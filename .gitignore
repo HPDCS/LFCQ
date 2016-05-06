@@ -3,3 +3,4 @@ script/pdf
 script/res
 script/tmp
 NBCQ
+*.o
