@@ -38,7 +38,9 @@
 #include "../mm/myallocator.h"
 #include "../datatypes/nb_calqueue.h"
 
-__thread nbc_bucket_node *to_free_pointers = NULL;
+__thread nbc_bucket_node *to_free_nodes = NULL;
+__thread nbc_bucket_node *to_free_tables_old = NULL;
+__thread nbc_bucket_node *to_free_tables_new = NULL;
 __thread unsigned int to_remove_nodes_count = 0;
 __thread unsigned int  lid;
 __thread unsigned int  mark;
@@ -72,41 +74,10 @@ static inline unsigned int hash(double timestamp, double bucket_width)
 {
 	unsigned int res =  (unsigned int) (timestamp / bucket_width);
 	unsigned int ret = 0;
-//	unsigned int ret0 = 0;
-//	unsigned int ret1 = 0;
-//	unsigned int ret2 = 0;
-//	unsigned int ret3 = 0;
-//	unsigned int ret4 = 0;
-//	unsigned int ret5 = 0;
-//	double tmp1 = (res+0)*bucket_width;
-//	double tmp2 = (res+1)*bucket_width;
-//	double tmp3 = (res+2)*bucket_width;
-//	double tmp4 = (res+3)*bucket_width;
-//	double tmp5 = (res+4)*bucket_width;
 	bool end = false;
 	unsigned int count = 0;
 
-
-	//res -= res < 3 ? res : 3;
 	res -= (res & (-(res < 3))) +  (3 & (-(res >= 3)));
-
-
-//	ret0 = (-1) ^ ( ( -1 ^ (res-1)) & ( -( GREATER(tmp1, timestamp) 							 ) ));
-//	ret1 = (-1) ^ ( ( -1 ^ (res+0)) & ( -( D_EQUAL(tmp1, timestamp)  || GREATER(tmp2, timestamp) ) ));
-//	ret2 = (-1) ^ ( ( -1 ^ (res+1)) & ( -( D_EQUAL(tmp2, timestamp)  || GREATER(tmp3, timestamp) ) ));
-//	ret3 = (-1) ^ ( ( -1 ^ (res+2)) & ( -( D_EQUAL(tmp3, timestamp)  || GREATER(tmp4, timestamp) ) ));
-//	ret4 = (-1) ^ ( ( -1 ^ (res+3)) & ( -( D_EQUAL(tmp4, timestamp)  || GREATER(tmp5, timestamp) ) ));
-//	ret5 = (-1) ^ ( ( -1 ^ (res+4)) & ( -( D_EQUAL(tmp5, timestamp) 							 ) ));
-
-
-//	ret1 = (ret1 & (-(ret1 < ret2))) + (ret2 & (-(ret1 >= ret2)));
-//	ret2 = (ret3 & (-(ret3 < ret4))) + (ret3 & (-(ret3 >= ret4)));
-//	ret0 = (ret0 & (-(ret0 < ret5))) + (ret5 & (-(ret0 >= ret5)));
-//
-//
-//	ret1 = (ret1 & (-(ret1 < ret2))) + (ret2 & (-(ret1 >= ret2)));
-//	ret1 = (ret1 & (-(ret1 < ret0))) + (ret0 & (-(ret1 >= ret0)));
-
 
 	while( !end )
 	{
@@ -120,78 +91,8 @@ static inline unsigned int hash(double timestamp, double bucket_width)
 		count++;
 	}
 
-//	unsigned int res1 =  (unsigned int) (timestamp / bucket_width);
-//
-//	while( true )
-//	{
-//
-//		//printf("LOCK HERE %f, %f %f\n", res*bucket_width, timestamp, bucket_width);
-//		if(D_EQUAL(res1*bucket_width, timestamp))
-//			break;
-//		if(GREATER(res1*bucket_width, timestamp))
-//		{
-//			res1--;
-//			break;
-//		}
-//		res1++;
-//	}
-
-
-//	if(res1 != ret)
-//		printf("%u %u %u %u %u %u %u %u \n", ret, res1, ret0, ret1, ret2, ret3, ret4, ret5);
 	return ret;
 }
-
-//	unsigned int ret_val_1a = 0;
-//	unsigned int ret_val_1b = 0;
-//	unsigned int ret_val_2a = 0;
-//	unsigned int ret_val_2b = 0;
-//	unsigned int ret_val_3a = 0;
-//	unsigned int ret_val_3b = 0;
-//	unsigned int ret_val_4a = 0;
-//	unsigned int ret_val_4b = 0;
-//	unsigned int ret_val_1 = 0;
-//	unsigned int ret_val_2 = 0;
-//	unsigned int ret_val_3 = 0;
-//	unsigned int ret_val_4 = 0;
-//	double tmp1;
-//	double tmp2;
-//	double tmp3;
-//	double tmp4;
-//
-//
-//	tmp1 = (res+0)*bucket_width;
-//	tmp2 = (res+1)*bucket_width;
-//	tmp3 = (res+2)*bucket_width;
-//	tmp4 = (res+3)*bucket_width;
-//
-//
-//	ret_val_1a = (res+0) & (-(D_EQUAL(tmp1, timestamp)));
-//	ret_val_1b = (res-1) & (-(GREATER(tmp1, timestamp)));
-//
-//	ret_val_2a = (res+1) & (-(D_EQUAL(tmp2, timestamp)));
-//	ret_val_2b = (res-0) & (-(GREATER(tmp2, timestamp)));
-//
-//	ret_val_3a = (res+2) & (-(D_EQUAL(tmp3, timestamp)));
-//	ret_val_3b = (res+1) & (-(GREATER(tmp3, timestamp)));
-//
-//	ret_val_4a = (res+3) & (-(D_EQUAL(tmp4, timestamp)));
-//	ret_val_4b = (res+2) & (-(GREATER(tmp4, timestamp)));
-//
-//
-//	ret_val_1 = ret_val_1a + ret_val_1b;
-//	ret_val_2 = ret_val_2a + ret_val_2b;
-//	ret_val_3 = ret_val_3a + ret_val_3b;
-//	ret_val_4 = ret_val_4a + ret_val_4b;
-//
-//	ret_val_1 = (ret_val_1 & (-(ret_val_1 < ret_val_2))) + (ret_val_2 & (-(ret_val_1 >= ret_val_2)));
-//	ret_val_2 = (ret_val_3 & (-(ret_val_3 < ret_val_4))) + (ret_val_3 & (-(ret_val_3 >= ret_val_4)));
-//
-//	ret_val_1 = (ret_val_1 & (-(ret_val_1 < ret_val_2))) + (ret_val_2 & (-(ret_val_1 >= ret_val_2)));
-//
-//	return ret_val_1;
-
-
 
 /**
  *  This function returns an unmarked reference
@@ -324,18 +225,24 @@ static nbc_bucket_node* node_malloc(void *payload, double timestamp, unsigned in
  *
  *
  */
-static inline void connect_to_be_freed_list(nbc_bucket_node *start, unsigned int counter)
+static inline void connect_to_be_freed_node_list(nbc_bucket_node *start, unsigned int counter)
 {
 	nbc_bucket_node* new_node;
 	start = get_unmarked(start);
 
 	new_node = node_malloc(start, start->timestamp, counter);
-	new_node->next = to_free_pointers;
+	new_node->next = to_free_nodes;
 
-	to_free_pointers = new_node;
+	to_free_nodes = new_node;
 	to_remove_nodes_count += counter;
 }
 
+static inline void connect_to_be_freed_table_list(table *h)
+{
+	nbc_bucket_node *tmp = node_malloc(h, INFTY, 0);
+	tmp->next = to_free_tables_new;
+	to_free_tables_new = tmp;
+}
 
 /**
  * This function implements the search of a node that contains a given timestamp t. It finds two adjacent nodes,
@@ -354,8 +261,150 @@ static inline void connect_to_be_freed_list(nbc_bucket_node *start, unsigned int
  * @param right_node a pointer to a pointer used to return the right node
  *
  */
-static void search_std(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
-						nbc_bucket_node **left_node, nbc_bucket_node **right_node)
+//static void search_std(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
+//						nbc_bucket_node **left_node, nbc_bucket_node **right_node)
+//{
+//	nbc_bucket_node *left, *right, *left_next, *tmp, *tmp_next, *tail;
+//	unsigned int counter;
+//	tail = g_tail;
+//
+//	do
+//	{
+//		// Fetch the head and its next
+//		tmp = head;
+//		tmp_next = tmp->next;
+//		counter = 0;
+//		double tmp_timestamp;
+//		do
+//		{
+//			bool marked = is_marked_for_search(tmp_next, REMOVE_DEL_INV);
+//			// Find the first unmarked node that is <= timestamp
+//			if (!marked)
+//			{
+//				left = tmp;
+//				left_next = tmp_next;
+//				counter = 0;
+//			}
+//			// Take a snap to identify the last marked node before the right node
+//			counter+=marked;
+//
+//			// Find the next unmarked node from the left node (right node)
+//			tmp = get_unmarked(tmp_next);
+//			tmp_timestamp = tmp->timestamp;
+//			//if (tmp == tail)
+//			//	break;
+//			tmp_next = tmp->next;
+//
+//		} while (	tmp != tail &&
+//					(
+//						is_marked_for_search(tmp_next, REMOVE_DEL_INV)
+//						|| ( LEQ(tmp_timestamp, timestamp) && tie_breaker == 0)
+//						|| ( LEQ(tmp_timestamp, timestamp) && tie_breaker != 0 && tmp->counter <= tie_breaker)
+//					)
+//				);
+//
+//		// Set right node
+//		right = tmp;
+//
+//		//left node and right node have to be adjacent. If not try with CAS
+//		if (get_unmarked(left_next) != right)
+//		{
+//			if(is_marked(left_next, MOV))
+//				right = get_marked(right, MOV);
+//			// if CAS succeeds connect the removed nodes to to_be_freed_list
+//			if (!CAS_x86(
+//						(volatile unsigned long long *)&(left->next),
+//						(unsigned long long) left_next,
+//						(unsigned long long) right
+//						)
+//					)
+//				continue;
+//			connect_to_be_freed_node_list(left_next, counter);
+//		}
+//		// at this point they are adjacent. Thus check that right node is still unmarked and return
+//		if (right == tail || !is_marked_for_search(right->next, REMOVE_DEL_INV))
+//		{
+//			*left_node = left;
+//			*right_node = get_unmarked(right);
+//			return;
+//		}
+//	} while (1);
+//}
+//
+//static void search_copy(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
+//						nbc_bucket_node **left_node, nbc_bucket_node **right_node)
+//{
+//	nbc_bucket_node *left, *right, *left_next, *tmp, *tmp_next, *tail;
+//	unsigned int counter;
+//	tail = g_tail;
+//
+//	do
+//	{
+//		// Fetch the head and its next
+//		tmp = head;
+//		tmp_next = tmp->next;
+//		counter = 0;
+//		double tmp_timestamp;
+//		do
+//		{
+//			bool marked = is_marked_for_search(tmp_next, REMOVE_DEL);
+//			// Find the first unmarked node that is <= timestamp
+//			if (!marked)
+//			{
+//				left = tmp;
+//				left_next = tmp_next;
+//				counter = 0;
+//			}
+//			// Take a snap to identify the last marked node before the right node
+//			counter+=marked;
+//
+//			// Find the next unmarked node from the left node (right node)
+//			tmp = get_unmarked(tmp_next);
+//			tmp_timestamp = tmp->timestamp;
+//			//if (tmp == tail)
+//			//	break;
+//			tmp_next = tmp->next;
+//
+//		} while (	tmp != tail &&
+//					(
+//						is_marked_for_search(tmp_next, REMOVE_DEL)
+//						|| ( LEQ(tmp_timestamp, timestamp) && tie_breaker == 0)
+//						|| ( LEQ(tmp_timestamp, timestamp) && tie_breaker != 0 && tmp->counter <= tie_breaker)
+//					)
+//				);
+//
+//		// Set right node
+//		right = tmp;
+//
+//		//left node and right node have to be adjacent. If not try with CAS
+//		if (get_unmarked(left_next) != right)
+//		{
+//			if(is_marked(left_next, MOV))
+//				right = get_marked(right, MOV);
+//			if(is_marked(left_next, INV))
+//				right = get_marked(right, INV);
+//			// if CAS succeeds connect the removed nodes to to_be_freed_list
+//			if (!CAS_x86(
+//						(volatile unsigned long long *)&(left->next),
+//						(unsigned long long) left_next,
+//						(unsigned long long) right
+//						)
+//					)
+//				continue;
+//			connect_to_be_freed_node_list(left_next, counter);
+//		}
+//		// at this point they are adjacent. Thus check that right node is still unmarked and return
+//		if (right == tail || !is_marked_for_search(right->next, REMOVE_DEL))
+//		{
+//			*left_node = left;
+//			*right_node = right;
+//			return;
+//		}
+//	} while (1);
+//}
+
+static void search(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
+						nbc_bucket_node **left_node, nbc_bucket_node **right_node, int flag)
 {
 	nbc_bucket_node *left, *right, *left_next, *tmp, *tmp_next, *tail;
 	unsigned int counter;
@@ -370,7 +419,7 @@ static void search_std(nbc_bucket_node *head, double timestamp, unsigned int tie
 		double tmp_timestamp;
 		do
 		{
-			bool marked = is_marked_for_search(tmp_next, REMOVE_DEL_INV);
+			bool marked = is_marked_for_search(tmp_next, flag);
 			// Find the first unmarked node that is <= timestamp
 			if (!marked)
 			{
@@ -390,7 +439,7 @@ static void search_std(nbc_bucket_node *head, double timestamp, unsigned int tie
 
 		} while (	tmp != tail &&
 					(
-						is_marked_for_search(tmp_next, REMOVE_DEL_INV)
+						is_marked_for_search(tmp_next, flag)
 						|| ( LEQ(tmp_timestamp, timestamp) && tie_breaker == 0)
 						|| ( LEQ(tmp_timestamp, timestamp) && tie_breaker != 0 && tmp->counter <= tie_breaker)
 					)
@@ -404,78 +453,7 @@ static void search_std(nbc_bucket_node *head, double timestamp, unsigned int tie
 		{
 			if(is_marked(left_next, MOV))
 				right = get_marked(right, MOV);
-			// if CAS succeeds connect the removed nodes to to_be_freed_list
-			if (!CAS_x86(
-						(volatile unsigned long long *)&(left->next),
-						(unsigned long long) left_next,
-						(unsigned long long) right
-						)
-					)
-				continue;
-			connect_to_be_freed_list(left_next, counter);
-		}
-		// at this point they are adjacent. Thus check that right node is still unmarked and return
-		if (right == tail || !is_marked_for_search(right->next, REMOVE_DEL_INV))
-		{
-			*left_node = left;
-			*right_node = get_unmarked(right);
-			return;
-		}
-	} while (1);
-}
-
-static void search_copy(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
-						nbc_bucket_node **left_node, nbc_bucket_node **right_node)
-{
-	nbc_bucket_node *left, *right, *left_next, *tmp, *tmp_next, *tail;
-	unsigned int counter;
-	tail = g_tail;
-
-	do
-	{
-		// Fetch the head and its next
-		tmp = head;
-		tmp_next = tmp->next;
-		counter = 0;
-		double tmp_timestamp;
-		do
-		{
-			bool marked = is_marked_for_search(tmp_next, REMOVE_DEL);
-			// Find the first unmarked node that is <= timestamp
-			if (!marked)
-			{
-				left = tmp;
-				left_next = tmp_next;
-				counter = 0;
-			}
-			// Take a snap to identify the last marked node before the right node
-			counter+=marked;
-
-			// Find the next unmarked node from the left node (right node)
-			tmp = get_unmarked(tmp_next);
-			tmp_timestamp = tmp->timestamp;
-			//if (tmp == tail)
-			//	break;
-			tmp_next = tmp->next;
-
-		} while (	tmp != tail &&
-					(
-						is_marked_for_search(tmp_next, REMOVE_DEL)
-						|| ( LEQ(tmp_timestamp, timestamp) && tie_breaker == 0)
-						|| ( LEQ(tmp_timestamp, timestamp) && tie_breaker != 0 && tmp->counter <= tie_breaker)
-					)
-				);
-
-		// Set right node
-		right = tmp;
-
-		//left node and right node have to be adjacent. If not try with CAS
-		if (get_unmarked(left_next) != right)
-		{
-			// TODO check
-			if(is_marked(left_next, MOV))
-				right = get_marked(right, MOV);
-			if(is_marked(left_next, INV))
+			if(flag == REMOVE_DEL && is_marked(left_next, INV))
 				right = get_marked(right, INV);
 			// if CAS succeeds connect the removed nodes to to_be_freed_list
 			if (!CAS_x86(
@@ -485,18 +463,19 @@ static void search_copy(nbc_bucket_node *head, double timestamp, unsigned int ti
 						)
 					)
 				continue;
-			connect_to_be_freed_list(left_next, counter);
+			connect_to_be_freed_node_list(left_next, counter);
 		}
 		// at this point they are adjacent. Thus check that right node is still unmarked and return
-		if (right == tail || !is_marked_for_search(right->next, REMOVE_DEL))
+		if (right == tail || !is_marked_for_search(right->next, flag))
 		{
 			*left_node = left;
 			*right_node = right;
+			if(flag == REMOVE_DEL_INV )
+				*right_node = get_unmarked(right);
 			return;
 		}
 	} while (1);
 }
-
 
 /**
  * This function commits a value in the current field of a queue. It retries until the timestamp
@@ -559,7 +538,7 @@ static bool insert_std(nb_calqueue* queue, table* hashtable, nbc_bucket_node* ne
 	// node to be added in the hashtable
 	bucket = hashtable->array + index;
 
-	search_std(bucket, new_node_timestamp, new_node_counter, &left_node, &right_node);
+	search(bucket, new_node_timestamp, new_node_counter, &left_node, &right_node, REMOVE_DEL_INV);
 
 	new_node->next = right_node;
 
@@ -594,7 +573,7 @@ static bool insert_copy(nb_calqueue* queue, table* hashtable, nbc_bucket_node** 
 	// node to be added in the hashtable
 	bucket = hashtable->array + index;
 
-	search_copy(bucket, new_node_timestamp, new_node_counter, &left_node, &right_node);
+	search(bucket, new_node_timestamp, new_node_counter, &left_node, &right_node, REMOVE_DEL);
 
 	(*new_node)->next = get_marked(get_unmarked(right_node), INV);
 
@@ -603,12 +582,11 @@ static bool insert_copy(nb_calqueue* queue, table* hashtable, nbc_bucket_node** 
 
 	else if(D_EQUAL(new_node_timestamp, left_node->timestamp ) && left_node->counter == new_node_counter)
 	{
-		//mm_free((*new_node));
 		*new_node = left_node;
 		return true;
 	}
 
-
+	// TODO
 	//if(is_marked(right_node, MOV))
 	//	right_node = get_unmarked(right_node);
 
@@ -628,7 +606,6 @@ static bool insert_copy(nb_calqueue* queue, table* hashtable, nbc_bucket_node** 
 	return false;
 
 }
-
 
 static void set_new_table(table* h, unsigned int threshold )
 {
@@ -726,16 +703,11 @@ static void block_table(table* h, unsigned int *index, double *min_timestamp)
 		}
 		while( !marked && !cas_result );
 
-		//printf("bloccato il bucket %u \n", i);
-
 		do
 		{
-
-		//	printf("Cerco Right node \n");
-			search_std(bucket, 0.0, 0, &left_node, &right_node);
+			search(bucket, 0.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
 			right_node = get_unmarked(right_node);
 			right_node_next = right_node->next;
-		//	printf("Right node %p\n", right_node);
 		}
 		while(
 				right_node != tail &&
@@ -751,12 +723,6 @@ static void block_table(table* h, unsigned int *index, double *min_timestamp)
 					)
 				)
 			);
-
-
-		//printf("bloccato il primo node del bucket %u \n", i);
-
-//				if(cas_result)
-//						printf("Locked first node in bucket #%u\n", i);
 
 		if(LESS(right_node->timestamp, *min_timestamp) )
 		{
@@ -801,8 +767,6 @@ static double compute_mean_separation_time(table* h,
 			if (sample_size > SAMPLE_SIZE)
 				sample_size = SAMPLE_SIZE;
 
-
-			//printf("COMPUTE SAMPLE SIZE %u\n", sample_size);
 			double sample_array[sample_size];
 
 			int counter = 0;
@@ -820,16 +784,13 @@ static double compute_mean_separation_time(table* h,
 				nbc_bucket_node *tmp = array + (index+i)%size;
 				nbc_bucket_node *tmp_next = get_unmarked(tmp->next);
 				double tmp_timestamp = tmp->timestamp;
-				//printf("BUCKET SAMPLE %u \n", index+i);
+
 				while( tmp != tail && counter < sample_size &&  LESS(tmp_timestamp, min_timestamp + old_bw*(i+1)) )
 				{
 
 					tmp_next = tmp->next;
 					if(!is_marked(tmp_next, DEL) && tmp->counter != HEAD_ID && GEQ(tmp_timestamp, min_timestamp + old_bw*(i)))
-					{
 						sample_array[counter++] = tmp_timestamp;
-				//		printf("SAMPLE %u %f\n", counter, tmp->timestamp);
-					}
 					else
 					{
 						if( LESS(tmp_timestamp, min_next_round) && GEQ(tmp_timestamp, min_timestamp + old_bw*(i+1)))
@@ -897,7 +858,6 @@ static table* read_table(nb_calqueue* queue)
 
 	if(h->new_table != NULL)
 	{
-
 		//printf("%u - MOVING BUCKETS\n", lid);
 		table *new_h = h->new_table;
 		nbc_bucket_node *array = h->array;
@@ -925,28 +885,15 @@ static table* read_table(nb_calqueue* queue)
 			nbc_bucket_node *bucket = array + i;
 			nbc_bucket_node *right_node, *left_node, *right_node_next;
 
-
-			//printf("MOVING BUCKET %u %p \n", i, bucket);
 			do
 			{
-				//printf("*********************\n");
 				do
 				{
 
-					search_std(bucket, 0.0, 0, &left_node, &right_node);
+					search(bucket, 0.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
 					right_node = get_unmarked(right_node);
 					right_node_next = right_node->next;
 				}
-//				while(
-//						right_node != tail &&
-//						get_unmarked(right_node_next) == right_node_next &&
-//						!is_marked(right_node_next, MOV) &&
-//						!CAS_x86(
-//											(volatile unsigned long long *) &(right_node->next),
-//											(unsigned long long)			right_node_next,
-//											(unsigned long long) 			get_marked(right_node_next, MOV)
-//						)
-//					);
 				while(
 						right_node != tail &&
 						(
@@ -964,8 +911,6 @@ static table* read_table(nb_calqueue* queue)
 
 				if(right_node != tail)
 				{
-				//	printf("R: %p %.10f %u %p %p\n", right_node, right_node->timestamp,
-				//			right_node->counter, right_node->replica, right_node->next);
 					nbc_bucket_node *replica = node_malloc(right_node->payload, right_node->timestamp,  right_node->counter);
 					nbc_bucket_node *right_replica_field;
 					nbc_bucket_node *replica2;
@@ -973,16 +918,11 @@ static table* read_table(nb_calqueue* queue)
 					if(replica == tail)
 						error("A\n");
 
-
 					replica2 = replica;
 					while(!insert_copy(queue, new_h, &replica2) && queue->hashtable == h);
 
-				//	if(get_unmarked())
-
-
 					if(queue->hashtable != h)
 						return queue->hashtable;
-
 
 					if(replica2 == tail)
 						error("B %p %p %p\n", replica, replica2, tail);
@@ -993,9 +933,6 @@ static table* read_table(nb_calqueue* queue)
 							(unsigned long long) 			replica2))
 						atomic_inc_x86(&(new_h->counter));
 
-				//	printf("C Replica: %p, %p\n", replica, right_node->replica);
-
-
 					bool cas_result = false;
 					bool marked  = false;
 					right_replica_field = right_node->replica;
@@ -1005,11 +942,8 @@ static table* read_table(nb_calqueue* queue)
 
 					if(replica == replica2 && replica != right_replica_field)
 					{
-				//		printf("Should be impossible %p, %p\n", replica, right_replica_field);
 						do
 						{
-
-
 							right_node_next = replica->next;
 							marked = is_marked(right_node_next, DEL);
 							if(!marked)
@@ -1025,7 +959,6 @@ static table* read_table(nb_calqueue* queue)
 					if(replica != replica2)
 						mm_free(replica);
 
-
 					do
 					{
 						right_node_next = right_node->next;
@@ -1039,15 +972,8 @@ static table* read_table(nb_calqueue* queue)
 
 					}while( !marked && !cas_result ) ;
 
-
-			//		printf("Destroy original %p %p %p\n", right_node, right_node_next, right_node->next);
-
-
-
 					do
 					{
-
-
 						right_node_next = right_replica_field->next;
 						marked = is_marked(right_node_next, INV);
 						if(marked)
@@ -1056,56 +982,24 @@ static table* read_table(nb_calqueue* queue)
 											(unsigned long long)			right_node_next,
 											(unsigned long long) 			get_unmarked(right_node_next)
 										);
-
 					}while( marked && !cas_result ) ;
-
 
 					nbc_flush_current(
 							new_h,
 							right_replica_field);
-
-			//		printf("Validate replica %p %p %p\n", right_replica_field, right_node_next, right_replica_field->next);
-
-			//		printf("Count new item %u\n", new_h->counter.count);
 				}
-
 			}while(right_node != tail);
-
 		}
 
-		CAS_x86(
+		if(CAS_x86(
 				(volatile unsigned long long *) &(queue->hashtable),
 				(unsigned long long)			h,
 				(unsigned long long) 			new_h
-		);
+		))
+			connect_to_be_freed_table_list(h);
 
-//		printf("%u - MOVING BUCKETS DONE "
-//				"O_CUR: %u "
-//				"O_SIZE: %u "
-//				"O_BW: %.10f "
-//				"O_TS: %.10f "
-//				"N_CUR: %u "
-//				"N_SIZE: %u "
-//				"N_BW: %.10f "
-//				"N_TS: %.10f "
-//				"TAIL: %p "
-//				"\n",
-//				lid,
-//				(unsigned int) ( (h->current)>>32),
-//				(unsigned int) (h->size),
-//				(h->bucket_width),
-//				(h->bucket_width)*( (h->current)>>32),
-//				(unsigned int) ( (new_h->current)>>32),
-//				(unsigned int) (new_h->size),
-//				(new_h->bucket_width),
-//				(new_h->bucket_width)*( (new_h->current)>>32),
-//				(g_tail)
-//				);
 		h = new_h;
-
-
 	}
-
 	return h;
 }
 
@@ -1138,7 +1032,6 @@ nb_calqueue* nb_calqueue_init(unsigned int threshold)
 	res->hashtable->bucket_width = 1.0;
 	res->hashtable->new_table = NULL;
 	res->hashtable->size = 1;
-
 
 	res->hashtable->array = (nbc_bucket_node*) mm_std_malloc(sizeof(nbc_bucket_node) );
 	if(res->hashtable->array == NULL)
@@ -1231,7 +1124,7 @@ nbc_bucket_node* nbc_dequeue(nb_calqueue *queue)
 
 		min = array + (index % size);
 
-		search_std(min, 0.0, 0, &left_node, &right_node);
+		search(min, 0.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
 
 
 		if(is_marked(min->next, MOV))
@@ -1245,9 +1138,7 @@ nbc_bucket_node* nbc_dequeue(nb_calqueue *queue)
 			return node_malloc(NULL, INFTY, 1);
 
 		else if( LESS(right_timestamp, (index)*bucket_width) )
-		{
 			nbc_flush_current(h, right_node);
-		}
 
 		else if( GREATER(right_timestamp, (index+1)*bucket_width) )
 		{
@@ -1278,7 +1169,7 @@ nbc_bucket_node* nbc_dequeue(nb_calqueue *queue)
 			{
 				nbc_bucket_node *left_node, *right_node;
 
-				search_std(min, right_timestamp, -1,  &left_node, &right_node);
+				search(min, right_timestamp, -1,  &left_node, &right_node, REMOVE_DEL_INV);
 				atomic_dec_x86(&(h->counter));
 
 				return res;
@@ -1315,7 +1206,6 @@ nbc_bucket_node* nbc_dequeue(nb_calqueue *queue)
 		//else
 		//	printf("NUM ELEMS %u %p %u %llu %llu\n", h->counter.count, h, index, current, current >> 32);
 
-
 	}while(1);
 	return NULL;
 }
@@ -1338,8 +1228,40 @@ double nbc_prune(nb_calqueue *queue, double timestamp)
 	nbc_bucket_node **meta_prec, *meta_tmp, *current_meta_node;
 	unsigned int counter;
 
-	current_meta_node = to_free_pointers;
-	meta_prec = (nbc_bucket_node**)&(to_free_pointers);
+	if(to_free_tables_old != NULL)
+	{
+		if(to_free_tables_old->timestamp == INFTY)
+			to_free_tables_old->timestamp = timestamp;
+		else if(to_free_tables_old->timestamp < timestamp)
+		{
+			to_free_tables_old->counter++;
+			to_free_tables_old->timestamp = timestamp;
+		}
+
+
+		if(to_free_tables_old->counter > 3)
+		{
+			while(to_free_tables_old != NULL)
+			{
+				nbc_bucket_node *my_tmp = to_free_tables_old;
+				to_free_tables_old = to_free_tables_old->next;
+
+				table *h = (table*) my_tmp->payload;
+				mm_free(h->array);
+				mm_free(h);
+				mm_free(my_tmp);
+			}
+		}
+	}
+	else
+	{
+		to_free_tables_old = to_free_tables_new;
+		to_free_tables_new = NULL;
+	}
+
+
+	current_meta_node = to_free_nodes;
+	meta_prec = (nbc_bucket_node**)&(to_free_nodes);
 
 	while(current_meta_node != NULL)
 	{
@@ -1383,19 +1305,15 @@ double nbc_prune(nb_calqueue *queue, double timestamp)
 
 			if(current_meta_node->counter == 0)
 			{
-				//*prec = tmp = current_meta_node;
 				meta_tmp = current_meta_node;
 				*meta_prec = current_meta_node->next;
 				current_meta_node = current_meta_node->next;
 				mm_free(meta_tmp);
-				//to_free_pointers = current_meta_node;
 			}
 			else
 			{
-				//prec = & ( (*prec)->next );
 				meta_prec = (nbc_bucket_node**) & ( current_meta_node->next );
 				current_meta_node = current_meta_node->next;
-
 			}
 		}
 		else
@@ -1404,7 +1322,6 @@ double nbc_prune(nb_calqueue *queue, double timestamp)
 			current_meta_node = current_meta_node->next;
 		}
 	}
-//	printf("removed %u/%u nodes\n", committed, to_remove_nodes_count);
 	to_remove_nodes_count -= committed;
 	return (double)committed;
 }

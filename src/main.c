@@ -30,7 +30,6 @@
 #include <stdarg.h>
 #include <sys/time.h>
 
-//#include "datatypes/nonblocking_queue.h"
 #include "datatypes/list.h"
 #include "datatypes/calqueue.h"
 #include "datatypes/nb_calqueue.h"
@@ -47,10 +46,7 @@ volatile double GVT = 0.0;
 char		DATASTRUCT;
 
 unsigned int THREADS;		// Number of threads
-
 unsigned int OPERATIONS; 	// Number of operations per thread
-
-
 unsigned int ITERATIONS;		// = 800000;
 
 unsigned int TOTAL_OPS;		// = 800000;
@@ -67,16 +63,12 @@ unsigned int TOTAL_OPS3;		// = 800000;
 double PROB_DEQUEUE3;		// Probability to dequeue
 char   PROB_DISTRIBUTION3;
 
-
 unsigned int PRUNE_PERIOD;	// Number of ops before calling prune
-//double PROB_ROLL;			// Control parameter for increasing the probability to enqueue // a node with timestamp lower than the current owned by the thread
 double MEAN_INTERARRIVAL_TIME = 1.0;			// Maximum distance from the current event owned by the thread
 unsigned int LOG_PERIOD;	// Number of ops before printing a log
 unsigned int VERBOSE;		// if 1 prints a full log on STDOUT and on individual files
 unsigned int LOG;			// = 0;
 double PRUNE_TRESHOLD;		// = 0.35;
-//double BUCKET_WIDTH;		// = 1.0;//0.000976563;
-//unsigned int COLLABORATIVE_TODO_LIST;
 unsigned int SAFETY_CHECK;
 unsigned int EMPTY_QUEUE;
 
@@ -130,11 +122,6 @@ double exponential_rand(struct drand48_data *seed)
 	random_num =  -log(random_num);
 	random_num *= MEAN_INTERARRIVAL_TIME;
 	return random_num;
-}
-
-void prepopulate()
-{
-
 }
 
 double dequeue(unsigned int my_id)
@@ -380,44 +367,6 @@ void classic_hold(
 			current_prob = PROB_DEQUEUE3;
 		}
 
-//		if(PROB_DEQUEUE < 0.49 && TOTAL_OPS / tot_count < 3)
-//		{		e_time.tv_sec = 0;
-//				e_time.tv_nsec = 0;
-//				d_time.tv_sec = 0;
-//				d_time.tv_nsec = 0;
-//
-//				PROB_DEQUEUE = 0.5;
-//				 gettimeofday(&endTV, NULL);
-//					timersub(&endTV, &startTV, &diff);
-//		double min = INFTY;
-//							unsigned int j =0;
-//							for(;j<THREADS;j++)
-//							{
-//									double tmp = array[j];
-//									if(tmp < min)
-//											min = tmp;
-//							}
-//
-//		  printf("%u - MIN - %.10f  LOG  %.2f/100.00 SEC:%d:%d\n", my_id, min, ((double)ops_count[my_id])*100/OPERATIONS, (int)diff.tv_sec, (int)diff.tv_usec);
-//
-//		  if(my_id == 0 && ops_count[my_id]%(LOG_PERIOD) == 0 && LOG)
-//			{
-//				double min = INFTY;
-//				unsigned int j =0;
-//				for(;j<THREADS;j++)
-//				{
-//					double tmp = array[j];
-//					if(tmp < min)
-//						min = tmp;
-//				}
-//
-//				gettimeofday(&endTV, NULL);
-//				timersub(&endTV, &startTV, &diff);
-//				printf("%u - LOG %.10f %.2f/100.00 SEC:%d:%d\n", my_id, min, ((double)ops_count[my_id])*100/OPERATIONS, (int)diff.tv_sec, (int)diff.tv_usec);
-//			}
-//
-//		}
-
 	}
 }
 
@@ -562,29 +511,18 @@ int main(int argc, char **argv)
 
 
 
-//printf("####\n");
 printf("D:%c,", DATASTRUCT);
 printf("T:%u,", THREADS);
 printf("OPS:%u,", TOTAL_OPS);
-//printf("OPSpT:%u\n", OPERATIONS);
 printf("PRUNE_PER:%u,", PRUNE_PERIOD);
 printf("PRUNE_T:%f,", PRUNE_TRESHOLD);
-//printf("PROB_ROLL:%f\n", PROB_ROLL);
 printf("PROB_DIST:%c,",PROB_DISTRIBUTION1);
 printf("P_DEQUEUE:%f,", PROB_DEQUEUE1);
-
-
 printf("PROB_DIST:%c,",PROB_DISTRIBUTION2);
 printf("P_DEQUEUE:%f,", PROB_DEQUEUE2);
-
-
 printf("PROB_DIST:%c,",PROB_DISTRIBUTION3);
 printf("P_DEQUEUE:%f,", PROB_DEQUEUE3);
-
 printf("MEAN_INTERARRIVAL_TIME:%f,", MEAN_INTERARRIVAL_TIME);
-//printf("LOG_PERIOD:%u\n", LOG_PERIOD);
-//printf("B_WIDTH:%f,", BUCKET_WIDTH);
-//printf("COLLABORATIVE_TODO_LIST:%u,", COLLABORATIVE_TODO_LIST);
 printf("SAFETY_CHECK:%u,", SAFETY_CHECK);
 printf("EMPTY_QUEUE:%u,", EMPTY_QUEUE);
 
@@ -593,8 +531,6 @@ printf("\n");
 
 	unsigned int i = 0;
 	pthread_t tid[THREADS];
-
-	//mm_init(512, sizeof(bucket_node), false);
 
 	if(DATASTRUCT == 'L')
 	{
@@ -608,15 +544,12 @@ printf("\n");
 
 	gettimeofday(&startTV, NULL);
 
-
 	for(;i<THREADS;i++)
 	{
 		id[i] = i;
 		ops_count[i] = 0;
 		pthread_create(tid +i, NULL, process, id+i);
 	}
-
-
 
 	for(i=0;i<THREADS;i++)
 		pthread_join(tid[i], (void*)&id);
