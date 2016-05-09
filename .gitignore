@@ -4,3 +4,4 @@ script/res
 script/tmp
 NBCQ
 *.o
+*.out
