@@ -39,25 +39,24 @@ set offset 0.5,0.5,0.5,0.5
 set title filename
 
 set xlabel '#Threads'
-set grid x
+set grid  lc rgb "#888888"
 
 set ylabel 'CPU Time(s)'
-set grid y
+#set grid y
 
 
 
 set output filename.'_1.eps'
 set key top left
 plot \
-filename.'-N.dat'\
-	using 1:4:5	w yerrorbars 	linecolor rgb "#000099" lt 1 lw 1.5 	 title "", '' \
-	using 1:4	w linespoints 	linecolor rgb "#000099" lt 2 lw 1.5 pt 6 title "NBQueue", \
-filename.'-L.dat'\
-	using 1:4:5	w yerrorbars 	linecolor rgb "#009900" lt 1 lw 1.5 	 title "", '' \
-	using 1:4	w linespoints 	linecolor rgb "#009900" lt 2 lw 1.5 pt 6 title "LList", \
+filename.'-F.dat'\
+	using 1:4:5	w yerrorbars 	linecolor rgb "#222222" lt 1 lw 1.5 	 title "", '' \
+	using 1:4	w linespoints 	linecolor rgb "#222222" lt 2 lw 1.5 pt 4 ps 1.5 title "NBCQueue", \
 filename.'-C.dat'\
-	using 1:4:5	w yerrorbars 	linecolor rgb "#990000" lt 1 lw 1.5 	 title "", '' \
-	using 1:4	w linespoints 	linecolor rgb "#990000" lt 2 lw 1.5 pt 6 title "CalQueue"
+	using 1:4:5	w yerrorbars 	linecolor rgb "#222222" lt 1 lw 1.5 	 title "", '' \
+	using 1:4	w linespoints 	linecolor rgb "#222222" lt 2 lw 1.5 pt 8 ps 1.5 title "CalQueue"
+	#9+(1.5*x)**2 w l lc rgb "#880000",\
+	#(25+4.5*x) w l lc rgb "#880000"
 
 #set yrange [:3000000]
 #
@@ -65,9 +64,9 @@ filename.'-C.dat'\
 #set output filename.'_2.eps'
 #set key bottom left
 #plot \
-#filename.'-N.dat'\
+#filename.'-F.dat'\
 #	using 1:6:7	w yerrorbars 	linecolor rgb "#000099" lt 1 lw 1.5 	 title "", '' \
-#	using 1:6	w linespoints 	linecolor rgb "#000099" lt 2 lw 1.5 pt 6 title "NBQueue", \
+#	using 1:6	w linespoints 	linecolor rgb "#000099" lt 2 lw 1.5 pt 6 title "NBCQueue", \
 #filename.'-L.dat'\
 #	using 1:6:7	w yerrorbars 	linecolor rgb "#009900" lt 1 lw 1.5 	 title "", '' \
 #	using 1:6	w linespoints 	linecolor rgb "#009900" lt 2 lw 1.5 pt 6 title "LList", \
@@ -81,9 +80,9 @@ filename.'-C.dat'\
 #set output filename.'_3.eps'
 #set key bottom left
 #plot \
-#filename.'-N.dat'\
+#filename.'-F.dat'\
 #	using 1:8:9	w yerrorbars 	linecolor rgb "#000099" lt 1 lw 1.5 	 title "", '' \
-#	using 1:8	w linespoints 	linecolor rgb "#000099" lt 2 lw 1.5 pt 6 title "NBQueue", \
+#	using 1:8	w linespoints 	linecolor rgb "#000099" lt 2 lw 1.5 pt 6 title "NBCQueue", \
 #filename.'-L.dat'\
 #	using 1:8:9	w yerrorbars 	linecolor rgb "#009900" lt 1 lw 1.5 	 title "", '' \
 #	using 1:8	w linespoints 	linecolor rgb "#009900" lt 2 lw 1.5 pt 6 title "LList", \

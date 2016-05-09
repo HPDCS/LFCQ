@@ -40,7 +40,7 @@ for (dirpath, dirnames, filenames) in walk("tmp"):
 	for f in filenames:
 		if f == "aggregated":
 			continue
-		if f[0] not in ["N","C","L"]:
+		if f[0] not in ["F","C","L","N"]:
 			continue
 		f = open("tmp/"+f)
 		l = []
@@ -65,7 +65,9 @@ for line in f.readlines():
 		u = 0
 		s = 0
 		t = 0
-		o = 0
+		o1 = 0
+		o2 = 0
+		o3 = 0
 		e = 0
 		for elem in line:
 			try:
@@ -75,23 +77,40 @@ for line in f.readlines():
 				continue
 			if k == "T":
 				t = int(v)
-			elif k == "OPS":
-				name += str(v) + "-"
+			#elif k == "OPS":
+			#	name += str(v) + "-"
 				o = int(v)
 			elif k == "PRUNE_PER":
 				name += str(v) + "-"
 			elif k == "PRUNE_T":  
 				name += str(v) + "-"
-			elif k == "P_DEQUEUE":
+			#elif k == "MEAN_INTERARRIVAL_TIME":   
+			#	name += str(v) + "-"
+			elif k == "PROB_DIST1":   
 				name += str(v) + "-"
-			elif k == "MEAN_INTERARRIVAL_TIME":   
+			elif k == "P_DEQUEUE1":
 				name += str(v) + "-"
-			elif k == "PROB_DIST":   
+			elif k == "OPS1":
 				name += str(v) + "-"
-			elif k == "SIZE":     
+				o1 = int(v)
+			elif k == "PROB_DIST2":   
 				name += str(v) + "-"
-			elif k == "B_WIDTH":
+			elif k == "P_DEQUEUE2":
 				name += str(v) + "-"
+			elif k == "OPS2":
+				name += str(v) + "-"
+				o2 = int(v)
+			elif k == "PROB_DIST3":   
+				name += str(v) + "-"
+			elif k == "P_DEQUEUE3":
+				name += str(v) + "-"
+			elif k == "OPS3":
+				name += str(v) + "-"
+				o3 = int(v)
+			#elif k == "SIZE":     
+			#	name += str(v) + "-"
+			#elif k == "B_WIDTH":
+			#	name += str(v) + "-"
 			elif k == "MALLOC_T":
 				pass
 			elif k == "FREE_T":
@@ -116,7 +135,7 @@ for line in f.readlines():
 					d[name] = {}
 				if not d[name].has_key(t):
 					d[name][t] = []
-				d[name][t] += [(r,u,s,o)]
+				d[name][t] += [(r,u,s,o1,o2,o3)]
 	except:
 		err_log.write(str( line )+"\n")
 		
@@ -139,8 +158,8 @@ for k,v in d.items():
 		opsr_dev = 0
 		opsus_dev = 0
 		for l in v[k1]:
-			if l[0] > (l[1]+l[2])/k1:
-				print "STRANO- R:"+str( l[0] )+"\tU:"+str(l[1]+l[2])
+			#if l[0] > (l[1]+l[2])/k1:
+			#	print "STRANO- R:"+str( l[0] )+"\tU:"+str(l[1]+l[2])
 			#f.write(str(k1)+", "+str(l[0])+", "+str(l[1]+l[2])+", "+str(l[3]/l[0])+", "+str(l[3]/(l[1]+l[2]))+"\n")
 			r_avg 		+= l[0]
 			us_avg 		+= l[1]+l[2]

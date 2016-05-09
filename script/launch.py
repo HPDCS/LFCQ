@@ -47,7 +47,15 @@ for line in conf.readlines():
 		all_threads = [int(x) for x in line[1].split(",")]
 	elif line[0] == "ops":
 		ops = int(line[1])
+	elif line[0] == "ops1":
+		ops1 = int(line[1])
+	elif line[0] == "ops2":
+		ops2 = int(line[1])
 	elif line[0] == "iterations":
+		overall_iterations = int(line[1])
+	elif line[0] == "start_from":
+		start_from = int(line[1])
+	elif line[0] == "overall_iterations":
 		iterations = int(line[1])
 	elif line[0] == "verbose":
 		verbose = int(line[1])
@@ -71,22 +79,27 @@ for line in conf.readlines():
 		width = float(line[1])
 	elif line[0] == "prob_dequeue":
 		prob_dequeue = float(line[1])
+	elif line[0] == "prob_dequeue1":
+		prob_dequeue1 = float(line[1])
+	elif line[0] == "prob_dequeue2":
+		prob_dequeue2 = float(line[1])
 	elif line[0] == "look_pool":
 		look_pool = [float(x) for x in line[1].split(",")]
 	elif line[0] == "data_type":
 		data_type = line[1].split(",")
 	elif line[0] == "distribution":
-		distribution = line[1].split(",")
+		distribution = line[1]#.split(",")
+	elif line[0] == "distribution1":
+		distribution1 = line[1]#.split(",")
+	elif line[0] == "distribution2":
+		distribution2 = line[1]#.split(",")
 	elif line[0] == "enable_log":
 		enable_log = line[1] == "1"
-		
-
-
 
 cmd1="time"
 cmd2="-f"
 cmd3="R:%e,U:%U,S:%S"
-cmd4="../Debug/NBPQueue"
+cmd4="../Debug/NBCQ"
 tmp_dir="tmp"
 
 
@@ -136,10 +149,8 @@ def print_log(first=False):
 
 if __name__ == "__main__":
 
-
-
 	print "#########################################################################"
-	print "              TESTS v1.0"
+	print "              TESTS v2.0"
 	print "#########################################################################"
 
 	threads = all_threads[:]
@@ -148,65 +159,64 @@ if __name__ == "__main__":
 		print "-------------------------------------------------------------------------\r"
 		print "WARNING more threads ("+str(m_core)+") than core available ("+str(core)+"). Using time-sharing!"
 		print "-------------------------------------------------------------------------\r"
-
 	
-	buf_line = len(threads)*len(look_pool)*len(distribution)
-	print str(len(threads))+" "+str(len(look_pool))+" "+str(len(distribution))+" "+str(len(data_type))+" "+str(buf_line) 
+	buf_line = len(threads)*len(distribution)
+	print str(len(threads))+" "+str(len(distribution))+" "+str(len(data_type))+" "+str(buf_line) 
 	residual_iter = {}
 	instance = {}
 	
-	
 	cmd = [cmd1, cmd2, cmd3, cmd4]
-	
-	
-	
-	cmd = [cmd1, cmd2, cmd3, cmd4]
-	
-	
 	core_avail = core
 	
 	test_pool = {}
 	file_pool = {}
 	run_pool = set([])
 	
-	init_size	=str(init_size	)
 	verbose		=str(verbose		)
 	log			=str(log			)
-	prune_period=str(prune_period)
+	prune_period=str(prune_period	)
 	ops			=str(ops			)
-	prob_roll	=str(prob_roll	)
-	prob_dequeue=str(prob_dequeue)
+	prob_dequeue=str(prob_dequeue	)
+	ops1			=str(ops1			)
+	prob_dequeue1=str(prob_dequeue1	)
+	ops2			=str(ops2			)
+	prob_dequeue2=str(prob_dequeue2	)
 	prune_tresh	=str(prune_tresh	)
-	width		=str(width		)
 	
 	count_test = 0
+	
+	
 	
 	if enable_log:
 		atexit.register(enable_echo, sys.stdin.fileno(), True)
 		enable_echo(sys.stdin.fileno(), False)
 	
-	for run in range(iterations):
-		for d in distribution:
-			for look in look_pool:
-				look = str(look)
-				for struct in data_type:
-					for t in threads:
-						if not test_pool.has_key(t):
-							test_pool[t] = []
-						test_pool[t] += [[struct, ops, str(t),      prune_period, prob_roll, prob_dequeue, look,  d,    init_size,  verbose,  log,  prune_tresh,   width, str(collaborative), str(safety), str(empty_queue), str(run)]]
-						count_test +=1
-						#	  		 STRUCT	 OPS, THREADS PRUNE_PERIOD  PROB_ROLL  PROB_DEQUEUE  LOOK_AHEAD INIT_SIZE   VERBOSE   LOG   PRUNE_TRESHOLD BUCKET_WIDTH
-
+	#for d in distribution:
+	#for d in distribution:
+	#for d in distribution:
+		#distribution1 = d
+		#distribution2 = d
+	for struct in data_type:
+		for t in threads:
+			if not test_pool.has_key(t):
+				test_pool[t] = []
+			for run in xrange(start_from, iterations + start_from):
+				test_pool[t] += [ [  struct, str(t), str(overall_iterations), 				# STRUCT, THREADS, OVERALL SIZE
+									 distribution, prob_dequeue, ops, 						# DISTRIBUTION, PROB_DEQUEUE, OPS  
+									 distribution1, prob_dequeue1, ops1, 					# DISTRIBUTION, PROB_DEQUEUE, OPS  
+									 distribution2, prob_dequeue2, ops2, 					# DISTRIBUTION, PROB_DEQUEUE, OPS  
+									 prune_period, prune_tresh, 							# PRUNE_PERIOD, PRUNE_TRESHOLD
+									 verbose,												# VERBOSE
+									 log,													# LOG
+									 str(safety),											# SAFETY 
+									 str(empty_queue),										# EMPTY_QUEUE
+									 str(run)]	]											# RUN
+				count_test +=1
+				id_string = struct + str(t) + str(overall_iterations) + distribution + prob_dequeue + ops 	  + distribution1 + prob_dequeue1 + ops1    +  distribution2 + prob_dequeue2 + ops2 
+				residual_iter[id_string] = iterations
+				instance[id_string] = 0
 
 	num_test = count_test
-	for d in distribution:
-		for j in look_pool:
-			for i in all_threads:
-				for k in data_type:
-					residual_iter[(d,i,j,k)] = iterations
-					instance[(d,i,j,k)] = 0
-
-
 	
 	print "Number of test: "+str(num_test-count_test)+"/"+str(num_test)+" Usage Core: "+str(core-core_avail)+"/"+str(core)+"\r"
 
@@ -221,36 +231,39 @@ if __name__ == "__main__":
 			else:
 				cmdline = pool[0]
 				test_pool[t] = pool[1:]
-				filename = tmp_dir+"/"+"-".join(cmdline)
+				filename = tmp_dir+"/"+"-".join(cmdline).replace(".", "_")
+				print filename
 				f = open(filename, "w")
 				p = Popen(cmd+cmdline[:-1], stdout=f, stderr=f)
-				residual_iter[(cmdline[7], t,float(cmdline[6]),cmdline[0])]-=1
-				instance[(cmdline[7], t,float(cmdline[6]),cmdline[0])]+=1
+				id_string = cmdline[0] + cmdline[1] + cmdline[2] + cmdline[3] + cmdline[4] + cmdline[5] + cmdline[6] + cmdline[7] + cmdline[8] + cmdline[9] + cmdline[10] + cmdline[11] 
+				residual_iter[id_string]-=1
+				instance[id_string]+=1
 				core_avail -= min(t,core)
-				run_pool.add( (p,cmdline[7],t,float(cmdline[6]),cmdline[0]) )
+				run_pool.add( (p,t,id_string, cmdline[-1]) )
 				file_pool[p]=f
 				count_test -= 1
 			continue
 		print_log()
 		sleep(1)
 		to_remove = set([])
-		for	p,d,t,i,j in run_pool:
+		for	p,t,id_string,i in run_pool:
+			
 			if p.poll() != None:
-				to_remove.add((p,d,t,i,j))
+				to_remove.add((p,t,id_string,i))
 				file_pool[p].close()
 				del file_pool[p]
-				instance[(d,t,i,j)]-=1
+				instance[id_string]-=1
 				core_avail += min(t,core)
 		run_pool -= to_remove
 		
 	while core_avail < core:
 		to_remove = set([])
-		for	p,d,t,i,j in run_pool:
+		for	(p,t,id_string,i) in run_pool:
 			if p.poll() != None:
-				to_remove.add((p,d,t,i,j))
+				to_remove.add((p,t,id_string,i))
 				file_pool[p].close()
 				del file_pool[p]
-				instance[(d,t,i,j)]-=1
+				instance[id_string]-=1
 				core_avail += t
 		run_pool -= to_remove
 		sleep(1)

@@ -484,7 +484,6 @@ int main(int argc, char **argv)
 
 
 	TOTAL_OPS = TOTAL_OPS1 + TOTAL_OPS2 + TOTAL_OPS3;
-	TOTAL_OPS2 += TOTAL_OPS1;
 
 	OPERATIONS = (TOTAL_OPS/THREADS);
 	PRUNE_PERIOD = (unsigned int) strtol(argv[par++], (char **)NULL, 10);
@@ -516,19 +515,21 @@ printf("T:%u,", THREADS);
 printf("OPS:%u,", TOTAL_OPS);
 printf("PRUNE_PER:%u,", PRUNE_PERIOD);
 printf("PRUNE_T:%f,", PRUNE_TRESHOLD);
-printf("PROB_DIST:%c,",PROB_DISTRIBUTION1);
-printf("P_DEQUEUE:%f,", PROB_DEQUEUE1);
-printf("PROB_DIST:%c,",PROB_DISTRIBUTION2);
-printf("P_DEQUEUE:%f,", PROB_DEQUEUE2);
-printf("PROB_DIST:%c,",PROB_DISTRIBUTION3);
-printf("P_DEQUEUE:%f,", PROB_DEQUEUE3);
+printf("OPS1:%u,", TOTAL_OPS1);
+printf("PROB_DIST1:%c,",PROB_DISTRIBUTION1);
+printf("P_DEQUEUE1:%f,", PROB_DEQUEUE1);
+printf("OPS2:%u,", TOTAL_OPS2);
+printf("PROB_DIST2:%c,",PROB_DISTRIBUTION2);
+printf("P_DEQUEUE2:%f,", PROB_DEQUEUE2);
+printf("OPS3:%u,", TOTAL_OPS3);
+printf("PROB_DIST3:%c,",PROB_DISTRIBUTION3);
+printf("P_DEQUEUE3:%f,", PROB_DEQUEUE3);
 printf("MEAN_INTERARRIVAL_TIME:%f,", MEAN_INTERARRIVAL_TIME);
 printf("SAFETY_CHECK:%u,", SAFETY_CHECK);
 printf("EMPTY_QUEUE:%u,", EMPTY_QUEUE);
 
 
-printf("\n");
-
+TOTAL_OPS2 += TOTAL_OPS1;
 	unsigned int i = 0;
 	pthread_t tid[THREADS];
 
@@ -586,6 +587,5 @@ printf("\n");
 		else
 			printf("%d:%lld,INF,", i,ops_count[i]);
 }
-	printf("\n");
 	return 0;
 }
