@@ -178,7 +178,6 @@ if __name__ == "__main__":
 		enable_echo(sys.stdin.fileno(), False)
 	
 	for struct in data_type:
-		print struct
 		for t in threads:
 			if not test_pool.has_key(t):
 				test_pool[t] = []
@@ -188,7 +187,7 @@ if __name__ == "__main__":
 						test_pool[t] += [ [  struct, str(t), str(overall_iterations), 		# STRUCT, THREADS, OVERALL SIZE
 											 d, "0.0", size, 								# DISTRIBUTION, PROB_DEQUEUE, OPS  
 											 d, "0.5", operations, 							# DISTRIBUTION, PROB_DEQUEUE, OPS  
-											 d, "1.0", 0, 								# DISTRIBUTION, PROB_DEQUEUE, OPS  
+											 d, "1.0", str(0), 								# DISTRIBUTION, PROB_DEQUEUE, OPS  
 											 prune_period, prune_tresh, 					# PRUNE_PERIOD, PRUNE_TRESHOLD
 											 verbose,										# VERBOSE
 											 log,											# LOG
@@ -196,10 +195,9 @@ if __name__ == "__main__":
 											 str(empty_queue),								# EMPTY_QUEUE
 											 str(run)]	]									# RUN
 						count_test +=1
-						id_string = struct + str(t) + str(overall_iterations) + d + "0.0" + size + d + "0.5" + operations +  d + "1.0" + size 
+						id_string = struct + str(t) + str(overall_iterations) + d + "0.0" + size + d + "0.5" + operations +  d + "1.0" + str(0) 
 						residual_iter[id_string] = iterations
 						instance[id_string] = 0
-						print id_string
 	num_test = count_test
 	
 	print_log(True)
