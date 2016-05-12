@@ -48,16 +48,16 @@ for line in conf.readlines():
 		core=int(line[1])
 	elif line[0] == "all_threads":
 		all_threads = [int(x) for x in line[1].split(",")]
-	elif line[0] == "ops":
-		ops = int(line[1])
-	elif line[0] == "ops1":
-		ops1 = int(line[1])
-	elif line[0] == "ops2":
-		ops2 = int(line[1])
+	elif line[0] == "queue_size":
+		queue_size = line[1].split(",")
+	elif line[0] == "operations":
+		operations = line[1]
 	elif line[0] == "iterations":
 		overall_iterations = int(line[1])
 	elif line[0] == "start_from":
 		start_from = int(line[1])
+	elif line[0] == "test":
+		test = line[1]
 	elif line[0] == "overall_iterations":
 		iterations = int(line[1])
 	elif line[0] == "verbose":
@@ -80,22 +80,12 @@ for line in conf.readlines():
 		prune_tresh = float(line[1])
 	elif line[0] == "width":
 		width = float(line[1])
-	elif line[0] == "prob_dequeue":
-		prob_dequeue = float(line[1])
-	elif line[0] == "prob_dequeue1":
-		prob_dequeue1 = float(line[1])
-	elif line[0] == "prob_dequeue2":
-		prob_dequeue2 = float(line[1])
 	elif line[0] == "look_pool":
 		look_pool = [float(x) for x in line[1].split(",")]
 	elif line[0] == "data_type":
 		data_type = line[1].split(",")
 	elif line[0] == "distribution":
-		distribution = line[1]#.split(",")
-	elif line[0] == "distribution1":
-		distribution1 = line[1]#.split(",")
-	elif line[0] == "distribution2":
-		distribution2 = line[1]#.split(",")
+		distribution = line[1].split(",")
 	elif line[0] == "enable_log":
 		enable_log = line[1] == "1"
 
@@ -177,12 +167,6 @@ if __name__ == "__main__":
 	verbose		=str(verbose		)
 	log			=str(log			)
 	prune_period=str(prune_period	)
-	ops			=str(ops			)
-	prob_dequeue=str(prob_dequeue	)
-	ops1			=str(ops1			)
-	prob_dequeue1=str(prob_dequeue1	)
-	ops2			=str(ops2			)
-	prob_dequeue2=str(prob_dequeue2	)
 	prune_tresh	=str(prune_tresh	)
 	
 	count_test = 0
@@ -193,33 +177,30 @@ if __name__ == "__main__":
 		atexit.register(enable_echo, sys.stdin.fileno(), True)
 		enable_echo(sys.stdin.fileno(), False)
 	
-	#for d in distribution:
-	#for d in distribution:
-	#for d in distribution:
-		#distribution1 = d
-		#distribution2 = d
 	for struct in data_type:
+		print struct
 		for t in threads:
 			if not test_pool.has_key(t):
 				test_pool[t] = []
-			for run in xrange(start_from, iterations + start_from):
-				test_pool[t] += [ [  struct, str(t), str(overall_iterations), 				# STRUCT, THREADS, OVERALL SIZE
-									 distribution, prob_dequeue, ops, 						# DISTRIBUTION, PROB_DEQUEUE, OPS  
-									 distribution1, prob_dequeue1, ops1, 					# DISTRIBUTION, PROB_DEQUEUE, OPS  
-									 distribution2, prob_dequeue2, ops2, 					# DISTRIBUTION, PROB_DEQUEUE, OPS  
-									 prune_period, prune_tresh, 							# PRUNE_PERIOD, PRUNE_TRESHOLD
-									 verbose,												# VERBOSE
-									 log,													# LOG
-									 str(safety),											# SAFETY 
-									 str(empty_queue),										# EMPTY_QUEUE
-									 str(run)]	]											# RUN
-				count_test +=1
-				id_string = struct + str(t) + str(overall_iterations) + distribution + prob_dequeue + ops 	  + distribution1 + prob_dequeue1 + ops1    +  distribution2 + prob_dequeue2 + ops2 
-				residual_iter[id_string] = iterations
-				instance[id_string] = 0
-
+			for d  in distribution:
+				for size in queue_size:
+					for run in xrange(start_from, iterations + start_from):
+						test_pool[t] += [ [  struct, str(t), str(overall_iterations), 		# STRUCT, THREADS, OVERALL SIZE
+											 d, "0.0", size, 								# DISTRIBUTION, PROB_DEQUEUE, OPS  
+											 d, "0.5", operations, 							# DISTRIBUTION, PROB_DEQUEUE, OPS  
+											 d, "1.0", 0, 								# DISTRIBUTION, PROB_DEQUEUE, OPS  
+											 prune_period, prune_tresh, 					# PRUNE_PERIOD, PRUNE_TRESHOLD
+											 verbose,										# VERBOSE
+											 log,											# LOG
+											 str(safety),									# SAFETY 
+											 str(empty_queue),								# EMPTY_QUEUE
+											 str(run)]	]									# RUN
+						count_test +=1
+						id_string = struct + str(t) + str(overall_iterations) + d + "0.0" + size + d + "0.5" + operations +  d + "1.0" + size 
+						residual_iter[id_string] = iterations
+						instance[id_string] = 0
+						print id_string
 	num_test = count_test
-	
 	
 	print_log(True)
 	while count_test > 0:

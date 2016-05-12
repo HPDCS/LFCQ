@@ -73,9 +73,10 @@ filename.'-F.dat'\
 	using 1:4	w linespoints 	linecolor rgb "#000000" lt 2 lw 3 pt 6 ps 1 title "SLCQ Triangular", \
 filename.'-C.dat'\
 	using 1:4:5	w yerrorbars 	linecolor rgb "#000000" lt 1 lw 1.5 	 title "", '' \
-	using 1:4	w linespoints 	linecolor rgb "#000000" lt 1 lw 3 pt 6 ps 1 title "SLCQ Uniform"
-	#9+(1.5*x)**2 w l lc rgb "#880000",\
-	#(25+4.5*x) w l lc rgb "#880000"
+	using 1:4	w linespoints 	linecolor rgb "#000000" lt 1 lw 3 pt 6 ps 1 title "SLCQ Uniform",\
+	9+(1.5*x)**2 w l lc rgb "#880000",\
+	(25+4.5*x) w l lc rgb "#880000",\
+	(30*x-100) w l lc rgb "#880000"
 
 #set yrange [:3000000]
 #
