@@ -1,22 +1,27 @@
+#F non nonblocking calendar queue, C spinlock protected calendar queue
          data_type=F,C
-        	  core=8
-       all_threads=3,5,7#1,2,4,6,8
-      distribution=U
+#core
+        	  core=1
+       all_threads=1,2,4,6,8,10,12,14,16
+        start_from=0
+        iterations=10
+overall_iterations=10
+      distribution=U#,E,T,t
+			  #test=H,UP
+        queue_size=32000#25,50,100,200,4000,8000,16000,32000,64000,128000
+		operations=10000000
       prob_dequeue=0.0
                ops=32000
-     distribution1=U
+     distribution1=t
      prob_dequeue1=0.5
               ops1=1000000
-     distribution2=U
+     distribution2=t
      prob_dequeue2=1.0
               ops2=32000
-overall_iterations=2
-        iterations=10
         enable_log=0
            verbose=0
                log=0
-        start_from=0
-      prune_period=50000
+      prune_period=5000
        prune_tresh=1.0
             safety=0
        empty_queue=0

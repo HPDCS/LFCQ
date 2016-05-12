@@ -40,7 +40,10 @@ print sys.argv
 conf = open(sys.argv[1])
 
 for line in conf.readlines():
-	line = line.strip().split("#")[0].split("=")
+	line = line.strip()
+	if line[0] == "#":
+		pass
+	line = line.split("#")[0].split("=")
 	if line[0] == "core":
 		core=int(line[1])
 	elif line[0] == "all_threads":
@@ -116,7 +119,7 @@ def enable_echo(fd, enabled):
 def get_next_set(threads, available):
 	res = 0
 	for i in threads:
-		if i <= available:
+		if min(i,core) <= available:
 			res = max(res, i)
 	return res
 
@@ -161,7 +164,6 @@ if __name__ == "__main__":
 		print "-------------------------------------------------------------------------\r"
 	
 	buf_line = len(threads)*len(distribution)
-	print str(len(threads))+" "+str(len(distribution))+" "+str(len(data_type))+" "+str(buf_line) 
 	residual_iter = {}
 	instance = {}
 	
@@ -218,8 +220,7 @@ if __name__ == "__main__":
 
 	num_test = count_test
 	
-	print "Number of test: "+str(num_test-count_test)+"/"+str(num_test)+" Usage Core: "+str(core-core_avail)+"/"+str(core)+"\r"
-
+	
 	print_log(True)
 	while count_test > 0:
 		t = get_next_set(threads, core_avail)
@@ -232,7 +233,6 @@ if __name__ == "__main__":
 				cmdline = pool[0]
 				test_pool[t] = pool[1:]
 				filename = tmp_dir+"/"+"-".join(cmdline).replace(".", "_")
-				print filename
 				f = open(filename, "w")
 				p = Popen(cmd+cmdline[:-1], stdout=f, stderr=f)
 				id_string = cmdline[0] + cmdline[1] + cmdline[2] + cmdline[3] + cmdline[4] + cmdline[5] + cmdline[6] + cmdline[7] + cmdline[8] + cmdline[9] + cmdline[10] + cmdline[11] 
@@ -242,6 +242,7 @@ if __name__ == "__main__":
 				run_pool.add( (p,t,id_string, cmdline[-1]) )
 				file_pool[p]=f
 				count_test -= 1
+				print filename + "\t" +  "#TEST: "+str(num_test-count_test)+"/"+str(num_test)+" #Core: "+str(core-core_avail)+"/"+str(core)+"\r"
 			continue
 		print_log()
 		sleep(1)
@@ -264,7 +265,7 @@ if __name__ == "__main__":
 				file_pool[p].close()
 				del file_pool[p]
 				instance[id_string]-=1
-				core_avail += t
+				core_avail +=  min(t,core)
 		run_pool -= to_remove
 		sleep(1)
 		print_log()

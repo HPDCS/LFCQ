@@ -36,8 +36,8 @@ if [ ! -d $eps_dir ]; then
 	mkdir $eps_dir
 fi
 
-for i in ./res/*-N.dat;  do
- o=`basename $i -N.dat`
+for i in ./res/*-F.dat;  do
+ o=`basename $i -F.dat`
  gnuplot -e "filename='./res/${o}'" script.gnuplot
 done
 

@@ -106,6 +106,15 @@ double uniform_rand(struct drand48_data *seed)
 	return random_num;
 }
 
+double neg_triangular_rand(struct drand48_data *seed)
+{
+	double random_num = 0.0;
+	drand48_r(seed, &random_num);
+	random_num = 1-sqrt(random_num);
+	random_num *= MEAN_INTERARRIVAL_TIME*3/2;
+	return random_num;
+}
+
 double triangular_rand(struct drand48_data *seed)
 {
 	double random_num = 0.0;
@@ -202,6 +211,8 @@ double enqueue(unsigned int my_id, struct drand48_data* seed, double local_min, 
 		update = uniform_rand(seed);
 	else if(distribution == 'T')
 		update = triangular_rand(seed);
+	else if(distribution == 't')
+		update = neg_triangular_rand(seed);
 	else if(distribution == 'E')
 		update = exponential_rand(seed);
 
