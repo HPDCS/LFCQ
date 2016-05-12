@@ -39,7 +39,7 @@
 #define GREATER(a,b) 	( (a) > (b) &&  !D_EQUAL((a), (b)) )
 #define SAMPLE_SIZE 25
 #define HEAD_ID 0
-#define MAXIMUM_SIZE 32768 //65536
+#define MAXIMUM_SIZE 65536//32768 //65536
 #define MINIMUM_SIZE 1
 
 #define peppe

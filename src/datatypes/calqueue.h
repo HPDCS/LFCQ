@@ -3,8 +3,8 @@
 #define __CALQUEUE_H
 
 //#define CALQSPACE 49153		// Calendar array size needed for maximum resize
-#define CALQSPACE 65536		// Calendar array size needed for maximum resize
-#define MAXNBUCKETS 32768	// Maximum number of buckets in calendar queue
+#define CALQSPACE 131072//65536		// Calendar array size needed for maximum resize
+#define MAXNBUCKETS 65536//32768	// Maximum number of buckets in calendar queue
 
 //#define CALQSPACE  128        // Calendar array size needed for maximum resize
 //#define MAXNBUCKETS 64       // Maximum number of buckets in calendar queue
