@@ -43,7 +43,7 @@
 #define MAXIMUM_SIZE 65536//32768 //65536
 #define MINIMUM_SIZE 1
 
-#define peppe
+#define FLUSH_SMART 1
 
 extern __thread unsigned int  lid;
 
