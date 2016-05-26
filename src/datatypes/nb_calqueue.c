@@ -1087,8 +1087,7 @@ nbc_bucket_node* nbc_dequeue(nb_calqueue *queue)
 			unsigned int new_current = ((unsigned int)(h->current >> 32));
 			if( new_current < index )
 				continue;
-			//printf("nbc_dequeue: 0 evt type %u\n", ((msg_t*)(right_node->payload))->type); //da_cancellare
-			res = right_node->payload;
+			res = node_malloc(right_node->payload, right_node->timestamp, right_node->counter);
 
 			//printf("nbc_dequeue: 1 evt type %u\n", ((msg_t*)(res->payload))->type); //da_cancellare
 			if(
@@ -1103,11 +1102,11 @@ nbc_bucket_node* nbc_dequeue(nb_calqueue *queue)
 				nbc_bucket_node *left_node, *right_node;
 
 				search(min, right_timestamp, 0,  &left_node, &right_node, REMOVE_DEL_INV);
-				atomic_dec_x86(&(h->counter));
-
-				//printf("nbc_dequeue: 2 evt type %u\n", ((msg_t*)(res->payload))->type); //da_cancellare
+				atomic_dec_x86(&(h->counter)); //da_cancellare
 				return res;
 			}
+			else
+				free(res);
 		}
 //		else if(is_marked(right_node_next, DEL))
 //		{
