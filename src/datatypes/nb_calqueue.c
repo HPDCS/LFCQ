@@ -167,14 +167,19 @@ static inline bool is_marked(void *pointer, unsigned long long mask)
 
 static inline bool is_marked_for_search(void *pointer, unsigned int mask)
 {
-	if(mask == REMOVE_DEL)
-		return (bool) ((((unsigned long long) pointer) &  ((unsigned long long) 3)) == DEL);
-	if(mask == REMOVE_DEL_INV)
-	{		bool a = (bool) ((((unsigned long long) pointer) &  ((unsigned long long) 3)) == DEL);
-			bool b = (bool) ((((unsigned long long) pointer) &  ((unsigned long long) 3)) == INV);
-			return a || b;
-	}
-	return false;
+//	if(mask == REMOVE_DEL)
+//		return (bool) ((((unsigned long long) pointer) &  ((unsigned long long) 3)) == DEL);
+//	if(mask == REMOVE_DEL_INV)
+//	{		bool a = (bool) ((((unsigned long long) pointer) &  ((unsigned long long) 3)) == DEL);
+//			bool b = (bool) ((((unsigned long long) pointer) &  ((unsigned long long) 3)) == INV);
+//			return a || b;
+//	}
+
+
+	bool a = (bool) ((((unsigned long long) pointer) &  ((unsigned long long) 3)) == DEL);
+	bool b = (bool) ((((unsigned long long) pointer) &  ((unsigned long long) 3)) == INV);
+	b = b & (mask == REMOVE_DEL_INV);
+	return a || b;
 }
 
 /**
