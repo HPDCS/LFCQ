@@ -34,8 +34,7 @@
 #include <pthread.h>
 #include <math.h>
 
-#include "../arch/atomic.h"
-#include "../datatypes/nb_calqueue.h"
+#include "nb_calqueue.h"
 
 __thread nbc_bucket_node *to_free_nodes = NULL;
 __thread nbc_bucket_node *to_free_tables_old = NULL;

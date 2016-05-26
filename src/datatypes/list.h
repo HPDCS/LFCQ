@@ -30,11 +30,10 @@
 #define __LIST_DATATYPE_H
 
 #include <stddef.h>
+#include <stdbool.h>
 #include <string.h>
 #include <assert.h>
 #include <pthread.h>
-
-#include "../mm/myallocator.h"
 
 
 //#include <core/core.h>
@@ -74,7 +73,7 @@ struct rootsim_list {
  *  \endcode
  */
 #define new_list(type)	(type *)({ \
-				void *__lmptr = (void *)rsalloc(sizeof(struct rootsim_list));\
+				void *__lmptr = (void *)malloc(sizeof(struct rootsim_list));\
 				bzero(__lmptr, sizeof(struct rootsim_list));\
 				__lmptr;\
 			})

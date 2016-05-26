@@ -24,6 +24,7 @@
  *  Created on: Jul 13, 2015
  *      Author: Romolo Marotta
  */
+
 #ifndef DATATYPES_NONBLOCKING_CALQUEUE_H_
 #define DATATYPES_NONBLOCKING_CALQUEUE_H_
 

@@ -34,7 +34,6 @@
 #include "datatypes/calqueue.h"
 #include "datatypes/nb_calqueue.h"
 
-#include "mm/myallocator.h"
 
 nb_calqueue* nbcqueue;
 list(nbc_bucket_node) lqueue;
@@ -185,7 +184,7 @@ double dequeue(unsigned int my_id)
 	}
 
 	if(free_pointer != NULL)
-		mm_free(free_pointer);
+		free(free_pointer);
 
 	if( VERBOSE )
 	{
@@ -211,7 +210,7 @@ double enqueue(unsigned int my_id, struct drand48_data* seed, double local_min, 
 		update = uniform_rand(seed);
 	else if(distribution == 'T')
 		update = triangular_rand(seed);
-	else if(distribution == 't')
+	else if(distribution == 'N')
 		update = neg_triangular_rand(seed);
 	else if(distribution == 'E')
 		update = exponential_rand(seed);
@@ -427,7 +426,6 @@ void* process(void *arg)
 	gettimeofday(&endTV, NULL);
 	timersub(&endTV, &startTV, &diff);
 
-	mm_get_log_data(&malloc_time[my_id], &malloc_count[my_id], &free_time[my_id], &free_count[my_id]);
 
 	if(LOG)
 		printf("%u- DONE + %d:%d "
