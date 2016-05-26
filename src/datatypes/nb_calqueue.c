@@ -1167,7 +1167,7 @@ double nbc_prune(nb_calqueue *queue, double timestamp)
 
 	prune_count++;
 
-	if(prune_count < 100)
+	if(prune_count < 1)
 		return 0.0;
 	else
 		prune_count = 0;

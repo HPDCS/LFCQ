@@ -166,8 +166,10 @@ double dequeue(unsigned int my_id)
 	{
 		nbc_bucket_node *new = nbc_dequeue(nbcqueue);
 		free_pointer = new;
-		timestamp = new->timestamp;
-		counter = new->counter;
+		if(free_pointer != NULL){
+			timestamp = new->timestamp;
+			counter = new->counter;
+		}
 	}
 	clock_gettime(CLOCK_MONOTONIC,&endTV2);
 
