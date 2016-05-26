@@ -8,7 +8,6 @@ RM := rm -rf
 
 # All of the sources participating in the build are defined here
 -include sources.mk
--include src/mm/subdir.mk
 -include src/datatypes/subdir.mk
 -include src/arch/subdir.mk
 -include src/subdir.mk
@@ -38,7 +37,7 @@ NBCQ: $(OBJS) $(USER_OBJS)
 
 # Other Targets
 clean:
-	-$(RM) $(OBJS)$(C_DEPS)$(EXECUTABLES) NBCQ
+	-$(RM) $(EXECUTABLES)$(OBJS)$(C_DEPS) NBCQ
 	-@echo ' '
 
 .PHONY: all clean dependents
