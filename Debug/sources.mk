@@ -16,5 +16,4 @@ SUBDIRS := \
 src/arch \
 src/datatypes \
 src \
-src/mm \
 
