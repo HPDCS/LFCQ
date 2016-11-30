@@ -38,6 +38,19 @@
 #include "nb_calqueue.h"
 #include "core.h"
 
+
+#define VAL (0ULL)
+#define DEL (1ULL)
+#define MOV (2ULL)
+#define INV (3ULL)
+
+#define MASK_PTR (-4LL)
+#define MASK_MRK (3ULL)
+
+#define REMOVE_DEL		 0
+#define REMOVE_DEL_INV	 1
+
+
 __thread nbc_bucket_node *to_free_nodes = NULL;
 __thread nbc_bucket_node *to_free_nodes_old = NULL;
 
@@ -45,21 +58,13 @@ __thread nbc_bucket_node *to_free_tables_old = NULL;
 __thread nbc_bucket_node *to_free_tables_new = NULL;
 
 __thread unsigned int to_remove_nodes_count = 0;
-__thread unsigned int  mark;
-__thread unsigned int  prune_count = 0;
+__thread unsigned int mark;
+__thread unsigned int prune_count = 0;
 
 static unsigned int * volatile prune_array;
 static unsigned int threads;
 
 static nbc_bucket_node *g_tail;
-
-#define VAL ((unsigned long long)0)
-#define DEL ((unsigned long long)1)
-#define MOV ((unsigned long long)2)
-#define INV ((unsigned long long)3)
-
-#define REMOVE_DEL		 0
-#define REMOVE_DEL_INV	 1
 
 
 /**
@@ -90,26 +95,38 @@ static void error(const char *msg, ...) {
  */
 static inline unsigned int hash(double timestamp, double bucket_width)
 {
-	unsigned int res =  (unsigned int) (timestamp / bucket_width);
+	double tmp1;
+//	double tmp2;
+	unsigned int ret = 0;
+	bool end = false;
+	unsigned int count = 0;
 
-	if(timestamp / bucket_width > pow(2, 32))
+	double res_d = (timestamp / bucket_width);
+	unsigned int res =  (unsigned int) res_d;
+
+	if(res_d > 4294967295)
 		error("Probable Overflow when computing the index: "
 				"TS=%e,"
 				"BW:%e, "
 				"TS/BW:%e, "
 				"2^32:%e\n",
-				timestamp, bucket_width, timestamp / bucket_width,  pow(2, 32));
+				timestamp, bucket_width, res_d,  pow(2, 32));
 
 
-	unsigned int ret = 0;
-	bool end = false;
-	unsigned int count = 0;
+//	tmp1 = res * bucket_width;
+//	tmp2 = tmp1 + bucket_width;
+//
+//	if(LESS(timestamp, tmp1))
+//		return --res;
+//	if(GEQ(timestamp, tmp2))
+//		return ++res;
+//	return res;
 
-	res -= (res & (-(res < 3))) +  (3 & (-(res >= 3)));
+	res -= (res & (-(res < 3))) +  (3 & (-(res >= 3))); 
 
 	while( !end )
 	{
-		double tmp1 = res*bucket_width;
+		tmp1 = res*bucket_width;
 
 		ret = ((res) & (-(D_EQUAL(tmp1, timestamp)))) +  ((res-1) & (-(GREATER(tmp1, timestamp))));
 		end = D_EQUAL(tmp1, timestamp) || GREATER(tmp1, timestamp);
@@ -135,7 +152,7 @@ static inline unsigned int hash(double timestamp, double bucket_width)
  */
 static inline void* get_unmarked(void *pointer)
 {
-	return (void*) (((unsigned long long) pointer) & ~((unsigned long long) 3));
+	return (void*) (((unsigned long long) pointer) & MASK_PTR);
 }
 
 /**
@@ -163,17 +180,34 @@ static inline void* get_marked(void *pointer, unsigned long long mark)
  */
 static inline bool is_marked(void *pointer, unsigned long long mask)
 {
-	return (bool) ((((unsigned long long) pointer) &  ((unsigned long long) 3)) == mask);
+	return (bool) ((((unsigned long long) pointer) & MASK_MRK) == mask);
+}
+
+/**
+ *  This function checks if a reference is generally marked
+ *
+ *  @author Romolo Marotta
+ *
+ *  @param pointer
+ *
+ *  @return true if the reference is generally marked, else false
+ */
+static inline bool is_marked(void *pointer)
+{
+	return (bool) ((((unsigned long long) pointer) & MASK_MRK));
 }
 
 static inline bool is_marked_for_search(void *pointer, unsigned int mask)
 {
+	bool a, b;
+	
 	if(mask == REMOVE_DEL)
-		return (bool) ((((unsigned long long) pointer) &  ((unsigned long long) 3)) == DEL);
+		return (bool) ((((unsigned long long) pointer) & MASK_MRK) == DEL);
 	if(mask == REMOVE_DEL_INV)
-	{		bool a = (bool) ((((unsigned long long) pointer) &  ((unsigned long long) 3)) == DEL);
-			bool b = (bool) ((((unsigned long long) pointer) &  ((unsigned long long) 3)) == INV);
-			return a || b;
+	{		
+		a = (bool) ((((unsigned long long) pointer) & MASK_MRK) == DEL);
+		b = (bool) ((((unsigned long long) pointer) & MASK_MRK) == INV);
+		return a || b;
 	}
 	return false;
 }
@@ -214,7 +248,7 @@ static nbc_bucket_node* node_malloc(void *payload, double timestamp, unsigned in
 {
 	nbc_bucket_node* res = (nbc_bucket_node*) malloc(sizeof(nbc_bucket_node));
 
-	if (is_marked(res, DEL) || is_marked(res, MOV) || is_marked(res, INV) || res == NULL)
+	if (is_marked(res) || res == NULL)
 	{
 		error("%lu - Not aligned Node or No memory\n", pthread_self());
 		abort();
@@ -237,7 +271,7 @@ static nbc_bucket_node* node_malloc(void *payload, double timestamp, unsigned in
  *
  * @param queue used to associate freed nodes to a queue
  * @param start the pointer to the first node in the disconnected sequence
- * @param end   the pointer to the last node in the disconnected sequence
+ * @param number of node to connect to the to_be_free queue
  * @param timestamp   the timestamp of the last disconnected node
  *
  *
@@ -285,6 +319,7 @@ static void search(nbc_bucket_node *head, double timestamp, unsigned int tie_bre
 	nbc_bucket_node *left, *right, *left_next, *tmp, *tmp_next, *tail;
 	nbc_bucket_node *right_unmarked;
 	unsigned int counter;
+	double tmp_timestamp;
 	tail = g_tail;
 
 	do
@@ -293,7 +328,6 @@ static void search(nbc_bucket_node *head, double timestamp, unsigned int tie_bre
 		tmp = head;
 		tmp_next = tmp->next;
 		counter = 0;
-		double tmp_timestamp;
 		do
 		{
 			// Check if the node is marked
@@ -312,49 +346,32 @@ static void search(nbc_bucket_node *head, double timestamp, unsigned int tie_bre
 			// Retrieve timestamp and next field from the current node (tmp)
 			tmp = get_unmarked(tmp_next);
 			tmp_timestamp = tmp->timestamp;
-			//if (tmp == tail)
-			//	break;
+			
 			tmp_next = tmp->next;
 
 			// Exit if tmp is a tail or its timestamp is > of the searched key
 		} while (	tmp != tail &&
-//					(
-//						is_marked_for_search(tmp_next, flag)
-//						|| (
-//								LEQ(tmp_timestamp, timestamp) &&
-//								tie_breaker == 0
-//							)
-//						|| (
-//								LEQ(tmp_timestamp, timestamp) &&
-//								tie_breaker != 0 && tmp->counter <= tie_breaker
-//							)
-//					)
 					(
-						is_marked_for_search(tmp_next, flag)
-						|| LESS(tmp_timestamp, timestamp)
-						||  (
-								D_EQUAL(tmp_timestamp, timestamp) &&
-								tie_breaker == 0
+						is_marked_for_search(tmp_next, flag) ||
+						LESS(tmp_timestamp, timestamp)	||  
+						(
+							D_EQUAL(tmp_timestamp, timestamp) &&
+							(
+								tie_breaker == 0 || 
+								(tie_breaker != 0 && tmp->counter <= tie_breaker)
 							)
-						|| (
-								D_EQUAL(tmp_timestamp, timestamp) &&
-								tie_breaker != 0 && tmp->counter <= tie_breaker
-							)
+						)
 					)
 				);
 
 		// Set right node
 		right = tmp;
-		right_unmarked = tmp;
 
 		//left node and right node have to be adjacent. If not try with CAS
 		if (get_unmarked(left_next) != right)
 		{
-			if(is_marked(left_next, MOV))
-				right = get_marked(right, MOV);
-
-			else if(flag == REMOVE_DEL && is_marked(left_next, INV))
-				right = get_marked(right, INV);
+			right |= (MASK_MRK & left_next);
+			
 			// if CAS succeeds connect the removed nodes to to_be_freed_list
 			if (!CAS_x86(
 						(volatile unsigned long long *)&(left->next),
@@ -365,16 +382,15 @@ static void search(nbc_bucket_node *head, double timestamp, unsigned int tie_bre
 				continue;
 			connect_to_be_freed_node_list(left_next, counter);
 		}
-		// at this point they are adjacent. Thus check that right node is still unmarked and return
-		if (right_unmarked == tail || !is_marked_for_search(right_unmarked->next, flag))
-		{
-			*left_node = left;
-			*right_node = right;
-			if(flag == REMOVE_DEL_INV )
-				*right_node = right_unmarked;
-			
-			return;
-		}
+		
+		// at this point they are adjacent
+		*left_node = left;
+		*right_node = right;
+		if(flag == REMOVE_DEL_INV )
+			*right_node = tmp;
+		
+		return;
+		
 	} while (1);
 }
 
@@ -397,19 +413,18 @@ static inline void nbc_flush_current(table* h, nbc_bucket_node* node)
 	newCur |= generate_ABA_mark();
 
 	// Retry until it is ensured that the current is moved back to index
-#if FLUSH_SMART == 1
+
 	oldCur = h->current;
 	oldIndex = (unsigned int) (oldCur >> 32);
 	if(
 		index > oldIndex
-		|| is_marked(node->next, DEL)
+		|| is_marked(node->next)
 		|| CAS_x86(
 					(volatile unsigned long long *)&(h->current),
 					(unsigned long long) oldCur,
 					(unsigned long long) newCur
 					)
 				) return;
-#endif
 
 	do
 	{
@@ -418,54 +433,8 @@ static inline void nbc_flush_current(table* h, nbc_bucket_node* node)
 		oldIndex = (unsigned int) (oldCur >> 32);
 	}
 	while (
-			index <
-#if FLUSH_SMART == 0
-			=
-#endif
-			oldIndex && !is_marked(node->next, DEL)
-			&& !CAS_x86(
-						(volatile unsigned long long *)&(h->current),
-						(unsigned long long) oldCur,
-						(unsigned long long) newCur
-						)
-					);
-}
-
-static inline void nbc_flush_current2(table* h, nbc_bucket_node* node)
-{
-	unsigned long long oldCur;
-	unsigned int oldIndex;
-	unsigned int index = hash(node->timestamp, h->bucket_width);
-	unsigned long long newCur =  ( ( unsigned long long ) index ) << 32;
-	newCur |= generate_ABA_mark();
-
-	// Retry until it is ensured that the current is moved back to index
-#if FLUSH_SMART == 1
-	oldCur = h->current;
-	oldIndex = (unsigned int) (oldCur >> 32);
-	if(
-		index > oldIndex
-		|| is_marked(node->next, DEL) || is_marked(node->next, VAL)
-		|| CAS_x86(
-					(volatile unsigned long long *)&(h->current),
-					(unsigned long long) oldCur,
-					(unsigned long long) newCur
-					)
-				) return;
-#endif
-
-	do
-	{
-
-		oldCur = h->current;
-		oldIndex = (unsigned int) (oldCur >> 32);
-	}
-	while (
-			index <
-#if FLUSH_SMART == 0
-			=
-#endif
-			oldIndex && !is_marked(node->next, DEL) && !is_marked(node->next, VAL)
+			index <	oldIndex 
+			&& is_marked(node->next, VAL)
 			&& !CAS_x86(
 						(volatile unsigned long long *)&(h->current),
 						(unsigned long long) oldCur,
@@ -1067,20 +1036,20 @@ void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 
 	//printf("ENQ %p %f %u\n", new_node, new_node->timestamp, new_node->counter);
 	do
+	{
 		h  = read_table(queue);
-	while(!insert_std(h, &new_node, REMOVE_DEL_INV));
+	} while(!insert_std(h, &new_node, REMOVE_DEL_INV));
 
 
 
-	nbc_flush_current(
-			h,
-			new_node);
+	nbc_flush_current(h, new_node);
+	
 	atomic_inc_x86(&(h->counter));
 	
 	//printf("nbc_enqueue: evt type %u\n", ((msg_t*)(new_node->payload))->type);//da_cancellare
 }
 
-static bool CAS_for_mark( nbc_bucket_node* right_node, nbc_bucket_node* right_node_next)
+static inline bool CAS_for_mark( nbc_bucket_node* right_node, nbc_bucket_node* right_node_next)
 {
 	return CAS_x86(
 			(volatile unsigned long long *)&(right_node->next),
@@ -1090,7 +1059,7 @@ static bool CAS_for_mark( nbc_bucket_node* right_node, nbc_bucket_node* right_no
 
 }
 
-static bool CAS_for_increase_cur(table* h, unsigned long long current, unsigned long long newCur)
+static inline bool CAS_for_increase_cur(table* h, unsigned long long current, unsigned long long newCur)
 {
 	return CAS_x86(
 			(volatile unsigned long long *)&(h->current),
