@@ -50,6 +50,9 @@
 #define REMOVE_DEL		 0
 #define REMOVE_DEL_INV	 1
 
+#define MAX_INT 4294967295
+#define MASK_ABA 4294967295ULL
+
 
 __thread nbc_bucket_node *to_free_nodes = NULL;
 __thread nbc_bucket_node *to_free_nodes_old = NULL;
@@ -309,7 +312,7 @@ static inline void connect_to_be_freed_table_list(table *h)
  * @param head the head of the list in which we have to perform the search
  * @param timestamp the value to be found
  * @param left_node a pointer to a pointer used to return the left node
- * @param right_node a pointer to a pointer used to return the right node
+ * @param left_node_next a pointer to a pointer used to return the next field of the left node 
  *
  */
 
@@ -364,14 +367,12 @@ static void search(nbc_bucket_node *head, double timestamp, unsigned int tie_bre
 					)
 				);
 
-		// Set right node
-		right = tmp;
+		// Set right node and copy the mark of left node
+		right = tmp | (MASK_MRK & left_next);
 
 		//left node and right node have to be adjacent. If not try with CAS
-		if (get_unmarked(left_next) != right)
+		if (left_next != right)
 		{
-			right |= (MASK_MRK & left_next);
-			
 			// if CAS succeeds connect the removed nodes to to_be_freed_list
 			if (!CAS_x86(
 						(volatile unsigned long long *)&(left->next),
@@ -386,8 +387,6 @@ static void search(nbc_bucket_node *head, double timestamp, unsigned int tie_bre
 		// at this point they are adjacent
 		*left_node = left;
 		*right_node = right;
-		if(flag == REMOVE_DEL_INV )
-			*right_node = tmp;
 		
 		return;
 		
@@ -474,64 +473,71 @@ static bool insert_std(table* hashtable, nbc_bucket_node** new_node, int flag)
 
 	search(bucket, new_node_timestamp, new_node_counter, &left_node, &right_node, flag);
 
-
-	switch(flag)
+	if(!is_marked(right_node, MOV))
 	{
-	case REMOVE_DEL_INV:
-
-		new_node_pointer->next = right_node;
-		// set tie_breaker
-		new_node_pointer->counter = 1 + ( -D_EQUAL(new_node_timestamp, left_node->timestamp ) & left_node->counter );
-
-		if (CAS_x86(
-					(volatile unsigned long long*)&(left_node->next),
-					(unsigned long long) right_node,
-					(unsigned long long) new_node_pointer
-				))
+		switch(flag)
 		{
+		case REMOVE_DEL_INV:
 
-//			printf("ENQUEUE: %f %u - %u %u\n", new_node_pointer->timestamp, new_node_pointer->counter, hash(new_node_timestamp,
-//					hashtable->bucket_width), index );
-			return true;
+			new_node_pointer->next = right_node;
+			// set tie_breaker
+			new_node_pointer->counter = 1 + ( -D_EQUAL(new_node_timestamp, left_node->timestamp ) & left_node->counter );
+
+			if (CAS_x86
+					(
+						(volatile unsigned long long*)&(left_node->next),
+						(unsigned long long) right_node,
+						(unsigned long long) new_node_pointer
+					)
+			)
+			{
+
+	//			printf("ENQUEUE: %f %u - %u %u\n", new_node_pointer->timestamp, new_node_pointer->counter, hash(new_node_timestamp,
+	//					hashtable->bucket_width), index );
+				return true;
+			}
+
+			// reset tie breaker for the new search
+			new_node_pointer->counter = 0;
+			break;
+
+		case REMOVE_DEL:
+
+			// mark the to-be.inserted node as INV
+			new_node_pointer->next = get_marked(right_node, INV);
+			// node already exists
+			if(D_EQUAL(new_node_timestamp, left_node->timestamp ) && left_node->counter == new_node_counter)
+			{
+				free(new_node_pointer);
+				*new_node = left_node;
+				return true;
+			}
+
+			// first replica to be inserted
+			
+			// copy left node mark
+			new_node_pointer |= (MASK_MRK & right_node);
+
+	//		if(right_node->timestamp == INFTY)
+	//		printf("MOVING %f %u between left %f %u right  INFTY %u\n",
+	//				new_node_timestamp, new_node_counter,
+	//				left_node->timestamp, left_node->counter,
+	//				 right_node->counter);
+	//		else
+	//			printf("MOVING %f %u between left %f %u right  %f %u\n",
+	//					new_node_timestamp, new_node_counter,
+	//					left_node->timestamp, left_node->counter,
+	//					right_node->timestamp, right_node->counter);
+
+			if (CAS_x86(
+						(volatile unsigned long long*)&(left_node->next),
+						(unsigned long long) right_node,
+						(unsigned long long) new_node_pointer
+					))
+				//printf("insert_std: evt type %u\n", ((msg_t*)(new_node[0]->payload))->type);//da_cancellare
+				return true;
+			break;
 		}
-
-		// reset tie breaker
-		new_node_pointer->counter = 0;
-		break;
-
-	case REMOVE_DEL:
-
-		new_node_pointer->next = get_marked(right_node, INV);
-		// node already exists
-		if(D_EQUAL(new_node_timestamp, left_node->timestamp ) && left_node->counter == new_node_counter)
-		{
-			free(new_node_pointer);
-			*new_node = left_node;
-			return true;
-		}
-		// first replica to be inserted
-		if(is_marked(right_node, INV))
-			new_node_pointer = get_marked(new_node_pointer, INV);
-
-//		if(right_node->timestamp == INFTY)
-//		printf("MOVING %f %u between left %f %u right  INFTY %u\n",
-//				new_node_timestamp, new_node_counter,
-//				left_node->timestamp, left_node->counter,
-//				 right_node->counter);
-//		else
-//			printf("MOVING %f %u between left %f %u right  %f %u\n",
-//					new_node_timestamp, new_node_counter,
-//					left_node->timestamp, left_node->counter,
-//					right_node->timestamp, right_node->counter);
-
-		if (CAS_x86(
-					(volatile unsigned long long*)&(left_node->next),
-					(unsigned long long) right_node,
-					(unsigned long long) new_node_pointer
-				))
-			//printf("insert_std: evt type %u\n", ((msg_t*)(new_node[0]->payload))->type);//da_cancellare
-			return true;
-		break;
 	}
 	return false;
 
@@ -541,32 +547,28 @@ static void set_new_table(table* h, unsigned int threshold )
 {
 	nbc_bucket_node *tail = g_tail;
 	int signed_counter = atomic_read( &h->counter );
-	signed_counter = (-(signed_counter >= 0)) & signed_counter;
-
-
-	unsigned int counter = (unsigned int)signed_counter;
+	unsigned int counter = (unsigned int) ( (-(signed_counter >= 0)) & signed_counter);
 	unsigned int i = 0;
 	unsigned int size = h->size;
 	unsigned int thp2 = threshold *2;
 	unsigned int new_size = 0;
+	table *new_h;
+	nbc_bucket_node *array;
 
-
-	if		(size == 1 && counter > thp2)
-		new_size = thp2;
-	else if (size == thp2 && counter < threshold)
-		new_size = 1;
-	else if (size >= thp2 && counter > 2*size)
+	if 		(size >= thp2 && counter > 2*size)
 		new_size = 2*size;
 	else if (size > thp2 && counter < 0.5*size)
 		new_size =  0.5*size;
-
-	if(new_size > MAXIMUM_SIZE )
-		new_size = 0;
-
-	if(new_size > 0)
+	else if	(size == 1 && counter > thp2)
+		new_size = thp2;
+	else if (size == thp2 && counter < threshold)
+		new_size = 1;
+	
+	
+	if(new_size != 0 && new_size <= MAXIMUM_SIZE)
 	{
 
-		table *new_h = (table*) malloc(sizeof(table));
+		new_h = (table*) malloc(sizeof(table));
 		if(new_h == NULL)
 			error("No enough memory to new table structure\n");
 
@@ -577,7 +579,7 @@ static void set_new_table(table* h, unsigned int threshold )
 		new_h->current 		= ((unsigned long long)-1) << 32;
 
 
-		nbc_bucket_node *array =  (nbc_bucket_node*) malloc(sizeof(nbc_bucket_node) * new_size);
+		array =  (nbc_bucket_node*) malloc(sizeof(nbc_bucket_node) * new_size);
 		if(array == NULL)
 		{
 			free(new_h);
@@ -788,49 +790,60 @@ static double compute_mean_separation_time(table* h,
 
 static table* read_table(nb_calqueue* queue)
 {
-	table *h = queue->hashtable;
+	table *h = queue->hashtable		;
 #if ENABLE_EXPANSION == 0
 	return h;
 #endif
-	nbc_bucket_node *tail = g_tail;
+	nbc_bucket_node *tail = g_tail	;
+	unsigned int i, index			;
+	unsigned int size = h->size		;
+	unsigned int thp2 = threshold *2;
 
+	table 			*new_h 			;
+	nbc_bucket_node *array 			;
+	double 			 new_bw 		;
+	double 			 min_timestamp 	;
+	double 			 newaverage		;
+	nbc_bucket_node *bucket			 
+	nbc_bucket_node *right_node, *left_node, *right_node_next;
+	
 	//printf("SIZE H %d\n", h->counter.count);
 
-	unsigned int i, index;
-	if(h->new_table == NULL)
+	if( 
+		(counter < 0.5*size || counter > 2*size)
+		&& (h->new_table == NULL)
+		)
 		set_new_table(h, queue->threshold);
 
 	if(h->new_table != NULL)
 	{
 		//printf("%u - MOVING BUCKETS\n", tid);
-		table *new_h = h->new_table;
-		nbc_bucket_node *array = h->array;
-		double new_bw = new_h->bucket_width;
-		double min_timestamp = INFTY;
+		new_h 			= h->new_table;
+		array 			= h->array;
+		new_bw 			= new_h->bucket_width;
+		min_timestamp 	= INFTY;
 
 		if(new_bw < 0)
 		{
 			block_table(h, &index, &min_timestamp);
-			double newaverage = compute_mean_separation_time(h, new_h->size, queue->threshold, index, min_timestamp);
-			if
-			(
+			newaverage = compute_mean_separation_time(h, new_h->size, queue->threshold, index, min_timestamp);
+//			if
+//			(
 					CAS_x86(
 							(volatile unsigned long long *) &(new_h->bucket_width),
 							*( (unsigned long long*)  &new_bw),
 							*( (unsigned long long*)  &newaverage)
 					)
-				)
-			{
+//				)
+//			{
 //					printf("COMPUTE BW %.20f %u\n", newaverage, new_h->size)
-
 				;
-			}
+//			}
 		}
 
 		for(i=0; i < h->size; i++)
 		{
 			nbc_bucket_node *bucket = array + i;
-			nbc_bucket_node *right_node, *left_node, *right_node_next;
 
 			do
 			{
@@ -840,25 +853,25 @@ static table* read_table(nb_calqueue* queue)
 					search(bucket, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
 					right_node = get_unmarked(right_node);
 					right_node_next = right_node->next;
+					
+					if(is_marked(right_node_next, MOV))
+						break;
+						
+					
 				}
 				while(
 						right_node != tail &&
-						(
-							is_marked(right_node_next, DEL) ||
-							is_marked(right_node_next, INV) ||
-							(	get_unmarked(right_node_next) == right_node_next && !(
-									CAS_x86(
-									(volatile unsigned long long *) &(right_node->next),
-									(unsigned long long)			right_node_next,
-									(unsigned long long) 			get_marked(right_node_next, MOV)
-									))
-							)
-						)
-					);
+						!CAS_x86(
+								(volatile unsigned long long *) &(right_node->next),
+								(unsigned long long)			get_unmarked(right_node_next),
+								(unsigned long long) 			get_marked(right_node_next, MOV)
+								)
+									
+				);
 
 				if(right_node != tail)
 				{
-					nbc_bucket_node *replica = node_malloc(right_node->payload, right_node->timestamp,  right_node->counter);
+					nbc_bucket_node *replica 		= node_malloc(right_node->payload, right_node->timestamp,  right_node->counter);
 					nbc_bucket_node *right_replica_field;
 					nbc_bucket_node *replica2;
 
@@ -984,9 +997,9 @@ nb_calqueue* nb_calqueue_init(unsigned int threshold)
 	}
 	res->hashtable->bucket_width = 1.0;
 	res->hashtable->new_table = NULL;
-	res->hashtable->size = 1;
+	res->hashtable->size = MINIMUM_SIZE;
 
-	res->hashtable->array = (nbc_bucket_node*) malloc(sizeof(nbc_bucket_node) );
+	res->hashtable->array = (nbc_bucket_node*) malloc(MINIMUM_SIZE * sizeof(nbc_bucket_node) );
 	if(res->hashtable->array == NULL)
 	{
 		free(res->hashtable);
@@ -999,7 +1012,7 @@ nb_calqueue* nb_calqueue_init(unsigned int threshold)
 	g_tail = node_malloc(NULL, INFTY, 0);
 	g_tail->next = NULL;
 
-	for (i = 0; i < 1; i++)
+	for (i = 0; i < MINIMUM_SIZE; i++)
 	{
 		res->hashtable->array[i].next = g_tail;
 		res->hashtable->array[i].timestamp = i * 1.0;
@@ -1027,20 +1040,12 @@ void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 {
 	nbc_bucket_node *new_node = node_malloc(payload, timestamp, 0);
 	table *h;
-	if(new_node->counter != 0)
-		{
-			// Should never be executed
-			printf("LINE 933 NOT VALID %u new_node_counter\n", new_node->counter);
-			exit(1);
-		}
 
 	//printf("ENQ %p %f %u\n", new_node, new_node->timestamp, new_node->counter);
 	do
 	{
 		h  = read_table(queue);
 	} while(!insert_std(h, &new_node, REMOVE_DEL_INV));
-
-
 
 	nbc_flush_current(h, new_node);
 	
@@ -1082,9 +1087,12 @@ nbc_bucket_node* nbc_dequeue(nb_calqueue *queue)
 	nbc_bucket_node *right_node, *min, *right_node_next, *res, *tail, *left_node;
 	table * h;
 	unsigned long long current;
+	unsigned long long newCur;
 
 	unsigned int index;
+	unsigned int newInd;
 	unsigned int size;
+	unsigned int tie;
 	nbc_bucket_node *array;
 	double right_timestamp;
 	double bucket_width;
@@ -1112,10 +1120,9 @@ nbc_bucket_node* nbc_dequeue(nb_calqueue *queue)
 		//printf("nbc_dequeue: -1 evt type %u\n", ((msg_t*)(right_node->payload))->type); //da_cancellare
 
 
-		if(is_marked(min->next, MOV))
+		if(is_marked(right_node, MOV))
 			continue;
 
-		right_node_next = right_node->next;
 		right_timestamp = right_node->timestamp;
 
 
@@ -1123,7 +1130,8 @@ nbc_bucket_node* nbc_dequeue(nb_calqueue *queue)
 			return NULL;
 
 		else if( LESS(right_timestamp, (index)*bucket_width) )
-		{	//nbc_flush_current(h, right_node);
+		{	
+			nbc_flush_current(h, right_node);
 //			printf("ER %f %u %f %p %u %u %u %u - %u %u\n",
 //					right_timestamp,
 //					right_node->counter,
@@ -1139,33 +1147,41 @@ nbc_bucket_node* nbc_dequeue(nb_calqueue *queue)
 //			if(old == right_timestamp)
 //				exit(1);
 //			old = right_timestamp;
-			continue;
 		}
 		else if( GREATER(right_timestamp, (index+1)*bucket_width) )
 		{
 			if(index+1 < index)
 				error("\nOVERFLOW index:%u  %.10f %u %f\n", index, bucket_width, size, right_timestamp);
 
-			unsigned long long newCur =  ( ( unsigned long long ) index+1 ) << 32;
-			newCur |= generate_ABA_mark();
-//				CAS_x86(
-//						(volatile unsigned long long *)&(h->current),
-//						(unsigned long long)			current,
-//						(unsigned long long) 			newCur				)
-			CAS_for_increase_cur(h, current, newCur)
+			newCur =  ( ( unsigned long long ) index+1 ) << 32;
+			newCur |= current & MASK_ABA;
 
-			;
+//			CAS_x86(
+//					(volatile unsigned long long *)&(h->current),
+//					(unsigned long long)			current,
+//					(unsigned long long) 			newCur				);
+			
+			
+			CAS_for_increase_cur(h, current, newCur);
+			
 		}
-		else if(!is_marked(right_node_next, DEL))
-		{
-			unsigned int new_current = ((unsigned int)(h->current >> 32));
-			if( new_current < index )
+		else
+		{ 
+			newCur = h->current;
+			newInd = ((unsigned int)(newCur >> 32));
+
+			if( 
+				newInd < index  || 
+				( newInd == index && newCur != current) 
+			   )
 				continue;
-			//printf("nbc_dequeue: 0 evt type %u\n", ((msg_t*)(right_node->payload))->type); //da_cancellare
+			
+
+			right_node_next = right_node->next;
 			res = right_node->payload;
-			unsigned int tie = right_node->counter;
-			//printf("nbc_dequeue: 1 evt type %u\n", ((msg_t*)(res->payload))->type); //da_cancellare
-			if(
+			tie = right_node->counter;
+
+			if( !is_marked(right_node_next, DEL) &&
 //					CAS_x86(
 //								(volatile unsigned long long *)&(right_node->next),
 //								(unsigned long long) get_unmarked(right_node_next),
@@ -1174,10 +1190,7 @@ nbc_bucket_node* nbc_dequeue(nb_calqueue *queue)
 					CAS_for_mark(right_node, right_node_next)
 				)
 			{
-				nbc_bucket_node *left_node, *right_node;
-
 				search(min, right_timestamp, tie,  &left_node, &right_node, REMOVE_DEL_INV);
-				//search(min, -1.0, 0,  &left_node, &right_node, REMOVE_DEL_INV);
 				atomic_dec_x86(&(h->counter));
 				//printf("DEQUEUE: %f %u - %u %u\n", right_timestamp, tie, index, index % size);
 				//printf("nbc_dequeue: 2 evt type %u\n", ((msg_t*)(res->payload))->type); //da_cancellare
