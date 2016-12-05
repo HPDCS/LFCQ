@@ -608,204 +608,241 @@ static void set_new_table(table* h, unsigned int threshold )
 	}
 }
 
-static void block_table(table* h, unsigned int *index, double *min_timestamp)
+static void block_table(table* h)
 {
 	unsigned int i=0;
 	unsigned int size = h->size;
-	nbc_bucket_node *tail = g_tail;
 	nbc_bucket_node *array = h->array;
-	*min_timestamp = INFTY;
-
+	nbc_bucket_node *bucket, *bucket_next;
+	
 	for(i = 0; i < size; i++)
 	{
-		nbc_bucket_node *bucket = array + i;
-		nbc_bucket_node *bucket_next, *right_node, *left_node, *right_node_next;
-
-		bool marked = false;
-		bool cas_result = false;
-
+		bucket = array + ((i + lid) % size);
+		
 		do
 		{
 			bucket_next = bucket->next;
-			marked = is_marked(bucket_next, MOV);
-			if(!marked)
-				cas_result = CAS_x86(
+		}
+		while( !is_marked(bucket_next, MOV) &&
+				!CAS_x86(
 						(volatile unsigned long long *) &(bucket->next),
 						(unsigned long long)			bucket_next,
 						(unsigned long long) 			get_marked(bucket_next, MOV)
-					);
-		}
-		while( !marked && !cas_result );
-
-		do
-		{
-			search(bucket, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
-			right_node = get_unmarked(right_node);
-			right_node_next = right_node->next;
-		}
-		while(
-				right_node != tail &&
-				(
-					is_marked(right_node_next, DEL) ||
-					is_marked(right_node_next, INV) ||
-					(	get_unmarked(right_node_next) == right_node_next && !(
-							cas_result = CAS_x86(
-							(volatile unsigned long long *) &(right_node->next),
-							(unsigned long long)			right_node_next,
-							(unsigned long long) 			get_marked(right_node_next, MOV)
-							))
-					)
-				)
-			);
-
-		if(LESS(right_node->timestamp, *min_timestamp) )
-		{
-			*min_timestamp = right_node->timestamp;
-			*index = i;
-//			printf("MIN %f %u\n", *min_timestamp, right_node->counter);
-		}
-
+				) 
+		);
 	}
 }
 
 static double compute_mean_separation_time(table* h,
-		unsigned int new_size, unsigned int threashold,
-		unsigned int index, double min_timestamp)
+		unsigned int new_size, unsigned int threashold)
 {
 	nbc_bucket_node *tail = g_tail;
 
-	unsigned int i;
+	unsigned int i = 0, index;
 
 	table *new_h = h->new_table;
 	nbc_bucket_node *array = h->array;
 	double old_bw = h->bucket_width;
+	double min_timestamp;
 	unsigned int size = h->size;
 	double new_bw = new_h->bucket_width;
-
-	if(new_bw < 0)
+	
+	unsigned int sample_size;
+	double average = 0.0;
+	double newaverage = 0.0;
+	double tmp_timestamp, *sample_array:
+	int counter = 0;
+	
+	double min_next_round = INFTY;
+	unsigned int new_index = 0;
+	unsigned int limit = size*3;
+    
+    nbc_bucket_node *tmp *tmp_next;
+	
+	index = (unsigned int)(h->current >> 32);
+	min_timestamp = index * old_bw;
+	
+	if(new_bw >= 0)
+		return new_bw;
+	
+	if(new_size <= threashold*2)
+		return 1.0;
+	
+	sample_size = (new_size <= 5) ? (new_size/2) : (5 + (int)((double)new_size / 10));
+	sample_size = (sample_size > SAMPLE_SIZE) ? sample_size = SAMPLE_SIZE;
+    
+	double sample_array[sample_size+1]; //<--DA SISTEMARE STANDARD C90
+    
+    
+    
+    
+    
+    
+    
+    //Scorro i bucket (per massimo 3 volte)
+	while(counter != sample_size && i < limit && new_h->bucket_width == -1.0)
 	{
-
-		unsigned int sample_size;
-		double average = 0.0;
-		double newaverage = 0.0;
-
-		if(new_size <= threashold*2)
-			newaverage = 1.0;
-		else
+    
+		tmp = array + (index+i)%size;
+		tmp_next = get_unmarked(tmp->next);
+		tmp_timestamp = tmp->timestamp;
+    
+		while( tmp != tail && counter < sample_size )
 		{
-
-			if (new_size <= 5)
-				sample_size = new_size/2;
-			else
-				sample_size = 5 + (int)((double)new_size / 10);
-
-			if (sample_size > SAMPLE_SIZE)
-				sample_size = SAMPLE_SIZE;
-
-			double sample_array[sample_size];
-
-			int counter = 0;
-			i = 0;
-
-			min_timestamp = hash(min_timestamp, old_bw)*old_bw;
-
-			double min_next_round = INFTY;
-			unsigned int new_index = 0;
-			unsigned int limit = h->size*3;
-
-			while(counter != sample_size && i < limit && new_h->bucket_width == -1.0)
+    
+			tmp_next = tmp->next;
+			if(
+					!is_marked(tmp_next, DEL) &&
+					!is_marked(tmp_next, INV) &&
+					
+					tmp->counter != HEAD_ID   &&
+					
+					LESS(tmp_timestamp, min_timestamp + old_bw*(i+1)) &&
+					GEQ(tmp_timestamp, min_timestamp + old_bw*(i)) &&
+					
+					!D_EQUAL(tmp_timestamp, sample_array[counter])
+			)
 			{
-
-				nbc_bucket_node *tmp = array + (index+i)%size;
-				nbc_bucket_node *tmp_next = get_unmarked(tmp->next);
-				double tmp_timestamp = tmp->timestamp;
-
-				while( tmp != tail && counter < sample_size &&  LESS(tmp_timestamp, min_timestamp + old_bw*(i+1)) )
+				sample_array[++counter] = tmp_timestamp;
+			}
+			else
+			{
+				if( LESS(tmp_timestamp, min_next_round) && GEQ(tmp_timestamp, min_timestamp + old_bw*(i+1)))
 				{
-
-					tmp_next = tmp->next;
-					if(
-							!is_marked(tmp_next, DEL) &&
-							!is_marked(tmp_next, INV) &&
-							tmp->counter != HEAD_ID   &&
-							GEQ(tmp_timestamp, min_timestamp + old_bw*(i)) &&
-							!D_EQUAL(tmp_timestamp, sample_array[counter-1])
-					)
-						sample_array[counter++] = tmp_timestamp;
-					else
-					{
-						if( LESS(tmp_timestamp, min_next_round) && GEQ(tmp_timestamp, min_timestamp + old_bw*(i+1)))
-						{
-							min_next_round = tmp_timestamp;
-							new_index = i;
-						}
-					}
-					tmp = get_unmarked(tmp_next);
-					tmp_timestamp = tmp->timestamp;
-				}
-				i++;
-				if(counter < sample_size && i >= size*3 && min_next_round != INFTY && new_h->bucket_width == -1.0)
-				{
-					min_timestamp = hash(min_next_round, old_bw)*old_bw;
-					index = new_index;
-					limit += size*3;
-					min_next_round = INFTY;
-					new_index = 0;
+					min_next_round = tmp_timestamp;
+					new_index = i;
+					break;
 				}
 			}
-			if( counter < sample_size)
-				sample_size = counter;
-
-			for(i = 1; i<sample_size;i++)
-				average += sample_array[i] - sample_array[i - 1];
-
-				// Get the average
-			average = average / (double)(sample_size - 1);
-
-			int j=0;
-			// Recalculate ignoring large separations
-			for (i = 1; i < sample_size; i++) {
-				if ((sample_array[i] - sample_array[i - 1]) < (average * 2.0))
-				{
-					newaverage += (sample_array[i] - sample_array[i - 1]);
-					j++;
-				}
-			}
-
-			// Compute new width
-			newaverage = (newaverage / j) * 3.0;	/* this is the new width */
-			if(newaverage <= 0.0)
-				newaverage = 1.0;
-			//if(newaverage <  pow(10,-4))
-			//	newaverage = pow(10,-3);
-			if(isnan(newaverage))
-				newaverage = 1.0;
+			tmp = get_unmarked(tmp_next);
+			tmp_timestamp = tmp->timestamp;
 		}
-
-		new_bw = newaverage;
-
+		i++;
+		
+		if(min_next_round != INFTY && counter < sample_size && i >= size*3 && new_h->bucket_width == -1.0)
+		{
+			min_timestamp = hash(min_next_round, old_bw)*old_bw;
+			index = new_index;
+			limit += size*3;
+			min_next_round = INFTY;
+			new_index = 0;
+		}
 	}
-	return new_bw;
+	
+	
+	
+	
+	
+	
+	if( counter < sample_size)
+		sample_size = counter;
+    
+	for(i = 1; i<sample_size;i++)
+		average += sample_array[i] - sample_array[i - 1];
+    
+		// Get the average
+	average = average / (double)(sample_size - 1);
+    
+	int j=0;
+	// Recalculate ignoring large separations
+	for (i = 1; i < sample_size; i++) {
+		if ((sample_array[i] - sample_array[i - 1]) < (average * 2.0))
+		{
+			newaverage += (sample_array[i] - sample_array[i - 1]);
+			j++;
+		}
+	}
+    
+	// Compute new width
+	newaverage = (newaverage / j) * 3.0;	/* this is the new width */
+	if(newaverage <= 0.0)
+		newaverage = 1.0;
+	//if(newaverage <  pow(10,-4))
+	//	newaverage = pow(10,-3);
+	if(isnan(newaverage))
+		newaverage = 1.0;
+	
+    
+	return newaverage;
 }
 
-static table* read_table(nb_calqueue* queue)
+
+static void migrate_node(nbc_bucket_node *right_node,	table *new_h)
+{
+	nbc_bucket_node *replica, *right_replica_field, *right_node_next;
+	
+	//Create a new node inserted in the new table as as INValid
+	replica = node_malloc(right_node->payload, right_node->timestamp,  right_node->counter);
+	
+	//if(replica == tail)
+	//	error("A\n");
+             
+	while(!insert_std(new_h, &replica, REMOVE_DEL));
+             
+	//if(replica2 == tail)
+	//	error("B %p %p %p\n", replica, replica2, tail);
+             
+	if( CAS_x86(
+				(volatile unsigned long long *) &(right_node->replica),
+				(unsigned long long)			NULL,
+				(unsigned long long) 			replica
+				)
+		)
+	{
+			atomic_inc_x86(&(new_h->counter));
+             }
+             
+	right_replica_field = right_node->replica;
+             
+	//if(right_replica_field == tail)
+	//	error("%u - C %p %p %p %p %p\n", tid, replica, replica2, tail, right_replica_field, right_node->replica);
+                             
+	nbc_flush_current(new_h, right_replica_field);
+             
+	do
+	{
+		//non possiamo sostituirlo con un fetch&or(00) senza do/while?
+		right_node_next = right_replica_field->next;
+	}while( 
+		is_marked(right_node_next, INV) && 
+		!CAS_x86(	(volatile unsigned long long *) &(right_replica_field->next),
+					(unsigned long long)			right_node_next,
+					(unsigned long long) 			get_unmarked(right_node_next)
+				)
+		);
+	
+	do{
+		//come sopra
+		right_node_next = right_node->next;
+	}while( 
+		!is_marked(right_node_next, DEL) && 
+		!CAS_x86(	(volatile unsigned long long *) &(right_node->next),
+					(unsigned long long)			right_node_next,
+					(unsigned long long) 			get_marked(get_unmarked(right_node_next), DEL)
+				) 
+		) ;
+	
+}
+
+
+
+static table* read_table(nb_calqueue *queue)
 {
 	table *h = queue->hashtable		;
 #if ENABLE_EXPANSION == 0
 	return h;
 #endif
 	nbc_bucket_node *tail = g_tail	;
-	unsigned int i, index			;
+	unsigned int i					;
 	unsigned int size = h->size		;
 	unsigned int thp2 = threshold *2;
 
 	table 			*new_h 			;
-	nbc_bucket_node *array 			;
 	double 			 new_bw 		;
-	double 			 min_timestamp 	;
 	double 			 newaverage		;
-	nbc_bucket_node *bucket			 
+	nbc_bucket_node *bucket, *array	;
 	nbc_bucket_node *right_node, *left_node, *right_node_next;
+	nbc_bucket_node *replica, *right_replica_field;
 	
 	//printf("SIZE H %d\n", h->counter.count);
 
@@ -821,12 +858,11 @@ static table* read_table(nb_calqueue* queue)
 		new_h 			= h->new_table;
 		array 			= h->array;
 		new_bw 			= new_h->bucket_width;
-		min_timestamp 	= INFTY;
 
 		if(new_bw < 0)
 		{
-			block_table(h, &index, &min_timestamp);
-			newaverage = compute_mean_separation_time(h, new_h->size, queue->threshold, index, min_timestamp);
+			block_table(h);
+			newaverage = compute_mean_separation_time(h, new_h->size, queue->threshold);
 //			if
 //			(
 					CAS_x86(
@@ -841,113 +877,71 @@ static table* read_table(nb_calqueue* queue)
 //			}
 		}
 
-		for(i=0; i < h->size; i++)
+		//First try: try to migrati the nodes, if a marked node is found, continue to the next bucket
+		for(i=0; i < size; i++)
 		{
-			nbc_bucket_node *bucket = array + i;
+			bucket = array + ((i + lid) % size);
 
 			do
 			{
-				do
-				{
-
-					search(bucket, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
-					right_node = get_unmarked(right_node);
-					right_node_next = right_node->next;
-					
-					if(is_marked(right_node_next, MOV))
-						break;
-						
-					
-				}
-				while(
+				//Try to mark the top node
+				search(bucket, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
+				right_node = get_unmarked(right_node);
+				right_node_next = right_node->next;
+				
+				if(
+						!is_marked(right_node_next, MOV) &&
 						right_node != tail &&
 						!CAS_x86(
 								(volatile unsigned long long *) &(right_node->next),
 								(unsigned long long)			get_unmarked(right_node_next),
 								(unsigned long long) 			get_marked(right_node_next, MOV)
-								)
-									
+								)								
+				)
+					break;
+
+				if(right_node == tail)
+					break;
+				
+				migrate_node(right_node, new_h);
+				
+			}while(true);
+		}
+		
+		
+		//Second try: try to migrati the nodes and continue until each bucket is empty
+		for(i=0; i < size; i++)
+		{
+			bucket = array + ((i + lid) % size);
+
+			do
+			{
+				//Try to mark the top node
+				do
+				{
+					search(bucket, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
+					right_node = get_unmarked(right_node);
+					right_node_next = right_node->next;
+				}
+				while(
+						!is_marked(right_node_next, MOV) &&
+						right_node != tail &&
+						!CAS_x86(
+								(volatile unsigned long long *) &(right_node->next),
+								(unsigned long long)			get_unmarked(right_node_next),
+								(unsigned long long) 			get_marked(right_node_next, MOV)
+								)								
 				);
 
-				if(right_node != tail)
-				{
-					nbc_bucket_node *replica 		= node_malloc(right_node->payload, right_node->timestamp,  right_node->counter);
-					nbc_bucket_node *right_replica_field;
-					nbc_bucket_node *replica2;
-
-					if(replica == tail)
-						error("A\n");
-
-					replica2 = replica;
-					while(!insert_std(new_h, &replica2, REMOVE_DEL) && queue->hashtable == h);
-
-					if(queue->hashtable != h)
-						return queue->hashtable;
-
-					if(replica2 == tail)
-						error("B %p %p %p\n", replica, replica2, tail);
-
-					if(CAS_x86(
-							(volatile unsigned long long *) &(right_node->replica),
-							(unsigned long long)			NULL,
-							(unsigned long long) 			replica2))
-						atomic_inc_x86(&(new_h->counter));
-
-					bool cas_result = false;
-					bool marked  = false;
-					right_replica_field = right_node->replica;
-
-					if(right_replica_field == tail)
-						error("%u - C %p %p %p %p %p\n", tid, replica, replica2, tail, right_replica_field, right_node->replica);
-
-					if(replica == replica2 && replica != right_replica_field)
-					{
-						do
-						{
-							right_node_next = replica->next;
-							marked = is_marked(right_node_next, DEL);
-							if(!marked)
-								cas_result = CAS_x86(
-												(volatile unsigned long long *) &(replica->next),
-												(unsigned long long)			right_node_next,
-												(unsigned long long) 			get_marked(right_node_next, DEL)
-											);
-
-						}while( !marked && !cas_result ) ;
-					}
-
-					nbc_flush_current(
-							new_h,
-							right_replica_field);
-
-					do
-					{
-						right_node_next = right_replica_field->next;
-						marked = is_marked(right_node_next, INV);
-						if(marked)
-							cas_result = CAS_x86(
-											(volatile unsigned long long *) &(right_replica_field->next),
-											(unsigned long long)			right_node_next,
-											(unsigned long long) 			get_unmarked(right_node_next)
-										);
-					}while( marked && !cas_result ) ;
-
-					do{
-						right_node_next = right_node->next;
-						marked = is_marked(right_node_next, DEL);
-						if(!marked)
-							cas_result = CAS_x86(
-											(volatile unsigned long long *) &(right_node->next),
-											(unsigned long long)			right_node_next,
-											(unsigned long long) 			get_marked(get_unmarked(right_node_next), DEL)
-										);
-
-					}while( !marked && !cas_result ) ;
-
-				}
-			}while(right_node != tail);
+				if(right_node == tail)
+					break;
+				
+				migrate_node(right_node, new_h);
+				
+			}while(true);
 		}
 
+		//Try to replace the old table with the new one
 		if(CAS_x86(
 				(volatile unsigned long long *) &(queue->hashtable),
 				(unsigned long long)			h,
