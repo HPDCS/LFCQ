@@ -39,6 +39,7 @@ NBCQ: $(OBJS) $(USER_OBJS)
 clean:
 	-$(RM) $(EXECUTABLES)$(OBJS)$(C_DEPS) NBCQ
 	-@echo ' '
+	-clear
 
 .PHONY: all clean dependents
 .SECONDARY:

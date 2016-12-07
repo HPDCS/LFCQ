@@ -71,6 +71,8 @@ double PRUNE_TRESHOLD;		// = 0.35;
 unsigned int SAFETY_CHECK;
 unsigned int EMPTY_QUEUE;
 
+__thread unsigned int TID;
+
 unsigned int *id;
 volatile long long *ops;
 volatile long long *ops_count;
@@ -396,7 +398,7 @@ void* process(void *arg)
 	double max = 0.0;
 
 	my_id =  *((unsigned int*)(arg));
-	lid = my_id;
+	(TID) = my_id;
 	sprintf(name_file, "%u.txt", my_id);
 	srand48_r(my_id+157, &seed2);
         srand48_r(my_id+359, &seed);

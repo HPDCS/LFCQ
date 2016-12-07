@@ -34,9 +34,9 @@
 #include <pthread.h>
 #include <math.h>
 
-#include "atomic.h"
+//#include "atomic.h"
 #include "nb_calqueue.h"
-#include "core.h"
+//#include "core.h"
 
 
 #define VAL (0ULL)
@@ -53,6 +53,18 @@
 #define MAX_INT 4294967295
 #define MASK_ABA 4294967295ULL
 
+#define VA_NUM_ARGS(...) VA_NUM_ARGS_IMPL(__VA_ARGS__, 5,4,3,2,1)
+#define VA_NUM_ARGS_IMPL(_1,_2,_3,_4,_5,N,...) N
+
+#define macro_dispatcher(func, ...) macro_dispatcher_(func, VA_NUM_ARGS(__VA_ARGS__))
+#define macro_dispatcher_(func, nargs) macro_dispatcher__(func, nargs)
+#define macro_dispatcher__(func, nargs) func ## nargs
+
+#define is_marked(...) macro_dispatcher(is_marked, __VA_ARGS__)(__VA_ARGS__)
+#define is_marked2(w,r) is_marked_2(w,r)
+#define is_marked1(w)   is_marked_1(w)
+
+
 
 __thread nbc_bucket_node *to_free_nodes = NULL;
 __thread nbc_bucket_node *to_free_nodes_old = NULL;
@@ -64,8 +76,8 @@ __thread unsigned int to_remove_nodes_count = 0;
 __thread unsigned int mark;
 __thread unsigned int prune_count = 0;
 
-__thread unsigned long long cantor_p1 = ((TID)*((TID)+1)/2)
-__thread unsigned long long cantor_p2 = (TID); 
+//__thread unsigned long long cantor_p1 = ((TID)*((TID)+1)/2);
+//__thread unsigned long long cantor_p2 = (TID); 
 
 static unsigned int * volatile prune_array;
 static unsigned int threads;
@@ -184,7 +196,7 @@ static inline void* get_marked(void *pointer, unsigned long long mark)
  *
  *  @return true if the reference is marked, else false
  */
-static inline bool is_marked(void *pointer, unsigned long long mask)
+static inline bool is_marked_2(void *pointer, unsigned long long mask)
 {
 	return (bool) ((((unsigned long long) pointer) & MASK_MRK) == mask);
 }
@@ -198,7 +210,7 @@ static inline bool is_marked(void *pointer, unsigned long long mask)
  *
  *  @return true if the reference is generally marked, else false
  */
-static inline bool is_marked(void *pointer)
+static inline bool is_marked_1(void *pointer)
 {
 	return (bool) ((((unsigned long long) pointer) & MASK_MRK));
 }
@@ -232,11 +244,11 @@ static inline bool is_marked_for_search(void *pointer, unsigned int mask)
 * @return A value to be used as a unique mark for the message within the LP
 */
 static inline unsigned long long generate_ABA_mark() {
-	cantor_p1 += cantor_p2++;
-	return (MASK_ABA & cantor_p1);
+	//cantor_p1 += cantor_p2++;
+	//return (MASK_ABA & cantor_p1);
 		
-	//unsigned long long sum = ((TID) + (++mark));
-	//return (MASK_ABA & ((unsigned long long)( ((sum++)*(sum)/2) + mark )));
+	unsigned long long sum = ((TID) + (++mark));
+	return (MASK_ABA & ((unsigned long long)( ((sum)*(sum +1)/2) + mark )));
 }
 
 /**
@@ -323,7 +335,6 @@ static void search(nbc_bucket_node *head, double timestamp, unsigned int tie_bre
 						nbc_bucket_node **left_node, nbc_bucket_node **right_node, int flag)
 {
 	nbc_bucket_node *left, *right, *left_next, *tmp, *tmp_next, *tail;
-	nbc_bucket_node *right_unmarked;
 	unsigned int counter;
 	double tmp_timestamp;
 	tail = g_tail;
@@ -371,7 +382,7 @@ static void search(nbc_bucket_node *head, double timestamp, unsigned int tie_bre
 				);
 
 		// Set right node and copy the mark of left node
-		right = tmp | (MASK_MRK & left_next);
+		right = (nbc_bucket_node*) ((unsigned long long)tmp | (MASK_MRK &  (unsigned long long) left_next));
 
 		//left node and right node have to be adjacent. If not try with CAS
 		if (left_next != right)
@@ -518,7 +529,10 @@ static bool insert_std(table* hashtable, nbc_bucket_node** new_node, int flag)
 			// first replica to be inserted
 			
 			// copy left node mark
-			new_node_pointer |= (MASK_MRK & right_node);
+			new_node_pointer =  (nbc_bucket_node*) (
+								((unsigned long long) new_node_pointer) | 
+								(MASK_MRK &  (unsigned long long) right_node)
+								);
 
 	//		if(right_node->timestamp == INFTY)
 	//		printf("MOVING %f %u between left %f %u right  INFTY %u\n",
@@ -645,24 +659,21 @@ static double compute_mean_separation_time(table* h,
 	table *new_h = h->new_table;
 	nbc_bucket_node *array = h->array;
 	double old_bw = h->bucket_width;
-	double min_timestamp;
 	unsigned int size = h->size;
 	double new_bw = new_h->bucket_width;
 	
 	unsigned int sample_size;
 	double average = 0.0;
 	double newaverage = 0.0;
-	double tmp_timestamp, *sample_array:
+	double tmp_timestamp;
 	int counter = 0;
 	
 	double min_next_round = INFTY;
-	unsigned int new_index = 0;
 	double lower_bound, upper_bound;
     
-    nbc_bucket_node *tmp *tmp_next;
+    nbc_bucket_node *tmp, *tmp_next;
 	
 	index = (unsigned int)(h->current >> 32);
-	min_timestamp = index * old_bw;
 	
 	if(new_bw >= 0)
 		return new_bw;
@@ -671,9 +682,9 @@ static double compute_mean_separation_time(table* h,
 		return 1.0;
 	
 	sample_size = (new_size <= 5) ? (new_size/2) : (5 + (int)((double)new_size / 10));
-	sample_size = (sample_size > SAMPLE_SIZE) ? sample_size = SAMPLE_SIZE;
+	sample_size = (sample_size > SAMPLE_SIZE) ? SAMPLE_SIZE : sample_size;
     
-	double sample_array[sample_size+1]; //<--DA SISTEMARE STANDARD C90
+	double sample_array[SAMPLE_SIZE+1]; //<--DA SISTEMARE STANDARD C90
     
     //read nodes until the total samples is reached or until someone else do it
 	while(counter != sample_size && new_h->bucket_width == -1.0)
@@ -815,16 +826,15 @@ static table* read_table(nb_calqueue *queue)
 	return h;
 #endif
 	nbc_bucket_node *tail = g_tail	;
-	unsigned int i					;
-	unsigned int size = h->size		;
-	unsigned int thp2 = threshold *2;
+	unsigned int i, size = h->size	;
 
 	table 			*new_h 			;
 	double 			 new_bw 		;
 	double 			 newaverage		;
 	nbc_bucket_node *bucket, *array	;
 	nbc_bucket_node *right_node, *left_node, *right_node_next;
-	nbc_bucket_node *replica, *right_replica_field;
+	
+	int counter = 0;
 	
 	//printf("SIZE H %d\n", h->counter.count);
 
@@ -1072,7 +1082,7 @@ nbc_bucket_node* nbc_dequeue(nb_calqueue *queue)
 	nbc_bucket_node *array;
 	double right_timestamp;
 	double bucket_width;
-	double old = INFTY;
+	//double old = INFTY;
 
 
 	tail = g_tail;
@@ -1217,7 +1227,7 @@ nbc_bucket_node* nbc_dequeue(nb_calqueue *queue)
  * @param timestamp the threshold such that any node with timestamp strictly less than it is removed and freed
  *
  */
-double nbc_prune(double timestamp)
+double nbc_prune(nb_calqueue *queue, double timestamp)
 {
 #if ENABLE_PRUNE == 0
 	return 0.0;
@@ -1290,9 +1300,9 @@ double nbc_prune(double timestamp)
 //						counter,
 //						current_meta_node->counter);
        
-				free(tmp);
-				committed++;
-			}
+			free(tmp);
+			committed++;
+
 			tmp =  get_unmarked(tmp_next);
 		}
        
