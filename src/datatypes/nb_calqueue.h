@@ -46,7 +46,9 @@
 #define FLUSH_SMART 1
 #define ENABLE_EXPANSION 1
 
-extern __thread unsigned int  lid;
+#define TID tid
+
+extern __thread unsigned int TID;
 
 
 /**

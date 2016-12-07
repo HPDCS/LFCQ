@@ -64,6 +64,9 @@ __thread unsigned int to_remove_nodes_count = 0;
 __thread unsigned int mark;
 __thread unsigned int prune_count = 0;
 
+__thread unsigned long long cantor_p1 = ((TID)*((TID)+1)/2)
+__thread unsigned long long cantor_p2 = (TID); 
+
 static unsigned int * volatile prune_array;
 static unsigned int threads;
 
@@ -229,12 +232,12 @@ static inline bool is_marked_for_search(void *pointer, unsigned int mask)
 * @return A value to be used as a unique mark for the message within the LP
 */
 static inline unsigned long long generate_ABA_mark() {
-	unsigned long long k1 = tid;
-	unsigned long long k2 = mark++;
-	unsigned long long res = (unsigned long long)( ((k1 + k2) * (k1 + k2 + 1) / 2) + k2 );
-	return ((~((unsigned long long)0))>>32) & res;
+	cantor_p1 += cantor_p2++;
+	return (MASK_ABA & cantor_p1);
+		
+	//unsigned long long sum = ((TID) + (++mark));
+	//return (MASK_ABA & ((unsigned long long)( ((sum++)*(sum)/2) + mark )));
 }
-
 
 /**
  *  This function is an helper to allocate a node and filling its fields.
@@ -442,7 +445,6 @@ static inline void nbc_flush_current(table* h, nbc_bucket_node* node)
 					);
 }
 
-
 /**
  * This function insert a new event in the nonblocking queue.
  * The cost of this operation when succeeds should be O(1) as calendar queue
@@ -617,7 +619,7 @@ static void block_table(table* h)
 	
 	for(i = 0; i < size; i++)
 	{
-		bucket = array + ((i + lid) % size);
+		bucket = array + ((i + (TID)) % size);
 		
 		do
 		{
@@ -655,7 +657,7 @@ static double compute_mean_separation_time(table* h,
 	
 	double min_next_round = INFTY;
 	unsigned int new_index = 0;
-	unsigned int limit = size*3;
+	double lower_bound, upper_bound;
     
     nbc_bucket_node *tmp *tmp_next;
 	
@@ -673,71 +675,55 @@ static double compute_mean_separation_time(table* h,
     
 	double sample_array[sample_size+1]; //<--DA SISTEMARE STANDARD C90
     
-    
-    
-    
-    
-    
-    
-    //Scorro i bucket (per massimo 3 volte)
-	while(counter != sample_size && i < limit && new_h->bucket_width == -1.0)
-	{
-    
-		tmp = array + (index+i)%size;
-		tmp_next = get_unmarked(tmp->next);
-		tmp_timestamp = tmp->timestamp;
-    
-		while( tmp != tail && counter < sample_size )
+    //read nodes until the total samples is reached or until someone else do it
+	while(counter != sample_size && new_h->bucket_width == -1.0)
+	{   
+		//se non salto gli anni vuoti, posso semplificare di molto il codice 
+		for (i = 0; i < size; i++) // Se togliamo la gestione degli anni vuoti, si può togliere
 		{
-    
-			tmp_next = tmp->next;
-			if(
-					!is_marked(tmp_next, DEL) &&
-					!is_marked(tmp_next, INV) &&
-					
-					tmp->counter != HEAD_ID   &&
-					
-					LESS(tmp_timestamp, min_timestamp + old_bw*(i+1)) &&
-					GEQ(tmp_timestamp, min_timestamp + old_bw*(i)) &&
-					
-					!D_EQUAL(tmp_timestamp, sample_array[counter])
-			)
-			{
-				sample_array[++counter] = tmp_timestamp;
-			}
-			else
-			{
-				if( LESS(tmp_timestamp, min_next_round) && GEQ(tmp_timestamp, min_timestamp + old_bw*(i+1)))
-				{
-					min_next_round = tmp_timestamp;
-					new_index = i;
-					break;
-				}
-			}
-			tmp = get_unmarked(tmp_next);
-			tmp_timestamp = tmp->timestamp;
-		}
-		i++;
+			tmp = array + (index + i) % size; 	//get the head of the bucket
+			tmp = get_unmarked(tmp->next);		//pointer to first node
+			
+			lower_bound = (index + i) * old_bw;
+			upper_bound = (index + i + 1) * old_bw;
 		
-		if(min_next_round != INFTY && counter < sample_size && i >= size*3 && new_h->bucket_width == -1.0)
-		{
-			min_timestamp = hash(min_next_round, old_bw)*old_bw;
-			index = new_index;
-			limit += size*3;
-			min_next_round = INFTY;
-			new_index = 0;
+			while( tmp != tail && counter < sample_size )
+			{
+				tmp_timestamp = tmp->timestamp;
+				tmp_next = tmp->next;
+				//I will consider ognly valid nodes (VAL or MOV) In realtà se becco nodi MOV posso uscire!
+				if(!is_marked(tmp_next, DEL) && !is_marked(tmp_next, INV))
+				{
+					if( //belong to the current bucket
+						LESS(tmp_timestamp, upper_bound) &&	GEQ(tmp_timestamp, lower_bound) &&
+						!D_EQUAL(tmp_timestamp, sample_array[counter])
+					)
+					{
+						sample_array[++counter] = tmp_timestamp;
+					}
+					else if(GEQ(tmp_timestamp, upper_bound) && LESS(tmp_timestamp, min_next_round))
+					{
+							min_next_round = tmp_timestamp;
+							break;
+					}
+				}
+				tmp = get_unmarked(tmp_next);
+			}
 		}
+		//if the calebdar has no more elements I will go out
+		if(min_next_round == INFTY)
+			break;
+		//otherwise I will restart from the next good bucket
+		index = hash(min_next_round, old_bw);
+		min_next_round = INFTY;
 	}
-	
-	
-	
-	
-	
+
+
 	
 	if( counter < sample_size)
 		sample_size = counter;
     
-	for(i = 1; i<sample_size;i++)
+	for(i = 2; i<=sample_size;i++)
 		average += sample_array[i] - sample_array[i - 1];
     
 		// Get the average
@@ -745,7 +731,7 @@ static double compute_mean_separation_time(table* h,
     
 	int j=0;
 	// Recalculate ignoring large separations
-	for (i = 1; i < sample_size; i++) {
+	for (i = 2; i <= sample_size; i++) {
 		if ((sample_array[i] - sample_array[i - 1]) < (average * 2.0))
 		{
 			newaverage += (sample_array[i] - sample_array[i - 1]);
@@ -755,17 +741,15 @@ static double compute_mean_separation_time(table* h,
     
 	// Compute new width
 	newaverage = (newaverage / j) * 3.0;	/* this is the new width */
-	if(newaverage <= 0.0)
+	if(newaverage <= 0.0) //è possibile?
 		newaverage = 1.0;
 	//if(newaverage <  pow(10,-4))
 	//	newaverage = pow(10,-3);
 	if(isnan(newaverage))
-		newaverage = 1.0;
-	
+		newaverage = 1.0;	
     
 	return newaverage;
 }
-
 
 static void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 {
@@ -824,8 +808,6 @@ static void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 	
 }
 
-
-
 static table* read_table(nb_calqueue *queue)
 {
 	table *h = queue->hashtable		;
@@ -865,11 +847,11 @@ static table* read_table(nb_calqueue *queue)
 			newaverage = compute_mean_separation_time(h, new_h->size, queue->threshold);
 //			if
 //			(
-					CAS_x86(
-							(volatile unsigned long long *) &(new_h->bucket_width),
-							*( (unsigned long long*)  &new_bw),
-							*( (unsigned long long*)  &newaverage)
-					)
+			CAS_x86(
+					(volatile unsigned long long *) &(new_h->bucket_width),
+					*( (unsigned long long*)  &new_bw),
+					*( (unsigned long long*)  &newaverage)
+			)
 //				)
 //			{
 //					printf("COMPUTE BW %.20f %u\n", newaverage, new_h->size)
@@ -880,7 +862,7 @@ static table* read_table(nb_calqueue *queue)
 		//First try: try to migrati the nodes, if a marked node is found, continue to the next bucket
 		for(i=0; i < size; i++)
 		{
-			bucket = array + ((i + lid) % size);
+			bucket = array + ((i + (TID)) % size);
 
 			do
 			{
@@ -912,7 +894,7 @@ static table* read_table(nb_calqueue *queue)
 		//Second try: try to migrati the nodes and continue until each bucket is empty
 		for(i=0; i < size; i++)
 		{
-			bucket = array + ((i + lid) % size);
+			bucket = array + ((i + (TID)) % size);
 
 			do
 			{
@@ -1247,133 +1229,91 @@ double nbc_prune(double timestamp)
 	unsigned int i=0;
 	unsigned int flag = 1;
 
-	prune_count++;
-
-	if(prune_count < 100)
+	if(++prune_count < 100)
 		return 0.0;
-	else
-		prune_count = 0;
+	
+	prune_count = 0;
 
 
 	for(;i<threads;i++)
 	{
-		prune_array[tid + i*threads] = 1;
-		flag &= prune_array[tid*threads +i];
+		prune_array[(TID) + i*threads] = 1;
+		flag &= prune_array[(TID)*threads +i];
 	}
 
-	if(flag == 1)
+	if(flag != 1)
+		return 0.0;
+	
+	while(to_free_tables_old != NULL)
 	{
-		if(to_free_tables_old != NULL)
-		{
-//			if(to_free_tables_old->timestamp == INFTY)
-//				to_free_tables_old->timestamp = timestamp;
-//			else if(to_free_tables_old->timestamp < timestamp)
-//			{
-//				to_free_tables_old->counter++;
-//				to_free_tables_old->timestamp = timestamp;
-//			}
-//			if(to_free_tables_old->counter > 3)
-//			{
-				while(to_free_tables_old != NULL)
-				{
-					nbc_bucket_node *my_tmp = to_free_tables_old;
-					to_free_tables_old = to_free_tables_old->next;
-
-					table *h = (table*) my_tmp->payload;
-					free(h->array);
-					free(h);
-					free(my_tmp);
-				}
-//			}
-		}
-		else
-		{
-			to_free_tables_old = to_free_tables_new;
-			to_free_tables_new = NULL;
-		}
-
-
-		if(to_free_nodes_old != NULL)
-		{
-
-			current_meta_node = to_free_nodes_old;
-			meta_prec = (nbc_bucket_node**)&(to_free_nodes_old);
-
-			while(current_meta_node != NULL)
-			{
-				//if(	LESS(current_meta_node->timestamp, timestamp) )
-				{
-					counter = current_meta_node->counter;
-					prec = (nbc_bucket_node**)&(current_meta_node->payload);
-					tmp = *prec;
-					tmp = get_unmarked(tmp);
-
-					while(counter-- != 0)
-					{
-						tmp_next = tmp->next;
-						if(!is_marked(tmp_next, DEL) && !is_marked(tmp_next, INV))
-							error("Found a %s node during prune "
-									"NODE %p "
-									"NEXT %p "
-									"TAIL %p "
-									"MARK %llu "
-									"TS %f "
-									"PRUNE TS %f "
-									"TIE %u "
-									"TIE META %u "
-									"\n",
-									is_marked(tmp_next, MOV) ? "MOV" : "VAL",
-									tmp,
-									tmp->next,
-									g_tail,
-									(unsigned long long) tmp->next & (3ULL),
-									tmp->timestamp,
-									timestamp,
-									counter,
-									current_meta_node->counter);
-
-						//if( LESS(tmp->timestamp, timestamp))
-						{
-							current_meta_node->counter--;
-							free(tmp);
-							committed++;
-						}
-						tmp =  get_unmarked(tmp_next);
-					}
-
-					if(current_meta_node->counter == 0)
-					{
-						meta_tmp = current_meta_node;
-						*meta_prec = current_meta_node->next;
-						current_meta_node = current_meta_node->next;
-						free(meta_tmp);
-					}
-					else
-					{
-						meta_prec = (nbc_bucket_node**) & ( current_meta_node->next );
-						current_meta_node = current_meta_node->next;
-					}
-				}
-//				else
-//				{
-//					meta_prec = (nbc_bucket_node**)  & ( current_meta_node->next );
-//					current_meta_node = current_meta_node->next;
-//				}
-			}
-			to_remove_nodes_count -= committed;
-		}
-		else
-		{
-			to_free_nodes_old = to_free_nodes;
-			to_free_nodes = NULL;
-		}
-
-
-		for(i=0;i<threads;i++)
-			prune_array[tid*threads +i] = 0;
-
-
+		nbc_bucket_node *my_tmp = to_free_tables_old;
+		to_free_tables_old = to_free_tables_old->next;
+    
+		table *h = (table*) my_tmp->payload;
+		free(h->array);
+		free(h);
+		free(my_tmp);
 	}
+	
+	current_meta_node = to_free_nodes_old;
+	meta_prec = (nbc_bucket_node**)&(to_free_nodes_old);
+    
+	while(current_meta_node != NULL)
+	{
+		
+		counter = current_meta_node->counter;
+		prec = (nbc_bucket_node**)&(current_meta_node->payload);
+		tmp = *prec;
+		tmp = get_unmarked(tmp);
+       
+		while(counter-- != 0)
+		{
+			tmp_next = tmp->next;
+//			if(!is_marked(tmp_next, DEL) && !is_marked(tmp_next, INV))
+//				error("Found a %s node during prune "
+//						"NODE %p "
+//						"NEXT %p "
+//						"TAIL %p "
+//						"MARK %llu "
+//						"TS %f "
+//						"PRUNE TS %f "
+//						"TIE %u "
+//						"TIE META %u "
+//						"\n",
+//						is_marked(tmp_next, MOV) ? "MOV" : "VAL",
+//						tmp,
+//						tmp->next,
+//						g_tail,
+//						(unsigned long long) tmp->next & (3ULL),
+//						tmp->timestamp,
+//						timestamp,
+//						counter,
+//						current_meta_node->counter);
+       
+				free(tmp);
+				committed++;
+			}
+			tmp =  get_unmarked(tmp_next);
+		}
+       
+		meta_tmp = current_meta_node;
+		*meta_prec = current_meta_node->next;
+		current_meta_node = current_meta_node->next;
+		free(meta_tmp);
+       
+	}
+	
+	//to_remove_nodes_count -= committed; //<-- si usa?
+	
+	to_free_tables_old = to_free_tables_new;
+	to_free_tables_new = NULL;
+	
+	to_free_nodes_old = to_free_nodes;
+	to_free_nodes = NULL;
+	
+	for(i=0;i<threads;i++)
+		prune_array[(TID)*threads +i] = 0;
+    
 	return (double)committed;
 }
 
