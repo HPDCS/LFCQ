@@ -33,6 +33,7 @@
 #include <float.h>
 #include <pthread.h>
 #include <math.h>
+#include <assert.h>
 
 //#include "atomic.h"
 #include "nb_calqueue.h"
@@ -64,6 +65,17 @@
 #define is_marked2(w,r) is_marked_2(w,r)
 #define is_marked1(w)   is_marked_1(w)
 
+#define UNION_CAST(x, destType) (((union {__typeof__(x) a; destType b;})x).b)
+
+#ifndef NDEBUG
+#define assertf(CONDITION, STRING,  ...)        if(CONDITION)\
+        {\
+        printf( (STRING), __VA_ARGS__);\
+        exit(1);\
+        }
+#else
+#define assertf(CONDITION, STRING,  ...) {}
+#endif
 
 
 __thread nbc_bucket_node *to_free_nodes = NULL;
@@ -72,8 +84,8 @@ __thread nbc_bucket_node *to_free_nodes_old = NULL;
 __thread nbc_bucket_node *to_free_tables_old = NULL;
 __thread nbc_bucket_node *to_free_tables_new = NULL;
 
+__thread unsigned long long mark;
 __thread unsigned int to_remove_nodes_count = 0;
-__thread unsigned int mark;
 __thread unsigned int prune_count = 0;
 
 //__thread unsigned long long cantor_p1 = ((TID)*((TID)+1)/2);
@@ -170,7 +182,8 @@ static inline unsigned int hash(double timestamp, double bucket_width)
  */
 static inline void* get_unmarked(void *pointer)
 {
-	return (void*) (((unsigned long long) pointer) & MASK_PTR);
+	return UNION_CAST((UNION_CAST(pointer, unsigned long long) & MASK_PTR), void *);
+	//return (void*) (((unsigned long long) pointer) & MASK_PTR);
 }
 
 /**
@@ -184,7 +197,8 @@ static inline void* get_unmarked(void *pointer)
  */
 static inline void* get_marked(void *pointer, unsigned long long mark)
 {
-	return (void*) (((unsigned long long) get_unmarked((pointer))) | (mark));
+	return UNION_CAST((UNION_CAST(pointer, unsigned long long)|(mark)), void *);
+	//return (void*) (((unsigned long long) get_unmarked((pointer))) | (mark));
 }
 
 /**
@@ -198,7 +212,8 @@ static inline void* get_marked(void *pointer, unsigned long long mark)
  */
 static inline bool is_marked_2(void *pointer, unsigned long long mask)
 {
-	return (bool) ((((unsigned long long) pointer) & MASK_MRK) == mask);
+	return ( (UNION_CAST(pointer, unsigned long long) & MASK_MRK) == mask );
+	//return (bool) ((((unsigned long long) pointer) & MASK_MRK) == mask);
 }
 
 /**
@@ -212,7 +227,8 @@ static inline bool is_marked_2(void *pointer, unsigned long long mask)
  */
 static inline bool is_marked_1(void *pointer)
 {
-	return (bool) ((((unsigned long long) pointer) & MASK_MRK));
+	return (UNION_CAST(pointer, unsigned long long) & MASK_MRK);
+	//return (bool) ((((unsigned long long) pointer) & MASK_MRK));
 }
 
 static inline bool is_marked_for_search(void *pointer, unsigned int mask)
@@ -220,14 +236,29 @@ static inline bool is_marked_for_search(void *pointer, unsigned int mask)
 	bool a, b;
 	
 	if(mask == REMOVE_DEL)
-		return (bool) ((((unsigned long long) pointer) & MASK_MRK) == DEL);
+		return ( (UNION_CAST(pointer, unsigned long long) & MASK_MRK) == DEL );
+		//return (bool) ((((unsigned long long) pointer) & MASK_MRK) == DEL);
 	if(mask == REMOVE_DEL_INV)
 	{		
-		a = (bool) ((((unsigned long long) pointer) & MASK_MRK) == DEL);
-		b = (bool) ((((unsigned long long) pointer) & MASK_MRK) == INV);
+		a = ( (UNION_CAST(pointer, unsigned long long) & MASK_MRK) == DEL );
+		b = ( (UNION_CAST(pointer, unsigned long long) & MASK_MRK) == INV );
+		//a = (bool) ((((unsigned long long) pointer) & MASK_MRK) == DEL);
+		//b = (bool) ((((unsigned long long) pointer) & MASK_MRK) == INV);
 		return a || b;
 	}
 	return false;
+}
+
+/**
+ *  This function get the mark
+ *
+ *  @author Romolo Marotta
+ *  @param pointer
+ *  @return the mark
+ */
+static inline unsigned long long get_mark(void *pointer)
+{
+	return UNION_CAST((UNION_CAST(pointer, unsigned long long) & MASK_MRK), unsigned long long);
 }
 
 /**
@@ -248,7 +279,8 @@ static inline unsigned long long generate_ABA_mark() {
 	//return (MASK_ABA & cantor_p1);
 		
 	unsigned long long sum = ((TID) + (++mark));
-	return (MASK_ABA & ((unsigned long long)( ((sum)*(sum +1)/2) + mark )));
+	return ( MASK_ABA & (( (sum)*(sum +1ULL)/2ULL) + mark ));
+	//return (MASK_ABA & ((unsigned long long)( ((sum)*(sum +1)/2) + mark )));
 }
 
 /**
@@ -264,7 +296,8 @@ static inline unsigned long long generate_ABA_mark() {
  */
 static nbc_bucket_node* node_malloc(void *payload, double timestamp, unsigned int tie_breaker)
 {
-	nbc_bucket_node* res = (nbc_bucket_node*) malloc(sizeof(nbc_bucket_node));
+	nbc_bucket_node* res = malloc(sizeof(nbc_bucket_node));
+	//nbc_bucket_node* res = (nbc_bucket_node*) malloc(sizeof(nbc_bucket_node));
 
 	if (is_marked(res) || res == NULL)
 	{
@@ -382,7 +415,8 @@ static void search(nbc_bucket_node *head, double timestamp, unsigned int tie_bre
 				);
 
 		// Set right node and copy the mark of left node
-		right = (nbc_bucket_node*) ((unsigned long long)tmp | (MASK_MRK &  (unsigned long long) left_next));
+		right = get_marked(tmp,get_mark(left_next));
+		//right =  ((unsigned long long)tmp | (MASK_MRK &  (unsigned long long) left_next));
 
 		//left node and right node have to be adjacent. If not try with CAS
 		if (left_next != right)
@@ -529,10 +563,12 @@ static bool insert_std(table* hashtable, nbc_bucket_node** new_node, int flag)
 			// first replica to be inserted
 			
 			// copy left node mark
-			new_node_pointer =  (nbc_bucket_node*) (
-								((unsigned long long) new_node_pointer) | 
-								(MASK_MRK &  (unsigned long long) right_node)
-								);
+			
+			new_node_pointer = get_marked(new_node_pointer,get_mark(right_node));
+			//new_node_pointer =  (nbc_bucket_node*) (
+			//					((unsigned long long) new_node_pointer) | 
+			//					(MASK_MRK &  (unsigned long long) right_node)
+			//					);
 
 	//		if(right_node->timestamp == INFTY)
 	//		printf("MOVING %f %u between left %f %u right  INFTY %u\n",
@@ -584,7 +620,8 @@ static void set_new_table(table* h, unsigned int threshold )
 	if(new_size != 0 && new_size <= MAXIMUM_SIZE)
 	{
 
-		new_h = (table*) malloc(sizeof(table));
+		new_h = malloc(sizeof(table));
+		//new_h = (table*) malloc(sizeof(table));
 		if(new_h == NULL)
 			error("No enough memory to new table structure\n");
 
@@ -595,7 +632,9 @@ static void set_new_table(table* h, unsigned int threshold )
 		new_h->current 		= ((unsigned long long)-1) << 32;
 
 
-		array =  (nbc_bucket_node*) malloc(sizeof(nbc_bucket_node) * new_size);
+		
+		array =  malloc(sizeof(nbc_bucket_node) * new_size);
+		//array =  (nbc_bucket_node*) malloc(sizeof(nbc_bucket_node) * new_size);
 		if(array == NULL)
 		{
 			free(new_h);
@@ -721,7 +760,7 @@ static double compute_mean_separation_time(table* h,
 				tmp = get_unmarked(tmp_next);
 			}
 		}
-		//if the calebdar has no more elements I will go out
+		//if the calendar has no more elements I will go out
 		if(min_next_round == INFTY)
 			break;
 		//otherwise I will restart from the next good bucket
@@ -965,17 +1004,20 @@ nb_calqueue* nb_calqueue_init(unsigned int threshold)
 	unsigned int i = 0;
 
 	threads = threshold;
-	prune_array = (unsigned int*) malloc(sizeof(unsigned int)*threshold*threshold);
+	prune_array = malloc(sizeof(unsigned int)*threshold*threshold);
+	//prune_array = (unsigned int*) malloc(sizeof(unsigned int)*threshold*threshold);
 	memset(prune_array, 0, sizeof(unsigned int)*threshold*threshold);
 
-	nb_calqueue* res = (nb_calqueue*) malloc(sizeof(nb_calqueue));
+	nb_calqueue* res = malloc(sizeof(nb_calqueue));
+	//nb_calqueue* res = (nb_calqueue*) malloc(sizeof(nb_calqueue));
 	if(res == NULL)
 		error("No enough memory to allocate queue\n");
 	memset(res, 0, sizeof(nb_calqueue));
 
 	res->threshold = threshold;
 
-	res->hashtable = (table*) malloc(sizeof(table));
+	res->hashtable = malloc(sizeof(table));
+	//res->hashtable = (table*) malloc(sizeof(table));
 	if(res->hashtable == NULL)
 	{
 		free(res);
@@ -985,7 +1027,8 @@ nb_calqueue* nb_calqueue_init(unsigned int threshold)
 	res->hashtable->new_table = NULL;
 	res->hashtable->size = MINIMUM_SIZE;
 
-	res->hashtable->array = (nbc_bucket_node*) malloc(MINIMUM_SIZE * sizeof(nbc_bucket_node) );
+	res->hashtable->array = malloc(MINIMUM_SIZE * sizeof(nbc_bucket_node) );
+	//res->hashtable->array = (nbc_bucket_node*) malloc(MINIMUM_SIZE * sizeof(nbc_bucket_node) );
 	if(res->hashtable->array == NULL)
 	{
 		free(res->hashtable);
@@ -1104,7 +1147,6 @@ nbc_bucket_node* nbc_dequeue(nb_calqueue *queue)
 		search(min, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
 		
 		//printf("nbc_dequeue: -1 evt type %u\n", ((msg_t*)(right_node->payload))->type); //da_cancellare
-
 
 		if(is_marked(right_node, MOV))
 			continue;
