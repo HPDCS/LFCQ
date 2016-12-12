@@ -801,21 +801,6 @@ static void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 	//if(replica == tail)
 	//	error("A\n");
              
-	while(!insert_std(new_h, &replica, REMOVE_DEL) && right_node->replica == NULL);
-             
-	//if(replica2 == tail)
-	//	error("B %p %p %p\n", replica, replica2, tail);
-             
-	if( BOOL_CAS(
-				&(right_node->replica),
-				NULL,
-				replica
-				)
-		)
-	{
-		atomic_inc_x86(&(new_h->counter));
-    }
-             
     do
 	{ 
 		right_replica_field = right_node->replica;
