@@ -68,6 +68,7 @@ struct __bucket_node
 	//void *generator;	// pointer to the successor
 	void *payload;  				// general payload
 	double timestamp;  				// key
+	unsigned long long epoch;		//enqueue's epoch
 	unsigned int counter; 			// used to resolve the conflict with same timestamp using a FIFO policy
 	//char zpad3[36];					// actually used only to distinguish head nodes
 };
