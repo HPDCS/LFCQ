@@ -37,7 +37,28 @@
 
 //#include "atomic.h"
 #include "nb_calqueue.h"
+#include "../utils/util.h"
 //#include "core.h"
+
+
+#define LOG_DEQUEUE 1
+#define LOG_ENQUEUE 1
+
+#define BOOL_CAS_ALE(addr, old, new)  CAS_x86(\
+										UNION_CAST(addr, volatile unsigned long long *),\
+										UNION_CAST(old,  unsigned long long),\
+										UNION_CAST(new,  unsigned long long)\
+									  )
+									  	
+
+#define BOOL_CAS_GCC(addr, old, new)  __sync_bool_compare_and_swap(\
+										(addr),\
+										(old),\
+										(new)\
+									  )
+
+
+#define BOOL_CAS BOOL_CAS_GCC 
 
 
 #define VAL (0ULL)
@@ -54,28 +75,9 @@
 #define MAX_INT 4294967295
 #define MASK_ABA 4294967295ULL
 
-#define VA_NUM_ARGS(...) VA_NUM_ARGS_IMPL(__VA_ARGS__, 5,4,3,2,1)
-#define VA_NUM_ARGS_IMPL(_1,_2,_3,_4,_5,N,...) N
-
-#define macro_dispatcher(func, ...) macro_dispatcher_(func, VA_NUM_ARGS(__VA_ARGS__))
-#define macro_dispatcher_(func, nargs) macro_dispatcher__(func, nargs)
-#define macro_dispatcher__(func, nargs) func ## nargs
-
 #define is_marked(...) macro_dispatcher(is_marked, __VA_ARGS__)(__VA_ARGS__)
 #define is_marked2(w,r) is_marked_2(w,r)
 #define is_marked1(w)   is_marked_1(w)
-
-#define UNION_CAST(x, destType) (((union {__typeof__(x) a; destType b;})x).b)
-
-#ifndef NDEBUG
-#define assertf(CONDITION, STRING,  ...)        if(CONDITION)\
-        {\
-        printf( (STRING), __VA_ARGS__);\
-        exit(1);\
-        }
-#else
-#define assertf(CONDITION, STRING,  ...) {}
-#endif
 
 
 __thread nbc_bucket_node *to_free_nodes = NULL;
@@ -123,16 +125,16 @@ static void error(const char *msg, ...) {
  *
  * @return the linear index of a given timestamp
  */
-static inline unsigned int hash(double timestamp, double bucket_width)
+static inline unsigned long long hash(double timestamp, double bucket_width)
 {
 	double tmp1;
 //	double tmp2;
-	unsigned int ret = 0;
+	unsigned long long ret = 0;
 	bool end = false;
-	unsigned int count = 0;
 
 	double res_d = (timestamp / bucket_width);
-	unsigned int res =  (unsigned int) res_d;
+	unsigned long long res =  (unsigned long long) res_d;
+
 
 	if(res_d > 4294967295)
 		error("Probable Overflow when computing the index: "
@@ -152,7 +154,7 @@ static inline unsigned int hash(double timestamp, double bucket_width)
 //		return ++res;
 //	return res;
 
-	res -= (res & (-(res < 3))) +  (3 & (-(res >= 3))); 
+	res -= (res & (-(res < 3ULL))) +  (3ULL & (-(res >= 3ULL))); 
 
 	while( !end )
 	{
@@ -161,11 +163,8 @@ static inline unsigned int hash(double timestamp, double bucket_width)
 		ret = ((res) & (-(D_EQUAL(tmp1, timestamp)))) +  ((res-1) & (-(GREATER(tmp1, timestamp))));
 		end = D_EQUAL(tmp1, timestamp) || GREATER(tmp1, timestamp);
 
-		if(res+1 < res)
-			error("Overflow when computing the index\n");
+		assertf(res+1 < res, "Overflow when computing the index\n");
 		res++;
-
-		count++;
 	}
 
 	return ret;
@@ -231,22 +230,13 @@ static inline bool is_marked_1(void *pointer)
 	//return (bool) ((((unsigned long long) pointer) & MASK_MRK));
 }
 
-static inline bool is_marked_for_search(void *pointer, unsigned int mask)
+static inline bool is_marked_for_search(void *pointer, unsigned int research_flag)
 {
-	bool a, b;
+	unsigned long long mask_value = (UNION_CAST(pointer, unsigned long long) & MASK_MRK);
 	
-	if(mask == REMOVE_DEL)
-		return ( (UNION_CAST(pointer, unsigned long long) & MASK_MRK) == DEL );
-		//return (bool) ((((unsigned long long) pointer) & MASK_MRK) == DEL);
-	if(mask == REMOVE_DEL_INV)
-	{		
-		a = ( (UNION_CAST(pointer, unsigned long long) & MASK_MRK) == DEL );
-		b = ( (UNION_CAST(pointer, unsigned long long) & MASK_MRK) == INV );
-		//a = (bool) ((((unsigned long long) pointer) & MASK_MRK) == DEL);
-		//b = (bool) ((((unsigned long long) pointer) & MASK_MRK) == INV);
-		return a || b;
-	}
-	return false;
+	return 
+		(/*research_flag == REMOVE_DEL &&*/ mask_value == DEL) 
+		|| (research_flag == REMOVE_DEL_INV && (mask_value == INV) );
 }
 
 /**
@@ -422,10 +412,10 @@ static void search(nbc_bucket_node *head, double timestamp, unsigned int tie_bre
 		if (left_next != right)
 		{
 			// if CAS succeeds connect the removed nodes to to_be_freed_list
-			if (!CAS_x86(
-						(volatile unsigned long long *)&(left->next),
-						(unsigned long long) left_next,
-						(unsigned long long) right
+			if (!BOOL_CAS(
+						&(left->next),
+						left_next,
+						right
 						)
 					)
 				continue;
@@ -454,22 +444,22 @@ static void search(nbc_bucket_node *head, double timestamp, unsigned int tie_bre
 static inline void nbc_flush_current(table* h, nbc_bucket_node* node)
 {
 	unsigned long long oldCur;
-	unsigned int oldIndex;
-	unsigned int index = hash(node->timestamp, h->bucket_width);
-	unsigned long long newCur =  ( ( unsigned long long ) index ) << 32;
+	unsigned long long oldIndex;
+	unsigned long long index = ( unsigned long long ) hash(node->timestamp, h->bucket_width);
+	unsigned long long newCur =  index << 32;
 	newCur |= generate_ABA_mark();
 
 	// Retry until it is ensured that the current is moved back to index
 
 	oldCur = h->current;
-	oldIndex = (unsigned int) (oldCur >> 32);
+	oldIndex = oldCur >> 32;
 	if(
 		index > oldIndex
 		|| is_marked(node->next)
-		|| CAS_x86(
-					(volatile unsigned long long *)&(h->current),
-					(unsigned long long) oldCur,
-					(unsigned long long) newCur
+		|| BOOL_CAS(
+					&(h->current),
+					oldCur,
+					newCur
 					)
 				) return;
 
@@ -477,15 +467,15 @@ static inline void nbc_flush_current(table* h, nbc_bucket_node* node)
 	{
 
 		oldCur = h->current;
-		oldIndex = (unsigned int) (oldCur >> 32);
+		oldIndex = oldCur >> 32;
 	}
 	while (
 			index <	oldIndex 
 			&& is_marked(node->next, VAL)
-			&& !CAS_x86(
-						(volatile unsigned long long *)&(h->current),
-						(unsigned long long) oldCur,
-						(unsigned long long) newCur
+			&& !BOOL_CAS(
+						&(h->current),
+						oldCur,
+						newCur
 						)
 					);
 }
@@ -530,17 +520,17 @@ static bool insert_std(table* hashtable, nbc_bucket_node** new_node, int flag)
 			// set tie_breaker
 			new_node_pointer->counter = 1 + ( -D_EQUAL(new_node_timestamp, left_node->timestamp ) & left_node->counter );
 
-			if (CAS_x86
+			if (BOOL_CAS
 					(
-						(volatile unsigned long long*)&(left_node->next),
-						(unsigned long long) right_node,
-						(unsigned long long) new_node_pointer
+						&(left_node->next),
+						right_node,
+						new_node_pointer
 					)
 			)
 			{
-
-	//			printf("ENQUEUE: %f %u - %u %u\n", new_node_pointer->timestamp, new_node_pointer->counter, hash(new_node_timestamp,
-	//					hashtable->bucket_width), index );
+				#if LOG_ENQUEUE == 1
+				LOG("ENQUEUE: %f %u - %u %u\n", new_node_pointer->timestamp, new_node_pointer->counter,	hash(new_node_timestamp, hashtable->bucket_width), index );
+				#endif
 				return true;
 			}
 
@@ -581,10 +571,10 @@ static bool insert_std(table* hashtable, nbc_bucket_node** new_node, int flag)
 	//					left_node->timestamp, left_node->counter,
 	//					right_node->timestamp, right_node->counter);
 
-			if (CAS_x86(
-						(volatile unsigned long long*)&(left_node->next),
-						(unsigned long long) right_node,
-						(unsigned long long) new_node_pointer
+			if (BOOL_CAS(
+						&(left_node->next),
+						right_node,
+						new_node_pointer
 					))
 				//printf("insert_std: evt type %u\n", ((msg_t*)(new_node[0]->payload))->type);//da_cancellare
 				return true;
@@ -649,17 +639,17 @@ static void set_new_table(table* h, unsigned int threshold )
 
 		new_h->array 	= array;
 
-		if(!CAS_x86(
-				(volatile unsigned long long *) &(h->new_table),
-				(unsigned long long)			NULL,
-				(unsigned long long) 			new_h))
+		if(!BOOL_CAS(
+				&(h->new_table),
+				NULL,
+				new_h))
 		{
 			free(new_h->array);
 			free(new_h);
 		}
 
-		//else
-		//	printf("CHANGE SIZE from %u to %u, items %u #\n", size, new_size, counter);
+		else
+			LOG("CHANGE SIZE from %u to %u, items %u OLD_TABLE:%p NEW_TABLE:%p\n", size, new_size, counter, h, new_h);
 	}
 }
 
@@ -679,10 +669,10 @@ static void block_table(table* h)
 			bucket_next = bucket->next;
 		}
 		while( !is_marked(bucket_next, MOV) &&
-				!CAS_x86(
-						(volatile unsigned long long *) &(bucket->next),
-						(unsigned long long)			bucket_next,
-						(unsigned long long) 			get_marked(bucket_next, MOV)
+				!BOOL_CAS(
+					&(bucket->next),
+					bucket_next,
+					get_marked(bucket_next, MOV)
 				) 
 		);
 	}
@@ -811,48 +801,67 @@ static void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 	//if(replica == tail)
 	//	error("A\n");
              
-	while(!insert_std(new_h, &replica, REMOVE_DEL));
+	while(!insert_std(new_h, &replica, REMOVE_DEL) && right_node->replica == NULL);
              
 	//if(replica2 == tail)
 	//	error("B %p %p %p\n", replica, replica2, tail);
              
-	if( CAS_x86(
-				(volatile unsigned long long *) &(right_node->replica),
-				(unsigned long long)			NULL,
-				(unsigned long long) 			replica
+	if( BOOL_CAS(
+				&(right_node->replica),
+				NULL,
+				replica
 				)
 		)
 	{
-			atomic_inc_x86(&(new_h->counter));
-             }
+		atomic_inc_x86(&(new_h->counter));
+    }
+             
+    do
+	{ 
+		right_replica_field = right_node->replica;
+	}        
+	while(right_replica_field == NULL && !insert_std(new_h, &replica, REMOVE_DEL));
+	
+	//if(replica2 == tail)
+	//	error("B %p %p %p\n", replica, replica2, tail);
+             
+	if( right_replica_field == NULL && 
+			BOOL_CAS(
+				&(right_node->replica),
+				NULL,
+				replica
+				)
+		)
+	{
+		atomic_inc_x86(&(new_h->counter));
+    }
              
 	right_replica_field = right_node->replica;
              
 	//if(right_replica_field == tail)
 	//	error("%u - C %p %p %p %p %p\n", tid, replica, replica2, tail, right_replica_field, right_node->replica);
-                             
-	nbc_flush_current(new_h, right_replica_field);
-             
+            
 	do
 	{
-		//non possiamo sostituirlo con un fetch&or(00) senza do/while?
 		right_node_next = right_replica_field->next;
 	}while( 
 		is_marked(right_node_next, INV) && 
-		!CAS_x86(	(volatile unsigned long long *) &(right_replica_field->next),
-					(unsigned long long)			right_node_next,
-					(unsigned long long) 			get_unmarked(right_node_next)
+		!BOOL_CAS(	&(right_replica_field->next),
+					right_node_next,
+					get_unmarked(right_node_next)
 				)
 		);
+
+	nbc_flush_current(new_h, right_replica_field);
 	
 	do{
-		//come sopra
+		//non possiamo sostituirlo con un fetch&or(00) senza do/while?
 		right_node_next = right_node->next;
 	}while( 
 		!is_marked(right_node_next, DEL) && 
-		!CAS_x86(	(volatile unsigned long long *) &(right_node->next),
-					(unsigned long long)			right_node_next,
-					(unsigned long long) 			get_marked(get_unmarked(right_node_next), DEL)
+		!BOOL_CAS(	&(right_node->next),
+					right_node_next,
+					get_marked(get_unmarked(right_node_next), DEL)
 				) 
 		) ;
 	
@@ -873,7 +882,7 @@ static table* read_table(nb_calqueue *queue)
 	nbc_bucket_node *bucket, *array	;
 	nbc_bucket_node *right_node, *left_node, *right_node_next;
 	
-	int counter = 0;
+	int counter = atomic_read(&h->counter);
 	
 	//printf("SIZE H %d\n", h->counter.count);
 
@@ -894,16 +903,16 @@ static table* read_table(nb_calqueue *queue)
 		{
 			block_table(h);
 			newaverage = compute_mean_separation_time(h, new_h->size, queue->threshold);
-//			if
-//			(
-			CAS_x86(
-					(volatile unsigned long long *) &(new_h->bucket_width),
-					*( (unsigned long long*)  &new_bw),
-					*( (unsigned long long*)  &newaverage)
+			if
+			(
+			BOOL_CAS(
+					UNION_CAST(&new_h->bucket_width, unsigned long long *),
+					UNION_CAST(new_bw,unsigned long long),
+					UNION_CAST(newaverage, unsigned long long)
+				)
 			)
-//				)
 //			{
-//					printf("COMPUTE BW %.20f %u\n", newaverage, new_h->size)
+					LOG("COMPUTE BW -  OLD:%.20f NEW:%.20f %u\n", new_bw, newaverage, new_h->size)
 				;
 //			}
 		}
@@ -923,10 +932,10 @@ static table* read_table(nb_calqueue *queue)
 				if(
 						!is_marked(right_node_next, MOV) &&
 						right_node != tail &&
-						!CAS_x86(
-								(volatile unsigned long long *) &(right_node->next),
-								(unsigned long long)			get_unmarked(right_node_next),
-								(unsigned long long) 			get_marked(right_node_next, MOV)
+						!BOOL_CAS(
+								&(right_node->next),
+								get_unmarked(right_node_next),
+								get_marked(right_node_next, MOV)
 								)								
 				)
 					break;
@@ -957,10 +966,10 @@ static table* read_table(nb_calqueue *queue)
 				while(
 						!is_marked(right_node_next, MOV) &&
 						right_node != tail &&
-						!CAS_x86(
-								(volatile unsigned long long *) &(right_node->next),
-								(unsigned long long)			get_unmarked(right_node_next),
-								(unsigned long long) 			get_marked(right_node_next, MOV)
+						!BOOL_CAS(
+								&(right_node->next),
+								get_unmarked(right_node_next),
+								get_marked(right_node_next, MOV)
 								)								
 				);
 
@@ -973,10 +982,10 @@ static table* read_table(nb_calqueue *queue)
 		}
 
 		//Try to replace the old table with the new one
-		if(CAS_x86(
-				(volatile unsigned long long *) &(queue->hashtable),
-				(unsigned long long)			h,
-				(unsigned long long) 			new_h
+		if(BOOL_CAS(
+				&(queue->hashtable),
+				h,
+				new_h
 		))
 		{
 //			printf("%u %f %llu %u %f %llu\n",
@@ -1085,20 +1094,20 @@ void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 
 static inline bool CAS_for_mark( nbc_bucket_node* right_node, nbc_bucket_node* right_node_next)
 {
-	return CAS_x86(
-			(volatile unsigned long long *)&(right_node->next),
-			(unsigned long long) get_unmarked(right_node_next),
-			(unsigned long long) get_marked(right_node_next, DEL)
+	return BOOL_CAS(
+			&(right_node->next),
+			get_unmarked(right_node_next),
+			get_marked(right_node_next, DEL)
 			);
 
 }
 
 static inline bool CAS_for_increase_cur(table* h, unsigned long long current, unsigned long long newCur)
 {
-	return CAS_x86(
-			(volatile unsigned long long *)&(h->current),
-			(unsigned long long)			current,
-			(unsigned long long) 			newCur				);
+	return BOOL_CAS(
+			&(h->current),
+			current,
+			newCur				);
 }
 
 /**
@@ -1111,15 +1120,17 @@ static inline bool CAS_for_increase_cur(table* h, unsigned long long current, un
  * @return a pointer to a node that contains the dequeued value
  *
  */
-nbc_bucket_node* nbc_dequeue(nb_calqueue *queue)
+void* nbc_dequeue(nb_calqueue *queue)
 {
 	nbc_bucket_node *right_node, *min, *right_node_next, *res, *tail, *left_node;
 	table * h;
+	
 	unsigned long long current;
 	unsigned long long newCur;
 
-	unsigned int index;
-	unsigned int newInd;
+	unsigned long long index;
+	unsigned long long newInd;
+	
 	unsigned int size;
 	unsigned int tie;
 	nbc_bucket_node *array;
@@ -1139,7 +1150,7 @@ nbc_bucket_node* nbc_dequeue(nb_calqueue *queue)
 		array = h->array;
 		bucket_width = h->bucket_width;
 
-		index = (unsigned int)(current >> 32);
+		index = current >> 32;
 
 
 		min = array + (index % size);
@@ -1178,11 +1189,20 @@ nbc_bucket_node* nbc_dequeue(nb_calqueue *queue)
 		}
 		else if( GREATER(right_timestamp, (index+1)*bucket_width) )
 		{
-			if(index+1 < index)
-				error("\nOVERFLOW index:%u  %.10f %u %f\n", index, bucket_width, size, right_timestamp);
 
-			newCur =  ( ( unsigned long long ) index+1 ) << 32;
-			newCur |= current & MASK_ABA;
+			newCur =  ( index+1 ) << 32;
+			newCur |= (current & MASK_ABA);
+			
+			//LOG("INCREASE CUR - TS_LEFT:%.20f TS_RIGHT:%.20f INDEX: %llu TABLE:%p\n", min->timestamp, right_timestamp, index, h); 
+			
+			assertf(
+				index+1 > MASK_ABA, 
+				"\nOVERFLOW INDEX:%llu  BW:%.10f SIZE:%u RIGHT_TS:%.20f TAIL:%p RIGHT_NODE:%p TABLE:%p NUM_ELEM:%u\n",
+				index, bucket_width, size, right_timestamp, tail, right_node, h, atomic_read(&h->counter)
+			);
+
+			
+			//assertf((newCur >> 32) == MASK_ABA, "TANA %llu\n", newCur);
 
 //			CAS_x86(
 //					(volatile unsigned long long *)&(h->current),
@@ -1190,13 +1210,19 @@ nbc_bucket_node* nbc_dequeue(nb_calqueue *queue)
 //					(unsigned long long) 			newCur				);
 			
 			
-			CAS_for_increase_cur(h, current, newCur);
+			if(
+				CAS_for_increase_cur(h, current, newCur)
+				)
+			//LOG("NEW INDEX : %llu\n", (newCur >> 32))
+			;
+			
+			
 			
 		}
 		else
 		{ 
 			newCur = h->current;
-			newInd = ((unsigned int)(newCur >> 32));
+			newInd = (newCur >> 32);
 
 			if( 
 				newInd < index  || 
@@ -1220,7 +1246,10 @@ nbc_bucket_node* nbc_dequeue(nb_calqueue *queue)
 			{
 				search(min, right_timestamp, tie,  &left_node, &right_node, REMOVE_DEL_INV);
 				atomic_dec_x86(&(h->counter));
-				//printf("DEQUEUE: %f %u - %u %u\n", right_timestamp, tie, index, index % size);
+				
+				#if LOG_DEQUEUE == 1
+					LOG("DEQUEUE: %f %u - %llu %llu\n", right_timestamp, tie, index, index % size);
+				#endif
 				//printf("nbc_dequeue: 2 evt type %u\n", ((msg_t*)(res->payload))->type); //da_cancellare
 				return res;
 			}
@@ -1286,6 +1315,7 @@ double nbc_prune(nb_calqueue *queue, double timestamp)
 	
 	prune_count = 0;
 
+	LOG("PRUNE %s\n", "");
 
 	for(;i<threads;i++)
 	{

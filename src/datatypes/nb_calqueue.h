@@ -45,6 +45,7 @@
 
 #define FLUSH_SMART 1
 #define ENABLE_EXPANSION 1
+#define ENABLE_PRUNE 1
 
 #define TID tid
 
@@ -101,7 +102,7 @@ struct nb_calqueue
 };
 
 extern void nbc_enqueue(nb_calqueue *queue, double timestamp, void* payload);
-extern nbc_bucket_node* nbc_dequeue(nb_calqueue *queue);
+extern void* nbc_dequeue(nb_calqueue *queue);
 extern double nbc_prune(nb_calqueue *queue, double timestamp);
 extern nb_calqueue* nb_calqueue_init(unsigned int threashold);
 
