@@ -638,7 +638,8 @@ static void block_table(table* h)
 	unsigned int size = h->size;
 	nbc_bucket_node *array = h->array;
 	nbc_bucket_node *bucket, *bucket_next;
-	nbc_bucket_node *left_node, *right_node;
+	nbc_bucket_node *left_node, *right_node; 
+	nbc_bucket_node *right_node_next, *left_node_next;
 	
 	for(i = 0; i < size; i++)
 	{
@@ -873,9 +874,9 @@ static table* read_table(nb_calqueue *queue)
 			if
 			(
 				BOOL_CAS(
-						&new_h->bucket_width,
-						new_bw,
-						newaverage
+						UNION_CAST(&new_h->bucket_width, unsigned long long *),
+						UNION_CAST(new_bw,unsigned long long),
+						UNION_CAST(newaverage, unsigned long long)
 					)
 			)
 				LOG("COMPUTE BW -  OLD:%.20f NEW:%.20f %u\n", new_bw, newaverage, new_h->size);
