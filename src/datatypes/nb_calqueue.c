@@ -28,12 +28,9 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <sys/types.h>
 #include <float.h>
 #include <pthread.h>
 #include <math.h>
-#include <assert.h>
 
 //#include "atomic.h"
 #include "nb_calqueue.h"
@@ -442,7 +439,6 @@ static inline void nbc_flush_current(table* h, nbc_bucket_node* node)
 	unsigned long long oldIndex;
 	unsigned long long oldEpoch;
 	unsigned long long newIndex = ( unsigned long long ) hash(node->timestamp, h->bucket_width);
-	unsigned long long newEpoch;
 	unsigned long long newCur =  newIndex << 32;
 	
 	// Retry until it is ensured that the current is moved back to index
@@ -451,7 +447,7 @@ static inline void nbc_flush_current(table* h, nbc_bucket_node* node)
 	oldIndex = oldCur >> 32;
 	newCur |= (oldEpoch + 1);
 		
-	if(index >	oldIndex 
+	if(newIndex >	oldIndex 
 		|| is_marked(node->next)
 		|| oldCur == (tmpCur = VAL_CAS(
 									&(h->current),
@@ -476,7 +472,7 @@ static inline void nbc_flush_current(table* h, nbc_bucket_node* node)
 		newCur |= (oldEpoch + 1);
 	}
 	while (
-			index <	oldIndex 
+			newIndex <	oldIndex 
 			&& is_marked(node->next, VAL)
 			&& oldCur == (tmpCur = VAL_CAS(
 							&(h->current),
@@ -629,15 +625,13 @@ static void set_new_table(table* h, unsigned int threshold )
 
 
 		
-		array =  malloc(sizeof(nbc_bucket_node) * new_size);
+		array =  calloc(new_size, sizeof(nbc_bucket_node));
 		//array =  (nbc_bucket_node*) malloc(sizeof(nbc_bucket_node) * new_size);
 		if(array == NULL)
 		{
 			free(new_h);
 			error("No enough memory to allocate new table array %u\n", new_size);
 		}
-
-		memset(array, 0, sizeof(nbc_bucket_node) * new_size);
 
 		for (i = 0; i < new_size; i++)
 			array[i].next = tail;
@@ -997,15 +991,13 @@ nb_calqueue* nb_calqueue_init(unsigned int threshold)
 	unsigned int i = 0;
 
 	threads = threshold;
-	prune_array = malloc(sizeof(unsigned int)*threshold*threshold);
+	prune_array = calloc(threshold*threshold, sizeof(unsigned int));
 	//prune_array = (unsigned int*) malloc(sizeof(unsigned int)*threshold*threshold);
-	memset(prune_array, 0, sizeof(unsigned int)*threshold*threshold);
 
-	nb_calqueue* res = malloc(sizeof(nb_calqueue));
+	nb_calqueue* res = calloc(1, sizeof(nb_calqueue));
 	//nb_calqueue* res = (nb_calqueue*) malloc(sizeof(nb_calqueue));
 	if(res == NULL)
 		error("No enough memory to allocate queue\n");
-	memset(res, 0, sizeof(nb_calqueue));
 
 	res->threshold = threshold;
 
@@ -1020,7 +1012,7 @@ nb_calqueue* nb_calqueue_init(unsigned int threshold)
 	res->hashtable->new_table = NULL;
 	res->hashtable->size = MINIMUM_SIZE;
 
-	res->hashtable->array = malloc(MINIMUM_SIZE * sizeof(nbc_bucket_node) );
+	res->hashtable->array = calloc(MINIMUM_SIZE, sizeof(nbc_bucket_node) );
 	//res->hashtable->array = (nbc_bucket_node*) malloc(MINIMUM_SIZE * sizeof(nbc_bucket_node) );
 	if(res->hashtable->array == NULL)
 	{
@@ -1028,8 +1020,6 @@ nb_calqueue* nb_calqueue_init(unsigned int threshold)
 		free(res);
 		error("No enough memory to allocate queue\n");
 	}
-
-	memset(res->hashtable->array, 0, sizeof(nbc_bucket_node) );
 
 	g_tail = node_malloc(NULL, INFTY, 0);
 	g_tail->next = NULL;
@@ -1065,7 +1055,7 @@ void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 
 	do
 	{
-		if(old_h != (h = read_table(queue))
+		if(old_h != (h = read_table(queue)))
 		{
 			old_h = h;
 			new_node->epoch = (h->current & MASK_EPOCH);
@@ -1112,8 +1102,8 @@ void* nbc_dequeue(nb_calqueue *queue)
 					*res, *tail, *array;
 	table * h;
 	
-	unsigned long long current, newCur;
-	unsigned long long index, newInd;
+	unsigned long long current;
+	unsigned long long index;
 	unsigned long long epoch;
 	
 	unsigned int size;
@@ -1166,7 +1156,7 @@ void* nbc_dequeue(nb_calqueue *queue)
 				}
 				
 			}
-			if(is_marked(left_node_next, MOV)
+			if(is_marked(left_node_next, MOV))
 			{
 				break;
 			}
