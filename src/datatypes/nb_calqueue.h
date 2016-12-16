@@ -1,8 +1,8 @@
 /*****************************************************************************
-*
+* 
 *	This file is part of NBQueue, a lock-free O(1) priority queue.
-*
-*   Copyright (C) 2015, Romolo Marotta
+* 
+*   Copyright (C) 2015, Romolo Marotta      
 *
 *   This program is free software: you can redistribute it and/or modify
 *   it under the terms of the GNU General Public License as published by
@@ -21,15 +21,15 @@
 /*
  * nonblockingqueue.h
  *
- *  Created on: Jul 13, 2015
+ *  Created on: Jul 13, 2015    
  *      Author: Romolo Marotta
  */
 
 #ifndef DATATYPES_NONBLOCKING_CALQUEUE_H_
 #define DATATYPES_NONBLOCKING_CALQUEUE_H_
 
-#include <stdbool.h>
 #include <float.h>
+#include <math.h>
 #include "../arch/atomic.h"
 
 #define INFTY DBL_MAX
@@ -50,6 +50,7 @@
 #define TID tid
 
 extern __thread unsigned int TID;
+extern __thread struct drand48_data seedT;
 
 
 /**

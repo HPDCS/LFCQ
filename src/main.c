@@ -24,7 +24,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <math.h>
 
 #include <pthread.h>
 #include <stdarg.h>
@@ -34,14 +33,17 @@
 #include "datatypes/calqueue.h"
 #include "datatypes/nb_calqueue.h"
 
-#include "utils/util.h"
+#include "utils/hpdcs_utils.h"
+#include "utils/hpdcs_math.h"
 
 #define PAYLOAD_SIZE 128
 
+__thread struct drand48_data seedT;
 
 struct payload
 {
 	double timestamp;
+	unsigned long long id;
 	char   data[PAYLOAD_SIZE];
 };
 
@@ -75,7 +77,7 @@ double PROB_DEQUEUE3;		// Probability to dequeue
 char   PROB_DISTRIBUTION3;
 
 unsigned int PRUNE_PERIOD;	// Number of ops before calling prune
-double MEAN_INTERARRIVAL_TIME = 1.0;			// Maximum distance from the current event owned by the thread
+double MEAN_INTERARRIVAL_TIME = 10.00;			// Maximum distance from the current event owned by the thread
 unsigned int LOG_PERIOD;	// Number of ops before printing a log
 unsigned int VERBOSE;		// if 1 prints a full log on STDOUT and on individual files
 unsigned int ENABLE_LOG;			// = 0;
@@ -84,6 +86,7 @@ unsigned int SAFETY_CHECK;
 unsigned int EMPTY_QUEUE;
 
 __thread unsigned int TID;
+__thread unsigned int num_op=0;
 
 unsigned int *id;
 volatile long long *ops;
@@ -111,86 +114,17 @@ void test_log(unsigned int my_id, const char *msg, ...) {
 	fwrite(buffer,1,  strlen(buffer), log_files[my_id]);
 }
 
-double uniform_rand(struct drand48_data *seed)
-{
-	double random_num = 0.0;
-	drand48_r(seed, &random_num);
-	random_num *= MEAN_INTERARRIVAL_TIME*2;
-	return random_num;
-}
-
-double neg_triangular_rand(struct drand48_data *seed)
-{
-	double random_num = 0.0;
-	drand48_r(seed, &random_num);
-	random_num = 1-sqrt(random_num);
-	random_num *= MEAN_INTERARRIVAL_TIME*3/2;
-	return random_num;
-}
-
-double triangular_rand(struct drand48_data *seed)
-{
-	double random_num = 0.0;
-	drand48_r(seed, &random_num);
-	random_num = sqrt(random_num);
-	random_num *= MEAN_INTERARRIVAL_TIME*3/2;
-	return random_num;
-}
-
-double exponential_rand(struct drand48_data *seed)
-{
-	double random_num = 0.0;
-	drand48_r(seed, &random_num);
-	random_num =  -log(random_num);
-	random_num *= MEAN_INTERARRIVAL_TIME;
-	return random_num;
-}
-
-
 double dequeue(unsigned int my_id)
 {
 
 	struct timespec startTV2,endTV2;
-	struct timeval diff;
 	double timestamp = INFTY;
 	unsigned int counter = 1;
-	void* free_pointer;
+	void* free_pointer = NULL;
 	clock_gettime(CLOCK_MONOTONIC, &startTV2);
 	payload *new_nbc_node;
 	calqueue_node *new_cal_node;
 
-//	if(DATASTRUCT == 'L')
-//	{
-//		free_pointer = list_pop(lqueue);
-//		nbc_bucket_node *new = node_payload(lqueue,free_pointer);
-//		if(free_pointer != NULL)
-//		{
-//			timestamp = new->timestamp;
-//			counter = new->counter;
-//		}
-//	}
-//	else if(DATASTRUCT == 'C')
-//	{
-//		calqueue_node* new = calqueue_get();
-//		free_pointer = new;
-//		if(free_pointer != NULL)
-//		{
-//			timestamp = new->timestamp;
-//			counter = 1;
-//		}
-//	}
-//	else if(DATASTRUCT == 'F')
-//	{
-//		nbc_bucket_node *new = nbc_dequeue(nbcqueue);
-//		free_pointer = NULL;
-//		timestamp = UNION_CAST(new, double);
-//		
-//		//if(free_pointer != NULL){
-//		//	timestamp = new->timestamp;
-//		//	counter = new->counter;
-//		//}
-//	}
-	
 	switch(DATASTRUCT)
 	{
 		case 'L':
@@ -229,30 +163,22 @@ double dequeue(unsigned int my_id)
 
 	d_time.tv_nsec += endTV2.tv_nsec > startTV2.tv_nsec ? ( endTV2.tv_nsec - startTV2.tv_nsec) : (1000000000+ endTV2.tv_nsec - startTV2.tv_nsec);
 
-	//if(counter == 0)
-	//{
-	//	printf("%u-%d:%d\tDEQUEUE should never return a HEAD node %.10f - %d\n",
-	//			my_id, (int)diff.tv_sec, (int)diff.tv_usec, timestamp, counter);
-	//	exit(1);
-	//}
-	
 	assertf(
 		counter == 0,
 		"%u-%d:%d\tDEQUEUE should never return a HEAD node %.10f - %d\n",
-		my_id, (int)diff.tv_sec, (int)diff.tv_usec, timestamp, counter
+		my_id, (int)d_time.tv_sec, (int)d_time.tv_nsec, timestamp, counter
 		);
 
 	if(free_pointer != NULL)
 	{
-		//LOG("%u - FREEING %p\n", my_id,  free_pointer);
 		free(free_pointer);
 	}
 	if( VERBOSE )
 	{
 		if(timestamp == INFTY )
-			test_log(my_id, "%u-%d:%d\tDEQUEUE EMPTY\n", my_id, diff.tv_sec, diff.tv_usec);
+			test_log(my_id, "%u-%d:%d\tDEQUEUE EMPTY\n", my_id, d_time.tv_sec, d_time.tv_nsec);
 		else
-			test_log(my_id, "%u-%d:%d\tDEQUEUE %.15f - %d\n", my_id, diff.tv_sec, diff.tv_usec, timestamp, counter);
+			test_log(my_id, "%u-%d:%d\tDEQUEUE %.15f - %d\n", my_id, d_time.tv_sec, d_time.tv_nsec, timestamp, counter);
 	}
 	
 	return timestamp;
@@ -269,29 +195,19 @@ double enqueue(unsigned int my_id, struct drand48_data* seed, double local_min, 
 	payload data;
 	payload *nbc_data;
 
-	//if(distribution == 'U')
-	//	update = uniform_rand(seed);
-	//else if(distribution == 'T')
-	//	update = triangular_rand(seed);
-	//else if(distribution == 'N')
-	//	update = neg_triangular_rand(seed);
-	//else if(distribution == 'E')
-	//	update = exponential_rand(seed);
-		
-	
 	switch(distribution)
 	{
 		case 'U':
-			update = uniform_rand(seed);
+			update = uniform_rand(seed, MEAN_INTERARRIVAL_TIME);
 			break;
 		case 'T':
-			update = triangular_rand(seed);
+			update = triangular_rand(seed, MEAN_INTERARRIVAL_TIME);
 			break;
 		case 'N':
-			update = neg_triangular_rand(seed);
+			update = neg_triangular_rand(seed, MEAN_INTERARRIVAL_TIME);
 			break;
 		case 'E':
-			update = exponential_rand(seed);
+			update = exponential_rand(seed, MEAN_INTERARRIVAL_TIME);
 			break;
 		default:
 			break;
@@ -299,26 +215,13 @@ double enqueue(unsigned int my_id, struct drand48_data* seed, double local_min, 
 	timestamp = local_min;
 
 	timestamp += update;
-	//	LOG("%u - UPDATE ENQUEUE TS_OLD %.20f TS_NEW %.20f\n", my_id,  local_min, timestamp);
+	
 	if(timestamp < 0.0)
 	{
-	//	LOG("ENQUEUE negative TS %.20f\n", timestamp);
 		timestamp = 0;
 	}	
 clock_gettime(CLOCK_MONOTONIC, &startTV2);
 
-	//if(DATASTRUCT == 'L')
-	//{
-	//	nbc_bucket_node node;
-	//	node.timestamp = timestamp;
-	//	node.counter = 1;
-	//	list_insert(lqueue, timestamp, &node);
-	//}
-	//else if(DATASTRUCT == 'C')
-	//	calqueue_put(timestamp, NULL);
-	//else if(DATASTRUCT == 'F')
-	//	nbc_enqueue(nbcqueue, timestamp, UNION_CAST(timestamp, void*));
-	
 	switch(DATASTRUCT)
 	{
 		case 'L':
@@ -331,6 +234,9 @@ clock_gettime(CLOCK_MONOTONIC, &startTV2);
 		case 'F':
 			nbc_data = malloc(sizeof(payload));
 			nbc_data->timestamp = timestamp;
+			nbc_data->id = TID;
+			nbc_data->id = nbc_data->id << 32;
+			nbc_data->id |= num_op++;
 			nbc_enqueue(nbcqueue, timestamp, nbc_data);
 			break;
 		default:
@@ -408,6 +314,8 @@ void classic_hold(
 				{
 					if(timestamp < GVT)
 					{
+						gettimeofday(&endTV, NULL);
+						timersub(&endTV, &startTV, &diff);
 						printf("%u - %d:%d ERRORE timestamp:%f > GVT:%f\n",
 								my_id, (int)diff.tv_sec, (int)diff.tv_usec, timestamp, GVT);
 						exit(1);
@@ -421,7 +329,6 @@ void classic_hold(
 					}
 					GVT = timestamp;
 				}
-		//LOG("%u - UPDATE DEQUEUE TS_OLD %.20f TS_NEW %.20f\n", my_id ,local_min, timestamp);
 				local_min = timestamp;
 			}
 		}
@@ -433,7 +340,7 @@ void classic_hold(
 		}
 
 
-		if( DATASTRUCT == 'F' && ops_count[my_id]%(PRUNE_PERIOD) == 0)
+		if( PRUNE_PERIOD != 0 && DATASTRUCT == 'F' && ops_count[my_id]%(PRUNE_PERIOD) == 0)
 		{
 			min = INFTY;
 			j =0;
@@ -446,7 +353,11 @@ void classic_hold(
 			nbc_prune(nbcqueue, min*PRUNE_TRESHOLD);
 
 			if( VERBOSE )
+			{	
+				gettimeofday(&endTV, NULL);
+				timersub(&endTV, &startTV, &diff);
 				test_log(my_id, "%u-%d:%d\tPRUNE %.10f\n", my_id, (int)diff.tv_sec, (int)diff.tv_usec, min*PRUNE_TRESHOLD);
+			}
 
 		}
 
@@ -495,7 +406,7 @@ void* process(void *arg)
 	long long n_enqueue = 0;
 	struct drand48_data seed;
 	struct drand48_data seed2    ;
-	FILE  *f;
+	FILE  *f = NULL;
 	double max = 0.0;
 	double timestamp;
 
@@ -503,7 +414,8 @@ void* process(void *arg)
 	(TID) = my_id;
 	sprintf(name_file, "%u.txt", my_id);
 	srand48_r(my_id+157, &seed2);
-        srand48_r(my_id+359, &seed);
+    srand48_r(my_id+359, &seed);
+    srand48_r(my_id+254, &seedT);
 
 
 	if(VERBOSE)
@@ -555,7 +467,7 @@ void* process(void *arg)
 			ops_count[my_id]-n_enqueue);
 
 
-	ops[my_id] = n_dequeue - n_enqueue;
+	ops[my_id] = n_enqueue - n_dequeue;
 //	array[my_id] = INFTY;
 
 	if( VERBOSE )

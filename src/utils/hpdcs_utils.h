@@ -1,7 +1,7 @@
 #ifndef __UTIL_HPCDS__
 #define __UTIL_HPCDS__
 
-#define NDEBUG
+#define NDEBUG 
 
 #define VA_NUM_ARGS(...) VA_NUM_ARGS_IMPL(__VA_ARGS__, 5,4,3,2,1)
 #define VA_NUM_ARGS_IMPL(_1,_2,_3,_4,_5,N,...) N
@@ -23,9 +23,9 @@
 #endif
 
 #ifndef NDEBUG
-#define LOG(STRING,  ...)     {printf( (STRING), __VA_ARGS__);}
+#define LOG(STRING,  ...)     (printf( (STRING), __VA_ARGS__))
 #else
-#define LOG(STRING,  ...) {}
+#define LOG(STRING,  ...) do{}while(0)
 #endif
 
 #endif

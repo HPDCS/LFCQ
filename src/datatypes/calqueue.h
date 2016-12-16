@@ -1,6 +1,6 @@
 #pragma once
 #ifndef __CALQUEUE_H
-#define __CALQUEUE_H
+#define __CALQUEUE_H    
 
 //#define CALQSPACE 49153		// Calendar array size needed for maximum resize
 #define CALQSPACE 131072//65536		// Calendar array size needed for maximum resize
