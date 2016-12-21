@@ -163,7 +163,7 @@ static inline unsigned long long hash(double timestamp, double bucket_width)
 		ret = ((res) & (-(D_EQUAL(tmp1, timestamp)))) +  ((res-1) & (-(GREATER(tmp1, timestamp))));
 		end = D_EQUAL(tmp1, timestamp) || GREATER(tmp1, timestamp);
 
-		assertf(res+1 < res, "Overflow when computing the index\n");
+		assertf(res+1 < res, "Overflow when computing the index\n%s", "");
 		res++;
 	}
 
