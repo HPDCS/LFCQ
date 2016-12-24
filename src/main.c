@@ -514,6 +514,9 @@ int main(int argc, char **argv)
 	TOTAL_OPS3 = (unsigned int) strtol(argv[par++], (char **)NULL, 10);
 
 	TOTAL_OPS = TOTAL_OPS1 + TOTAL_OPS2 + TOTAL_OPS3;
+	
+	PERC_USED_BUCKET 			= strtod(argv[par++], (char **)NULL);
+	ELEM_PER_BUCKET 			= (unsigned int) strtol(argv[par++], (char **)NULL, 10);
 
 	OPERATIONS 					= (TOTAL_OPS/THREADS);
 	PRUNE_PERIOD 				= (unsigned int) strtol(argv[par++], (char **)NULL, 10);
@@ -528,8 +531,6 @@ int main(int argc, char **argv)
 	SAFETY_CHECK 				= (unsigned int) strtol(argv[par++], (char **)NULL, 10);
 	EMPTY_QUEUE 				= (unsigned int) strtol(argv[par++], (char **)NULL, 10);
 	
-	PERC_USED_BUCKET 			= strtod(argv[par++], (char **)NULL);
-	ELEM_PER_BUCKET 			= (unsigned int) strtol(argv[par++], (char **)NULL, 10);
 
 	id = (unsigned int*) malloc(THREADS*sizeof(unsigned int));
 	ops = (long long*) malloc(THREADS*sizeof(long long));
@@ -559,8 +560,10 @@ int main(int argc, char **argv)
 	printf("PROB_DIST3:%c,",PROB_DISTRIBUTION3);
 	printf("P_DEQUEUE3:%f,", PROB_DEQUEUE3);
 	printf("MEAN_INTERARRIVAL_TIME:%f,", MEAN_INTERARRIVAL_TIME);
+	printf("PERC_USED_BUCKET:%f,", PERC_USED_BUCKET);
+	printf("ELEM_PER_BUCKET:%u,", ELEM_PER_BUCKET);
 	printf("SAFETY_CHECK:%u,", SAFETY_CHECK);
-	printf("EMPTY_QUEUE:%u,\n\n", EMPTY_QUEUE);
+	printf("EMPTY_QUEUE:%u,", EMPTY_QUEUE);
 
 	TOTAL_OPS2 += TOTAL_OPS1;
 	

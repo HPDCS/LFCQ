@@ -569,6 +569,7 @@ static void set_new_table(table* h, unsigned int threshold, double pub, unsigned
 	unsigned int size = h->size;
 	unsigned int thp2, size_thp2;
 	unsigned int new_size = 0;
+	double pub_per_epb = pub*epb;
 	table *new_h;
 	nbc_bucket_node *array;
 	
@@ -576,9 +577,18 @@ static void set_new_table(table* h, unsigned int threshold, double pub, unsigned
 	//size_thp2 = (unsigned int) ((thp2) / ( pub * epb ));
 	//if(thp2 > size_thp2) thp2 = size_thp2;
 
-	if 		(size >= thp2 && counter > 2   * (pub*epb*size))
+//	if 		(size >= thp2/pub_per_epb && counter > 2   * (pub_per_epb*size))
+//		new_size = 2   * size;
+//	else if (size >  thp2/pub_per_epb && counter < 0.5 * (pub_per_epb*size))
+//		new_size = 0.5 * size;
+//	else if	(size == 1    && counter > thp2)
+//		new_size = thp2/pub_per_epb;
+//	else if (size == thp2/pub_per_epb && counter < threshold/pub_per_epb)
+//		new_size = 1;
+
+	if 		(size >= thp2 && counter > 2   * (pub_per_epb*size))
 		new_size = 2   * size;
-	else if (size >  thp2 && counter < 0.5 * (pub*epb*size))
+	else if (size >  thp2 && counter < 0.5 * (pub_per_epb*size))
 		new_size = 0.5 * size;
 	else if	(size == 1    && counter > thp2)
 		new_size = thp2;
@@ -855,17 +865,19 @@ static table* read_table(nb_calqueue *queue)
 	table 			*new_h 			;
 	double 			 new_bw 		;
 	double 			 newaverage		;
+	double 			 pub_per_epb	;
 	nbc_bucket_node *bucket, *array	;
 	nbc_bucket_node *right_node, *left_node, *right_node_next, *node;
 	
 	int counter = atomic_read(&h->counter);
 	
 	//printf("SIZE H %d\n", h->counter.count);
-
+	
+	pub_per_epb = queue->pub_per_epb;
 	if( 
 		(	
-			counter < (queue->elem_per_bucket * queue->perc_used_bucket) * 0.5 * size ||
-			counter > (queue->elem_per_bucket * queue->perc_used_bucket) * 2   * size
+			counter < pub_per_epb * 0.5 * size ||
+			counter > pub_per_epb * 2   * size
 		)
 		//(counter < 0.5*size || counter > 2*size)
 		&& (h->new_table == NULL)
@@ -1020,6 +1032,7 @@ nb_calqueue* nb_calqueue_init(unsigned int threshold, double perc_used_bucket, u
 	res->threshold = threshold;
 	res->perc_used_bucket = perc_used_bucket;
 	res->elem_per_bucket = elem_per_bucket;
+	res->pub_per_epb = perc_used_bucket * elem_per_bucket;
 
 	res->hashtable = malloc(sizeof(table));
 	if(res->hashtable == NULL)

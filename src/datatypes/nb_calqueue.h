@@ -99,10 +99,11 @@ typedef struct nb_calqueue nb_calqueue;
 struct nb_calqueue
 {
 	unsigned int threshold;
-	char zpad9[56];
-	table * volatile hashtable;
 	unsigned elem_per_bucket;
 	double perc_used_bucket;
+	double pub_per_epb;
+	char zpad9[40];
+	table * volatile hashtable;
 };
 
 extern void nbc_enqueue(nb_calqueue *queue, double timestamp, void* payload);
