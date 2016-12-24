@@ -84,6 +84,8 @@ unsigned int ENABLE_LOG;			// = 0;
 double PRUNE_TRESHOLD;		// = 0.35;
 unsigned int SAFETY_CHECK;
 unsigned int EMPTY_QUEUE;
+double PERC_USED_BUCKET; 	
+unsigned int ELEM_PER_BUCKET;
 
 __thread unsigned int TID;
 __thread unsigned int num_op=0;
@@ -483,7 +485,7 @@ void* process(void *arg)
 int main(int argc, char **argv)
 {
 	int par = 1;
-	int num_par = 19;
+	int num_par = 21;//19;
 	unsigned int i = 0;
 	pthread_t *tid;
 	long long tmp = 0;
@@ -525,6 +527,9 @@ int main(int argc, char **argv)
 	//COLLABORATIVE_TODO_LIST 		= (unsigned int) strtol(argv[par++], (char **)NULL, 10);
 	SAFETY_CHECK 				= (unsigned int) strtol(argv[par++], (char **)NULL, 10);
 	EMPTY_QUEUE 				= (unsigned int) strtol(argv[par++], (char **)NULL, 10);
+	
+	PERC_USED_BUCKET 			= strtod(argv[par++], (char **)NULL);
+	ELEM_PER_BUCKET 			= (unsigned int) strtol(argv[par++], (char **)NULL, 10);
 
 	id = (unsigned int*) malloc(THREADS*sizeof(unsigned int));
 	ops = (long long*) malloc(THREADS*sizeof(long long));
@@ -555,7 +560,7 @@ int main(int argc, char **argv)
 	printf("P_DEQUEUE3:%f,", PROB_DEQUEUE3);
 	printf("MEAN_INTERARRIVAL_TIME:%f,", MEAN_INTERARRIVAL_TIME);
 	printf("SAFETY_CHECK:%u,", SAFETY_CHECK);
-	printf("EMPTY_QUEUE:%u,", EMPTY_QUEUE);
+	printf("EMPTY_QUEUE:%u,\n\n", EMPTY_QUEUE);
 
 	TOTAL_OPS2 += TOTAL_OPS1;
 	
@@ -579,7 +584,7 @@ int main(int argc, char **argv)
 			calqueue_init();
 			break;
 		case 'F':
-			nbcqueue = nb_calqueue_init(THREADS);
+			nbcqueue = nb_calqueue_init(THREADS, PERC_USED_BUCKET, ELEM_PER_BUCKET);
 			break;
 		default:
 			break;

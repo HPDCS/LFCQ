@@ -101,11 +101,13 @@ struct nb_calqueue
 	unsigned int threshold;
 	char zpad9[56];
 	table * volatile hashtable;
+	unsigned elem_per_bucket;
+	double perc_used_bucket;
 };
 
 extern void nbc_enqueue(nb_calqueue *queue, double timestamp, void* payload);
 extern void* nbc_dequeue(nb_calqueue *queue);
 extern double nbc_prune(nb_calqueue *queue, double timestamp);
-extern nb_calqueue* nb_calqueue_init(unsigned int threashold);
+extern nb_calqueue* nb_calqueue_init(unsigned int threashold, double perc_used_bucket, unsigned int elem_per_bucket);
 
 #endif /* DATATYPES_NONBLOCKING_QUEUE_H_ */

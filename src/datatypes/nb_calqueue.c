@@ -560,31 +560,43 @@ static bool insert_std(table* hashtable, nbc_bucket_node** new_node, int flag)
 
 }
 
-static void set_new_table(table* h, unsigned int threshold )
+static void set_new_table(table* h, unsigned int threshold, double pub, unsigned int epb)
 {
 	nbc_bucket_node *tail = g_tail;
 	int signed_counter = atomic_read( &h->counter );
 	unsigned int counter = (unsigned int) ( (-(signed_counter >= 0)) & signed_counter);
 	unsigned int i = 0;
 	unsigned int size = h->size;
-	unsigned int thp2 = threshold *2;
+	unsigned int thp2, size_thp2;
 	unsigned int new_size = 0;
 	table *new_h;
 	nbc_bucket_node *array;
+	
+	thp2 = threshold *2;
+	//size_thp2 = (unsigned int) ((thp2) / ( pub * epb ));
+	//if(thp2 > size_thp2) thp2 = size_thp2;
 
-	if 		(size >= thp2 && counter > 2*size)
-		new_size = 2*size;
-	else if (size > thp2 && counter < 0.5*size)
-		new_size =  0.5*size;
-	else if	(size == 1 && counter > thp2)
+	if 		(size >= thp2 && counter > 2   * (pub*epb*size))
+		new_size = 2   * size;
+	else if (size >  thp2 && counter < 0.5 * (pub*epb*size))
+		new_size = 0.5 * size;
+	else if	(size == 1    && counter > thp2)
 		new_size = thp2;
 	else if (size == thp2 && counter < threshold)
 		new_size = 1;
+
+	//if 		(size >= thp2 && counter > 2*size)
+	//	new_size = 2*size;
+	//else if (size > thp2 && counter < 0.5*size)
+	//	new_size =  0.5*size;
+	//else if	(size == 1 && counter > thp2)
+	//	new_size = thp2;
+	//else if (size == thp2 && counter < threshold)
+	//	new_size = 1;
 	
 	
 	if(new_size != 0 && new_size <= MAXIMUM_SIZE)
 	{
-
 		new_h = malloc(sizeof(table));
 		if(new_h == NULL)
 			error("No enough memory to new table structure\n");
@@ -664,7 +676,7 @@ static void block_table(table* h)
 }
 
 static double compute_mean_separation_time(table* h,
-		unsigned int new_size, unsigned int threashold)
+		unsigned int new_size, unsigned int threashold, unsigned int elem_per_bucket)
 {
 	nbc_bucket_node *tail = g_tail;
 
@@ -764,7 +776,7 @@ static double compute_mean_separation_time(table* h,
 	}
     
 	// Compute new width
-	newaverage = (newaverage / j) * 3.0;	/* this is the new width */
+	newaverage = (newaverage / j) * elem_per_bucket;	/* this is the new width */
 	if(newaverage <= 0.0)
 		newaverage = 1.0;
 	//if(newaverage <  pow(10,-4))
@@ -851,10 +863,14 @@ static table* read_table(nb_calqueue *queue)
 	//printf("SIZE H %d\n", h->counter.count);
 
 	if( 
-		(counter < 0.5*size || counter > 2*size)
+		(	
+			counter < (queue->elem_per_bucket * queue->perc_used_bucket) * 0.5 * size ||
+			counter > (queue->elem_per_bucket * queue->perc_used_bucket) * 2   * size
+		)
+		//(counter < 0.5*size || counter > 2*size)
 		&& (h->new_table == NULL)
 		)
-		set_new_table(h, queue->threshold);
+		set_new_table(h, queue->threshold, queue->perc_used_bucket, queue->elem_per_bucket);
 
 	if(h->new_table != NULL)
 	{
@@ -866,7 +882,7 @@ static table* read_table(nb_calqueue *queue)
 		if(new_bw < 0)
 		{
 			block_table(h);
-			newaverage = compute_mean_separation_time(h, new_h->size, queue->threshold);
+			newaverage = compute_mean_separation_time(h, new_h->size, queue->threshold, queue->elem_per_bucket);
 			if
 			(
 				BOOL_CAS(
@@ -990,7 +1006,7 @@ static table* read_table(nb_calqueue *queue)
  *
  * @return a pointer a new queue
  */
-nb_calqueue* nb_calqueue_init(unsigned int threshold)
+nb_calqueue* nb_calqueue_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket)
 {
 	unsigned int i = 0;
 
@@ -1002,6 +1018,8 @@ nb_calqueue* nb_calqueue_init(unsigned int threshold)
 		error("No enough memory to allocate queue\n");
 
 	res->threshold = threshold;
+	res->perc_used_bucket = perc_used_bucket;
+	res->elem_per_bucket = elem_per_bucket;
 
 	res->hashtable = malloc(sizeof(table));
 	if(res->hashtable == NULL)
