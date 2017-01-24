@@ -211,6 +211,9 @@ double enqueue(unsigned int my_id, struct drand48_data* seed, double local_min, 
 		case 'E':
 			update = exponential_rand(seed, MEAN_INTERARRIVAL_TIME);
 			break;
+		case 'C':
+			update = camel_rand(seed, MEAN_INTERARRIVAL_TIME, 0.999, 2, 0.0005);
+			break;
 		default:
 			break;
 	}
