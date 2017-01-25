@@ -215,7 +215,8 @@ double enqueue(unsigned int my_id, struct drand48_data* seed, double local_min, 
 			update = camel_rand(seed, MEAN_INTERARRIVAL_TIME, 0.999, 2, 0.0005);
 			break;
 		default:
-			break;
+			printf("#ERROR: Unknown distribution\n");
+			exit(1);
 	}
 	timestamp = local_min;
 
@@ -245,7 +246,8 @@ clock_gettime(CLOCK_MONOTONIC, &startTV2);
 			nbc_enqueue(nbcqueue, timestamp, nbc_data);
 			break;
 		default:
-			break;
+			printf("#ERROR: Unknown data structure\n");
+			exit(1);
 	}
 	
 clock_gettime(CLOCK_MONOTONIC, &endTV2);
@@ -593,7 +595,8 @@ int main(int argc, char **argv)
 			nbcqueue = nb_calqueue_init(THREADS, PERC_USED_BUCKET, ELEM_PER_BUCKET);
 			break;
 		default:
-			break;
+			printf("#ERROR: Unknown data structure\n");
+			exit(1);
 	}
 	
 	gettimeofday(&startTV, NULL);

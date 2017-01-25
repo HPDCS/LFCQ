@@ -298,26 +298,26 @@ inline void spin_lock_x86(spinlock_t *s) {
 * @param s the spinlock to try to acquire
 */
 inline bool spin_trylock_x86(spinlock_t *s) {
-/*	unsigned int out = 0;
+	unsigned int out = 0;
 	unsigned int in = 1;
 
-	__asm__ __volatile__(
-		"movl $1,%%eax\n\t"
-		"xchgl %%eax, %0\n\t"
-		"testl %%eax, %%eax\n\t"
-		: "=a" ((unsigned int)out)
-		: "m" (s->lock)
-		: "eax", "memory"
-	);
+//	__asm__ __volatile__(
+//		"movl $1,%%eax\n\t"
+//		"xchgl %%eax, %0\n\t"
+//		"testl %%eax, %%eax\n\t"
+//		: "=a" ((unsigned int)out)
+//		: "m" (s->lock)
+//		: "eax", "memory"
+//	);
 
-	__asm__ __volatile__(
-		LOCK "xchgl %0, %1"
-		:"=r" ((unsigned int)out)
-		:"m" (s->lock), "0" (in)
-		:"memory");
+//	__asm__ __volatile__(
+//		LOCK "xchgl %0, %1"
+//		:"=r" ((unsigned int)out)
+//		:"m" (s->lock), "0" (in)
+//		:"memory");
 
-	return (bool)out;
-*/
+//	return (bool)out;
+
 	return atomic_test_and_set_x86((int *)&s->lock);
 }
 

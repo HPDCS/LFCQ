@@ -4,15 +4,18 @@
 
 # Add inputs and outputs from these tool invocations to the build variables 
 C_SRCS += \
-../src/utils/hpdcs_math.c
+../src/utils/hpdcs_math.c \
+../src/utils/advanced_spinlock.c
 ##../src/utils/hpdcs_utils.c\
 
 OBJS += \
-../src/utils/hpdcs_math.o 
+../src/utils/hpdcs_math.o \
+../src/utils/advanced_spinlock.o 
 ##../src/utils/hpdcs_utils.o\
 
 C_DEPS += \
-../src/utils/hpdcs_math.d 
+../src/utils/hpdcs_math.d \
+../src/utils/advanced_spinlock.d 
 ##../src/utils/hpdcs_utils.d\
 
 
