@@ -2,6 +2,9 @@ script/eps
 script/pdf
 script/res
 script/tmp
+Debug/*
+Release/*
+GProf/*
 NBCQ
 *.o
 *.out
