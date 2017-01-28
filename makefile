@@ -13,7 +13,7 @@ MACRO := -DARCH_X86_64  -DCACHE_LINE_SIZE=$(L1_CACHE_LINE_SIZE)
 OPTIMIZATION := -O0
 DEBUG := -g3
 
-
+FILTER_OUT_SRC := src/main_faster.c
 
 OBJS_DIR 	:= $(strip $(MAKECMDGOALS))
 
@@ -38,10 +38,9 @@ endif
 
 SUBDIRS 	:= $(shell find src -type d)
 C_SRCS		:= $(shell ls   $(patsubst %, %/*.c, $(SUBDIRS)) )
+C_SRCS 		:= $(filter-out $(FILTER_OUT_SRC), $(C_SRCS))
 OBJS		:= $(strip $(subst .c,.o, $(C_SRCS)))
 C_DEPS		:= $(patsubst %, $(OBJS_DIR)/%, $(subst .o,.d, $(OBJS)))
-
-
 
 RM := rm -rf
 
