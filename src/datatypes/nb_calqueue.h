@@ -4,7 +4,7 @@
 * 
 *   Copyright (C) 2015, Romolo Marotta      
 *
-*   This program is free software: you can redistribute it and/or modify
+*   This program is free software: you can redistribute it and/or modify 
 *   it under the terms of the GNU General Public License as published by
 *   the Free Software Foundation, either version 3 of the License, or
 *   (at your option) any later version.
@@ -22,7 +22,7 @@
  * nonblockingqueue.h
  *
  *  Created on: Jul 13, 2015    
- *      Author: Romolo Marotta
+ *      Author: Romolo Marotta   
  */
 
 #ifndef DATATYPES_NONBLOCKING_CALQUEUE_H_
@@ -33,11 +33,16 @@
 #include "../arch/atomic.h"
 
 #define INFTY DBL_MAX
-#define LESS(a,b) 		( (a) < (b) && !D_EQUAL((a), (b)) )
-#define LEQ(a,b)		( (a) < (b) ||  D_EQUAL((a), (b)) )
-#define D_EQUAL(a,b) 	(fabs((a) - (b)) < DBL_EPSILON)
-#define GEQ(a,b) 		( (a) > (b) ||  D_EQUAL((a), (b)) )
-#define GREATER(a,b) 	( (a) > (b) &&  !D_EQUAL((a), (b)) )
+//#define LESS(a,b) 		( (a) < (b) && !D_EQUAL((a), (b)) )
+//#define LEQ(a,b)		( (a) < (b) ||  D_EQUAL((a), (b)) )
+//#define D_EQUAL(a,b) 	(fabs((a) - (b)) < DBL_EPSILON)
+//#define GEQ(a,b) 		( (a) > (b) ||  D_EQUAL((a), (b)) )
+//#define GREATER(a,b) 	( (a) > (b) &&  !D_EQUAL((a), (b)) )
+#define LESS(a,b) 		( (a) <  (b) )
+#define LEQ(a,b)		( (a) <= (b) )
+#define D_EQUAL(a,b) 	( (a) == (b) )
+#define GEQ(a,b) 		( (a) >  (b) )
+#define GREATER(a,b) 	( (a) >= (b) )
 #define SAMPLE_SIZE 25
 #define HEAD_ID 0
 #define MAXIMUM_SIZE 65536//32768 //65536
@@ -51,6 +56,8 @@
 
 extern __thread unsigned int TID;
 extern __thread struct drand48_data seedT;
+extern __thread unsigned int to_remove_nodes_count;
+extern __thread unsigned int removed_nodes_count;
 
 
 /**
@@ -107,8 +114,8 @@ struct nb_calqueue
 };
 
 extern void nbc_enqueue(nb_calqueue *queue, double timestamp, void* payload);
-extern void* nbc_dequeue(nb_calqueue *queue);
-extern double nbc_prune(nb_calqueue *queue, double timestamp);
+extern double nbc_dequeue(nb_calqueue *queue, void **payload);
+extern double nbc_prune(nb_calqueue *queue);
 extern nb_calqueue* nb_calqueue_init(unsigned int threashold, double perc_used_bucket, unsigned int elem_per_bucket);
 
 #endif /* DATATYPES_NONBLOCKING_QUEUE_H_ */

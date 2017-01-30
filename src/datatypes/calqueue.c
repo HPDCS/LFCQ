@@ -6,13 +6,14 @@
 #include <stdbool.h>
 #include <math.h> //mauro
 #include <pthread.h>
+#include <float.h>
 
 #include "calqueue.h"
 #include "../arch/atomic.h"
 #include "../utils/hpdcs_utils.h"
 #include "../utils/advanced_spinlock.h"
 
-
+#define INFTY DBL_MAX
 
 
 // Declare data structures needed for the schedulers
@@ -336,6 +337,8 @@ void calqueue_init(void) {
 	cal_myspin.tail = NULL;
 }
 
+__thread calqueue_node *cal_free_nodes_lists = NULL;
+
 void calqueue_put(double timestamp, void *payload) {
 
 	calqueue_node *new_node;
@@ -343,7 +346,15 @@ void calqueue_put(double timestamp, void *payload) {
 	//printf("calqueue: inserendo %f, cwidth %f, bukettop %f, nbuckets %d, lastprio %f\n", timestamp, cwidth, buckettop, nbuckets, lastprio);
 
 	// Fill the node entry
-	new_node = malloc(sizeof(calqueue_node));
+	if(cal_free_nodes_lists == NULL)
+		new_node = malloc(sizeof(calqueue_node));
+	else
+	{
+		new_node = cal_free_nodes_lists;
+		cal_free_nodes_lists = cal_free_nodes_lists->next;
+	}
+	
+	
 	new_node->timestamp = timestamp;
 	new_node->payload = payload;
 	new_node->next = NULL;
@@ -376,7 +387,7 @@ void calqueue_put(double timestamp, void *payload) {
 
 }
 
-calqueue_node *calqueue_get(void) {
+double calqueue_get(void **payload) {
 	calqueue_node *node;
 
 	  acquire_lock(&cal_myspin);
@@ -396,16 +407,17 @@ release_lock(&cal_myspin);
 
 //__sync_lock_release(&queue_lock);
 
-
 //    spin_unlock_x86(&cal_spinx86);
 //	pthread_mutex_unlock(&cal_mutex);
 
-
-	if (node == NULL) {
-		return NULL;
+	if (node != NULL) {
+		node->next = cal_free_nodes_lists;
+		cal_free_nodes_lists = node;
+		*payload = node->payload;
+		return node->timestamp;
 	}
 
 	//printf("calqueue: estraendo %f, cwidth %f, bukettop %f, nbuckets %d, lastprio %f\n", node->timestamp, cwidth, buckettop, nbuckets, lastprio);
-
-	return node;
+	*payload = NULL;
+	return INFTY;
 }

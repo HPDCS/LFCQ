@@ -298,8 +298,8 @@ inline void spin_lock_x86(spinlock_t *s) {
 * @param s the spinlock to try to acquire
 */
 inline bool spin_trylock_x86(spinlock_t *s) {
-	unsigned int out = 0;
-	unsigned int in = 1;
+//	unsigned int out = 0;
+//	unsigned int in = 1;
 
 //	__asm__ __volatile__(
 //		"movl $1,%%eax\n\t"

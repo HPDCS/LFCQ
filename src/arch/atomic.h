@@ -36,9 +36,6 @@
 #define SPINLOCK_GIVES_COUNT
 
 
-#define ARCH_X86_64
-
-
 #if defined(ARCH_X86) || defined(ARCH_X86_64)
 
 /// Atomic counter definition

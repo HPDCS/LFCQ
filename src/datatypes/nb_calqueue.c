@@ -35,6 +35,7 @@
 //#include "atomic.h"
 #include "nb_calqueue.h"
 #include "../utils/hpdcs_utils.h"
+#include "../mm/mm.h"
 //#include "core.h"
 
 
@@ -90,6 +91,16 @@
 #define is_marked1(w)   is_marked_1(w)
 
 
+__thread hpdcs_gc_status malloc_status =
+{
+	.free_nodes_lists 				= NULL,
+	.to_free_nodes 				= NULL,
+	.to_free_nodes_old 			= NULL,
+	.block_size 				= sizeof(nbc_bucket_node),
+	.to_remove_nodes_count 	= 0LL
+};
+
+__thread nbc_bucket_node *free_nodes_lists = NULL;
 __thread nbc_bucket_node *to_free_nodes = NULL;
 __thread nbc_bucket_node *to_free_nodes_old = NULL;
 
@@ -98,6 +109,7 @@ __thread nbc_bucket_node *to_free_tables_new = NULL;
 
 __thread unsigned long long mark;
 __thread unsigned int to_remove_nodes_count = 0;
+__thread unsigned int removed_nodes_count = 0;
 __thread unsigned int prune_count = 0;
 
 //__thread unsigned long long cantor_p1 = ((TID)*((TID)+1)/2);
@@ -108,12 +120,11 @@ static unsigned int threads;
 
 static nbc_bucket_node *g_tail;
 
-
 /**
  * This function blocks the execution of the process.
  * Used for debug purposes.
  */
-static void error(const char *msg, ...) {
+static inline void error(const char *msg, ...) {
 	char buf[1024];
 	va_list args;
 
@@ -124,6 +135,7 @@ static void error(const char *msg, ...) {
 	printf("%s", buf);
 	exit(1);
 }
+
 
 /**
  * This function computes the index of the destination bucket in the hashtable
@@ -144,13 +156,14 @@ static inline unsigned long long hash(double timestamp, double bucket_width)
 
 
 	if(res_d > 4294967295)
+	{
 		error("Probable Overflow when computing the index: "
 				"TS=%e,"
 				"BW:%e, "
 				"TS/BW:%e, "
 				"2^32:%e\n",
 				timestamp, bucket_width, res_d,  pow(2, 32));
-
+	}
 
 	tmp1 = res * bucket_width;
 	tmp2 = tmp1 + bucket_width;
@@ -257,7 +270,11 @@ static inline unsigned long long get_mark(void *pointer)
  */
 static nbc_bucket_node* node_malloc(void *payload, double timestamp, unsigned int tie_breaker)
 {
-	nbc_bucket_node* res = malloc(sizeof(nbc_bucket_node));
+	nbc_bucket_node* res;
+	
+	res = mm_node_malloc(&malloc_status);
+	
+	to_remove_nodes_count += 1;
 
 	if (is_marked(res) || res == NULL)
 	{
@@ -273,6 +290,11 @@ static nbc_bucket_node* node_malloc(void *payload, double timestamp, unsigned in
 	res->timestamp = timestamp;
 
 	return res;
+}
+
+static void node_free(nbc_bucket_node *pointer)
+{
+	mm_node_free(&malloc_status, pointer);
 }
 
 /**
@@ -297,7 +319,6 @@ static inline void connect_to_be_freed_node_list(nbc_bucket_node *start, unsigne
 	new_node->next = to_free_nodes;
 
 	to_free_nodes = new_node;
-	to_remove_nodes_count += counter;
 }
 
 static inline void connect_to_be_freed_table_list(table *h)
@@ -356,7 +377,8 @@ static void search(nbc_bucket_node *head, double timestamp, unsigned int tie_bre
 				counter = 0;
 			}
 			// Take a count of the marked node between left node and current node (tmp)
-			counter+=marked;
+			if(marked)
+				counter++;
 
 			// Retrieve timestamp and next field from the current node (tmp)
 			tmp = get_unmarked(tmp_next);
@@ -524,7 +546,8 @@ static bool insert_std(table* hashtable, nbc_bucket_node** new_node, int flag)
 			// node already exists
 			if(D_EQUAL(new_node_timestamp, left_node->timestamp ) && left_node->counter == new_node_counter)
 			{
-				free(new_node_pointer);
+				removed_nodes_count++;
+				node_free(new_node_pointer);
 				*new_node = left_node;
 				return true;
 			}
@@ -567,7 +590,7 @@ static void set_new_table(table* h, unsigned int threshold, double pub, unsigned
 	unsigned int counter = (unsigned int) ( (-(signed_counter >= 0)) & signed_counter);
 	unsigned int i = 0;
 	unsigned int size = h->size;
-	unsigned int thp2, size_thp2;
+	unsigned int thp2;//, size_thp2;
 	unsigned int new_size = 0;
 	double pub_per_epb = pub*epb;
 	table *new_h;
@@ -631,11 +654,13 @@ static void set_new_table(table* h, unsigned int threshold, double pub, unsigned
 
 		if(!BOOL_CAS(&(h->new_table), NULL,	new_h))
 		{
+			to_remove_nodes_count-=2;
 			free(new_h->array);
 			free(new_h);
 		}
 		else
 			LOG("%u - CHANGE SIZE from %u to %u, items %u OLD_TABLE:%p NEW_TABLE:%p\n", TID, size, new_size, counter, h, new_h);
+		to_remove_nodes_count+=2;
 	}
 }
 
@@ -1126,7 +1151,7 @@ static inline bool CAS_for_increase_cur(table* h, unsigned long long current, un
  * @return a pointer to a node that contains the dequeued value
  *
  */
-void* nbc_dequeue(nb_calqueue *queue)
+double nbc_dequeue(nb_calqueue *queue, void** result)
 {
 	nbc_bucket_node *min, *min_next, 
 					*left_node, *left_node_next, 
@@ -1139,7 +1164,7 @@ void* nbc_dequeue(nb_calqueue *queue)
 	
 	unsigned int size;
 	unsigned int counter;
-	double bucket_width;
+	double bucket_width, left_ts;
 
 	tail = g_tail;
 	
@@ -1172,7 +1197,8 @@ void* nbc_dequeue(nb_calqueue *queue)
 			left_node_next = left_node->next;
 			if(!is_marked(left_node_next))
 			{
-				if(left_node->timestamp < index*bucket_width)
+				left_ts = left_node->timestamp;
+				if(left_ts < index*bucket_width)
 				{
 					res = left_node->payload;
 					left_node_next = FETCH_AND_OR(&left_node->next, DEL);
@@ -1180,9 +1206,10 @@ void* nbc_dequeue(nb_calqueue *queue)
 					{
 						ATOMIC_DEC(&(h->counter));
 						#if LOG_DEQUEUE == 1
-							LOG("DEQUEUE: %f %u - %llu %llu\n", left_node->timestamp, left_node->counter, index, index % size);
+							LOG("DEQUEUE: %f %u - %llu %llu\n",left_ts, left_node->counter, index, index % size);
 						#endif
-						return res;
+						*result = res;
+						return left_ts;
 					}
 				}
 				else
@@ -1192,7 +1219,8 @@ void* nbc_dequeue(nb_calqueue *queue)
 						#if LOG_DEQUEUE == 1
 						LOG("DEQUEUE: NULL 0 - %llu %llu\n", index, index % size);
 						#endif
-						return NULL;
+						*result = NULL;
+						return INFTY;
 					}
 					if(counter > 0 && BOOL_CAS(&(min->next), min_next, left_node))
 					{
@@ -1215,7 +1243,7 @@ void* nbc_dequeue(nb_calqueue *queue)
 
 	}while(1);
 	
-	return NULL;
+	return INFTY;
 }
 
 /**
@@ -1229,7 +1257,7 @@ void* nbc_dequeue(nb_calqueue *queue)
  * @param timestamp the threshold such that any node with timestamp strictly less than it is removed and freed
  *
  */
-double nbc_prune(nb_calqueue *queue, double timestamp)
+double nbc_prune(nb_calqueue *queue)
 {
 #if ENABLE_PRUNE == 0
 	return 0.0;
@@ -1241,14 +1269,14 @@ double nbc_prune(nb_calqueue *queue, double timestamp)
 	unsigned int i=0;
 	unsigned int flag = 1;
 
-	if(++prune_count < 1)
-		return 0.0;
-	
+	//if(++prune_count < 1)
+	//	return 0.0;
 	prune_count = 0;
 
 	for(;i<threads;i++)
 	{
 		prune_array[(TID) + i*threads] = 1;
+		//__sync_lock_test_and_set(prune_array+(TID) + i*threads, 1);
 		flag &= prune_array[(TID)*threads +i];
 	}
 
@@ -1261,9 +1289,13 @@ double nbc_prune(nb_calqueue *queue, double timestamp)
 		to_free_tables_old = to_free_tables_old->next;
     
 		table *h = (table*) my_tmp->payload;
+		
+			removed_nodes_count+=3;
 		free(h->array);
 		free(h);
-		free(my_tmp);
+		
+		node_free(my_tmp);
+		//free(my_tmp);
 	}
 	
 	current_meta_node = to_free_nodes_old;
@@ -1300,9 +1332,14 @@ double nbc_prune(nb_calqueue *queue, double timestamp)
 //						timestamp,
 //						counter,
 //						current_meta_node->counter);
-       
-			free(tmp);
+			
+			//tmp->next = free_nodes_lists;
+			//free_nodes_lists = tmp;
+			//free(tmp);
+			
+			node_free(tmp);
 			committed++;
+			removed_nodes_count++;
 
 			tmp =  get_unmarked(tmp_next);
 		}
@@ -1310,7 +1347,12 @@ double nbc_prune(nb_calqueue *queue, double timestamp)
 		meta_tmp = current_meta_node;
 		*meta_prec = current_meta_node->next;
 		current_meta_node = current_meta_node->next;
-		free(meta_tmp);
+		removed_nodes_count++;
+		
+		//meta_tmp->next = free_nodes_lists;
+		//free_nodes_lists = meta_tmp;
+		node_free(meta_tmp);
+		//free(meta_tmp);
        
 	}
 		
@@ -1322,6 +1364,7 @@ double nbc_prune(nb_calqueue *queue, double timestamp)
 	
 	for(i=0;i<threads;i++)
 		prune_array[(TID)*threads +i] = 0;
+		//__sync_lock_release(prune_array+(TID)*threads +i);
     
 	return (double)committed;
 }

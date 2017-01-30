@@ -18,9 +18,10 @@ typedef struct __calqueue_node {
 
 
 
+extern __thread calqueue_node *cal_free_nodes_lists;
 
 extern void calqueue_init(void);
-extern calqueue_node *calqueue_get(void);
+extern double calqueue_get(void **payload);
 extern void calqueue_put(double, void *);
 
 #endif /* __CALQUEUE_H */
