@@ -583,11 +583,9 @@ static bool insert_std(table* hashtable, nbc_bucket_node** new_node, int flag)
 
 }
 
-static void set_new_table(table* h, unsigned int threshold, double pub, unsigned int epb)
+static void set_new_table(table* h, unsigned int threshold, double pub, unsigned int epb, unsigned int counter)
 {
 	nbc_bucket_node *tail = g_tail;
-	int signed_counter = atomic_read( &h->counter );
-	unsigned int counter = (unsigned int) ( (-(signed_counter >= 0)) & signed_counter);
 	unsigned int i = 0;
 	unsigned int size = h->size;
 	unsigned int thp2;//, size_thp2;
@@ -637,7 +635,8 @@ static void set_new_table(table* h, unsigned int threshold, double pub, unsigned
 		new_h->bucket_width  = -1.0;
 		new_h->size 		 = new_size;
 		new_h->new_table 	 = NULL;
-		new_h->counter.count = 0;
+		new_h->d_counter.count = 0;
+		new_h->e_counter.count = 0;
 		new_h->current 		 = ((unsigned long long)-1) << 32;
 
 		array =  calloc(new_size, sizeof(nbc_bucket_node));
@@ -843,7 +842,7 @@ static void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 				)
 		)
 	{
-		ATOMIC_INC(&(new_h->counter));
+		ATOMIC_INC(&(new_h->e_counter));
     }
              
 	right_replica_field = right_node->replica;
@@ -894,7 +893,9 @@ static table* read_table(nb_calqueue *queue)
 	nbc_bucket_node *bucket, *array	;
 	nbc_bucket_node *right_node, *left_node, *right_node_next, *node;
 	
-	int counter = atomic_read(&h->counter);
+	
+	int signed_counter = atomic_read( &h->e_counter ) - atomic_read( &h->d_counter );
+	unsigned int counter = (unsigned int) ( (-(signed_counter >= 0)) & signed_counter);
 	
 	//printf("SIZE H %d\n", h->counter.count);
 	
@@ -907,7 +908,7 @@ static table* read_table(nb_calqueue *queue)
 		//(counter < 0.5*size || counter > 2*size)
 		&& (h->new_table == NULL)
 		)
-		set_new_table(h, queue->threshold, queue->perc_used_bucket, queue->elem_per_bucket);
+		set_new_table(h, queue->threshold, queue->perc_used_bucket, queue->elem_per_bucket, counter);
 
 	if(h->new_table != NULL)
 	{
@@ -1120,7 +1121,7 @@ void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 
 	nbc_flush_current(h, new_node);
 	
-	ATOMIC_INC(&(h->counter));
+	ATOMIC_INC(&(h->e_counter));
 }
 
 static inline bool CAS_for_mark( nbc_bucket_node* right_node, nbc_bucket_node* right_node_next)
@@ -1204,7 +1205,7 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 					left_node_next = FETCH_AND_OR(&left_node->next, DEL);
 					if(!is_marked(left_node_next))
 					{
-						ATOMIC_DEC(&(h->counter));
+						ATOMIC_INC(&(h->d_counter));
 						#if LOG_DEQUEUE == 1
 							LOG("DEQUEUE: %f %u - %llu %llu\n",left_ts, left_node->counter, index, index % size);
 						#endif

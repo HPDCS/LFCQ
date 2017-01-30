@@ -93,8 +93,10 @@ struct table
 	char zpad1[56];
 	table * volatile new_table;
 	char zpad2[56];
-	atomic_t counter;
+	atomic_t e_counter;
 	char zpad3[60];
+	atomic_t d_counter;
+	char zpad5[60];
 	volatile unsigned long long current;
 	char zpad4[56];
 	unsigned int size;
