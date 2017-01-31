@@ -132,7 +132,7 @@ locate_preds(pq_t *pq, pkey_t k, node_t **preds, node_t **succs)
 	x_next = get_unmarked_ref(x_next);
 	assert(x_next != NULL);
 	
-        while (x_next->k <= k || is_marked_ref(x_next->next[0]) 
+        while (x_next->k < k || is_marked_ref(x_next->next[0]) 
 	       || ((i == 0) && d)) {
 	    /* Record bottom level deleted node not having delete flag 
 	     * set, if traversed. */
@@ -429,42 +429,3 @@ pq_destroy(pq_t *pq)
     free(pq->head);
     free(pq);
 }
-
-
-//void main()
-//{
-//	
-//    unsigned int prova;
-//    pq_t *pq;
-//    
-//    _init_gc_subsystem();
-//    pq = pq_init(8);
-//    insert(pq, 18, (void *)18);
-//    insert(pq, 24, (void *)24);
-//    insert(pq, 98, (void *)98);
-//    insert(pq, 45, (void *)45);
-//    insert(pq, 71, (void *)71);
-//    insert(pq, 54, (void *)54);
-//    insert(pq, 39, (void *)39);
-//    
-//    printf("Prova %u\n", 18);
-//    printf("Prova %u\n", 24);
-//    printf("Prova %u\n", 98);
-//    printf("Prova %u\n", 45);
-//    printf("Prova %u\n", 71);
-//    printf("Prova %u\n", 54);
-//    printf("Prova %u\n", 39);
-//    printf("#######\n");
-//    
-//    printf("Prova %u\n", deletemin(pq));
-//    printf("Prova %u\n", deletemin(pq));
-//    printf("Prova %u\n", deletemin(pq));
-//    printf("Prova %u\n", deletemin(pq));
-//    printf("Prova %u\n", deletemin(pq));
-//    printf("Prova %u\n", deletemin(pq));
-//    printf("Prova %u\n", deletemin(pq));
-//    
-//}
-
-
-

@@ -28,6 +28,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stddef.h>
 #include <stdbool.h>
 #include <pthread.h>
 #include <math.h>
@@ -93,27 +94,19 @@
 
 __thread hpdcs_gc_status malloc_status =
 {
-	.free_nodes_lists 				= NULL,
+	.free_nodes_lists 			= NULL,
 	.to_free_nodes 				= NULL,
 	.to_free_nodes_old 			= NULL,
 	.block_size 				= sizeof(nbc_bucket_node),
-	.to_remove_nodes_count 	= 0LL
+	.offset_next 				= offsetof(nbc_bucket_node, next),
+	.to_remove_nodes_count 		= 0LL
 };
 
-__thread nbc_bucket_node *free_nodes_lists = NULL;
 __thread nbc_bucket_node *to_free_nodes = NULL;
 __thread nbc_bucket_node *to_free_nodes_old = NULL;
 
 __thread nbc_bucket_node *to_free_tables_old = NULL;
 __thread nbc_bucket_node *to_free_tables_new = NULL;
-
-__thread unsigned long long mark;
-__thread unsigned int to_remove_nodes_count = 0;
-__thread unsigned int removed_nodes_count = 0;
-__thread unsigned int prune_count = 0;
-
-//__thread unsigned long long cantor_p1 = ((TID)*((TID)+1)/2);
-//__thread unsigned long long cantor_p2 = (TID); 
 
 static unsigned int * volatile prune_array;
 static unsigned int threads;
@@ -274,8 +267,6 @@ static nbc_bucket_node* node_malloc(void *payload, double timestamp, unsigned in
 	
 	res = mm_node_malloc(&malloc_status);
 	
-	to_remove_nodes_count += 1;
-
 	if (is_marked(res) || res == NULL)
 	{
 		error("%lu - Not aligned Node or No memory\n", pthread_self());
@@ -315,15 +306,19 @@ static inline void connect_to_be_freed_node_list(nbc_bucket_node *start, unsigne
 	nbc_bucket_node* new_node;
 	start = get_unmarked(start);
 
-	new_node = node_malloc(start, start->timestamp, counter);
-	new_node->next = to_free_nodes;
-
-	to_free_nodes = new_node;
+	//new_node = mm_node_malloc(&malloc_status);
+	//new_node->counter = counter;
+	//new_node->payload = start;
+	//new_node->next = to_free_nodes;
+    //
+	//to_free_nodes = new_node;
+	mm_node_trash(&malloc_status, start, counter);
 }
 
 static inline void connect_to_be_freed_table_list(table *h)
 {
-	nbc_bucket_node *tmp = node_malloc(h, INFTY, 0);
+	nbc_bucket_node *tmp = mm_node_malloc(&malloc_status);
+	tmp->payload = h;
 	tmp->next = to_free_tables_new;
 	to_free_tables_new = tmp;
 }
@@ -355,7 +350,7 @@ static void search(nbc_bucket_node *head, double timestamp, unsigned int tie_bre
 	tail = g_tail;
 
 	do
-	{;
+	{
 		/// Fetch the head and its next node
 		tmp = head;
 		tmp_next = tmp->next;
@@ -420,6 +415,76 @@ static void search(nbc_bucket_node *head, double timestamp, unsigned int tie_bre
 		*left_node = left;
 		*right_node = right;
 		
+		return;
+		
+	} while (1);
+}
+
+
+static void search_for_insert(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
+						nbc_bucket_node **left_node, nbc_bucket_node **left_node_next, nbc_bucket_node **right_node,
+							int flag, unsigned int *skipped_nodes)
+{
+	nbc_bucket_node *left, *right, *left_next, *tmp, *tmp_next, *tail;
+	unsigned int counter;
+	double tmp_timestamp;
+	tail = g_tail;
+
+	do
+	{
+		/// Fetch the head and its next node
+		tmp = head;
+		tmp_next = tmp->next;
+		left = tmp = head;
+		left_next = tmp_next = tmp->next;
+		assertf(head == NULL, "PANIC %s\n", "");
+		assertf(tmp_next == NULL, "PANIC1 %s\n", "");
+		counter = 0;
+		do
+		{
+			// Check if the node is marked
+			bool marked = is_marked_for_search(tmp_next, flag);
+
+			// Find the first unmarked node that is <= timestamp
+			if (!marked)
+			{
+				left = tmp;
+				left_next = tmp_next;
+				counter = 0;
+			}
+			// Take a count of the marked node between left node and current node (tmp)
+			if(marked)
+				counter++;
+
+			// Retrieve timestamp and next field from the current node (tmp)
+			tmp = get_unmarked(tmp_next);
+			tmp_timestamp = tmp->timestamp;
+			
+			tmp_next = tmp->next;
+
+			// Exit if tmp is a tail or its timestamp is > of the searched key
+		} while (	tmp != tail &&
+					(
+						is_marked_for_search(tmp_next, flag) ||
+						LESS(tmp_timestamp, timestamp)	||  
+						(
+							D_EQUAL(tmp_timestamp, timestamp) &&
+							(
+								tie_breaker == 0 || 
+								(tie_breaker != 0 && tmp->counter <= tie_breaker)
+							)
+						)
+					)
+				);
+
+		// Set right node and copy the mark of left node
+		right = get_marked(tmp,get_mark(left_next));
+		
+		// at this point they are adjacent
+		*left_node = left;
+		*right_node = right;
+		*left_node_next = left_next;
+		*skipped_nodes = counter;
 		return;
 		
 	} while (1);
@@ -494,10 +559,11 @@ static inline void nbc_flush_current(table* h, nbc_bucket_node* node)
  */
 static bool insert_std(table* hashtable, nbc_bucket_node** new_node, int flag)
 {
-	nbc_bucket_node *left_node, *right_node, *bucket, *new_node_pointer;
+	nbc_bucket_node *left_node, *left_node_next, *right_node, *bucket, *new_node_pointer;
 	unsigned int index;
 
 	unsigned int new_node_counter 	;
+	unsigned int skipped_nodes 	;
 	double 		 new_node_timestamp ;
 
 	new_node_pointer 	= (*new_node);
@@ -509,7 +575,7 @@ static bool insert_std(table* hashtable, nbc_bucket_node** new_node, int flag)
 	// node to be added in the hashtable
 	bucket = hashtable->array + index;
 
-	search(bucket, new_node_timestamp, new_node_counter, &left_node, &right_node, flag);
+	search_for_insert(bucket, new_node_timestamp, new_node_counter, &left_node, &left_node_next, &right_node, flag, &skipped_nodes);
 
 	if(!is_marked(right_node, MOV))
 	{
@@ -521,17 +587,21 @@ static bool insert_std(table* hashtable, nbc_bucket_node** new_node, int flag)
 			// set tie_breaker
 			new_node_pointer->counter = 1 + ( -D_EQUAL(new_node_timestamp, left_node->timestamp ) & left_node->counter );
 
-			if (BOOL_CAS
-					(
-						&(left_node->next),
-						right_node,
-						new_node_pointer
-					)
+
+			if (!is_marked_for_search(left_node_next, flag) && 
+				BOOL_CAS
+						(
+							&(left_node->next),
+							left_node_next,
+							new_node_pointer
+						)
 			)
 			{
 				#if LOG_ENQUEUE == 1
 				LOG("ENQUEUE: %f %u - %u %u\n", new_node_pointer->timestamp, new_node_pointer->counter,	hash(new_node_timestamp, hashtable->bucket_width), index );
 				#endif
+				if (left_node_next != right_node)
+					connect_to_be_freed_node_list(left_node_next, skipped_nodes);
 				return true;
 			}
 
@@ -546,7 +616,6 @@ static bool insert_std(table* hashtable, nbc_bucket_node** new_node, int flag)
 			// node already exists
 			if(D_EQUAL(new_node_timestamp, left_node->timestamp ) && left_node->counter == new_node_counter)
 			{
-				removed_nodes_count++;
 				node_free(new_node_pointer);
 				*new_node = left_node;
 				return true;
@@ -569,13 +638,19 @@ static bool insert_std(table* hashtable, nbc_bucket_node** new_node, int flag)
 	//					left_node->timestamp, left_node->counter,
 	//					right_node->timestamp, right_node->counter);
 
-			if (BOOL_CAS(
-						&(left_node->next),
-						right_node,
-						new_node_pointer
-					))
-				//printf("insert_std: evt type %u\n", ((msg_t*)(new_node[0]->payload))->type);//da_cancellare
+			if (!is_marked_for_search(left_node_next, flag) && 
+				BOOL_CAS
+						(
+							&(left_node->next),
+							left_node_next,
+							new_node_pointer
+						)
+			)
+			{
+				if (left_node_next != right_node)
+					connect_to_be_freed_node_list(left_node_next, skipped_nodes);
 				return true;
+			}
 			break;
 		}
 	}
@@ -653,13 +728,11 @@ static void set_new_table(table* h, unsigned int threshold, double pub, unsigned
 
 		if(!BOOL_CAS(&(h->new_table), NULL,	new_h))
 		{
-			to_remove_nodes_count-=2;
 			free(new_h->array);
 			free(new_h);
 		}
 		else
 			LOG("%u - CHANGE SIZE from %u to %u, items %u OLD_TABLE:%p NEW_TABLE:%p\n", TID, size, new_size, counter, h, new_h);
-		to_remove_nodes_count+=2;
 	}
 }
 
@@ -1263,16 +1336,11 @@ double nbc_prune(nb_calqueue *queue)
 #if ENABLE_PRUNE == 0
 	return 0.0;
 #endif
-	unsigned int committed = 0;
 	nbc_bucket_node **prec, *tmp, *tmp_next;
 	nbc_bucket_node **meta_prec, *meta_tmp, *current_meta_node;
 	unsigned int counter;
 	unsigned int i=0;
 	unsigned int flag = 1;
-
-	//if(++prune_count < 1)
-	//	return 0.0;
-	prune_count = 0;
 
 	for(;i<threads;i++)
 	{
@@ -1291,20 +1359,29 @@ double nbc_prune(nb_calqueue *queue)
     
 		table *h = (table*) my_tmp->payload;
 		
-			removed_nodes_count+=3;
 		free(h->array);
 		free(h);
 		
 		node_free(my_tmp);
-		//free(my_tmp);
 	}
 	
 	current_meta_node = to_free_nodes_old;
 	meta_prec = (nbc_bucket_node**)&(to_free_nodes_old);
     
+    do
+    {
+		tmp = mm_node_collect(&malloc_status, &counter);
+		while(tmp != NULL && counter-- != 0)
+		{
+			tmp_next = tmp->next;
+			node_free(tmp);
+			tmp =  get_unmarked(tmp_next);
+		}
+	}
+    while(tmp != NULL);
+    
 	while(current_meta_node != NULL)
 	{
-		
 		counter = current_meta_node->counter;
 		prec = (nbc_bucket_node**)&(current_meta_node->payload);
 		tmp = *prec;
@@ -1339,21 +1416,15 @@ double nbc_prune(nb_calqueue *queue)
 			//free(tmp);
 			
 			node_free(tmp);
-			committed++;
-			removed_nodes_count++;
-
+		
 			tmp =  get_unmarked(tmp_next);
 		}
        
 		meta_tmp = current_meta_node;
 		*meta_prec = current_meta_node->next;
 		current_meta_node = current_meta_node->next;
-		removed_nodes_count++;
 		
-		//meta_tmp->next = free_nodes_lists;
-		//free_nodes_lists = meta_tmp;
 		node_free(meta_tmp);
-		//free(meta_tmp);
        
 	}
 		
@@ -1367,6 +1438,6 @@ double nbc_prune(nb_calqueue *queue)
 		prune_array[(TID)*threads +i] = 0;
 		//__sync_lock_release(prune_array+(TID)*threads +i);
     
-	return (double)committed;
+	return 0.0;
 }
 

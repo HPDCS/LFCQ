@@ -56,8 +56,6 @@
 
 extern __thread unsigned int TID;
 extern __thread struct drand48_data seedT;
-extern __thread unsigned int to_remove_nodes_count;
-extern __thread unsigned int removed_nodes_count;
 
 
 /**
@@ -69,8 +67,6 @@ struct __bucket_node
 	//char zpad1[64];
 	nbc_bucket_node * volatile next;	// pointer to the successor
 	char zpad2[56];
-	nbc_bucket_node * volatile replica;	// pointer to the replica
-	char zpad3[56];
 	//volatile unsigned int to_remove; 			// used to resolve the conflict with same timestamp using a FIFO policy
 	//char zpad[60];
 	//void *generator;	// pointer to the successor
@@ -79,6 +75,8 @@ struct __bucket_node
 	unsigned long long epoch;		//enqueue's epoch
 	unsigned int counter; 			// used to resolve the conflict with same timestamp using a FIFO policy
 	//char zpad3[36];					// actually used only to distinguish head nodes
+	char zpad3[28];
+	nbc_bucket_node * volatile replica;	// pointer to the replica
 };
 
 

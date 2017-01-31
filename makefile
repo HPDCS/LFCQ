@@ -52,7 +52,7 @@ $(OBJS_DIR)/NBCQ: $(patsubst %, $(OBJS_DIR)/%, $(OBJS)) $(USER_OBJS)
 	@echo 'Objects: $(OBJS)'
 	@echo 'Building target: $@'
 	@echo 'Invoking: Cross GCC Linker'
-	gcc  -o "$(OBJS_DIR)/NBCQ" $(patsubst %, $(OBJS_DIR)/%, $(OBJS)) $(USER_OBJS) $(LIBS)
+	gcc  -o "$(OBJS_DIR)/NBCQ" $(patsubst %, $(OBJS_DIR)/%, $(OBJS)) $(USER_OBJS) $(LIBS) $(DEBUG)
 	@echo 'Finished building target: $@'
 	@echo ' '
 
