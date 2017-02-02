@@ -94,6 +94,7 @@ __thread unsigned int num_op=0;
 unsigned int *id;
 volatile long long *ops;
 volatile long long *ops_count;
+volatile long long *malloc_op;
 
 
 double dequeue(void)
@@ -129,6 +130,42 @@ double dequeue(void)
 	}	
 	
 	return timestamp;
+}
+
+double enqueue2(unsigned int my_id, struct drand48_data* seed, double local_min, double (*current_prob) (struct drand48_data*, double))
+{
+	double timestamp = 0.0;
+	double update = 0.0;
+	payload data;
+
+	update = current_prob(seed, MEAN_INTERARRIVAL_TIME);
+	timestamp = local_min + update;
+	
+	if(timestamp < 0.0)
+		timestamp = 0.0;
+
+	switch(DATASTRUCT)
+	{
+		case 'L':
+			data.timestamp = timestamp;
+			list_insert(lqueue, timestamp, &data);
+			break;
+		case 'C':
+			calqueue_put(timestamp, NULL);
+			break;
+		case 'F':
+			nbc_enqueue(nbcqueue, timestamp, NULL);
+			break;
+		case 'S':
+			insert(skip_queue, timestamp, UNION_CAST(timestamp, void*));
+			break;
+		default:
+			printf("#ERROR: Unknown data structure\n");
+			exit(1);
+	}
+	
+	return timestamp;
+
 }
 
 
@@ -200,7 +237,6 @@ void classic_hold(
 
 	double timestamp = 0.0;
 	double local_min = 0.0;
-	double random_num = 0.0;
 	long long tot_count = 0;
 	long long par_count = 0;
 	long long end_operations 	;
@@ -210,28 +246,49 @@ void classic_hold(
 	long long local_dequeue = 0;
 	
 	unsigned int iterations = ITERATIONS;
+	unsigned int iter		= 0;
 	unsigned int j;
-	double current_prob ;
-	char current_dist	; 
-
+	double (*current_dist) (struct drand48_data*, double) ;
+	
     __sync_fetch_and_add(&BARRIER, 1);
 	
 	while(!__sync_bool_compare_and_swap(&lock, 0, 0));
 	
 	
-	while(iterations-- > 0)
+	while(iter < iterations)
 	{
 		tot_count = 0;
 		par_count = 0;
-		end_operations 		= TOTAL_OPS;
-		end_operations1 	= TOTAL_OPS1;
-		end_operations2 	= TOTAL_OPS2;
-		current_prob 		= PROB_DEQUEUE1;
-		current_dist	 	= PROB_DISTRIBUTION1;
+		end_operations 		= TOTAL_OPS*(iter+1);
+		end_operations1 	= TOTAL_OPS1+TOTAL_OPS*(iter);
+		end_operations2 	= TOTAL_OPS2+TOTAL_OPS*(iter++);
+		
+		switch(PROB_DISTRIBUTION1)
+		{
+			case 'U':
+				current_dist = uniform_rand;
+				break;
+			case 'T':
+				current_dist = triangular_rand;
+				break;
+			case 'N':
+				current_dist = neg_triangular_rand;
+				break;
+			case 'E':
+				current_dist = exponential_rand;
+				break;
+			case 'C':
+				current_dist = camel_compile_time_rand;
+				break;
+			default:
+				printf("#ERROR: Unknown distribution\n");
+				exit(1);
+		}
+		
 		
 		while(tot_count < end_operations1)
 		{
-			enqueue(my_id, seed, local_min, current_dist);
+			enqueue2(my_id, seed, local_min, current_dist);
 			local_enqueue++;
 			++par_count;
 			
@@ -248,10 +305,29 @@ void classic_hold(
 					tot_count += ops_count[j];
 			}
 		}
+				
+		switch(PROB_DISTRIBUTION2)
+		{
+			case 'U':
+				current_dist = uniform_rand;
+				break;
+			case 'T':
+				current_dist = triangular_rand;
+				break;
+			case 'N':
+				current_dist = neg_triangular_rand;
+				break;
+			case 'E':
+				current_dist = exponential_rand;
+				break;
+			case 'C':
+				current_dist = camel_compile_time_rand;
+				break;
+			default:
+				printf("#ERROR: Unknown distribution\n");
+				exit(1);
+		}
 		
-		malloc_status.to_remove_nodes_count = 0;
-		current_dist = PROB_DISTRIBUTION2;
-		current_prob = PROB_DEQUEUE2;
 		
 		while(tot_count < end_operations2)
 		{
@@ -260,7 +336,7 @@ void classic_hold(
 			if(timestamp != INFTY)
 				local_min = timestamp;
 
-			enqueue(my_id, seed, local_min, current_dist);
+			enqueue2(my_id, seed, local_min, current_dist);
 			
 			if( DATASTRUCT == 'F' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
 				nbc_prune(nbcqueue);
@@ -277,11 +353,9 @@ void classic_hold(
 
 		}
 		
-		current_dist = PROB_DISTRIBUTION3;
-		current_prob = PROB_DEQUEUE3;
-		
 		while(tot_count < end_operations)
 		{
+			par_count++;
 			timestamp = dequeue();
 			if(timestamp != INFTY)
 			{
@@ -289,7 +363,7 @@ void classic_hold(
 				local_min = timestamp;
 			}
 			
-			if( DATASTRUCT == 'F' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + +par_count) %(PRUNE_PERIOD) == 0)
+			if( DATASTRUCT == 'F' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
 				nbc_prune(nbcqueue);
 
 			if(par_count == THREADS)
@@ -436,8 +510,8 @@ void* process(void *arg)
 	}
 
 	ops[my_id] = n_enqueue - n_dequeue;
-
-	printf("%lld\t%lld \n", malloc_status.to_remove_nodes_count, n_enqueue - n_dequeue);
+	malloc_op[my_id] =  malloc_status.to_remove_nodes_count;
+	//printf("%lld\t%lld \n", malloc_status.to_remove_nodes_count, n_enqueue - n_dequeue);
 	pthread_exit(NULL);
 }
 
@@ -450,6 +524,7 @@ int main(int argc, char **argv)
 	unsigned long long sum = 0;
 	unsigned long long min = -1;
 	unsigned long long max = 0;
+	unsigned long long mal = 0;
 	unsigned long long avg = 0;
 	unsigned long long tmp = 0;
 	unsigned long long qsi = 0;
@@ -492,9 +567,10 @@ int main(int argc, char **argv)
 
 	id = (unsigned int*) malloc(THREADS*sizeof(unsigned int));
 	ops = (long long*) malloc(THREADS*sizeof(long long));
+	malloc_op = (long long*) malloc(THREADS*sizeof(long long));
 	ops_count = (long long*) malloc(THREADS*sizeof(long long));
 	p_tid = malloc(THREADS*sizeof(pthread_t));
-
+	
 
 	printf("D:%c,", DATASTRUCT);
 	printf("T:%u,", THREADS);
@@ -545,6 +621,7 @@ int main(int argc, char **argv)
 		pthread_create(p_tid +i, NULL, process, id+i);
 	}
 	
+	
 	while(!__sync_bool_compare_and_swap(&BARRIER, THREADS, 0));
 	
     __sync_lock_test_and_set(&lock, 0);
@@ -556,6 +633,7 @@ int main(int argc, char **argv)
 	{
 		qsi += ops[i];
 		tmp = ops_count[i];
+		mal += malloc_op[i];
 		sum += tmp;
 		min = min < tmp ? min : tmp;
 		max = max > tmp ? max : tmp;
@@ -568,6 +646,7 @@ int main(int argc, char **argv)
 	printf("MIN OP:%lld,", min);
 	printf("MAX OP:%lld,", max);
 	printf("AVG OP:%lld,", avg);
+	printf("MAL OP:%lld,", mal);
 
 	return 0;
 }

@@ -38,7 +38,7 @@ void hpdcs_spin_unlock(hpdcs_spinlock_t* my_lock)
 
 void acquire_lock(advanced_spin_lock* my_lock)
 {
-	if(spin_trylock(&(my_lock->main_spinlock)) == true)
+	if(spin_trylock((spinlock_t*)&(my_lock->main_spinlock)) == true)
 	//if(hpdcs_spin_trylock(&(my_lock->main_spinlock)))
 	{
 	//	printf("Il prossimo sono IO  %u\n",TID);

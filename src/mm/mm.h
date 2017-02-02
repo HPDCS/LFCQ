@@ -6,10 +6,12 @@ typedef struct _linked_pointer linked_pointer;
 typedef struct _linked_gc_node linked_gc_node;
 
 struct _linked_pointer{
+	void* base;
 	linked_pointer *next;
 };
 
 struct _linked_gc_node{
+	void* base;
 	linked_gc_node *next;
 	unsigned int counter;
 };
@@ -28,7 +30,8 @@ hpdcs_gc_status;
 
 void* mm_node_malloc(hpdcs_gc_status *status);
 void  mm_node_free(hpdcs_gc_status *status, void* pointer);
-void mm_node_trash(hpdcs_gc_status *status, void* pointer,  unsigned int counter);
+void  mm_node_trash(hpdcs_gc_status *status, void* pointer,  unsigned int counter);
 void* mm_node_collect(hpdcs_gc_status *status, unsigned int *counter);
+void  mm_new_era(hpdcs_gc_status *status);
 
 #endif

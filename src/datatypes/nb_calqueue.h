@@ -45,7 +45,7 @@
 #define GREATER(a,b) 	( (a) >= (b) )
 #define SAMPLE_SIZE 25
 #define HEAD_ID 0
-#define MAXIMUM_SIZE 65536//32768 //65536
+#define MAXIMUM_SIZE 131072//65536//32768 //65536
 #define MINIMUM_SIZE 1
 
 #define FLUSH_SMART 1
@@ -60,23 +60,19 @@ extern __thread struct drand48_data seedT;
 
 /**
  *  Struct that define a node in a bucket
- */
+ */ 
+
 typedef struct __bucket_node nbc_bucket_node;
 struct __bucket_node
 {
-	//char zpad1[64];
-	nbc_bucket_node * volatile next;	// pointer to the successor
-	char zpad2[56];
-	//volatile unsigned int to_remove; 			// used to resolve the conflict with same timestamp using a FIFO policy
-	//char zpad[60];
-	//void *generator;	// pointer to the successor
 	void *payload;  				// general payload
 	double timestamp;  				// key
 	unsigned long long epoch;		//enqueue's epoch
 	unsigned int counter; 			// used to resolve the conflict with same timestamp using a FIFO policy
-	//char zpad3[36];					// actually used only to distinguish head nodes
-	char zpad3[28];
+	unsigned int pad; 			// used to resolve the conflict with same timestamp using a FIFO policy
+	nbc_bucket_node * volatile next;	// pointer to the successor
 	nbc_bucket_node * volatile replica;	// pointer to the replica
+	char pad2[16];
 };
 
 
@@ -88,17 +84,17 @@ typedef struct table table;
 struct table
 {
 	nbc_bucket_node * array;
-	char zpad1[56];
+	double bucket_width;
+	unsigned int size;
+	unsigned int pad;
 	table * volatile new_table;
-	char zpad2[56];
+	char zpad4[32];
 	atomic_t e_counter;
 	char zpad3[60];
 	atomic_t d_counter;
-	char zpad5[60];
+	char zpad1[60];
 	volatile unsigned long long current;
-	char zpad4[56];
-	unsigned int size;
-	double bucket_width;
+	char zpad2[56];
 };
 
 
@@ -106,7 +102,7 @@ typedef struct nb_calqueue nb_calqueue;
 struct nb_calqueue
 {
 	unsigned int threshold;
-	unsigned elem_per_bucket;
+	unsigned int elem_per_bucket;
 	double perc_used_bucket;
 	double pub_per_epb;
 	char zpad9[40];
