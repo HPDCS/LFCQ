@@ -79,6 +79,23 @@ unsigned int ELEM_PER_BUCKET;
 __thread struct drand48_data seedT;
 extern __thread hpdcs_gc_status malloc_status;
 
+extern __thread unsigned long long concurrent_dequeue ;
+extern __thread unsigned long long performed_dequeue  ;
+extern __thread unsigned long long attempt_dequeue  ;
+extern __thread unsigned long long scan_list_length	;
+
+extern __thread unsigned long long concurrent_enqueue ;
+extern __thread unsigned long long performed_enqueue  ;
+extern __thread unsigned long long attempt_enqueue  ;
+
+extern __thread unsigned long long flush_current_attempt	;
+extern __thread unsigned long long flush_current_success	;
+extern __thread unsigned long long flush_current_fail	;
+
+extern __thread unsigned long long read_table_count	;
+
+
+
 nb_calqueue* nbcqueue;
 list(payload) lqueue;
 pq_t* skip_queue;
@@ -329,6 +346,9 @@ void classic_hold(
 		}
 		
 		
+		
+		//malloc_status.to_remove_nodes_count = 0;
+		
 		while(tot_count < end_operations2)
 		{
 			par_count++;
@@ -512,7 +532,19 @@ void* process(void *arg)
 	ops[my_id] = n_enqueue - n_dequeue;
 	malloc_op[my_id] =  malloc_status.to_remove_nodes_count;
 	//printf("%lld\t%lld \n", malloc_status.to_remove_nodes_count, n_enqueue - n_dequeue);
-	pthread_exit(NULL);
+	
+	
+	printf("CD:%f APD:%f LPD:%f CE:%f APE:%f FPE:%f FSU:%f FFA:%f %llu\n",
+							concurrent_dequeue*1.0/attempt_dequeue,
+							attempt_dequeue*1.0/performed_dequeue  ,
+							scan_list_length*1.0/attempt_dequeue	  ,
+							concurrent_enqueue*1.0/attempt_enqueue ,
+							attempt_enqueue*1.0/performed_enqueue  ,
+							flush_current_attempt*1.0/performed_enqueue	  ,
+							flush_current_success*1.0/flush_current_attempt	  ,
+							flush_current_fail*1.0/flush_current_attempt	  ,
+							read_table_count	  );
+	pthread_exit(NULL);    
 }
 
 

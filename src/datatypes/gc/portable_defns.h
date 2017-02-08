@@ -29,6 +29,10 @@
 
 typedef unsigned long int_addr_t;
 
+#include "../../mm/mm.h"
+
+extern __thread hpdcs_gc_status malloc_status;
+
 typedef int bool_t;
 #define FALSE 0
 #define TRUE  1
@@ -47,7 +51,7 @@ do {                                                                    \
 #define CACHE_PAD(_n) char __pad ## _n [CACHE_LINE_SIZE]
 #define ALIGNED_ALLOC(_s)                                       \
     ((void *)(((unsigned long)malloc((_s)+CACHE_LINE_SIZE*2) +  \
-        CACHE_LINE_SIZE - 1) & ~(CACHE_LINE_SIZE-1)))
+        CACHE_LINE_SIZE - 1) & ~(CACHE_LINE_SIZE-1))); malloc_status.to_remove_nodes_count += 1
 
 
 /*

@@ -45,7 +45,7 @@
 #define GREATER(a,b) 	( (a) >= (b) )
 #define SAMPLE_SIZE 25
 #define HEAD_ID 0
-#define MAXIMUM_SIZE 131072//65536//32768 //65536
+#define MAXIMUM_SIZE 1048576 //524288 //262144 //131072 //65536 //32768
 #define MINIMUM_SIZE 1
 
 #define FLUSH_SMART 1
@@ -72,7 +72,7 @@ struct __bucket_node
 	unsigned int pad; 			// used to resolve the conflict with same timestamp using a FIFO policy
 	nbc_bucket_node * volatile next;	// pointer to the successor
 	nbc_bucket_node * volatile replica;	// pointer to the replica
-	char pad2[16];
+	//char pad2[16];
 };
 
 
