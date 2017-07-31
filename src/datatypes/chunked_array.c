@@ -1,5 +1,3 @@
-
-
 #include <stdlib.h>
 #include <stddef.h>
 
@@ -83,3 +81,50 @@ chunked_array* create_chunked_array(size_t size, size_t item_size)
 	}
 	return res;
 }
+
+
+//chunked_array* init_chunked_array(size_t size, size_t item_size)
+//{
+//	int i;
+//	int num_chunks;
+//	chunked_array* res;
+//	
+//	if(size > MAXIMUM_ITEMS)
+//		return NULL;
+//	
+//	res = (chunked_array*) malloc(sizeof(chunked_array));
+//	if(res == NULL)
+//		return NULL;
+//	
+//	return res;
+//}
+//
+//
+//void parallel_allocate_chunks(chunked_array* array) 
+//{
+//	int i;
+//	int num_chunks;
+//	size_t size = array->high_limit - array->low_limit;
+//	size_t item_size array->item_size;
+//	char *tmp = NULL;
+//	bool used = false;
+//	char **chunk_array = array->chunks;
+//	
+//	num_chunks = size/ARRAY_CHUNK_SIZE + (size%ARRAY_CHUNK_SIZE != 0);
+//	
+//	
+//	for(i=0;i<num_chunks;i++)
+//	{
+//		if(chunks[i] == NULL)
+//		{
+//			if( tmp == NULL )
+//				tmp = (char*) malloc(item_size * ARRAY_CHUNK_SIZE);
+//				
+//			if( __sync_bool_compare_and_swap( &chunks[i], NULL, tmp))
+//				tmp = NULL;
+//			
+//		}
+//	}
+//	if( tmp != NULL)
+//		free(tmp);
+//}

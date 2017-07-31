@@ -36,7 +36,7 @@
 //#include "atomic.h"
 #include "nb_calqueue.h"
 #include "../utils/hpdcs_utils.h"
-#include "../mm/mm.h"
+#include "../mm/garbagecollector.h"
 //#include "core.h"
 
 
@@ -315,8 +315,9 @@ static nbc_bucket_node* node_malloc(void *payload, double timestamp, unsigned in
 }
 
 static void node_free(nbc_bucket_node *pointer)
-{
-	mm_node_free(&malloc_status, pointer);
+{	
+	free(pointer);
+	//mm_node_free(&malloc_status, pointer);
 }
 
 /**
@@ -583,6 +584,8 @@ static inline void nbc_flush_current(table* h, nbc_bucket_node* node)
 	newIndex = ( unsigned long long ) hash(node->timestamp, h->bucket_width);
 	newCur =  newIndex << 32;
 	
+//	printf("EPOCH %llu \n", 
+	
 	// Try to update the current if it need	
 	if(
 		newIndex >	oldIndex 
@@ -607,7 +610,6 @@ static inline void nbc_flush_current(table* h, nbc_bucket_node* node)
 	do
 	{
 		
-		//printf("CHANGED CUR %llu %llu %llu\n", oldEpoch, newIndex, oldIndex);
 		oldCur = tmpCur;
 		oldEpoch = oldCur & MASK_EPOCH;
 		oldIndex = oldCur >> 32;
@@ -851,7 +853,7 @@ static void set_new_table(table* h, unsigned int threshold, double pub, unsigned
 			free(new_h);
 		}
 		else
-			LOG("%u - CHANGE SIZE from %u to %u, items %u OLD_TABLE:%p NEW_TABLE:%p\n", TID, size, new_size, counter, h, new_h);
+			printf("%u - CHANGE SIZE from %u to %u, items %u OLD_TABLE:%p NEW_TABLE:%p\n", TID, size, new_size, counter, h, new_h);
 	}
 }
 
@@ -1104,8 +1106,8 @@ static table* read_table(nb_calqueue *queue)
 		//avg_diff= 0.0;
 		for(int i=0;i<2;i++)
 		{
-			a = ATOMIC_READ( &h->e_counter );
 			b = ATOMIC_READ( &h->d_counter );
+			a = ATOMIC_READ( &h->e_counter );
 			samples[i] = a-b;
 		}
 		
@@ -1124,8 +1126,8 @@ static table* read_table(nb_calqueue *queue)
 		//}
 		//signed_counter/=counter;
 		
-		sample_a = abs(samples[0] - size);
-		sample_b = abs(samples[1] - size);
+		sample_a = abs(samples[0] - size*queue->pub_per_epb);
+		sample_b = abs(samples[1] - size*queue->pub_per_epb);
 		
 		signed_counter =  (sample_a < sample_b) ? samples[0] : samples[1];
 		
@@ -1173,7 +1175,7 @@ static table* read_table(nb_calqueue *queue)
 						UNION_CAST(newaverage, unsigned long long)
 					)
 			)
-				LOG("COMPUTE BW -  OLD:%.20f NEW:%.20f %u\n", new_bw, newaverage, new_h->size);
+				printf("COMPUTE BW -  OLD:%.20f NEW:%.20f %u\n", new_bw, newaverage, new_h->size);
 		}
 
 		//First try: try to migrate the nodes, if a marked node is found, continue to the next bucket
@@ -1515,8 +1517,8 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 						attempt_dequeue++;
 						return INFTY;
 					}
-					double rand;			// <----------------------------------------
-					drand48_r(&seedT, &rand); 
+					//double rand;			// <----------------------------------------
+					//drand48_r(&seedT, &rand); 
 					//if(rand < 1.0/2)
 					if(h->current == current)
 						BOOL_CAS(&(h->current), current, ((index << 32) | epoch) );

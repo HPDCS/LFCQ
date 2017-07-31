@@ -254,6 +254,7 @@ void classic_hold(
 
 	double timestamp = 0.0;
 	double local_min = 0.0;
+	double random_num = 0.0;
 	long long tot_count = 0;
 	long long par_count = 0;
 	long long end_operations 	;
@@ -305,8 +306,27 @@ void classic_hold(
 		
 		while(tot_count < end_operations1)
 		{
-			enqueue2(my_id, seed, local_min, current_dist);
-			local_enqueue++;
+			
+			drand48_r(seed2, &random_num);
+
+			if( random_num < PROB_DEQUEUE1)
+			{
+				timestamp = dequeue();
+				if(timestamp != INFTY)
+				{
+					local_dequeue++;
+					local_min = timestamp;
+				}
+			}
+			else
+			{
+				enqueue2(my_id, seed, local_min, current_dist);
+				local_enqueue++;
+			}
+			
+			
+			//enqueue2(my_id, seed, local_min, current_dist);
+			//local_enqueue++;
 			++par_count;
 			
 			if( DATASTRUCT == 'F' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
@@ -346,8 +366,7 @@ void classic_hold(
 		}
 		
 		
-		
-		//malloc_status.to_remove_nodes_count = 0;
+		printf("A: %llu\n", malloc_status.to_remove_nodes_count);
 		
 		while(tot_count < end_operations2)
 		{
