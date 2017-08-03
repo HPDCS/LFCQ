@@ -13,7 +13,7 @@ MACRO := -DARCH_X86_64  -DCACHE_LINE_SIZE=$(L1_CACHE_LINE_SIZE) -DINTEL
 OPTIMIZATION := -O0
 DEBUG := -g3
 
-FILTER_OUT_SRC := src/main.c
+FILTER_OUT_SRC := src/main.c src/mm/mm.c src/mm/mm.h
 
 OBJS_DIR 	:= $(strip $(MAKECMDGOALS))
 
@@ -42,8 +42,19 @@ C_SRCS 		:= $(filter-out $(FILTER_OUT_SRC), $(C_SRCS))
 OBJS		:= $(strip $(subst .c,.o, $(C_SRCS)))
 C_DEPS		:= $(patsubst %, $(OBJS_DIR)/%, $(subst .o,.d, $(OBJS)))
 
+
+FLAGS=
+
 RM := rm -rf
 
+ifdef USE_MALLOC
+FLAGS := $(FLAGS) -DUSE_MALLOC=$(USE_MALLOC)
+endif
+
+ifdef UNROLLED_FACTOR
+FLAGS := $(FLAGS) -DUNROLLED_FACTOR=$(UNROLLED_FACTOR)
+endif
+	
 
 all Debug Release GProf: $(OBJS_DIR)/NBCQ
 
@@ -63,7 +74,7 @@ $(OBJS_DIR)/%.o: %.c
 	@echo 'Building file: $<'
 	@echo 'Invoking: Cross GCC Compiler'
 	-mkdir -p  $(subst $(shell basename $@),, $@)
-	gcc $(MACRO) $(OPTIMIZATION) $(DEBUG) -Wall -c -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o "$@" "$<"
+	gcc $(MACRO) $(OPTIMIZATION) $(DEBUG) $(FLAGS) -Wall -c -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o "$@" "$<"
 	@echo 'Finished building: $<'
 	@echo ' '
 
