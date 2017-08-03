@@ -39,7 +39,7 @@
 
 #include "utils/hpdcs_utils.h"
 #include "utils/hpdcs_math.h"
-#include "mm/mm.h"
+#include "mm/garbagecollector.h"
 
 struct payload
 {
@@ -366,7 +366,7 @@ void classic_hold(
 		}
 		
 		
-		printf("A: %llu\n", malloc_status.to_remove_nodes_count);
+		printf("%d: %lld %lld\n", TID, malloc_status.to_remove_nodes_count, malloc_status.all_malloc);
 		
 		while(tot_count < end_operations2)
 		{
@@ -391,6 +391,9 @@ void classic_hold(
 			}
 
 		}
+		
+		
+		printf("%d: %lld %lld\n", TID, malloc_status.to_remove_nodes_count, malloc_status.all_malloc);	
 		
 		while(tot_count < end_operations)
 		{
@@ -697,7 +700,7 @@ int main(int argc, char **argv)
 	printf("MIN OP:%lld,", min);
 	printf("MAX OP:%lld,", max);
 	printf("AVG OP:%lld,", avg);
-	printf("MAL OP:%lld,", mal);
+	printf("MAL OP:%lld,\n", mal);
 
 	return 0;
 }
