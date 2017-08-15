@@ -25,6 +25,7 @@ typedef struct hpdcs_gc_status
 	unsigned int block_size 			;
 	unsigned int offset_next 			;
 	long long to_remove_nodes_count 	;
+	long long all_malloc 	;
 }
 hpdcs_gc_status;
 

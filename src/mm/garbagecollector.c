@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include "garbagecollector.h"
-#include <hpdcs_utils.h>
+#include "../utils/hpdcs_utils.h"
 
 
 
@@ -18,7 +18,14 @@ struct _free_list
 };
 
 
-#define UNROLLED_FACTOR 300
+#ifndef USE_MALLOC
+#define USE_MALLOC 0
+#endif
+
+#ifndef UNROLLED_FACTOR
+#define UNROLLED_FACTOR 1
+#endif
+
 #define USE_POSIX_MEMALIGN 0
 #define USE_GLOBAL_LIST 0
 
@@ -61,6 +68,7 @@ void* alloc_array_nodes(hpdcs_gc_status *status, unsigned int num_item)
 	tmp->next = NULL;
 	res = tmp;
 	res->counter = num_item;
+	status->to_remove_nodes_count += 1;
 	
 	return (void*) (((char*) res)  + HEADER_SIZE);
 	
@@ -70,8 +78,12 @@ void* alloc_array_nodes(hpdcs_gc_status *status, unsigned int num_item)
 void free_array_nodes(hpdcs_gc_status *status, void *pointer)
 {
 	linked_gc_node *res = (linked_gc_node*) (((char*) pointer) - HEADER_SIZE) ;
-	//free (((char*) res) - res->offset_base) ;
-	
+
+#if USE_MALLOC == 1
+	free (((char*) res) - res->offset_base) ;
+	return ;
+#else
+
 	char *tmp = (char*) pointer ;
 	unsigned int num_item = res->counter;
 	unsigned int i = 0;
@@ -79,6 +91,7 @@ void free_array_nodes(hpdcs_gc_status *status, void *pointer)
 	tmp += HEADER_SIZE ;
 	for(;i<num_item; i++,tmp += status->block_size + HEADER_SIZE)
 		mm_node_free(status, tmp) ;
+#endif
 	
 }
 
@@ -86,21 +99,25 @@ void free_array_nodes(hpdcs_gc_status *status, void *pointer)
 void* mm_node_malloc(hpdcs_gc_status *status)
 {
 	linked_pointer *res;
-#if USE_GLOBAL_LIST == 1
-	linked_pointer *res_a;
-	//linked_pointer *res_b;
-#endif
-	
 	linked_pointer *tmp;
-	linked_pointer *rolled_list_head;
-	linked_pointer *free_nodes_lists 	= status->free_nodes_lists 	;
 	unsigned long long res_tmp;
 	//unsigned int res_pos_mem = 0;
 	int rolled = UNROLLED_FACTOR;
-	int i = 0;
 	//int step = 200;
 
-	
+	linked_pointer *free_nodes_lists 	= status->free_nodes_lists 	;
+
+#if USE_GLOBAL_LIST == 1
+	linked_pointer *res_a;
+	//linked_pointer *res_b;
+	int j = 0;
+#endif
+
+#if UNROLLED_FACTOR > 1
+	linked_pointer *rolled_list_head;
+	int i = 0;
+#endif
+
 	if(free_nodes_lists == NULL)
 	{	
 #if USE_GLOBAL_LIST == 1
@@ -119,8 +136,8 @@ void* mm_node_malloc(hpdcs_gc_status *status)
 		//	res_b = global_free_list_2;
 		//}
 		
-		for(int j=0;j<16;j++)
-			for(int i=0;i<8;i++)
+		for(j=0;j<16;j++)
+			for(i=0;i<8;i++)
 			{
 				res_a = global_free_list_array[i].pointer;
 				if(res_a != NULL && __sync_bool_compare_and_swap(&global_free_list_array[i].pointer, res_a, res_a->next))
@@ -164,16 +181,17 @@ void* mm_node_malloc(hpdcs_gc_status *status)
 		tmp->next = status->free_nodes_lists;
 		status->free_nodes_lists = rolled_list_head;
 		#endif
+		status->to_remove_nodes_count += 1;
 				
 	}
 	else
 	{
+		//status->to_remove_nodes_count -= 1;
 		res = free_nodes_lists;
 		status->free_nodes_lists = res->next;
 	}
 	
-	status->to_remove_nodes_count += 1;
-
+	status->all_malloc += 1;
 
 	return (void*) (((char*) res)  + HEADER_SIZE);
 }
@@ -181,13 +199,18 @@ void* mm_node_malloc(hpdcs_gc_status *status)
 void mm_node_free(hpdcs_gc_status *status, void* pointer)
 {
 	linked_pointer *res;
+#if USE_MALLOC == 0
 #if USE_GLOBAL_LIST == 1
 	linked_pointer *tmp_global;
 #endif
 	linked_pointer *tmp_lists 	= status->free_nodes_lists 	;
-	
+#endif
 	
 	res = (linked_pointer*) ( ((char*)pointer)- HEADER_SIZE );
+#if USE_MALLOC == 1
+	free(res->base);
+	return;
+#else
 	
 #if USE_GLOBAL_LIST == 1
 	if(private_alloc_node_count++%2 == 0)
@@ -217,6 +240,7 @@ void mm_node_free(hpdcs_gc_status *status, void* pointer)
 #endif
 	res->next = tmp_lists;
 	status->free_nodes_lists = (void*)res;
+#endif
 	
 }
 
