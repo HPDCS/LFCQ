@@ -268,9 +268,6 @@ void classic_hold(
 	unsigned int j;
 	double (*current_dist) (struct drand48_data*, double) ;
 	
-    __sync_fetch_and_add(&BARRIER, 1);
-	
-	while(!__sync_bool_compare_and_swap(&lock, 0, 0));
 	
 	
 	while(iter < iterations)
@@ -366,7 +363,7 @@ void classic_hold(
 		}
 		
 		
-		printf("%d: %lld %lld\n", TID, malloc_status.to_remove_nodes_count, malloc_status.all_malloc);
+		//printf("%d: %lld %lld\n", TID, malloc_status.to_remove_nodes_count, malloc_status.all_malloc);
 		
 		while(tot_count < end_operations2)
 		{
@@ -393,7 +390,7 @@ void classic_hold(
 		}
 		
 		
-		printf("%d: %lld %lld\n", TID, malloc_status.to_remove_nodes_count, malloc_status.all_malloc);	
+		//printf("%d: %lld %lld\n", TID, malloc_status.to_remove_nodes_count, malloc_status.all_malloc);	
 		
 		while(tot_count < end_operations)
 		{
@@ -421,6 +418,7 @@ void classic_hold(
 		(*n_dequeue) = local_dequeue;
 		(*n_enqueue) = local_enqueue;
 	}
+	
 }
 
 
@@ -537,6 +535,10 @@ void* process(void *arg)
 	CPU_SET(my_id, &cpuset);
 	sched_setaffinity(p_tid[my_id], sizeof(cpu_set_t), &cpuset);
 
+    __sync_fetch_and_add(&BARRIER, 1);
+	
+	//while(!__sync_bool_compare_and_swap(&lock, 0, 0));
+	while(lock);
 
 	//markov_hold(my_id, &seed, &seed2, &n_dequeue, &n_enqueue);
 	classic_hold(my_id, &seed, &seed2, &n_dequeue, &n_enqueue);
@@ -555,17 +557,25 @@ void* process(void *arg)
 	malloc_op[my_id] =  malloc_status.to_remove_nodes_count;
 	//printf("%lld\t%lld \n", malloc_status.to_remove_nodes_count, n_enqueue - n_dequeue);
 	
+	__sync_fetch_and_add(&BARRIER, 1);
+
+	while(BARRIER != THREADS);
 	
-	printf("CD:%f APD:%f LPD:%f CE:%f APE:%f FPE:%f FSU:%f FFA:%f %llu\n",
-							concurrent_dequeue*1.0/attempt_dequeue,
-							attempt_dequeue*1.0/performed_dequeue  ,
-							scan_list_length*1.0/attempt_dequeue	  ,
-							concurrent_enqueue*1.0/attempt_enqueue ,
-							attempt_enqueue*1.0/performed_enqueue  ,
-							flush_current_attempt*1.0/performed_enqueue	  ,
-							flush_current_success*1.0/flush_current_attempt	  ,
-							flush_current_fail*1.0/flush_current_attempt	  ,
-							read_table_count	  );
+	while(lock != TID);
+		
+	printf("CD%d:%f,APD%d:%f,LPD%d:%f,CE%d:%f,APE%d:%f,FPE%d:%f,FSU%d:%f,FFA%d:%f,RTC%d:%llu,M%d:%lld\n",
+							TID, concurrent_dequeue*1.0/attempt_dequeue,
+							TID, attempt_dequeue*1.0/performed_dequeue  ,
+							TID, scan_list_length*1.0/attempt_dequeue	  ,
+							TID, concurrent_enqueue*1.0/attempt_enqueue ,
+							TID, attempt_enqueue*1.0/performed_enqueue  ,
+							TID, flush_current_attempt*1.0/performed_enqueue	  ,
+							TID, flush_current_success*1.0/flush_current_attempt	  ,
+							TID, flush_current_fail*1.0/flush_current_attempt	  ,
+							TID, read_table_count	  ,
+							TID, malloc_status.to_remove_nodes_count);
+	
+	__sync_fetch_and_add(&lock, 1);
 	pthread_exit(NULL);    
 }
 
@@ -694,6 +704,15 @@ int main(int argc, char **argv)
 	}
 	
 	avg = sum/THREADS;
+	//printf(	"CD = Average Concurrent Dequeue," 
+	//		"APD = Attempts per Dequeue, "
+	//		"LPD = Scan list per Dequeue, "
+	//		"CE = Concurrent Enqueues, "
+	//		"APE = Attempts per Enqueue, "
+	//		"FPE = Flush Attempts per Enqueue, "
+	//		"FSU = Flush Succes Rate, "
+	//		"FFA = Flush Fail Rate,"
+	//		"RTC = READ table count\n"); 
 
 	printf("CHECK:%lld," , qsi);
 	printf("SUM OP:%lld,", sum);
@@ -701,6 +720,7 @@ int main(int argc, char **argv)
 	printf("MAX OP:%lld,", max);
 	printf("AVG OP:%lld,", avg);
 	printf("MAL OP:%lld,\n", mal);
+	
 
 	return 0;
 }
