@@ -9,7 +9,7 @@
 #define COLOR_CYAN    "\x1b[36m"
 #define COLOR_RESET   "\x1b[0m"
 
-#define NDEBUG 
+//#define NDEBUG 
 
 #define VA_NUM_ARGS(...) VA_NUM_ARGS_IMPL(__VA_ARGS__, 5,4,3,2,1)
 #define VA_NUM_ARGS_IMPL(_1,_2,_3,_4,_5,N,...) N
@@ -23,15 +23,11 @@
 
 #define UNION_CAST(x, destType) (((union {__typeof__(x) a; destType b;})x).b)
 
-#ifndef NDEBUG
-#define assertf(CONDITION, STRING,  ...)        if(CONDITION)\
-        {\
-        printf( (STRING), __VA_ARGS__);\
-        exit(1);\
-        }
-#else
+//#ifndef NDEBUG
+//#define assertf(CONDITION, STRING,  ...)	if(CONDITION) { printf( (STRING), __VA_ARGS__); exit(1); }
+//#else
 #define assertf(CONDITION, STRING,  ...) {}
-#endif
+//#endif
 
 #ifndef NDEBUG
 #define LOG(STRING,  ...)     (printf( (STRING), __VA_ARGS__))

@@ -5,7 +5,7 @@ O_SRCS :=
 S_UPPER_SRCS := 
 EXECUTABLES := 
 USER_OBJS :=
-LIBS := -lpthread -lm
+LIBS := -lpthread -lm -lnuma
 SRC_DIR := src
 
 L1_CACHE_LINE_SIZE := $(shell getconf LEVEL1_DCACHE_LINESIZE)
@@ -74,7 +74,7 @@ $(OBJS_DIR)/%.o: %.c
 	@echo 'Building file: $<'
 	@echo 'Invoking: Cross GCC Compiler'
 	-mkdir -p  $(subst $(shell basename $@),, $@)
-	gcc $(MACRO) $(OPTIMIZATION) $(DEBUG) $(FLAGS) -Wall -c -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o "$@" "$<"
+	gcc $(MACRO) $(OPTIMIZATION) $(DEBUG) $(FLAGS) $(LIBS) -Wall -c -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o "$@" "$<"
 	@echo 'Finished building: $<'
 	@echo ' '
 

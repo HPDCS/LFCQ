@@ -27,13 +27,15 @@
 #include <unistd.h>
 
 #include <pthread.h>
+#include <numa.h>
 #include <stdarg.h>
 #include <sched.h>
 #include <sys/time.h>
 
 #include "datatypes/list.h"
 #include "datatypes/calqueue.h"
-#include "datatypes/nb_calqueue.h"
+//#include "datatypes/nb_calqueue.h"
+#include "datatypes/numa_queue.h"
 #include "datatypes/prioq.h"
 #include "datatypes/gc/gc.h"
 
@@ -95,7 +97,6 @@ extern __thread unsigned long long flush_current_fail	;
 extern __thread unsigned long long read_table_count	;
 
 
-
 nb_calqueue* nbcqueue;
 list(payload) lqueue;
 pq_t* skip_queue;
@@ -106,6 +107,8 @@ volatile unsigned int BARRIER = 0;
 volatile unsigned int lock = 1;
 
 __thread unsigned int TID;
+__thread unsigned int NID;
+__thread unsigned int NUMA_NODES;
 __thread unsigned int num_op=0;
 
 unsigned int *id;
@@ -138,6 +141,9 @@ double dequeue(void)
 			break;
 		case 'F':
 			timestamp = nbc_dequeue(nbcqueue, &free_pointer);
+			break;
+		case 'N':
+			timestamp = numa_nbc_dequeue(nbcqueue, &free_pointer);
 			break;
 		case 'S':
 			timestamp = UNION_CAST(deletemin(skip_queue), double);
@@ -172,6 +178,9 @@ double enqueue2(unsigned int my_id, struct drand48_data* seed, double local_min,
 			break;
 		case 'F':
 			nbc_enqueue(nbcqueue, timestamp, NULL);
+			break;
+		case 'N':
+			numa_nbc_enqueue(nbcqueue, timestamp, NULL);
 			break;
 		case 'S':
 			insert(skip_queue, timestamp, UNION_CAST(timestamp, void*));
@@ -229,6 +238,9 @@ double enqueue(unsigned int my_id, struct drand48_data* seed, double local_min, 
 			break;
 		case 'F':
 			nbc_enqueue(nbcqueue, timestamp, NULL);
+			break;
+		case 'N':
+			numa_nbc_enqueue(nbcqueue, timestamp, NULL);
 			break;
 		case 'S':
 			insert(skip_queue, timestamp, UNION_CAST(timestamp, void*));
@@ -328,6 +340,8 @@ void classic_hold(
 			
 			if( DATASTRUCT == 'F' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
 				nbc_prune(nbcqueue);
+			else if( DATASTRUCT == 'N' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
+				numa_nbc_prune(nbcqueue);
 
 			
 			if(par_count == THREADS)
@@ -376,6 +390,8 @@ void classic_hold(
 			
 			if( DATASTRUCT == 'F' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
 				nbc_prune(nbcqueue);
+			else if( DATASTRUCT == 'N' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
+				numa_nbc_prune(nbcqueue);
 
 			if(par_count == THREADS)
 			{	
@@ -404,6 +420,8 @@ void classic_hold(
 			
 			if( DATASTRUCT == 'F' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
 				nbc_prune(nbcqueue);
+			else if( DATASTRUCT == 'N' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
+				numa_nbc_prune(nbcqueue);
 
 			if(par_count == THREADS)
 			{	
@@ -526,6 +544,8 @@ void* process(void *arg)
 
 	my_id =  *((unsigned int*)(arg));
 	(TID) = my_id;
+	(NID) = numa_node_of_cpu(tid);
+	NUMA_NODES =  numa_num_configured_nodes();
 	srand48_r(my_id+157, &seed2);
     srand48_r(my_id+359, &seed);
     srand48_r(my_id+254, &seedT);
@@ -534,6 +554,8 @@ void* process(void *arg)
 	CPU_ZERO(&cpuset);
 	CPU_SET(my_id, &cpuset);
 	sched_setaffinity(p_tid[my_id], sizeof(cpu_set_t), &cpuset);
+	
+    printf("%u %u %u\n", TID, NID, NUMA_NODES);
 
     __sync_fetch_and_add(&BARRIER, 1);
 	
@@ -562,18 +584,8 @@ void* process(void *arg)
 	while(BARRIER != THREADS);
 	
 	while(lock != TID);
-		
-	printf("CD%d:%f,APD%d:%f,LPD%d:%f,CE%d:%f,APE%d:%f,FPE%d:%f,FSU%d:%f,FFA%d:%f,RTC%d:%llu,M%d:%lld\n",
-							TID, concurrent_dequeue*1.0/attempt_dequeue,
-							TID, attempt_dequeue*1.0/performed_dequeue  ,
-							TID, scan_list_length*1.0/attempt_dequeue	  ,
-							TID, concurrent_enqueue*1.0/attempt_enqueue ,
-							TID, attempt_enqueue*1.0/performed_enqueue  ,
-							TID, flush_current_attempt*1.0/performed_enqueue	  ,
-							TID, flush_current_success*1.0/flush_current_attempt	  ,
-							TID, flush_current_fail*1.0/flush_current_attempt	  ,
-							TID, read_table_count	  ,
-							TID, malloc_status.to_remove_nodes_count);
+	
+	nbc_report(TID);
 	
 	__sync_fetch_and_add(&lock, 1);
 	pthread_exit(NULL);    
@@ -667,7 +679,10 @@ int main(int argc, char **argv)
 			calqueue_init();
 			break;
 		case 'F':
-			nbcqueue = nb_calqueue_init(THREADS, PERC_USED_BUCKET, ELEM_PER_BUCKET);
+			nbcqueue = nbc_init(THREADS, PERC_USED_BUCKET, ELEM_PER_BUCKET);
+			break;
+		case 'N':
+			nbcqueue = numa_nbc_init(THREADS, PERC_USED_BUCKET, ELEM_PER_BUCKET);
 			break;
 		case 'S':
 			_init_gc_subsystem();
