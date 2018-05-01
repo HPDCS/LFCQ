@@ -149,7 +149,7 @@ void helper(worker_calqueue* queue)
 void worker_nbc_enqueue(worker_calqueue* queue, double timestamp, void* payload)
 {
 	op_descriptor *desc = NULL;
-	if(NID != 0)
+	if(NID > 2)
 	{
 		desc = &queue->pending_ops[TID*8];
 		desc->timestamp = timestamp;
@@ -188,7 +188,7 @@ void worker_nbc_enqueue(worker_calqueue* queue, double timestamp, void* payload)
 double worker_nbc_dequeue(worker_calqueue *queue, void** result)
 {
 	op_descriptor *desc;
-	if(NID != 0)
+	if(NID > 2)
 	{
 			desc = &queue->pending_ops[TID*8];
 			desc->payload = result;

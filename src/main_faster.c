@@ -403,8 +403,8 @@ void classic_hold(
 		
 		while(tot_count < end_operations2 || end_test)
 		{
-			if(tot_count %5000000 == 0)
-			printf("%d - PERC %lld\n", TID, tot_count);
+			if(tot_count %20000000 == 0 && TID == 0)
+				printf("%d - PERC %lld\n", TID, tot_count);
 			par_count++;
 			timestamp = dequeue();
 			if(timestamp != INFTY)
@@ -581,7 +581,7 @@ void* process(void *arg)
 
 	my_id =  *((unsigned int*)(arg));
 	(TID) = my_id;
-	(NID) 		= TID%2; //numa_node_of_cpu(tid);
+	(NID) 		= numa_node_of_cpu(tid);
 	srand48_r(my_id+157, &seed2);
     srand48_r(my_id+359, &seed);
     srand48_r(my_id+254, &seedT);

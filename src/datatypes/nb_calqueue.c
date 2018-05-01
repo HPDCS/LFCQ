@@ -757,7 +757,7 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 		//__asm__ __volatile__ ("" : : : "memory");
 
 		//avg_diff= 0.0;
-		for(int i=0;i<2;i++)
+		for(i=0;i<2;i++)
 		{
 			b = ATOMIC_READ( &h->d_counter );
 			a = ATOMIC_READ( &h->e_counter );

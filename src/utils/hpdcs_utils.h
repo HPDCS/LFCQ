@@ -44,7 +44,7 @@
  * This function blocks the execution of the process.
  * Used for debug purposes.
  */
-inline void error(const char *msg, ...) {
+inline static void error(const char *msg, ...) {
 	char buf[1024];
 	va_list args;
 

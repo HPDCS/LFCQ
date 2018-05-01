@@ -1,3 +1,4 @@
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdbool.h>
@@ -23,18 +24,19 @@ struct _free_list
 #endif
 
 #ifndef UNROLLED_FACTOR
-#define UNROLLED_FACTOR 100
+#define UNROLLED_FACTOR 10000
 #endif
 
 #define USE_POSIX_MEMALIGN 0
-#define USE_GLOBAL_LIST 0
+#define USE_GLOBAL_LIST 1
+#define NUM_GLOBAL_LISTS 16
 
 //static linked_pointer * volatile global_free_list = NULL;
 //static char pad[CACHE_LINE_SIZE];
 //static linked_pointer * volatile global_free_list_2 = NULL;
 
 #if USE_GLOBAL_LIST == 1
-static free_list global_free_list_array[8];
+static free_list global_free_list_array[NUM_GLOBAL_LISTS];
 __thread unsigned int private_alloc_node_count = 0;
 #endif
 
@@ -136,8 +138,8 @@ void* mm_node_malloc(hpdcs_gc_status *status)
 		//	res_b = global_free_list_2;
 		//}
 		
-		for(j=0;j<16;j++)
-			for(i=0;i<8;i++)
+		for(j=0;j<NUM_GLOBAL_LISTS*2;j++)
+			for(i=0;i<NUM_GLOBAL_LISTS;i++)
 			{
 				res_a = global_free_list_array[i].pointer;
 				if(res_a != NULL && __sync_bool_compare_and_swap(&global_free_list_array[i].pointer, res_a, res_a->next))
@@ -202,6 +204,7 @@ void mm_node_free(hpdcs_gc_status *status, void* pointer)
 #if USE_MALLOC == 0
 #if USE_GLOBAL_LIST == 1
 	linked_pointer *tmp_global;
+	int i = 0;
 #endif
 	linked_pointer *tmp_lists 	= status->free_nodes_lists 	;
 #endif
@@ -229,7 +232,7 @@ void mm_node_free(hpdcs_gc_status *status, void* pointer)
 		//		return;
 		//}while(1);
 		
-		for(int i=0;i<8;i++)
+		for(i=0;i<8;i++)
 		{
 			tmp_global = global_free_list_array[ind%8].pointer;
 			res->next = tmp_global;
