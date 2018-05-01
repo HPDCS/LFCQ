@@ -82,7 +82,7 @@ void* mm_node_malloc(hpdcs_gc_status *status)
 	linked_pointer *free_nodes_lists 	= status->free_nodes_lists 	;
 	unsigned long long res_tmp;
 	//unsigned int res_pos_mem = 0;
-	int rolled = 250;
+	int rolled = 25;
 	int i = 0;
 	//int step = 200;
 

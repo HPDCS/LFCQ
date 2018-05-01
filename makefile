@@ -10,7 +10,7 @@ SRC_DIR := src
 
 L1_CACHE_LINE_SIZE := $(shell getconf LEVEL1_DCACHE_LINESIZE)
 MACRO := -DARCH_X86_64  -DCACHE_LINE_SIZE=$(L1_CACHE_LINE_SIZE) -DINTEL
-OPTIMIZATION := -O0
+OPTIMIZATION := -O3
 DEBUG := -g3
 
 FILTER_OUT_SRC := src/main.c src/mm/mm.c src/mm/mm.h
@@ -26,7 +26,7 @@ else ifeq ($(OBJS_DIR), Debug)
 	OBJS_DIR 	:= Debug
 else ifeq ($(OBJS_DIR), Release)
 	OBJS_DIR 	:= Release
-	OPTIMIZATION:=-O3 
+	OPTIMIZATION:=-O0 
 	DEBUG:=
 else ifeq ($(OBJS_DIR), GProf)
 	OBJS_DIR 	:= GProf
@@ -40,6 +40,7 @@ SUBDIRS 	:= $(shell find src -type d)
 C_SRCS		:= $(shell ls   $(patsubst %, %/*.c, $(SUBDIRS)) )
 C_SRCS 		:= $(filter-out $(FILTER_OUT_SRC), $(C_SRCS))
 OBJS		:= $(strip $(subst .c,.o, $(C_SRCS)))
+ASM		:= $(strip $(subst .c,.S, $(C_SRCS)))
 C_DEPS		:= $(patsubst %, $(OBJS_DIR)/%, $(subst .o,.d, $(OBJS)))
 
 
@@ -77,6 +78,7 @@ $(OBJS_DIR)/%.o: %.c
 	gcc $(MACRO) $(OPTIMIZATION) $(DEBUG) $(FLAGS) $(LIBS) -Wall -c -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o "$@" "$<"
 	@echo 'Finished building: $<'
 	@echo ' '
+
 
 # Other Targets
 clean:

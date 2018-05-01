@@ -1,6 +1,11 @@
 #ifndef __UTIL_HPCDS__
 #define __UTIL_HPCDS__
 
+
+#include <stdarg.h>
+#include <stdio.h>
+
+
 #define COLOR_RED     "\x1b[31m"
 #define COLOR_GREEN   "\x1b[32m"
 #define COLOR_YELLOW  "\x1b[33m"
@@ -34,5 +39,23 @@
 #else
 #define LOG(STRING,  ...) do{}while(0)
 #endif
+
+/**
+ * This function blocks the execution of the process.
+ * Used for debug purposes.
+ */
+inline void error(const char *msg, ...) {
+	char buf[1024];
+	va_list args;
+
+	va_start(args, msg);
+	vsnprintf(buf, 1024, msg, args);
+	va_end(args);
+
+	printf("%s", buf);
+	buf[1025] = 'a';
+	//exit(1);
+}
+
 
 #endif

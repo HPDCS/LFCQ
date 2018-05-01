@@ -23,7 +23,7 @@ struct _free_list
 #endif
 
 #ifndef UNROLLED_FACTOR
-#define UNROLLED_FACTOR 1
+#define UNROLLED_FACTOR 100
 #endif
 
 #define USE_POSIX_MEMALIGN 0

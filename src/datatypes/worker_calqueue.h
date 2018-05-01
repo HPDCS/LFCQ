@@ -25,15 +25,49 @@
  *      Author: Romolo Marotta   
  */
 
-#ifndef DATATYPES_NONBLOCKING_CALQUEUE_H_
-#define DATATYPES_NONBLOCKING_CALQUEUE_H_
+#ifndef DATATYPES_WORKER_CALQUEUE_H_
+#define DATATYPES_WORKER_CALQUEUE_H_
+
 
 #include "common_nb_calqueue.h"
 
 
+#define NID nid
 
-extern void nbc_enqueue(nb_calqueue *queue, double timestamp, void* payload);
-extern double nbc_dequeue(nb_calqueue *queue, void **payload);
-extern nb_calqueue* nbc_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket);
+
+extern __thread unsigned int NID;
+extern unsigned int NUMA_NODES;
+
+#define EMPTY_DESCRIPTOR 	0ULL
+#define DONE_DESCRIPTOR 	1ULL
+#define RUNNING_DESCRIPTOR 	2ULL
+#define ENQUEUE_DESCRIPTOR 	4ULL
+#define DEQUEUE_DESCRIPTOR 	8ULL
+
+typedef struct op_descriptor op_descriptor;
+struct op_descriptor
+{
+	volatile unsigned long long id_op;
+	volatile double timestamp;
+	void * volatile payload;
+	
+};
+
+typedef struct worker_calqueue worker_calqueue;
+struct worker_calqueue
+{
+	nb_calqueue real_queue;
+	char zpad9[56];
+	op_descriptor pending_ops[32*8];
+
+};
+
+
+
+
+
+extern worker_calqueue* worker_nbc_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket);
+extern void worker_nbc_enqueue(worker_calqueue* queue, double timestamp, void* payload);
+extern double worker_nbc_dequeue(worker_calqueue *queue, void** result);
 
 #endif /* DATATYPES_NONBLOCKING_QUEUE_H_ */

@@ -34,14 +34,16 @@
 
 #include "datatypes/list.h"
 #include "datatypes/calqueue.h"
-//#include "datatypes/nb_calqueue.h"
+#include "datatypes/nb_calqueue.h"
 #include "datatypes/numa_queue.h"
+#include "datatypes/worker_calqueue.h"
 #include "datatypes/prioq.h"
 #include "datatypes/gc/gc.h"
 
 #include "utils/hpdcs_utils.h"
 #include "utils/hpdcs_math.h"
 #include "mm/garbagecollector.h"
+
 
 struct payload
 {
@@ -98,6 +100,8 @@ extern __thread unsigned long long read_table_count	;
 
 
 nb_calqueue* nbcqueue;
+numa_nb_calqueue* numa_nbcqueue;
+worker_calqueue* worker_nbcqueue;
 list(payload) lqueue;
 pq_t* skip_queue;
 
@@ -108,13 +112,20 @@ volatile unsigned int lock = 1;
 
 __thread unsigned int TID;
 __thread unsigned int NID;
-__thread unsigned int NUMA_NODES;
 __thread unsigned int num_op=0;
+
+unsigned int NUMA_NODES;
 
 unsigned int *id;
 volatile long long *ops;
 volatile long long *ops_count;
 volatile long long *malloc_op;
+
+volatile unsigned int end_phase_1 = 0;
+volatile unsigned int end_phase_2 = 0;
+volatile unsigned int end_phase_3 = 0;
+volatile unsigned int end_test = 0;
+volatile long long final_ops = 0;
 
 
 double dequeue(void)
@@ -143,7 +154,10 @@ double dequeue(void)
 			timestamp = nbc_dequeue(nbcqueue, &free_pointer);
 			break;
 		case 'N':
-			timestamp = numa_nbc_dequeue(nbcqueue, &free_pointer);
+			timestamp = numa_nbc_dequeue(numa_nbcqueue, &free_pointer);
+			break;
+		case 'W':
+			timestamp = worker_nbc_dequeue(worker_nbcqueue, &free_pointer);
 			break;
 		case 'S':
 			timestamp = UNION_CAST(deletemin(skip_queue), double);
@@ -180,7 +194,10 @@ double enqueue2(unsigned int my_id, struct drand48_data* seed, double local_min,
 			nbc_enqueue(nbcqueue, timestamp, NULL);
 			break;
 		case 'N':
-			numa_nbc_enqueue(nbcqueue, timestamp, NULL);
+			numa_nbc_enqueue(numa_nbcqueue, timestamp, NULL);
+			break;
+		case 'W':
+			worker_nbc_enqueue(worker_nbcqueue, timestamp, NULL);
 			break;
 		case 'S':
 			insert(skip_queue, timestamp, UNION_CAST(timestamp, void*));
@@ -240,7 +257,10 @@ double enqueue(unsigned int my_id, struct drand48_data* seed, double local_min, 
 			nbc_enqueue(nbcqueue, timestamp, NULL);
 			break;
 		case 'N':
-			numa_nbc_enqueue(nbcqueue, timestamp, NULL);
+			numa_nbc_enqueue(numa_nbcqueue, timestamp, NULL);
+			break;
+		case 'W':
+			worker_nbc_enqueue(worker_nbcqueue, timestamp, NULL);
 			break;
 		case 'S':
 			insert(skip_queue, timestamp, UNION_CAST(timestamp, void*));
@@ -341,7 +361,7 @@ void classic_hold(
 			if( DATASTRUCT == 'F' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
 				nbc_prune(nbcqueue);
 			else if( DATASTRUCT == 'N' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
-				numa_nbc_prune(nbcqueue);
+				nbc_prune(numa_nbcqueue);
 
 			
 			if(par_count == THREADS)
@@ -353,7 +373,9 @@ void classic_hold(
 					tot_count += ops_count[j];
 			}
 		}
-				
+		
+		__sync_fetch_and_add(&end_phase_1, 1);
+		
 		switch(PROB_DISTRIBUTION2)
 		{
 			case 'U':
@@ -379,8 +401,10 @@ void classic_hold(
 		
 		//printf("%d: %lld %lld\n", TID, malloc_status.to_remove_nodes_count, malloc_status.all_malloc);
 		
-		while(tot_count < end_operations2)
+		while(tot_count < end_operations2 || end_test)
 		{
+			if(tot_count %5000000 == 0)
+			printf("%d - PERC %lld\n", TID, tot_count);
 			par_count++;
 			timestamp = dequeue();
 			if(timestamp != INFTY)
@@ -389,9 +413,9 @@ void classic_hold(
 			enqueue2(my_id, seed, local_min, current_dist);
 			
 			if( DATASTRUCT == 'F' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
-				nbc_prune(nbcqueue);
+				nbc_prune();
 			else if( DATASTRUCT == 'N' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
-				numa_nbc_prune(nbcqueue);
+				nbc_prune();
 
 			if(par_count == THREADS)
 			{	
@@ -402,9 +426,18 @@ void classic_hold(
 					tot_count += ops_count[j];
 
 			}
-
 		}
 		
+		if(end_test)
+		{
+			for(j=0;j<THREADS;j++)
+				tot_count += ops_count[j];
+			
+			__sync_val_compare_and_swap(&final_ops, 0, tot_count);
+			return;
+		}
+		
+		__sync_fetch_and_add(&end_phase_2, 1);
 		
 		//printf("%d: %lld %lld\n", TID, malloc_status.to_remove_nodes_count, malloc_status.all_malloc);	
 		
@@ -419,9 +452,9 @@ void classic_hold(
 			}
 			
 			if( DATASTRUCT == 'F' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
-				nbc_prune(nbcqueue);
+				nbc_prune();
 			else if( DATASTRUCT == 'N' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
-				numa_nbc_prune(nbcqueue);
+				nbc_prune();
 
 			if(par_count == THREADS)
 			{	
@@ -436,6 +469,9 @@ void classic_hold(
 		(*n_dequeue) = local_dequeue;
 		(*n_enqueue) = local_enqueue;
 	}
+	
+	__sync_fetch_and_add(&end_phase_3, 1);
+	
 	
 }
 
@@ -468,6 +504,7 @@ void markov_hold(
 	char current_dist	; 
 
     __sync_fetch_and_add(&BARRIER, 1);
+    
 	
 	while(!__sync_bool_compare_and_swap(&lock, 0, 0));
 	
@@ -544,8 +581,7 @@ void* process(void *arg)
 
 	my_id =  *((unsigned int*)(arg));
 	(TID) = my_id;
-	(NID) = numa_node_of_cpu(tid);
-	NUMA_NODES =  numa_num_configured_nodes();
+	(NID) 		= TID%2; //numa_node_of_cpu(tid);
 	srand48_r(my_id+157, &seed2);
     srand48_r(my_id+359, &seed);
     srand48_r(my_id+254, &seedT);
@@ -558,9 +594,12 @@ void* process(void *arg)
     printf("%u %u %u\n", TID, NID, NUMA_NODES);
 
     __sync_fetch_and_add(&BARRIER, 1);
+    
+    
 	
 	//while(!__sync_bool_compare_and_swap(&lock, 0, 0));
 	while(lock);
+	
 
 	//markov_hold(my_id, &seed, &seed2, &n_dequeue, &n_enqueue);
 	classic_hold(my_id, &seed, &seed2, &n_dequeue, &n_enqueue);
@@ -669,6 +708,8 @@ int main(int argc, char **argv)
 
 	TOTAL_OPS2 += TOTAL_OPS1;
 	
+	
+	NUMA_NODES  = 2;// numa_num_configured_nodes();
 	switch(DATASTRUCT)
 	{
 		case 'L':
@@ -682,7 +723,10 @@ int main(int argc, char **argv)
 			nbcqueue = nbc_init(THREADS, PERC_USED_BUCKET, ELEM_PER_BUCKET);
 			break;
 		case 'N':
-			nbcqueue = numa_nbc_init(THREADS, PERC_USED_BUCKET, ELEM_PER_BUCKET);
+			numa_nbcqueue = numa_nbc_init(THREADS, PERC_USED_BUCKET, ELEM_PER_BUCKET);
+			break;
+		case 'W':
+			worker_nbcqueue = worker_nbc_init(THREADS, PERC_USED_BUCKET, ELEM_PER_BUCKET);
 			break;
 		case 'S':
 			_init_gc_subsystem();
@@ -703,7 +747,12 @@ int main(int argc, char **argv)
 	
 	while(!__sync_bool_compare_and_swap(&BARRIER, THREADS, 0));
 	
+	
     __sync_lock_test_and_set(&lock, 0);
+    
+    
+    
+    
 
 	for(i=0;i<THREADS;i++)
 		pthread_join(p_tid[i], (void*)&id);
