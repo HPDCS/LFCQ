@@ -1131,6 +1131,17 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 						
 			if(!is_marked(left_node_next))
 			{
+				double rand = 0.0;                      // <----------------------------------------
+				double concurr = concurrent_dequeue;
+				concurr /= performed_dequeue;
+				drand48_r(&seedT, &rand);
+				if(counter > concurr  && rand < 0.5/concurr && BOOL_CAS(&(min->next), min_next, left_node))
+				{
+						connect_to_be_freed_node_list(min_next, counter);
+						counter = 0;
+				}
+
+				
 				if(left_ts < index*bucket_width)
 				{
 					//left_node_next = FETCH_AND_OR(&left_node->next, DEL);

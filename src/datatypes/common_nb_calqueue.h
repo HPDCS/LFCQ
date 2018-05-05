@@ -54,6 +54,7 @@
 #define FLUSH_SMART 1
 #define ENABLE_EXPANSION 1
 #define ENABLE_PRUNE 1
+#define ENABLE_HIGH_STATITISTICS 1
 
 #define TID tid
 
@@ -131,12 +132,14 @@ struct __bucket_node
 {
 	void *payload;  				// general payload
 	double timestamp;  				// key
+	//16
 	unsigned long long epoch;		//enqueue's epoch
 	unsigned int counter; 			// used to resolve the conflict with same timestamp using a FIFO policy
 	unsigned int nid; 				// used to resolve the conflict with same timestamp using a FIFO policy
+	//32
 	nbc_bucket_node * volatile next;	// pointer to the successor
 	nbc_bucket_node * volatile replica;	// pointer to the replica
-	//char pad2[16];
+	char pad2[16];
 };
 
 

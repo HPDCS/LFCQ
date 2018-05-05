@@ -342,8 +342,8 @@ void classic_hold(
 		
 		while(tot_count < end_operations2 || end_test)
 		{
-			if(tot_count %20000000 == 0 && TID == 0)
-				printf("%d - PERC %lld\n", TID, tot_count);
+			//if(tot_count %20000000 == 0 && TID == 0)
+			//	printf("%d - PERC %lld\n", TID, tot_count);
 			par_count++;
 			timestamp = dequeue();
 			if(timestamp != INFTY)
