@@ -40,6 +40,10 @@
  */
  
  __thread unsigned int local_spin = 0;
+ __thread unsigned int from_last_help = 0;
+ 
+#define NUM_MAIN_NODES 2
+#define CORE_PER_NODE 4
  
 worker_calqueue* worker_nbc_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket)
 {
@@ -113,6 +117,9 @@ worker_calqueue* worker_nbc_init(unsigned int threshold, double perc_used_bucket
 void helper(worker_calqueue* queue)
 {
 	unsigned long long i = 0, cur_op= 0;
+	from_last_help++;
+	if(from_last_help % CORE_PER_NODE == 0)
+		return;
 	op_descriptor * volatile desc = NULL;
 	for(i = 0; i< threads; i++){
 		desc = queue->pending_ops + i*8;
@@ -149,7 +156,7 @@ void helper(worker_calqueue* queue)
 void worker_nbc_enqueue(worker_calqueue* queue, double timestamp, void* payload)
 {
 	op_descriptor *desc = NULL;
-	if(NID > 2)
+	if(NID > NUM_MAIN_NODES)
 	{
 		desc = &queue->pending_ops[TID*8];
 		desc->timestamp = timestamp;
@@ -188,7 +195,7 @@ void worker_nbc_enqueue(worker_calqueue* queue, double timestamp, void* payload)
 double worker_nbc_dequeue(worker_calqueue *queue, void** result)
 {
 	op_descriptor *desc;
-	if(NID > 2)
+	if(NID > NUM_MAIN_NODES)
 	{
 			desc = &queue->pending_ops[TID*8];
 			desc->payload = result;

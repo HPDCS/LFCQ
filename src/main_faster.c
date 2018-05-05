@@ -612,6 +612,7 @@ int main(int argc, char **argv)
 		sum += tmp;
 		min = min < tmp ? min : tmp;
 		max = max > tmp ? max : tmp;
+		printf("OPS-%d:%lld ", i, tmp);
 	}
 	
 	avg = sum/THREADS;
