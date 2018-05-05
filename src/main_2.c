@@ -169,7 +169,7 @@ double dequeue(void)
 	return timestamp;
 }
 
-double enqueue(unsigned int my_id, struct drand48_data* seed, double local_min, double (*current_prob) (struct drand48_data*, double))
+double enqueue2(unsigned int my_id, struct drand48_data* seed, double local_min, double (*current_prob) (struct drand48_data*, double))
 {
 	double timestamp = 0.0;
 	double update = 0.0;
@@ -212,6 +212,67 @@ double enqueue(unsigned int my_id, struct drand48_data* seed, double local_min, 
 }
 
 
+double enqueue(unsigned int my_id, struct drand48_data* seed, double local_min, char distribution)
+{
+	double timestamp = 0.0;
+	double update = 0.0;
+	payload data;
+
+	switch(distribution)
+	{
+		case 'U':
+			update = uniform_rand(seed, MEAN_INTERARRIVAL_TIME);
+			break;
+		case 'T':
+			update = triangular_rand(seed, MEAN_INTERARRIVAL_TIME);
+			break;
+		case 'N':
+			update = neg_triangular_rand(seed, MEAN_INTERARRIVAL_TIME);
+			break;
+		case 'E':
+			update = exponential_rand(seed, MEAN_INTERARRIVAL_TIME);
+			break;
+		case 'C':
+			update = camel_compile_time_rand(seed, MEAN_INTERARRIVAL_TIME);
+			break;
+		default:
+			printf("#ERROR: Unknown distribution\n");
+			exit(1);
+	}
+	timestamp = local_min + update;
+	
+	if(timestamp < 0.0)
+		timestamp = 0.0;
+
+	switch(DATASTRUCT)
+	{
+		case 'L':
+			data.timestamp = timestamp;
+			list_insert(lqueue, timestamp, &data);
+			break;
+		case 'C':
+			calqueue_put(timestamp, NULL);
+			break;
+		case 'F':
+			nbc_enqueue(nbcqueue, timestamp, NULL);
+			break;
+		case 'N':
+			numa_nbc_enqueue(numa_nbcqueue, timestamp, NULL);
+			break;
+		case 'W':
+			worker_nbc_enqueue(worker_nbcqueue, timestamp, NULL);
+			break;
+		case 'S':
+			insert(skip_queue, timestamp, UNION_CAST(timestamp, void*));
+			break;
+		default:
+			printf("#ERROR: Unknown data structure\n");
+			exit(1);
+	}
+	
+	return timestamp;
+
+}
 
 
 void classic_hold(
@@ -288,12 +349,12 @@ void classic_hold(
 			}
 			else
 			{
-				enqueue(my_id, seed, local_min, current_dist);
+				enqueue2(my_id, seed, local_min, current_dist);
 				local_enqueue++;
 			}
 			
 			
-			//enqueue(my_id, seed, local_min, current_dist);
+			//enqueue2(my_id, seed, local_min, current_dist);
 			//local_enqueue++;
 			++par_count;
 			
@@ -349,7 +410,7 @@ void classic_hold(
 			if(timestamp != INFTY)
 				local_min = timestamp;
 
-			enqueue(my_id, seed, local_min, current_dist);
+			enqueue2(my_id, seed, local_min, current_dist);
 			
 			if( DATASTRUCT == 'F' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
 				nbc_prune();
@@ -415,6 +476,99 @@ void classic_hold(
 }
 
 
+
+
+void markov_hold(
+		unsigned int my_id,
+		struct drand48_data* seed,
+		struct drand48_data* seed2,
+		long long *n_dequeue,
+		long long *n_enqueue
+		)
+{
+
+	double timestamp = 0.0;
+	double local_min = 0.0;
+	double random_num = 0.0;
+	long long tot_count = 0;
+	long long par_count = 0;
+	long long end_operations 	;
+	long long end_operations1 	;
+	long long end_operations2 	;
+	long long local_enqueue = 0;
+	long long local_dequeue = 0;
+	
+	unsigned int iterations = ITERATIONS;
+	unsigned int j;
+	double current_prob ;
+	char current_dist	; 
+
+    __sync_fetch_and_add(&BARRIER, 1);
+    
+	
+	while(!__sync_bool_compare_and_swap(&lock, 0, 0));
+	
+	
+	while(iterations-- > 0)
+	{
+		tot_count = 0;
+		par_count = 0;
+		end_operations 		= TOTAL_OPS;
+		end_operations1 	= TOTAL_OPS1;
+		end_operations2 	= TOTAL_OPS2;
+		current_prob 		= PROB_DEQUEUE1;
+		current_dist	 	= PROB_DISTRIBUTION1;
+		
+		while(tot_count < end_operations)
+		{
+			drand48_r(seed2, &random_num);
+
+			if( random_num < (current_prob))
+			{
+				timestamp = dequeue();
+				if(timestamp != INFTY)
+				{
+					local_dequeue++;
+					local_min = timestamp;
+				}
+			}
+			else
+			{
+				enqueue(my_id, seed, local_min, current_dist);
+				local_enqueue++;
+			}
+
+			if( DATASTRUCT == 'F' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + ++par_count) %(PRUNE_PERIOD) == 0)
+				nbc_prune(nbcqueue);
+
+			if(par_count == THREADS)
+			{	
+				ops_count[my_id]+=par_count;
+				par_count = 0;
+				tot_count = 0;
+				for(j=0;j<THREADS;j++)
+					tot_count += ops_count[j];
+
+				if( tot_count > end_operations1 && tot_count < end_operations2 )
+				{
+					current_dist = PROB_DISTRIBUTION2;
+					current_prob = PROB_DEQUEUE2;
+				}
+
+				else if( tot_count > end_operations2)
+				{
+					current_dist = PROB_DISTRIBUTION3;
+					current_prob = PROB_DEQUEUE3;
+				}
+			}
+
+		}
+		(*n_dequeue) = local_dequeue;
+		(*n_enqueue) = local_enqueue;
+	}
+}
+
+
 void* process(void *arg)
 {
 	unsigned int my_id;
@@ -470,8 +624,7 @@ void* process(void *arg)
 	
 	while(lock != TID);
 	
-	if(DATASTRUCT == 'F' || DATASTRUCT == 'N' || DATASTRUCT == 'W')
-		nbc_report(TID);
+	nbc_report(TID);
 	
 	__sync_fetch_and_add(&lock, 1);
 	pthread_exit(NULL);    
