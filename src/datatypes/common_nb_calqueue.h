@@ -137,9 +137,10 @@ struct __bucket_node
 	unsigned int counter; 			// used to resolve the conflict with same timestamp using a FIFO policy
 	unsigned int nid; 				// used to resolve the conflict with same timestamp using a FIFO policy
 	//32
+	nbc_bucket_node * tail;
 	nbc_bucket_node * volatile next;	// pointer to the successor
 	nbc_bucket_node * volatile replica;	// pointer to the replica
-	char pad2[16];
+	char pad2[8];
 };
 
 

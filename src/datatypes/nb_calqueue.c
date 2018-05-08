@@ -136,24 +136,24 @@ void search(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
 {
 	nbc_bucket_node *left, *right, *left_next, *tmp, *tmp_next, *tail;
 	unsigned int counter;
+	unsigned int tmp_tie_breaker;
 	double tmp_timestamp;
-	tail = g_tail;
-	bool marked;
+	bool marked, ts_equal, tie_lower, go_to_next;
 
 	do
 	{
 		/// Fetch the head and its next node
 		left = tmp = head;
 		left_next = tmp_next = tmp->next;
+		tail = tmp->tail;
 		assertf(head == NULL, "PANIC %s\n", "");
 		assertf(tmp_next == NULL, "PANIC1 %s\n", "");
 		assertf(is_marked_for_search(left_next, flag), "PANIC2 %s\n", "");
 		counter = 0;
+		marked = is_marked_for_search(tmp_next, flag);
 		
 		do
 		{
-			// Check if the node is marked
-			marked = is_marked_for_search(tmp_next, flag);
 
 			//Find the first unmarked node that is <= timestamp
 			if (!marked)
@@ -167,21 +167,24 @@ void search(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
 			// Retrieve timestamp and next field from the current node (tmp)
 			
 			tmp = get_unmarked(tmp_next);
-			tmp_timestamp = tmp->timestamp;
 			tmp_next = tmp->next;
+			marked = is_marked_for_search(tmp_next, flag);
+			tmp_timestamp = tmp->timestamp;
+			tmp_tie_breaker = tmp->counter;
+			// Check if the node is marked
+			go_to_next = LESS(tmp_timestamp, timestamp);
+			ts_equal = D_EQUAL(tmp_timestamp, timestamp);
+			tie_lower = 		(
+								tie_breaker == 0 || 
+								(tie_breaker != 0 && tmp_tie_breaker <= tie_breaker)
+							);
+			go_to_next =  go_to_next || (ts_equal && tie_lower);
 
 			// Exit if tmp is a tail or its timestamp is > of the searched key
 		} while (	tmp != tail &&
 					(
-						is_marked_for_search(tmp_next, flag) ||
-						LESS(tmp_timestamp, timestamp)	||  
-						(
-							D_EQUAL(tmp_timestamp, timestamp) &&
-							(
-								tie_breaker == 0 || 
-								(tie_breaker != 0 && tmp->counter <= tie_breaker)
-							)
-						)
+						marked ||
+						go_to_next
 					)
 				);
 
@@ -207,31 +210,133 @@ void search(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
 	} while (1);
 }
 
+static bool search_and_insert(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
+						 int flag, nbc_bucket_node *new_node_pointer, nbc_bucket_node **new_node)
+{
+	nbc_bucket_node *left, *right, *left_next, *tmp, *tmp_next, *tail;
+	unsigned int counter;
+	unsigned int tmp_tie_breaker;
+	double tmp_timestamp;
+	bool marked, ts_equal, tie_lower, go_to_next;
 
-//static nbc_bucket_node* search_next_valid(nbc_bucket_node *head, int flag)
-//{
-//	nbc_bucket_node *right, *tmp, *tmp_next, *tail;
-//	tail = g_tail;
-//
-//	/// Fetch the head and its next node
-//	tmp = head;
-//	tmp_next = tmp->next;
-//	
-//	
-//	tmp = get_unmarked(tmp_next);
-//	tmp_next = tmp->next;
-//	
-//	while (	tmp != tail && is_marked_for_search(tmp_next, flag)  )
-//	{
-//		tmp = get_unmarked(tmp_next);
-//		tmp_next = tmp->next;
-//	}
-//	
-//	right = tmp;
-//
-//	return right;
-//}
+	do
+	{
+		/// Fetch the head and its next node
+		left = tmp = head;
+		left_next = tmp_next = tmp->next;
+		tail = tmp->tail;
+		assertf(head == NULL, "PANIC %s\n", "");
+		assertf(tmp_next == NULL, "PANIC1 %s\n", "");
+		assertf(is_marked_for_search(left_next, flag), "PANIC2 %s\n", "");
+		counter = 0;
+		marked = is_marked_for_search(tmp_next, flag);
+		
+		do
+		{
 
+			//Find the first unmarked node that is <= timestamp
+			if (!marked)
+			{
+				left = tmp;
+				left_next = tmp_next;
+				counter = 0;
+			}
+			counter+=marked;
+			
+			// Retrieve timestamp and next field from the current node (tmp)
+			
+			tmp = get_unmarked(tmp_next);
+			tmp_next = tmp->next;
+			marked = is_marked_for_search(tmp_next, flag);
+			tmp_timestamp = tmp->timestamp;
+			tmp_tie_breaker = tmp->counter;
+			// Check if the node is marked
+			go_to_next = LESS(tmp_timestamp, timestamp);
+			ts_equal = D_EQUAL(tmp_timestamp, timestamp);
+			tie_lower = 		(
+								tie_breaker == 0 || 
+								(tie_breaker != 0 && tmp_tie_breaker <= tie_breaker)
+							);
+			go_to_next =  go_to_next || (ts_equal && tie_lower);
+
+			// Exit if tmp is a tail or its timestamp is > of the searched key
+		} while (	tmp != tail &&
+					(
+						marked ||
+						go_to_next
+					)
+				);
+
+		// Set right node and copy the mark of left node
+		right = get_marked(tmp,get_mark(left_next));
+		
+		// at this point they are adjacent
+		
+		if(!is_marked(right, MOV))
+		{
+			switch(flag)
+			{
+			case REMOVE_DEL_INV:
+
+				new_node_pointer->next = right;
+				// set tie_breaker
+				new_node_pointer->counter = 1 + ( -D_EQUAL(timestamp, left->timestamp ) & left->counter );
+
+
+				if (BOOL_CAS
+							(
+								&(left->next),
+								left_next,
+								new_node_pointer
+							)
+				)
+				{
+					if (counter > 0)
+					{
+						connect_to_be_freed_node_list(left_next, counter);
+					}
+					return true;
+				}
+
+				// reset tie breaker for the new search
+				new_node_pointer->counter = 0;
+				break;
+
+			case REMOVE_DEL:
+
+				// mark the to-be.inserted node as INV
+				new_node_pointer->next = get_marked(right, INV);
+				// node already exists
+				if(D_EQUAL(timestamp, left->timestamp ) && left->counter == tie_breaker)
+				{
+					node_free(new_node_pointer);
+					*new_node = left;
+					return true;
+				}
+				// copy left node mark			
+				new_node_pointer = get_marked(new_node_pointer,get_mark(right));
+
+				if (BOOL_CAS(
+							&(left->next),
+							left_next,
+							new_node_pointer
+						)
+				)
+				{
+					if (counter > 0)
+					{
+						connect_to_be_freed_node_list(left_next, counter);
+					}
+					return true;
+				}
+				break;
+			}
+		}
+		return false;
+
+		
+	} while (1);
+}
 
 /**
  * This function commits a value in the current field of a queue. It retries until the timestamp
@@ -332,7 +437,7 @@ void flush_current(table* h, nbc_bucket_node* node)
  */
 bool insert_std(table* hashtable, nbc_bucket_node** new_node, int flag)
 {
-	nbc_bucket_node *left_node, *right_node, *bucket, *new_node_pointer;
+	nbc_bucket_node *bucket, *new_node_pointer;
 	//nbc_bucket_node *left_node_next;
 	unsigned int index;
 
@@ -350,69 +455,14 @@ bool insert_std(table* hashtable, nbc_bucket_node** new_node, int flag)
 	bucket = hashtable->array + index;
 
 	 
-	search(bucket, new_node_timestamp, new_node_counter, &left_node, &right_node, flag);
+	return search_and_insert(bucket, new_node_timestamp, new_node_counter, flag, new_node_pointer, new_node);
 	//search_for_insert(bucket, new_node_timestamp, new_node_counter, &left_node, &left_node_next, &right_node, flag, &skipped_nodes);
-
-	if(!is_marked(right_node, MOV))
-	{
-		switch(flag)
-		{
-		case REMOVE_DEL_INV:
-
-			new_node_pointer->next = right_node;
-			// set tie_breaker
-			new_node_pointer->counter = 1 + ( -D_EQUAL(new_node_timestamp, left_node->timestamp ) & left_node->counter );
-
-
-			if (BOOL_CAS
-						(
-							&(left_node->next),
-							right_node,
-							new_node_pointer
-						)
-			)
- 			{
-				#if LOG_ENQUEUE == 1
- 				LOG("ENQUEUE: %f %u - %u %u\n", new_node_pointer->timestamp, new_node_pointer->counter,	hash(new_node_timestamp, hashtable->bucket_width), index );
- 				#endif
- 				return true;
- 			}
-
-			// reset tie breaker for the new search
-			new_node_pointer->counter = 0;
-			break;
-
-		case REMOVE_DEL:
-
-			// mark the to-be.inserted node as INV
-			new_node_pointer->next = get_marked(right_node, INV);
-			// node already exists
-			if(D_EQUAL(new_node_timestamp, left_node->timestamp ) && left_node->counter == new_node_counter)
-			{
-				node_free(new_node_pointer);
-				*new_node = left_node;
-				return true;
-			}
-			// copy left node mark			
-			new_node_pointer = get_marked(new_node_pointer,get_mark(right_node));
-
-			if (BOOL_CAS(
-						&(left_node->next),
-						right_node,
-						new_node_pointer
-					)
-			)
-				return true;
-			break;
-		}
-	}
-	return false;
 
 }
 
 void set_new_table(table* h, unsigned int threshold, double pub, unsigned int epb, unsigned int counter)
 {
-	nbc_bucket_node *tail = g_tail;
+	nbc_bucket_node *tail;
 	unsigned int i = 0;
 	unsigned int size = h->size;
 	unsigned int thp2;//, size_thp2;
@@ -467,7 +517,8 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 		res = posix_memalign((void**)&new_h, CACHE_LINE_SIZE, sizeof(table));
 		if(res != 0)
 			error("No enough memory to new table structure\n");
-
+		
+		tail = g_tail;
 		new_h->bucket_width  = -1.0;
 		new_h->size 		 = new_size;
 		new_h->new_table 	 = NULL;
@@ -482,10 +533,12 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 			free(new_h);
 			error("No enough memory to allocate new table array %u\n", new_size);
 		}
+		
 
 		for (i = 0; i < new_size; i++)
 		{
 			array[i].next = tail;
+			array[i].tail = tail;
 			array[i].counter = 0;
 			array[i].epoch = 0;
 		}
@@ -732,7 +785,7 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 #if ENABLE_EXPANSION == 0
 	return h;
 #endif
-	nbc_bucket_node *tail = g_tail	;
+	nbc_bucket_node *tail;
 	unsigned int i, size = h->size	;
 
 	table 			*new_h 			;
@@ -815,6 +868,7 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 		new_h 			= h->new_table;
 		array 			= h->array;
 		new_bw 			= new_h->bucket_width;
+		tail = g_tail;	
 
 		if(new_bw < 0)
 		{
@@ -999,6 +1053,7 @@ nb_calqueue* nbc_init(unsigned int threshold, double perc_used_bucket, unsigned 
 	for (i = 0; i < MINIMUM_SIZE; i++)
 	{
 		res->hashtable->array[i].next = g_tail;
+		res->hashtable->array[i].tail = g_tail;
 		res->hashtable->array[i].timestamp = i * 1.0;
 		res->hashtable->array[i].counter = 0;
 	}
@@ -1021,9 +1076,9 @@ nb_calqueue* nbc_init(unsigned int threshold, double perc_used_bucket, unsigned 
  */
 void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 {
-	nbc_bucket_node *new_node = node_malloc(payload, timestamp, 0);
+	nbc_bucket_node *bucket, *new_node = node_malloc(payload, timestamp, 0);
 	table * h = NULL;		
-	unsigned int conc_enqueue;
+	unsigned int conc_enqueue, index;
 	unsigned int conc_enqueue_2;
 	double pub = queue->perc_used_bucket;
 	unsigned int epb = queue->elem_per_bucket;
@@ -1041,8 +1096,13 @@ void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 		new_node->epoch = (h->current & MASK_EPOCH);	
 		conc_enqueue =  ATOMIC_READ(&h->e_counter);	
 		attempt_enqueue++;
+		index = hash(timestamp, h->bucket_width) % h->size;
+
+		// node to be added in the hashtable
+		bucket = h->array + index;
 		
-	} while(!insert_std(h, &new_node, REMOVE_DEL_INV)) //;
+	//} while(!insert_std(h, &new_node, REMOVE_DEL_INV)) //;
+	} while(!search_and_insert(bucket, timestamp, new_node->counter, REMOVE_DEL_INV, new_node, &new_node)) //;
 	{
 		h = read_table(&queue->hashtable, th, epb, pub);
 		new_node->epoch = (h->current & MASK_EPOCH);
@@ -1050,6 +1110,10 @@ void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 		concurrent_enqueue += conc_enqueue_2 - conc_enqueue;
 		conc_enqueue = conc_enqueue_2;		
 		attempt_enqueue++;
+		index = hash(timestamp, h->bucket_width) % h->size;
+
+		// node to be added in the hashtable
+		bucket = h->array + index;
 	}
 
 	flush_current(h, new_node);
@@ -1093,7 +1157,6 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 	unsigned int epb = queue->elem_per_bucket;
 	unsigned int th = queue->threshold;
 
-	tail = g_tail;
 	
 	do
 	{
@@ -1119,6 +1182,7 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 		
 		min = array + (index++ % size);
 		left_node = min_next = min->next;
+		tail = min->tail;
 		
 		if(is_marked(min_next, MOV))
 			continue;

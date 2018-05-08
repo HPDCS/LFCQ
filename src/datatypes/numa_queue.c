@@ -316,16 +316,15 @@ double numa_nbc_dequeue(numa_nb_calqueue *queue, void** result)
 
 	tail = g_tail;
 	
-	nbc_bucket_node * volatile candidates[NUMA_NODES];
-	table * volatile c_h[NUMA_NODES];
-	void * volatile c_payloads[NUMA_NODES];
-	volatile bool completed[NUMA_NODES];
-	volatile bool old_epoch = false;
+	nbc_bucket_node * candidates[NUMA_NODES];
+	table * c_h[NUMA_NODES];
+	void * c_payloads[NUMA_NODES];
+	bool completed[NUMA_NODES];
+	bool old_epoch = false;
 	for (i =0; i<NUMA_NODES;i++)
 		completed[i] = false;
 	
 begin:
-	nbc_prune();
 	epoch = queue->global_epoch;
 	for (i =0; i<NUMA_NODES;i++)
 	{
@@ -337,7 +336,6 @@ begin:
 		end = false;
 		do
 		{
-			
 			counter = 0;
 			h = read_table(&queue->hashtable[current_numa_node], th, epb, pub);
 			current = h->current;
