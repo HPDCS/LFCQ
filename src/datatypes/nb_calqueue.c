@@ -1172,9 +1172,9 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 		array = h->array;
 		bucket_width = h->bucket_width;
 		conc_dequeue = ATOMIC_READ(&h->d_counter);
-			counter = 0;
-			index = current >> 32;
-			epoch = current & MASK_EPOCH;
+		counter = 0;
+		index = current >> 32;
+		epoch = current & MASK_EPOCH;
 		
 		assertf(
 				index+1 > MASK_EPOCH, 
@@ -1194,12 +1194,15 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 		//left_node->epoch <= epoch
 		)
 		{	
-			if(left_node->epoch > epoch)
-				counter = 0;
 			left_node_next = left_node->next;
 			left_ts = left_node->timestamp;
 			res = left_node->payload;
-						
+			
+			if(left_node->epoch > epoch){
+				counter = 0;
+				ep++;
+			}
+			else			
 			if(!is_marked(left_node_next))
 			{
 				double rand = 0.0;                      // <----------------------------------------
@@ -1252,6 +1255,7 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 					//drand48_r(&seedT, &rand); 
 					//if(rand < 1.0/2)
 					//if(h->current == current)
+					if(ep == 0)
 					BOOL_CAS(&(h->current), current, ((index << 32) | epoch) );
 
 					scan_list_length += counter;						
