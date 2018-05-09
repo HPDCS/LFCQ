@@ -1156,7 +1156,9 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 	double pub = queue->perc_used_bucket;
 	unsigned int epb = queue->elem_per_bucket;
 	unsigned int th = queue->threshold;
-
+	unsigned int ep = 0;
+	
+	
 	
 	do
 	{
@@ -1187,8 +1189,13 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 		if(is_marked(min_next, MOV))
 			continue;
 		
-		while(left_node->epoch <= epoch)
+		while(
+		1
+		//left_node->epoch <= epoch
+		)
 		{	
+			if(left_node->epoch > epoch)
+				counter = 0;
 			left_node_next = left_node->next;
 			left_ts = left_node->timestamp;
 			res = left_node->payload;
@@ -1244,11 +1251,12 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 					//double rand;			// <----------------------------------------
 					//drand48_r(&seedT, &rand); 
 					//if(rand < 1.0/2)
-					if(h->current == current)
-						BOOL_CAS(&(h->current), current, ((index << 32) | epoch) );
-					concurrent_dequeue += ATOMIC_READ(&h->d_counter) - conc_dequeue;
+					//if(h->current == current)
+					BOOL_CAS(&(h->current), current, ((index << 32) | epoch) );
+
 					scan_list_length += counter;						
 					attempt_dequeue++;
+                                        concurrent_dequeue += ATOMIC_READ(&h->d_counter) - conc_dequeue;
 					break;	
 				}
 				
@@ -1260,7 +1268,8 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 			left_node = get_unmarked(left_node_next);
 			counter++;
 		}
-
+	//if(ep++ % 1000)
+	//	printf("%u- RESTART FOR EPOCH: %u\n", tid, ep);
 	}while(1);
 	
 	

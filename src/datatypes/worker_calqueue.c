@@ -117,11 +117,12 @@ worker_calqueue* worker_nbc_init(unsigned int threshold, double perc_used_bucket
 void helper(worker_calqueue* queue)
 {
 	unsigned long long i = 0, cur_op= 0;
-	from_last_help++;
-	if(from_last_help % CORE_PER_NODE == 0)
-		return;
+	
 	op_descriptor * volatile desc = NULL;
-	for(i = 0; i< threads; i++){
+	if(from_last_help++%2)
+		return;
+	for(i = 0; i< threads; i++)
+	{
 		desc = queue->pending_ops + i*8;
 		cur_op = desc->id_op;
 		if(cur_op > 2ULL && __sync_bool_compare_and_swap(&desc->id_op, cur_op, RUNNING_DESCRIPTOR))

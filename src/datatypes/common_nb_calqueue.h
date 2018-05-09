@@ -150,7 +150,15 @@ typedef struct table table;
 struct table
 {
 	table * volatile new_table;
-	char zpad4[56];
+        // 8
+	unsigned int size;
+        unsigned int pad;
+	//16        
+	double bucket_width;
+	//24        
+	nbc_bucket_node* array;
+	//32
+	char zpad4[32];
 	#if SINGLE_COUNTER == 0
 	atomic_t e_counter;
 	char zpad3[60];
@@ -162,10 +170,10 @@ struct table
 	#endif
 	volatile unsigned long long current;
 	char zpad2[56];
-	unsigned int size;
-	unsigned int pad;
-	double bucket_width;
-	nbc_bucket_node* array;
+	//unsigned int size;
+	//unsigned int pad;
+	//double bucket_width;
+	//nbc_bucket_node* array;
 };
 
 typedef struct nb_calqueue nb_calqueue;

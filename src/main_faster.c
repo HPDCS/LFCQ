@@ -556,7 +556,7 @@ int main(int argc, char **argv)
 	TOTAL_OPS2 += TOTAL_OPS1;
 	
 	
-	NUMA_NODES  = 2;// numa_num_configured_nodes();
+	NUMA_NODES  = numa_num_configured_nodes();
 	switch(DATASTRUCT)
 	{
 		case 'L':
