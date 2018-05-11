@@ -171,6 +171,8 @@ void search(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
 	} while (1);
 }
 
+__thread unsigned long long enqueue_steps = 0;
+ 
 static unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
 						 int flag, nbc_bucket_node *new_node_pointer, nbc_bucket_node **new_node)
 {
@@ -194,7 +196,7 @@ static unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, u
 		
 		do
 		{
-
+			enqueue_steps++;
 			//Find the first unmarked node that is <= timestamp
 			if (!marked)
 			{
@@ -1342,7 +1344,7 @@ double nbc_prune()
 void nbc_report(unsigned int TID)
 {
 	
-	printf("%d- Dequeue: Concurrent:%f, Retries:%f, Lenght:%f, Steps:%f ### Enqueue: Concurrent:%f, Retries:%f, ### Flush: Retries:%f, Succ:%f, RTC:%llu,M:%lld\n",
+	printf("%d- Dequeue: Concurrent:%f, Retries:%f, Lenght:%f, Steps:%f ### Enqueue: Concurrent:%f, Retries:%f, Steps:%f ### Flush: Retries:%f, Succ:%f, RTC:%llu,M:%lld\n",
 			TID,
 			concurrent_dequeue*1.0/attempt_dequeue,
 			attempt_dequeue*1.0/performed_dequeue  ,
@@ -1350,6 +1352,7 @@ void nbc_report(unsigned int TID)
 			dequeue_steps*1.0/performed_dequeue,
 			concurrent_enqueue*1.0/attempt_enqueue ,
 			attempt_enqueue*1.0/performed_enqueue  ,
+			enqueue_steps*1.0/performed_dequeue,
 			flush_current_attempt*1.0/performed_enqueue	  ,
 			flush_current_success*1.0/flush_current_attempt	  ,
 //			flush_current_fail*1.0/flush_current_attempt	  ,
