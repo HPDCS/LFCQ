@@ -171,7 +171,7 @@ void search(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
 	} while (1);
 }
 
-static bool search_and_insert(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
+static unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
 						 int flag, nbc_bucket_node *new_node_pointer, nbc_bucket_node **new_node)
 {
 	nbc_bucket_node *left, *right, *left_next, *tmp, *tmp_next, *tail;
@@ -293,6 +293,8 @@ static bool search_and_insert(nbc_bucket_node *head, double timestamp, unsigned 
 				break;
 			}
 		}
+		else
+			return 3;
 		return false;
 
 		
@@ -1023,6 +1025,10 @@ nb_calqueue* nbc_init(unsigned int threshold, double perc_used_bucket, unsigned 
 	return res;
 }
 
+__thread unsigned long long traversed_in_insert = 0;
+__thread unsigned long long failed_inserts = 0;
+
+
 /**
  * This function implements the enqueue interface of the non-blocking queue.
  * Should cost O(1) when succeeds
@@ -1039,19 +1045,20 @@ void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 {
 	nbc_bucket_node *bucket, *new_node = node_malloc(payload, timestamp, 0);
 	table * h = NULL;		
-	unsigned int conc_enqueue, index;
-	unsigned int conc_enqueue_2;
-	double pub = queue->perc_used_bucket;
-	unsigned int epb = queue->elem_per_bucket;
-	unsigned int th = queue->threshold;
-	//table *old_h = NULL;	
 	unsigned int skip_read_count = 0;
+	unsigned int conc_enqueue, index, res;
+	unsigned int conc_enqueue_2;
+	
+	//double pub = queue->perc_used_bucket;
+	//unsigned int epb = queue->elem_per_bucket;
+	//unsigned int th = queue->threshold;
+	//table *old_h = NULL;	
 	
 	
-	h = queue->hashtable;
+	//h = queue->hashtable;
 	
-	if(skip_read_count++ % 10)
-	h = read_table(&queue->hashtable, th, epb, pub);
+	//if(skip_read_count++ % 10)
+	h = read_table(&queue->hashtable, queue->threshold, queue->elem_per_bucket, queue->perc_used_bucket);
 	//do
 	{
 		//if(old_h != (h = read_table(queue)))
@@ -1069,27 +1076,33 @@ void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 		bucket = h->array + index;
 		
 	//} while(!insert_std(h, &new_node, REMOVE_DEL_INV)) //;
-	} while(!search_and_insert(bucket, timestamp, new_node->counter, REMOVE_DEL_INV, new_node, &new_node)) //;
+	    res = search_and_insert(bucket, timestamp, new_node->counter, REMOVE_DEL_INV, new_node, &new_node);
+	} while(res != 1) //;
 	{
 		
-		h = queue->hashtable;
+		//h = queue->hashtable;
 		
-		if(skip_read_count++ % 10)
-			h = read_table(&queue->hashtable, th, epb, pub);
+		if(res == 3){
+			h = read_table(&queue->hashtable, queue->threshold, queue->elem_per_bucket, queue->perc_used_bucket);
+			conc_enqueue =  ATOMIC_READ(&h->e_counter);	
+			index = hash(timestamp, h->bucket_width) % h->size;
+			bucket = h->array + index;
+		}
+		
 		new_node->epoch = (h->current & MASK_EPOCH);
-		conc_enqueue_2 = ATOMIC_READ(&h->e_counter);
-		concurrent_enqueue += conc_enqueue_2 - conc_enqueue;
-		conc_enqueue = conc_enqueue_2;		
+		//conc_enqueue_2 = ATOMIC_READ(&h->e_counter);
+		//concurrent_enqueue += conc_enqueue_2 - conc_enqueue;
+		//conc_enqueue = conc_enqueue_2;		
 		attempt_enqueue++;
-		index = hash(timestamp, h->bucket_width) % h->size;
+		//	index = hash(timestamp, h->bucket_width) % h->size;
 
 		// node to be added in the hashtable
-		bucket = h->array + index;
+	    res = search_and_insert(bucket, timestamp, new_node->counter, REMOVE_DEL_INV, new_node, &new_node);
 	}
 
 	flush_current(h, new_node);
 	
-				
+	asm volatile("" ::: "memory");
 	conc_enqueue_2 = ATOMIC_READ(&h->e_counter);
 	performed_enqueue++;		
 	concurrent_enqueue += conc_enqueue_2 - conc_enqueue;
@@ -1109,6 +1122,7 @@ void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
  *
  */
  
+__thread unsigned long long dequeue_steps = 0;
  
 double nbc_dequeue(nb_calqueue *queue, void** result)
 {
@@ -1133,19 +1147,20 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 	unsigned int skip_read_count = 0;
 	
 	
+	h = read_table(&queue->hashtable, th, epb, pub);
+	size = h->size;
+	array = h->array;
+	bucket_width = h->bucket_width;
+	conc_dequeue = ATOMIC_READ(&h->d_counter);
 	do
 	{
-		h = queue->hashtable;
-		
-		if(skip_read_count++ % 10)
-		h = read_table(&queue->hashtable, th, epb, pub);
-		
+		//h = queue->hashtable;
 		
 		current = h->current;
-		size = h->size;
-		array = h->array;
-		bucket_width = h->bucket_width;
-		conc_dequeue = ATOMIC_READ(&h->d_counter);
+		//if(skip_read_count++ % 10)
+		//h = read_table(&queue->hashtable, th, epb, pub);
+		
+		
 		counter = 0;
 		index = current >> 32;
 		epoch = current & MASK_EPOCH;
@@ -1161,13 +1176,20 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 		tail = min->tail;
 		
 		if(is_marked(min_next, MOV))
+		{
+			h = read_table(&queue->hashtable, th, epb, pub);
+			conc_dequeue = ATOMIC_READ(&h->d_counter);
+			size = h->size;
+			array = h->array;
+			bucket_width = h->bucket_width;
 			continue;
-		
+		}
 		while(
 		1
 		//left_node->epoch <= epoch
 		)
 		{	
+			dequeue_steps++;
 			left_node_next = left_node->next;
 			left_ts = left_node->timestamp;
 			res = left_node->payload;
@@ -1241,7 +1263,14 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 			}
 			
 			if(is_marked(left_node_next, MOV))
+			{
+				h = read_table(&queue->hashtable, th, epb, pub);
+				conc_dequeue = ATOMIC_READ(&h->d_counter);
+				size = h->size;
+				array = h->array;
+				bucket_width = h->bucket_width;
 				break;
+			}
 			
 			left_node = get_unmarked(left_node_next);
 			counter++;
@@ -1313,15 +1342,17 @@ double nbc_prune()
 void nbc_report(unsigned int TID)
 {
 	
-	printf("CD%d:%f,APD%d:%f,LPD%d:%f,CE%d:%f,APE%d:%f,FPE%d:%f,FSU%d:%f,FFA%d:%f,RTC%d:%llu,M%d:%lld\n",
-							TID, concurrent_dequeue*1.0/attempt_dequeue,
-							TID, attempt_dequeue*1.0/performed_dequeue  ,
-							TID, scan_list_length*1.0/attempt_dequeue	  ,
-							TID, concurrent_enqueue*1.0/attempt_enqueue ,
-							TID, attempt_enqueue*1.0/performed_enqueue  ,
-							TID, flush_current_attempt*1.0/performed_enqueue	  ,
-							TID, flush_current_success*1.0/flush_current_attempt	  ,
-							TID, flush_current_fail*1.0/flush_current_attempt	  ,
-							TID, read_table_count	  ,
-							TID, malloc_status.to_remove_nodes_count);
+	printf("%d- Dequeue: Concurrent:%f, Retries:%f, Lenght:%f, Steps:%f ### Enqueue: Concurrent:%f, Retries:%f, ### Flush: Retries:%f, Succ:%f, RTC:%llu,M:%lld\n",
+			TID,
+			concurrent_dequeue*1.0/attempt_dequeue,
+			attempt_dequeue*1.0/performed_dequeue  ,
+			scan_list_length*1.0/attempt_dequeue	  ,
+			dequeue_steps*1.0/performed_dequeue,
+			concurrent_enqueue*1.0/attempt_enqueue ,
+			attempt_enqueue*1.0/performed_enqueue  ,
+			flush_current_attempt*1.0/performed_enqueue	  ,
+			flush_current_success*1.0/flush_current_attempt	  ,
+//			flush_current_fail*1.0/flush_current_attempt	  ,
+			read_table_count	  ,
+			malloc_status.to_remove_nodes_count);
 }
