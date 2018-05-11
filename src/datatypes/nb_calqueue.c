@@ -75,45 +75,6 @@ nbc_bucket_node *g_tail;
 
 
 /**
- *  This function is an helper to allocate a node and filling its fields.
- *
- *  @author Romolo Marotta
- *
- *  @param payload is a pointer to the referred payload by the node
- *  @param timestamp the timestamp associated to the payload
- *
- *  @return the pointer to the allocated node
- *
- */
-nbc_bucket_node* node_malloc(void *payload, double timestamp, unsigned int tie_breaker)
-{
-	nbc_bucket_node* res;
-	
-	res = mm_node_malloc(&malloc_status);
-	
-	if (unlikely(is_marked(res) || res == NULL))
-	{
-		error("%lu - Not aligned Node or No memory\n", pthread_self());
-		abort();
-	}
-
-	res->counter = tie_breaker;
-	res->next = NULL;
-	res->replica = NULL;
-	res->payload = payload;
-	res->epoch = 0;
-	res->timestamp = timestamp;
-
-	return res;
-}
-
-void node_free(nbc_bucket_node *pointer)
-{	
-	mm_node_free(&malloc_status, pointer);
-}
-
-
-/**
  * This function implements the search of a node that contains a given timestamp t. It finds two adjacent nodes,
  * left and right, such that: left.timestamp <= t and right.timestamp > t.
  *
@@ -1084,7 +1045,13 @@ void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 	unsigned int epb = queue->elem_per_bucket;
 	unsigned int th = queue->threshold;
 	//table *old_h = NULL;	
-
+	unsigned int skip_read_count = 0;
+	
+	
+	h = queue->hashtable;
+	
+	if(skip_read_count++ % 10)
+	h = read_table(&queue->hashtable, th, epb, pub);
 	//do
 	{
 		//if(old_h != (h = read_table(queue)))
@@ -1092,7 +1059,7 @@ void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 		//	old_h = h;
 		//	new_node->epoch = (h->current & MASK_EPOCH);
 		//}
-		h = read_table(&queue->hashtable, th, epb, pub);
+		//h = read_table(&queue->hashtable, th, epb, pub);
 		new_node->epoch = (h->current & MASK_EPOCH);	
 		conc_enqueue =  ATOMIC_READ(&h->e_counter);	
 		attempt_enqueue++;
@@ -1104,7 +1071,11 @@ void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 	//} while(!insert_std(h, &new_node, REMOVE_DEL_INV)) //;
 	} while(!search_and_insert(bucket, timestamp, new_node->counter, REMOVE_DEL_INV, new_node, &new_node)) //;
 	{
-		h = read_table(&queue->hashtable, th, epb, pub);
+		
+		h = queue->hashtable;
+		
+		if(skip_read_count++ % 10)
+			h = read_table(&queue->hashtable, th, epb, pub);
 		new_node->epoch = (h->current & MASK_EPOCH);
 		conc_enqueue_2 = ATOMIC_READ(&h->e_counter);
 		concurrent_enqueue += conc_enqueue_2 - conc_enqueue;
@@ -1137,6 +1108,8 @@ void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
  * @return a pointer to a node that contains the dequeued value
  *
  */
+ 
+ 
 double nbc_dequeue(nb_calqueue *queue, void** result)
 {
 	nbc_bucket_node *min, *min_next, 
@@ -1157,13 +1130,14 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 	unsigned int epb = queue->elem_per_bucket;
 	unsigned int th = queue->threshold;
 	unsigned int ep = 0;
-	
+	unsigned int skip_read_count = 0;
 	
 	
 	do
 	{
+		h = queue->hashtable;
 		
-		
+		if(skip_read_count++ % 10)
 		h = read_table(&queue->hashtable, th, epb, pub);
 		
 		

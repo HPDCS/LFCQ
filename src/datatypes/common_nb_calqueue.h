@@ -224,18 +224,63 @@ extern __thread hpdcs_gc_status malloc_status;
 
 
 void set_new_table(table* h, unsigned int threshold, double pub, unsigned int epb, unsigned int counter);
+
 bool insert_std(table* hashtable, nbc_bucket_node** new_node, int flag);
+
 table* read_table(table * volatile *hashtable, unsigned int threshold, unsigned int elem_per_bucket, double perc_used_bucket);
 void block_table(table* h);
 double compute_mean_separation_time(table* h, unsigned int new_size, unsigned int threashold, unsigned int elem_per_bucket);
-void search(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker, nbc_bucket_node **left_node, nbc_bucket_node **right_node, int flag);
 void migrate_node(nbc_bucket_node *right_node,	table *new_h);
-nbc_bucket_node* node_malloc(void *payload, double timestamp, unsigned int tie_breaker);
-void node_free(nbc_bucket_node *pointer);
+
+void search(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker, nbc_bucket_node **left_node, nbc_bucket_node **right_node, int flag);
+
+//nbc_bucket_node* node_malloc(void *payload, double timestamp, unsigned int tie_breaker);
+//void node_free(nbc_bucket_node *pointer);
+
 void flush_current(table* h, nbc_bucket_node* node);
+
 double nbc_prune();
 void nbc_report(unsigned int);
 
+
+
+/**
+ *  This function is an helper to allocate a node and filling its fields.
+ *
+ *  @author Romolo Marotta
+ *
+ *  @param payload is a pointer to the referred payload by the node
+ *  @param timestamp the timestamp associated to the payload
+ *
+ *  @return the pointer to the allocated node
+ *
+ */
+static inline nbc_bucket_node* node_malloc(void *payload, double timestamp, unsigned int tie_breaker)
+{
+	nbc_bucket_node* res;
+	
+	res = mm_node_malloc(&malloc_status);
+	
+	if (unlikely(is_marked(res) || res == NULL))
+	{
+		error("%lu - Not aligned Node or No memory\n", TID);
+		abort();
+	}
+
+	res->counter = tie_breaker;
+	res->next = NULL;
+	res->replica = NULL;
+	res->payload = payload;
+	res->epoch = 0;
+	res->timestamp = timestamp;
+
+	return res;
+}
+
+static inline void node_free(nbc_bucket_node *pointer)
+{	
+	mm_node_free(&malloc_status, pointer);
+}
 
 
 /**
