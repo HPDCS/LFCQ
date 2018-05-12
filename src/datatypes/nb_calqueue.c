@@ -1125,7 +1125,10 @@ void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
  */
  
 __thread unsigned long long dequeue_steps = 0;
- 
+__thread unsigned long long buckets = 0;
+__thread unsigned long long compact = 0;
+__thread unsigned long long c_success = 0;
+
 double nbc_dequeue(nb_calqueue *queue, void** result)
 {
 	nbc_bucket_node *min, *min_next, 
@@ -1176,6 +1179,7 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 		min = array + (index++ % size);
 		left_node = min_next = min->next;
 		tail = min->tail;
+		ep = 0;
 		
 		if(is_marked(min_next, MOV))
 		{
@@ -1197,8 +1201,11 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 			res = left_node->payload;
 			
 			if(left_node->epoch > epoch){
+				scan_list_length+=counter;
+			
 				counter = 0;
 				ep++;
+				
 			}
 			else			
 			if(!is_marked(left_node_next))
@@ -1207,8 +1214,16 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 				double concurr = concurrent_dequeue;
 				concurr /= performed_dequeue;
 				drand48_r(&seedT, &rand);
-				if(counter > concurr  && rand < 0.5/concurr && BOOL_CAS(&(min->next), min_next, left_node))
+				if(
+					counter > concurr  && 
+					ep == 0 &&
+					//rand < 4/concurr && 
+				
+				BOOL_CAS(&(min->next), min_next, left_node))
 				{
+						scan_list_length+=counter;
+
+						compact++;	
 						connect_to_be_freed_node_list(min_next, counter);
 						counter = 0;
 				}
@@ -1223,30 +1238,37 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 						concurrent_dequeue += ATOMIC_READ(&h->d_counter) - conc_dequeue;
 						scan_list_length += counter;						
 						performed_dequeue++;
-						attempt_dequeue++;
+						
 						#if LOG_DEQUEUE == 1
 							LOG("DEQUEUE: %f %u - %llu %llu\n",left_ts, left_node->counter, index, index % size);
 						#endif
 						*result = res;
 						ATOMIC_INC(&(h->d_counter));
+						
 						return left_ts;
 					}
+					attempt_dequeue++;
 				}
 				else
 				{
 					if(counter > 0 && BOOL_CAS(&(min->next), min_next, left_node))
 					{
+						scan_list_length+=counter;
+						compact++;
 						connect_to_be_freed_node_list(min_next, counter);
+						counter = 0;
 					}
+
 					if(left_node == tail && size == 1 )
 					{
 						#if LOG_DEQUEUE == 1
 						LOG("DEQUEUE: NULL 0 - %llu %llu\n", index, index % size);
 						#endif
+						performed_dequeue++;
 						*result = NULL;
 						concurrent_dequeue += ATOMIC_READ(&h->d_counter) - conc_dequeue;
 						scan_list_length += counter;						
-						attempt_dequeue++;
+						//attempt_dequeue++;
 						return INFTY;
 					}
 					//double rand;			// <----------------------------------------
@@ -1255,9 +1277,9 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 					//if(h->current == current)
 					if(ep == 0)
 					BOOL_CAS(&(h->current), current, ((index << 32) | epoch) );
-
+					buckets++;
 					scan_list_length += counter;						
-					attempt_dequeue++;
+					//attempt_dequeue++;
                                         concurrent_dequeue += ATOMIC_READ(&h->d_counter) - conc_dequeue;
 					break;	
 				}
@@ -1344,12 +1366,14 @@ double nbc_prune()
 void nbc_report(unsigned int TID)
 {
 	
-	printf("%d- Dequeue: Concurrent:%f, Retries:%f, Lenght:%f, Steps:%f ### Enqueue: Concurrent:%f, Retries:%f, Steps:%f ### Flush: Retries:%f, Succ:%f, RTC:%llu,M:%lld\n",
+	printf("%d- Dequeue: Conc.:%.3f, Retries:%.3f, Len:%.3f, Steps:%.3f Buckets:%.3f Compact:%.3f ### Enqueue: Conc.:%.3f, Retries:%.3f, Steps:%.3f ### Flush: Retries:%.3f, Succ:%.3f, RTC:%llu,M:%lld\n",
 			TID,
 			concurrent_dequeue*1.0/attempt_dequeue,
 			attempt_dequeue*1.0/performed_dequeue  ,
 			scan_list_length*1.0/attempt_dequeue	  ,
 			dequeue_steps*1.0/performed_dequeue,
+			buckets*1.0/performed_dequeue,
+			compact*1.0/performed_dequeue,
 			concurrent_enqueue*1.0/attempt_enqueue ,
 			attempt_enqueue*1.0/performed_enqueue  ,
 			enqueue_steps*1.0/performed_dequeue,

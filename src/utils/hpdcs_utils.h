@@ -14,7 +14,7 @@
 #define COLOR_CYAN    "\x1b[36m"
 #define COLOR_RESET   "\x1b[0m"
 
-#define NDEBUG 
+//#define NDEBUG 
 
 #define VA_NUM_ARGS(...) VA_NUM_ARGS_IMPL(__VA_ARGS__, 5,4,3,2,1)
 #define VA_NUM_ARGS_IMPL(_1,_2,_3,_4,_5,N,...) N
