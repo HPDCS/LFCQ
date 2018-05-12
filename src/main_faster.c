@@ -78,6 +78,8 @@ double MEAN_INTERARRIVAL_TIME = 1.00;			// Maximum distance from the current eve
 unsigned int EMPTY_QUEUE;
 double PERC_USED_BUCKET; 	
 unsigned int ELEM_PER_BUCKET;
+char   TEST_MODE;
+unsigned int TIME;
 
 
 __thread struct drand48_data seedT;
@@ -313,7 +315,14 @@ void classic_hold(
 			}
 		}
 		
+		if(TEST_MODE == 'T'){
+			par_count = 0;
+			ops_count[my_id] = 0;
+		}
 		__sync_fetch_and_add(&end_phase_1, 1);
+		
+		while(TEST_MODE == 'T' && end_phase_1 != THREADS+1);
+	
 		
 		switch(PROB_DISTRIBUTION2)
 		{
@@ -340,7 +349,7 @@ void classic_hold(
 		
 		//printf("%d: %lld %lld\n", TID, malloc_status.to_remove_nodes_count, malloc_status.all_malloc);
 		
-		while(tot_count < end_operations2 || end_test)
+		while((TEST_MODE != 'T' && tot_count < end_operations2) || (TEST_MODE == 'T' && !end_test))
 		{
 			//if(tot_count %20000000 == 0 && TID == 0)
 			//	printf("%d - PERC %lld\n", TID, tot_count);
@@ -356,7 +365,7 @@ void classic_hold(
 			else if( DATASTRUCT == 'N' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
 				nbc_prune();
 
-			if(par_count == THREADS)
+			if(par_count == THREADS && TEST_MODE != 'T')
 			{	
 				ops_count[my_id]+=par_count;
 				par_count = 0;
@@ -369,6 +378,15 @@ void classic_hold(
 		
 		if(end_test)
 		{
+			if(TEST_MODE == 'T')
+			{	
+				ops_count[my_id]+=par_count;
+				par_count = 0;
+				tot_count = 0;
+				for(j=0;j<THREADS;j++)
+					tot_count += ops_count[j];
+
+			}
 			for(j=0;j<THREADS;j++)
 				tot_count += ops_count[j];
 			
@@ -481,7 +499,7 @@ void* process(void *arg)
 int main(int argc, char **argv)
 {
 	int par = 1;
-	int num_par = 17;//19;
+	int num_par = 19;//19;
 	unsigned int i = 0;
 	unsigned long long sum = 0;
 	unsigned long long min = -1;
@@ -525,6 +543,8 @@ int main(int argc, char **argv)
 	//PROB_ROLL 					= strtod(argv[par++], (char **)NULL);
 	//MEAN_INTERARRIVAL_TIME	 	= strtod(argv[par++], (char **)NULL);
 	EMPTY_QUEUE 				= (unsigned int) strtol(argv[par++], (char **)NULL, 10);
+	TEST_MODE = argv[par++][0];
+	TIME 			= (unsigned int) strtol(argv[par++], (char **)NULL, 10);
 	
 
 	id = (unsigned int*) malloc(THREADS*sizeof(unsigned int));
@@ -552,6 +572,7 @@ int main(int argc, char **argv)
 	printf("PERC_USED_BUCKET:%f,", PERC_USED_BUCKET);
 	printf("ELEM_PER_BUCKET:%u,", ELEM_PER_BUCKET);
 	printf("EMPTY_QUEUE:%u,", EMPTY_QUEUE);
+	
 
 	TOTAL_OPS2 += TOTAL_OPS1;
 	
@@ -598,9 +619,13 @@ int main(int argc, char **argv)
     __sync_lock_test_and_set(&lock, 0);
     
     
-    
-    
-
+    if(TEST_MODE == 'T'){
+		while(end_phase_1 != THREADS);
+		while(!__sync_bool_compare_and_swap(&end_phase_1, THREADS, THREADS+1));
+		
+		sleep(TIME);
+		__sync_bool_compare_and_swap(&end_test, 0, 1);
+	}
 	for(i=0;i<THREADS;i++)
 		pthread_join(p_tid[i], (void*)&id);
 
@@ -628,6 +653,8 @@ int main(int argc, char **argv)
 
 	printf("CHECK:%lld," , qsi);
 	printf("SUM OP:%lld,", sum);
+	if(TEST_MODE == 'T')
+		printf("THROUGHPUT:%.f3,", sum*2.0/TIME/1000.0);
 	printf("MIN OP:%lld,", min);
 	printf("MAX OP:%lld,", max);
 	printf("AVG OP:%lld,", avg);
