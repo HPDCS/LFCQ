@@ -1200,22 +1200,16 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 			left_ts = left_node->timestamp;
 			res = left_node->payload;
 			
-			if(left_node->epoch > epoch){
-				scan_list_length+=counter;
-			
-				counter = 0;
-				ep++;
-				
-			}
-			else			
+					
 			if(!is_marked(left_node_next))
 			{
+				
 				double rand = 0.0;                      // <----------------------------------------
 				double concurr = concurrent_dequeue;
 				concurr /= performed_dequeue;
 				drand48_r(&seedT, &rand);
 				if(
-					counter > concurr  && 
+					counter > 0 && //concurr  && 
 					ep == 0 &&
 					//rand < 4/concurr && 
 				
@@ -1228,6 +1222,13 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 						counter = 0;
 				}
 
+				
+				if(left_node->epoch > epoch){
+					scan_list_length+=counter;
+					counter = 0;
+					ep++;
+					
+				}else
 				
 				if(left_ts < index*bucket_width)
 				{
