@@ -176,10 +176,10 @@ __thread unsigned long long enqueue_steps = 0;
 static unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
 						 int flag, nbc_bucket_node *new_node_pointer, nbc_bucket_node **new_node)
 {
-	nbc_bucket_node *left, *right, *left_next, *tmp, *tmp_next, *tail;
+	nbc_bucket_node *left, *left_next, *tmp, *tmp_next, *tail;
 	unsigned int counter;
-	unsigned int tmp_tie_breaker;
-	double tmp_timestamp;
+	unsigned int left_tie_breaker, tmp_tie_breaker;
+	double left_timestamp, tmp_timestamp;
 	bool marked, ts_equal, tie_lower, go_to_next;
 
 	do
@@ -187,6 +187,8 @@ static unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, u
 		/// Fetch the head and its next node
 		left = tmp = head;
 		left_next = tmp_next = tmp->next;
+		left_tie_breaker = tmp_tie_breaker = tmp->timestamp;
+		left_timestamp 	= tmp_timestamp    = tmp->counter;
 		tail = tmp->tail;
 		assertf(head == NULL, "PANIC %s\n", "");
 		assertf(tmp_next == NULL, "PANIC1 %s\n", "");
@@ -202,6 +204,8 @@ static unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, u
 			{
 				left = tmp;
 				left_next = tmp_next;
+				left_tie_breaker = tmp_tie_breaker;
+				left_timestamp = tmp_timestamp;
 				counter = 0;
 			}
 			counter+=marked;
@@ -209,10 +213,12 @@ static unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, u
 			// Retrieve timestamp and next field from the current node (tmp)
 			
 			tmp = get_unmarked(tmp_next);
+			
 			tmp_next = tmp->next;
-			marked = is_marked_for_search(tmp_next, flag);
 			tmp_timestamp = tmp->timestamp;
 			tmp_tie_breaker = tmp->counter;
+			
+			marked = is_marked_for_search(tmp_next, flag);
 			// Check if the node is marked
 			go_to_next = LESS(tmp_timestamp, timestamp);
 			ts_equal = D_EQUAL(tmp_timestamp, timestamp);
@@ -231,69 +237,34 @@ static unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, u
 				);
 
 		// Set right node and copy the mark of left node
-		right = get_marked(tmp,get_mark(left_next));
+		//right = get_marked(tmp,get_mark(left_next));
 		
 		// at this point they are adjacent
 		
-		if(!is_marked(right, MOV))
+		if(!is_marked(tmp, MOV))
 		{
-			switch(flag)
+			// mark the to-be.inserted node as INV
+			new_node_pointer->next = get_marked(tmp, INV & (-(flag == REMOVE_DEL)) );
+			
+			new_node_pointer->counter =  ((-(flag == REMOVE_DEL_INV)) & (1 + ( -D_EQUAL(timestamp, left_timestamp ) & left_tie_breaker ))) +
+										 ((-(flag == REMOVE_DEL_INV)));
+
+			// node already exists
+			if(flag == REMOVE_DEL && D_EQUAL(timestamp, left_timestamp ) && left_tie_breaker == tie_breaker)
 			{
-			case REMOVE_DEL_INV:
-
-				new_node_pointer->next = right;
-				// set tie_breaker
-				new_node_pointer->counter = 1 + ( -D_EQUAL(timestamp, left->timestamp ) & left->counter );
-
-
-				if (BOOL_CAS
-							(
-								&(left->next),
-								left_next,
-								new_node_pointer
-							)
-				)
-				{
-					if (counter > 0)
-					{
-						connect_to_be_freed_node_list(left_next, counter);
-					}
-					return true;
-				}
-
-				// reset tie breaker for the new search
-				new_node_pointer->counter = 0;
-				break;
-
-			case REMOVE_DEL:
-
-				// mark the to-be.inserted node as INV
-				new_node_pointer->next = get_marked(right, INV);
-				// node already exists
-				if(D_EQUAL(timestamp, left->timestamp ) && left->counter == tie_breaker)
-				{
-					node_free(new_node_pointer);
-					*new_node = left;
-					return true;
-				}
-				// copy left node mark			
-				new_node_pointer = get_marked(new_node_pointer,get_mark(right));
-
-				if (BOOL_CAS(
-							&(left->next),
-							left_next,
-							new_node_pointer
-						)
-				)
-				{
-					if (counter > 0)
-					{
-						connect_to_be_freed_node_list(left_next, counter);
-					}
-					return true;
-				}
-				break;
+				node_free(new_node_pointer);
+				*new_node = left;
+				return true;
 			}
+							// copy left node mark			
+			if (BOOL_CAS(&(left->next), left_next, get_marked(new_node_pointer,get_mark(left_next))))
+			{
+				if (counter > 0)
+					connect_to_be_freed_node_list(left_next, counter);
+				return true;
+			}
+			// reset tie breaker for the new search
+			new_node_pointer->counter &= ~(-(flag == REMOVE_DEL_INV));
 		}
 		else
 			return 3;
@@ -1047,64 +1018,29 @@ void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 {
 	nbc_bucket_node *bucket, *new_node = node_malloc(payload, timestamp, 0);
 	table * h = NULL;		
-	unsigned int skip_read_count = 0;
-	unsigned int conc_enqueue, index, res;
-	unsigned int conc_enqueue_2;
 	
-	//double pub = queue->perc_used_bucket;
-	//unsigned int epb = queue->elem_per_bucket;
-	//unsigned int th = queue->threshold;
-	//table *old_h = NULL;	
+	unsigned int conc_enqueue, index, res, conc_enqueue_2;
+	double pub = queue->perc_used_bucket;
+	unsigned int epb = queue->elem_per_bucket;
+	unsigned int th = queue->threshold;
 	
-	
-	//h = queue->hashtable;
-	
-	//if(skip_read_count++ % 10)
-	h = read_table(&queue->hashtable, queue->threshold, queue->elem_per_bucket, queue->perc_used_bucket);
-	//do
-	{
-		//if(old_h != (h = read_table(queue)))
-		//{
-		//	old_h = h;
-		//	new_node->epoch = (h->current & MASK_EPOCH);
-		//}
-		//h = read_table(&queue->hashtable, th, epb, pub);
-		new_node->epoch = (h->current & MASK_EPOCH);	
-		conc_enqueue =  ATOMIC_READ(&h->e_counter);	
-		attempt_enqueue++;
-		index = hash(timestamp, h->bucket_width) % h->size;
+	res = 3;
 
-		// node to be added in the hashtable
-		bucket = h->array + index;
-		
-	//} while(!insert_std(h, &new_node, REMOVE_DEL_INV)) //;
-	    res = search_and_insert(bucket, timestamp, new_node->counter, REMOVE_DEL_INV, new_node, &new_node);
-	} while(res != 1) //;
-	{
-		
-		//h = queue->hashtable;
-		
+	while(res != 1){
 		if(res == 3){
-			h = read_table(&queue->hashtable, queue->threshold, queue->elem_per_bucket, queue->perc_used_bucket);
+			h = read_table(&queue->hashtable, th, epb, pub);
 			conc_enqueue =  ATOMIC_READ(&h->e_counter);	
 			index = hash(timestamp, h->bucket_width) % h->size;
 			bucket = h->array + index;
 		}
 		
 		new_node->epoch = (h->current & MASK_EPOCH);
-		//conc_enqueue_2 = ATOMIC_READ(&h->e_counter);
-		//concurrent_enqueue += conc_enqueue_2 - conc_enqueue;
-		//conc_enqueue = conc_enqueue_2;		
 		attempt_enqueue++;
-		//	index = hash(timestamp, h->bucket_width) % h->size;
-
-		// node to be added in the hashtable
 	    res = search_and_insert(bucket, timestamp, new_node->counter, REMOVE_DEL_INV, new_node, &new_node);
 	}
 
 	flush_current(h, new_node);
 	
-	asm volatile("" ::: "memory");
 	conc_enqueue_2 = ATOMIC_READ(&h->e_counter);
 	performed_enqueue++;		
 	concurrent_enqueue += conc_enqueue_2 - conc_enqueue;
@@ -1149,32 +1085,25 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 	unsigned int epb = queue->elem_per_bucket;
 	unsigned int th = queue->threshold;
 	unsigned int ep = 0;
-	unsigned int skip_read_count = 0;
-	
+	double rand = 0.0;                      // <----------------------------------------
+	double concurr = concurrent_dequeue;
+	concurr /= performed_dequeue;
+			
 	
 	h = read_table(&queue->hashtable, th, epb, pub);
 	size = h->size;
 	array = h->array;
 	bucket_width = h->bucket_width;
 	conc_dequeue = ATOMIC_READ(&h->d_counter);
+	
 	do
 	{
-		//h = queue->hashtable;
-		
 		current = h->current;
-		//if(skip_read_count++ % 10)
-		//h = read_table(&queue->hashtable, th, epb, pub);
-		
-		
 		counter = 0;
 		index = current >> 32;
 		epoch = current & MASK_EPOCH;
 		
-		assertf(
-				index+1 > MASK_EPOCH, 
-				"\nOVERFLOW INDEX:%llu  BW:%.10f SIZE:%u TAIL:%p TABLE:%p NUM_ELEM:%u\n",
-				index, bucket_width, size, tail, h, ATOMIC_READ(&h->counter)
-			);
+		assertf(index+1 > MASK_EPOCH, "\nOVERFLOW INDEX:%llu  BW:%.10f SIZE:%u TAIL:%p TABLE:%p NUM_ELEM:%u\n", index, bucket_width, size, tail, h, ATOMIC_READ(&h->counter));
 		
 		min = array + (index++ % size);
 		left_node = min_next = min->next;
@@ -1190,38 +1119,29 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 			bucket_width = h->bucket_width;
 			continue;
 		}
-		while(
-		1
-		//left_node->epoch <= epoch
+		while( 1 //left_node->epoch <= epoch
 		)
 		{	
 			dequeue_steps++;
 			left_node_next = left_node->next;
 			left_ts = left_node->timestamp;
 			res = left_node->payload;
-			
-					
+								
 			if(!is_marked(left_node_next))
 			{
-				
-				double rand = 0.0;                      // <----------------------------------------
-				double concurr = concurrent_dequeue;
-				concurr /= performed_dequeue;
 				drand48_r(&seedT, &rand);
-				if(
+				if( 0 &&
 					counter > 0 && //concurr  && 
 					ep == 0 &&
 					//rand < 4/concurr && 
-				
-				BOOL_CAS(&(min->next), min_next, left_node))
+					BOOL_CAS(&(min->next), min_next, left_node)
+				)
 				{
 						scan_list_length+=counter;
-
 						compact++;	
 						connect_to_be_freed_node_list(min_next, counter);
 						counter = 0;
 				}
-
 				
 				if(left_node->epoch > epoch){
 					scan_list_length+=counter;
@@ -1232,7 +1152,6 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 				
 				if(left_ts < index*bucket_width)
 				{
-					//left_node_next = FETCH_AND_OR(&left_node->next, DEL);
 					left_node_next = VAL_CAS(&left_node->next, left_node_next, get_marked(left_node_next, DEL));
 					if(!is_marked(left_node_next))
 					{
@@ -1252,14 +1171,18 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 				}
 				else
 				{
-					if(counter > 0 && BOOL_CAS(&(min->next), min_next, left_node))
+					if(
+						counter > 0 && //concurr  && 
+						ep == 0 &&
+						//rand < 4/concurr && 
+						BOOL_CAS(&(min->next), min_next, left_node)
+					)
 					{
-						scan_list_length+=counter;
-						compact++;
-						connect_to_be_freed_node_list(min_next, counter);
-						counter = 0;
+							scan_list_length+=counter;
+							compact++;	
+							connect_to_be_freed_node_list(min_next, counter);
+							counter = 0;
 					}
-
 					if(left_node == tail && size == 1 )
 					{
 						#if LOG_DEQUEUE == 1
@@ -1269,19 +1192,15 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 						*result = NULL;
 						concurrent_dequeue += ATOMIC_READ(&h->d_counter) - conc_dequeue;
 						scan_list_length += counter;						
-						//attempt_dequeue++;
 						return INFTY;
 					}
-					//double rand;			// <----------------------------------------
 					//drand48_r(&seedT, &rand); 
 					//if(rand < 1.0/2)
 					//if(h->current == current)
 					if(ep == 0)
 					BOOL_CAS(&(h->current), current, ((index << 32) | epoch) );
 					buckets++;
-					scan_list_length += counter;						
-					//attempt_dequeue++;
-                                        concurrent_dequeue += ATOMIC_READ(&h->d_counter) - conc_dequeue;
+					scan_list_length += counter;
 					break;	
 				}
 				
@@ -1300,8 +1219,7 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 			left_node = get_unmarked(left_node_next);
 			counter++;
 		}
-	//if(ep++ % 1000)
-	//	printf("%u- RESTART FOR EPOCH: %u\n", tid, ep);
+		
 	}while(1);
 	
 	
