@@ -653,8 +653,10 @@ int main(int argc, char **argv)
 
 	printf("CHECK:%lld," , qsi);
 	printf("SUM OP:%lld,", sum);
-	if(TEST_MODE == 'T')
-		printf("THROUGHPUT:%.f3,", sum*2.0/TIME/1000.0);
+	if(TEST_MODE == 'T'){
+		printf("TIME:%.3f,", 1.0*TIME);
+		printf("THROUGHPUT:%.3f,", sum*2.0/TIME/1000.0);
+	}
 	printf("MIN OP:%lld,", min);
 	printf("MAX OP:%lld,", max);
 	printf("AVG OP:%lld,", avg);
