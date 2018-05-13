@@ -618,17 +618,21 @@ int main(int argc, char **argv)
 	
     __sync_lock_test_and_set(&lock, 0);
     
-    
+     struct timespec start, end;
     if(TEST_MODE == 'T'){
 		while(end_phase_1 != THREADS);
 		while(!__sync_bool_compare_and_swap(&end_phase_1, THREADS, THREADS+1));
-		
+		gettime(&start);
 		sleep(TIME);
 		__sync_bool_compare_and_swap(&end_test, 0, 1);
 	}
+	gettime(&end);
 	for(i=0;i<THREADS;i++)
 		pthread_join(p_tid[i], (void*)&id);
 
+
+	struct timespec elapsed = timediff(start, end);
+    double dt = elapsed.tv_sec + (double)elapsed.tv_nsec / 1000000000.0;
 	for(i=0;i<THREADS;i++)
 	{
 		qsi += ops[i];
@@ -654,8 +658,8 @@ int main(int argc, char **argv)
 	printf("CHECK:%lld," , qsi);
 	printf("SUM OP:%lld,", sum);
 	if(TEST_MODE == 'T'){
-		printf("TIME:%.3f,", 1.0*TIME);
-		printf("THROUGHPUT:%.3f,", sum*2.0/TIME/1000.0);
+		printf("TIME:%.8f,", dt);
+		printf("THROUGHPUT:%.3f,", sum*2.0/dt/1000.0);
 	}
 	printf("MIN OP:%lld,", min);
 	printf("MAX OP:%lld,", max);

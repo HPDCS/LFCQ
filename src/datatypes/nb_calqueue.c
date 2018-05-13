@@ -1088,7 +1088,7 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 	double rand = 0.0;                      // <----------------------------------------
 	double concurr = concurrent_dequeue;
 	concurr /= performed_dequeue;
-			
+	bool successful_cas = false;			
 	
 	h = read_table(&queue->hashtable, th, epb, pub);
 	size = h->size;
@@ -1120,7 +1120,7 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 			continue;
 		}
 		
-		while( left_node->epoch <= epoch
+		while( 1//left_node->epoch <= epoch
 		)
 		{	
 			dequeue_steps++;
@@ -1132,9 +1132,12 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 			{
 				drand48_r(&seedT, &rand);
 				if( 0 &&
-					counter > 0 && //concurr  && 
+					counter > 
+					//0 && 
+					concurr/2  && 
+					//counter == (TID*((int)concurr/2)+1) == 0 &&
 					ep == 0 &&
-					//rand < 4/concurr && 
+					(successful_cas = rand < 0.25/concurr) && 
 					BOOL_CAS(&(min->next), min_next, left_node)
 				)
 				{
@@ -1144,6 +1147,8 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 						counter = 0;
 				}
 				
+				//c_success += successful_cas;
+
 				if(left_node->epoch > epoch){
 					scan_list_length+=counter;
 					counter = 0;
@@ -1172,10 +1177,12 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 				}
 				else
 				{
-					if(
-						counter > 0 && //concurr  && 
+					drand48_r(&seedT, &rand);
+
+					if( //0 &&
+						(successful_cas = counter > 0) && //concurr  && 
 						ep == 0 &&
-						//rand < 4/concurr && 
+						(successful_cas = rand < 0.5/concurr) && 
 						BOOL_CAS(&(min->next), min_next, left_node)
 					)
 					{
@@ -1184,7 +1191,8 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 							connect_to_be_freed_node_list(min_next, counter);
 							counter = 0;
 					}
-					if(left_node == tail && size == 1 )
+					c_success+=successful_cas;
+					if(left_node == tail && size == 1 && !is_marked(min->next, MOV))
 					{
 						#if LOG_DEQUEUE == 1
 						LOG("DEQUEUE: NULL 0 - %llu %llu\n", index, index % size);
@@ -1196,13 +1204,17 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 						attempt_dequeue++;						
 						return INFTY;
 					}
-					drand48_r(&seedT, &rand); 
-					if(rand < 1.0/2)
-					//if(h->current == current)
+					//drand48_r(&seedT, &rand); 
+ 					scan_list_length += counter;
+					//counter = 5000;
+					//while(rand*counter-- > 0);
+					//if(rand < 1.0/2)
+					
 					if(ep == 0)
-					BOOL_CAS(&(h->current), current, ((index << 32) | epoch) );
+						if(h->current == current)
+							BOOL_CAS(&(h->current), current, ((index << 32) | epoch) );
 					concurrent_dequeue += ATOMIC_READ(&h->d_counter) - conc_dequeue;
-					scan_list_length += counter;
+					//scan_list_length += counter;
 					attempt_dequeue++;
 					buckets++;
 					break;	
@@ -1223,7 +1235,7 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 			left_node = get_unmarked(left_node_next);
 			counter++;
 		}
-					attempt_dequeue++;
+//					attempt_dequeue++;
 		
 	}while(1);
 	
@@ -1290,19 +1302,23 @@ double nbc_prune()
 void nbc_report(unsigned int TID)
 {
 	
-	printf("%d- Dequeue: Conc.:%.3f, Retries:%.3f, Len:%.3f, Buckets:%.3f, Steps:%.3f Compact:%.3f ### Enqueue: Conc.:%.3f, Retries:%.3f, Steps:%.3f ### Flush: Retries:%.3f, Succ:%.3f, RTC:%llu,M:%lld\n",
+	printf("%d- "
+	"Dequeue: Conc.:%.3f, Retries:%.3f, Len:%.3f, Buckets:%.3f, Steps:%.3f Compact:%.3f Compact_success:%.3f ### "
+	"Enqueue: Conc.:%.3f, "/*Retries:%.3f,*/ "Steps:%.3f " // ### Flush: Retries:%.3f, Succ:%.3f, 
+	"RTC:%llu,M:%lld\n",
 			TID,
 			concurrent_dequeue*1.0/attempt_dequeue,
 			attempt_dequeue*1.0/performed_dequeue  ,
 			scan_list_length*1.0/attempt_dequeue	  ,
 			buckets*1.0/attempt_dequeue	  ,
 			dequeue_steps*1.0/performed_dequeue,
-			compact*1.0/performed_dequeue,
+			c_success*1.0/performed_dequeue,
+			compact*1.0/c_success,
 			concurrent_enqueue*1.0/attempt_enqueue ,
-			attempt_enqueue*1.0/performed_enqueue  ,
+			//attempt_enqueue*1.0/performed_enqueue  ,
 			enqueue_steps*1.0/performed_dequeue,
-			flush_current_attempt*1.0/performed_enqueue	  ,
-			flush_current_success*1.0/flush_current_attempt	  ,
+			//flush_current_attempt*1.0/performed_enqueue	  ,
+			//flush_current_success*1.0/flush_current_attempt	  ,
 //			flush_current_fail*1.0/flush_current_attempt	  ,
 			read_table_count	  ,
 			malloc_status.to_remove_nodes_count);
