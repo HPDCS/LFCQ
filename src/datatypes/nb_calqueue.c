@@ -1072,7 +1072,7 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 					*res, *tail, *array;
 	table * h;
 	
-	unsigned long long current;
+	unsigned long long current, old_current, new_current;
 	unsigned long long index;
 	unsigned long long epoch;
 	
@@ -1094,11 +1094,11 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 	size = h->size;
 	array = h->array;
 	bucket_width = h->bucket_width;
+	current = h->current;
 	
 	do
 	{
 		conc_dequeue = ATOMIC_READ(&h->d_counter);
-		current = h->current;
 		counter = 0;
 		index = current >> 32;
 		epoch = current & MASK_EPOCH;
@@ -1117,6 +1117,7 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 			size = h->size;
 			array = h->array;
 			bucket_width = h->bucket_width;
+			current = h->current;
 			continue;
 		}
 		
@@ -1210,9 +1211,20 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 					//while(rand*counter-- > 0);
 					//if(rand < 1.0/2)
 					
+					
 					if(ep == 0)
-						if(h->current == current)
-							BOOL_CAS(&(h->current), current, ((index << 32) | epoch) );
+					{
+						new_current = h->current;
+						if(new_current == current){
+							old_current = VAL_CAS(&(h->current), current, ((index << 32) | epoch) );
+							if(old_current == current)
+								current = ((index << 32) | epoch);
+							else
+								current = old_current;
+						}
+						else
+							current = new_current;
+					}
 					concurrent_dequeue += ATOMIC_READ(&h->d_counter) - conc_dequeue;
 					//scan_list_length += counter;
 					attempt_dequeue++;
@@ -1229,6 +1241,7 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 				size = h->size;
 				array = h->array;
 				bucket_width = h->bucket_width;
+				current = h->current;
 				break;
 			}
 			
