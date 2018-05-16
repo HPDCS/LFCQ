@@ -131,16 +131,16 @@ typedef struct __bucket_node nbc_bucket_node;
 struct __bucket_node
 {
 	void *payload;  				// general payload
-	double timestamp;  				// key
-	//16
 	unsigned long long epoch;		//enqueue's epoch
+	//16
+	double timestamp;  				// key
 	unsigned int counter; 			// used to resolve the conflict with same timestamp using a FIFO policy
 	unsigned int nid; 				// used to resolve the conflict with same timestamp using a FIFO policy
 	//32
 	nbc_bucket_node * tail;
 	nbc_bucket_node * volatile next;	// pointer to the successor
 	nbc_bucket_node * volatile replica;	// pointer to the replica
-	char pad2[8];
+	unsigned long long pad2;
 };
 
 
@@ -152,7 +152,7 @@ struct table
 	table * volatile new_table;
         // 8
 	unsigned int size;
-        unsigned int pad;
+    unsigned int pad;
 	//16        
 	double bucket_width;
 	//24        
@@ -184,9 +184,10 @@ struct nb_calqueue
 	double perc_used_bucket;
 	// 16
 	double pub_per_epb;
-	// 24
-	char zpad9[40];
-	// 56
+	nbc_bucket_node * tail;
+	// 32
+	char zpad9[32];
+	// 64
 	table * volatile hashtable;
 	// 64
 };

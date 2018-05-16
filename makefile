@@ -76,6 +76,8 @@ $(OBJS_DIR)/%.o: %.c
 	@echo 'Invoking: Cross GCC Compiler'
 	-mkdir -p  $(subst $(shell basename $@),, $@)
 	gcc $(MACRO) $(OPTIMIZATION) $(DEBUG) $(FLAGS) $(LIBS) -Wall -c -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o "$@" "$<"
+	gcc $(MACRO) $(OPTIMIZATION) $(DEBUG) $(FLAGS) $(LIBS) -Wall -S -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o "$(@:%.o=%.s)" "$<"
+	objdump -S --disassemble $(@) > $(@:%.o=%.s) 
 	@echo 'Finished building: $<'
 	@echo ' '
 
