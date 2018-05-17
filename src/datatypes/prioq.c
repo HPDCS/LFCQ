@@ -59,6 +59,9 @@ __thread ptst_t *ptst;
 
 static int gc_id[NUM_LEVELS];
 
+__thread node_t *last_head = NULL;
+__thread node_t *last_min = NULL;
+__thread unsigned int last_offset = 0;
 
 /* initialize new node */
 static node_t *
@@ -310,14 +313,21 @@ deletemin(pq_t *pq)
 
     x = pq->head;
     obs_head = x->next[0];
-
+    
+	if(last_head == obs_head){
+		x = last_min;
+		offset = last_offset;
+	}
+	else
+		last_head = obs_head;
     do {
 	offset++;
 
-        /* expensive, high probability that this cache line has
+    /* expensive, high probability that this cache line has
 	 * been modified */
 	nxt = x->next[0];
-
+	
+		
         // tail cannot be deleted
 	if (get_unmarked_ref(nxt) == pq->tail) {
 	    goto out;
@@ -337,7 +347,10 @@ deletemin(pq_t *pq)
     while ( (x = get_unmarked_ref(nxt)) && is_marked_ref(nxt) );
 
     assert(!is_marked_ref(x));
-
+	
+	last_min = x;
+	last_offset = offset;
+	
     v = x->v;
 
     
