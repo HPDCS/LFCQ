@@ -347,10 +347,7 @@ deletemin(pq_t *pq)
     while ( (x = get_unmarked_ref(nxt)) && is_marked_ref(nxt) );
 
     assert(!is_marked_ref(x));
-	
-	last_min = x;
-	last_offset = offset;
-	
+		
     v = x->v;
 
     
@@ -358,6 +355,9 @@ deletemin(pq_t *pq)
      * deleted node as the new lowest-level head pointed node
      * candidate. */
     if (newhead == NULL) newhead = x;
+	
+	last_min = newhead;
+	last_offset = offset;
 
     /* if the offset is big enough, try to update the head node and
      * perform memory reclamation */
@@ -370,6 +370,8 @@ deletemin(pq_t *pq)
      * which is deleted */
     if (__sync_bool_compare_and_swap(&pq->head->next[0], obs_head, get_marked_ref(newhead)))
     {
+	last_offset = 0;
+	last_min = NULL;
 	/* Update higher level pointers. */
 	restructure(pq);
 
