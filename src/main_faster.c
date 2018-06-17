@@ -314,15 +314,14 @@ void classic_hold(
 					tot_count += ops_count[j];
 			}
 		}
+		__sync_fetch_and_add(&end_phase_1, 1);
+		
+		while(TEST_MODE == 'T' && end_phase_1 != THREADS+1);
 		
 		if(TEST_MODE == 'T'){
 			par_count = 0;
 			ops_count[my_id] = 0;
 		}
-		__sync_fetch_and_add(&end_phase_1, 1);
-		
-		while(TEST_MODE == 'T' && end_phase_1 != THREADS+1);
-	
 		
 		switch(PROB_DISTRIBUTION2)
 		{
@@ -347,12 +346,8 @@ void classic_hold(
 		}
 		
 		
-		//printf("%d: %lld %lld\n", TID, malloc_status.to_remove_nodes_count, malloc_status.all_malloc);
-		
 		while((TEST_MODE != 'T' && tot_count < end_operations2) || (TEST_MODE == 'T' && !end_test))
 		{
-			//if(tot_count %20000000 == 0 && TID == 0)
-			//	printf("%d - PERC %lld\n", TID, tot_count);
 			par_count++;
 			timestamp = dequeue();
 			if(timestamp != INFTY)
@@ -391,12 +386,12 @@ void classic_hold(
 				tot_count += ops_count[j];
 			
 			__sync_val_compare_and_swap(&final_ops, 0, tot_count);
+			(*n_dequeue) = local_dequeue;
+			(*n_enqueue) = local_enqueue;
 			return;
 		}
 		
 		__sync_fetch_and_add(&end_phase_2, 1);
-		
-		//printf("%d: %lld %lld\n", TID, malloc_status.to_remove_nodes_count, malloc_status.all_malloc);	
 		
 		while(tot_count < end_operations)
 		{
@@ -461,13 +456,9 @@ void* process(void *arg)
     
     
 	
-	//while(!__sync_bool_compare_and_swap(&lock, 0, 0));
 	while(lock);
 	
-
-	//markov_hold(my_id, &seed, &seed2, &n_dequeue, &n_enqueue);
 	classic_hold(my_id, &seed, &seed2, &n_dequeue, &n_enqueue);
-
 	
 	while(EMPTY_QUEUE)
 	{
@@ -480,7 +471,6 @@ void* process(void *arg)
 
 	ops[my_id] = n_enqueue - n_dequeue;
 	malloc_op[my_id] =  malloc_status.to_remove_nodes_count;
-	//printf("%lld\t%lld \n", malloc_status.to_remove_nodes_count, n_enqueue - n_dequeue);
 	
 	__sync_fetch_and_add(&BARRIER, 1);
 
@@ -609,6 +599,8 @@ int main(int argc, char **argv)
 	{
 		id[i] = i;
 		ops_count[i] = 0;
+		ops[i] = 0;
+		malloc_op[i] = 0;
 		pthread_create(p_tid +i, NULL, process, id+i);
 	}
 	
@@ -618,7 +610,7 @@ int main(int argc, char **argv)
 	
     __sync_lock_test_and_set(&lock, 0);
     
-     struct timespec start, end;
+    struct timespec start, end;
     if(TEST_MODE == 'T'){
 		while(end_phase_1 != THREADS);
 		while(!__sync_bool_compare_and_swap(&end_phase_1, THREADS, THREADS+1));
