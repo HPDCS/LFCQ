@@ -314,12 +314,13 @@ deletemin(pq_t *pq)
     x = pq->head;
     obs_head = x->next[0];
     
-	if(last_head == obs_head){
+	if(last_min && last_head == obs_head){
 		x = last_min;
 		offset = last_offset;
 	}
 	else
 		last_head = obs_head;
+		
     do {
 	offset++;
 
@@ -336,13 +337,22 @@ deletemin(pq_t *pq)
 	/* Do not allow head to point past a node currently being
 	 * inserted. This makes the lock-freedom quite a theoretic
 	 * matter. */
-	if (newhead == NULL && x->inserting) newhead = x;
-
+	if (newhead == NULL && x->inserting){
+		 newhead = x;
+		 last_min = newhead;
+		 last_offset = offset;
+	}
+	
 	/* optimization */
 	if (is_marked_ref(nxt)) continue;
+	
 	/* the marker is on the preceding pointer */
-        /* linearisation point deletemin */
+    /* linearisation point deletemin */
 	nxt = __sync_fetch_and_or(&x->next[0], 1);
+	if(newhead == NULL && !is_marked_ref(nxt)){
+		last_min = x;
+		last_offset = offset;
+	}
     }
     while ( (x = get_unmarked_ref(nxt)) && is_marked_ref(nxt) );
 
@@ -356,8 +366,6 @@ deletemin(pq_t *pq)
      * candidate. */
     if (newhead == NULL) newhead = x;
 	
-	last_min = newhead;
-	last_offset = offset;
 
     /* if the offset is big enough, try to update the head node and
      * perform memory reclamation */
