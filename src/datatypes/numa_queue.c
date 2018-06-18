@@ -28,6 +28,8 @@
 
 #include "numa_queue.h"
 
+__thread unsigned long long performed_enqueue;
+
 /**
  * This function commits a value in the current field of a queue. It retries until the timestamp
  * associated with current is strictly less than the value that has to be committed

@@ -43,8 +43,8 @@
 #define LESS(a,b) 		( (a) <  (b) )
 #define LEQ(a,b)		( (a) <= (b) )
 #define D_EQUAL(a,b) 	( (a) == (b) )
-#define GEQ(a,b) 		( (a) >  (b) )
-#define GREATER(a,b) 	( (a) >= (b) )
+#define GEQ(a,b) 		( (a) >= (b) )
+#define GREATER(a,b) 	( (a) >  (b) )
 #define SAMPLE_SIZE 25
 #define HEAD_ID 0
 #define MAXIMUM_SIZE 1048576 //524288 //262144 //131072 //65536 //32768
@@ -122,6 +122,13 @@
 
 
 #define SINGLE_COUNTER 0
+
+#define MONITOR_PERIOD 16
+#define READTABLE_PERIOD 32
+#define COMPACT_RANDOM_ENQUEUE 1
+#define COMPACT_RANDOM_DEQUEUE 1
+#define DISTANCE_FROM_CURRENT 0.0
+
 
 /**
  *  Struct that define a node in a bucket
@@ -238,7 +245,7 @@ void search(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker, n
 //nbc_bucket_node* node_malloc(void *payload, double timestamp, unsigned int tie_breaker);
 //void node_free(nbc_bucket_node *pointer);
 
-void flush_current(table* h, nbc_bucket_node* node);
+void flush_current(table* h, unsigned long long newIndex, nbc_bucket_node* node);
 
 double nbc_prune();
 void nbc_report(unsigned int);
