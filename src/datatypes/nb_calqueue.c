@@ -1153,9 +1153,10 @@ void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 {
 	nbc_bucket_node *bucket, *new_node = node_malloc(payload, timestamp, 0);
 	table * h = NULL;		
-	unsigned int index, res;
+	unsigned int index, res, dist;
 	unsigned long long cur_enqueues = 0;
 	unsigned long long newIndex = 0;
+	
 	
 	// get configuration of the queue
 	double pub = queue->perc_used_bucket;
@@ -1199,6 +1200,10 @@ void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 	// updates for statistics
 	if(monitor)
 	{
+		
+		unsigned long long oldCur = h->current;
+		unsigned long long oldIndex = oldCur >> 32;
+		dist = h->size*DISTANCE_FROM_CURRENT+1;
 		concurrent_enqueue += __sync_fetch_and_add(&h->e_counter.count, flush_eq) - cur_enqueues;
 		flush_eq = 0;
 		
@@ -1207,7 +1212,7 @@ void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 		double rand;
 		nbc_bucket_node *left_node, *right_node;
 		drand48_r(&seedT, &rand);
-		search(h->array+(unsigned int)(h->size*rand), -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
+		search(h->array+((oldIndex + dist + (unsigned int)((h->size-dist)*rand))%h->size), -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
 		#endif
 	}
 	
@@ -1240,7 +1245,7 @@ __thread unsigned long long num_cas = 0ULL;
 	unsigned long long epoch;
 	unsigned long long cur_dequeues = 0;
 	
-	unsigned int size;
+	unsigned int size, dist;
 	unsigned int counter;
 	double bucket_width, left_ts, right_limit;
 	
@@ -1277,14 +1282,10 @@ begin:
 	
 	#if COMPACT_RANDOM_DEQUEUE == 1
 	if(monitor){
+		dist = h->size*DISTANCE_FROM_CURRENT+1;
 		drand48_r(&seedT, &rand);
 		index = current >> 32;
-		if(index < th)
-			index = (index*rand);
-		else
-			index = (index-(unsigned int)(th*rand));
-		index = index % size;
-		search(array+index, -1.0, 0, &left_nodea, &right_node, REMOVE_DEL_INV);
+		search(array+((index + dist + (unsigned int)( (size-dist)*rand))%size), -1.0, 0,  &left_nodea, &right_node, REMOVE_DEL_INV);
 	}
 	#endif
 	
