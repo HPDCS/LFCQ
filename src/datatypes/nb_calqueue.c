@@ -283,10 +283,14 @@ static unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, u
 	nbc_bucket_node *left, *left_next, *tmp, *tmp_next, *tail;
 	unsigned int counter;
 	unsigned int left_tie_breaker, tmp_tie_breaker;
-	double left_timestamp, tmp_timestamp;
+	double left_timestamp, tmp_timestamp, rand;
 	bool marked, ts_equal, tie_lower, go_to_next;
 	bool is_new_key = flag == REMOVE_DEL_INV;
-
+	drand48_r(&seedT, &rand);
+	if(rand < 0.05){
+		nuc_bucket_node *lnode, *rnode;
+		search(head, -1.0, 0, &lnode, &rnode, REMOVE_DEL_INV);
+	}
 	// read tail from head (this is done for avoiding an additional cache miss)
 	tail = head->tail;
 	do
