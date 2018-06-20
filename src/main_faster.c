@@ -448,8 +448,8 @@ void* process(void *arg)
     
 	CPU_ZERO(&cpuset);
 	CPU_SET(my_id, &cpuset);
-	sched_setaffinity(p_tid[my_id], sizeof(cpu_set_t), &cpuset);
-	
+	//sched_setaffinity(p_tid[my_id], sizeof(cpu_set_t), &cpuset);
+	pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
     //printf("%u %u %u\n", TID, NID, NUMA_NODES);
 
     __sync_fetch_and_add(&BARRIER, 1);
