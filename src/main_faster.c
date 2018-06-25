@@ -345,7 +345,7 @@ void classic_hold(
 				exit(1);
 		}
 		
-		
+		near = 0;
 		while((TEST_MODE != 'T' && tot_count < end_operations2) || (TEST_MODE == 'T' && !end_test))
 		{
 			par_count++;
