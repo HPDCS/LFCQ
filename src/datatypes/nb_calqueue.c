@@ -286,9 +286,10 @@ static unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, u
 	double left_timestamp, tmp_timestamp, rand;
 	bool marked, ts_equal, tie_lower, go_to_next;
 	bool is_new_key = flag == REMOVE_DEL_INV;
-	drand48_r(&seedT, &rand);
-	if(rand < 0.05){
-		nuc_bucket_node *lnode, *rnode;
+	//drand48_r(&seedT, &rand);
+	//if(rand < 0.5)
+	{
+		nbc_bucket_node *lnode, *rnode;
 		search(head, -1.0, 0, &lnode, &rnode, REMOVE_DEL_INV);
 	}
 	// read tail from head (this is done for avoiding an additional cache miss)
@@ -326,6 +327,8 @@ static unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, u
 				left_timestamp = tmp_timestamp;
 				counter = 0;
 			}
+			else
+                        clflush(tmp);
 			
 			// increase the count of marked nodes met during scan
 			counter+=marked;
@@ -338,7 +341,7 @@ static unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, u
 			tmp_next = tmp->next;
 			tmp_timestamp = tmp->timestamp;
 			tmp_tie_breaker = tmp->counter;
-			
+			__builtin_prefetch(tmp->next_next);
 			// Check if the right node is marked
 			marked = is_marked_for_search(tmp_next, flag);
 			
@@ -381,9 +384,12 @@ static unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, u
 			*new_node = left;
 			return OK;
 		}
+		new_node_pointer->next_next = tail;
 		// copy left node mark			
 		if (BOOL_CAS(&(left->next), left_next, get_marked(new_node_pointer,get_mark(left_next))))
 		{
+			
+			__sync_lock_test_and_set(&left->next_next,  get_unmarked(left_next));
 			if (counter > 0)
 				connect_to_be_freed_node_list(left_next, counter);
 			return OK;
@@ -409,7 +415,7 @@ static unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, u
 __thread unsigned long long near = 0;
 __thread unsigned long long dist = 0;
 
-void flush_current(table* h, unsigned long long newIndex, nbc_bucket_node* node)
+void flush_current(table* h, unsigned long long newIndex, unsigned int size, nbc_bucket_node* node)
 {
 	unsigned long long oldCur, oldIndex, oldEpoch;
 	unsigned long long newCur, tmpCur = -1;
@@ -424,7 +430,7 @@ void flush_current(table* h, unsigned long long newIndex, nbc_bucket_node* node)
 	//newIndex = ( unsigned long long ) hash(node->timestamp, h->bucket_width);
 	newCur =  newIndex << 32;
 	distance = newIndex - oldIndex;
-	dist = h->size*DISTANCE_FROM_CURRENT;
+	dist = size*DISTANCE_FROM_CURRENT;
 	if(distance > 0 && distance < dist){
 		newIndex = oldIndex;
 		newCur =  newIndex << 32;
@@ -444,7 +450,8 @@ void flush_current(table* h, unsigned long long newIndex, nbc_bucket_node* node)
 						)
 		)
 	{
-		//if(tmpCur != -1)
+		if(tmpCur != -1)
+			near++;
 		//{	
 		//	flush_current_attempt += 1;	
 		//	flush_current_success += 1;
@@ -471,7 +478,7 @@ void flush_current(table* h, unsigned long long newIndex, nbc_bucket_node* node)
 		//	else
 		//	continue;
 		//}
-		
+		near++;
 		//flush_current_attempt += 1;	
 		//flush_current_fail += 1;
 	}
@@ -486,7 +493,8 @@ void flush_current(table* h, unsigned long long newIndex, nbc_bucket_node* node)
 									) 
 						)
 		);
-		//if(mark)
+		if(mark)
+			near++;
 		//{
 		//	flush_current_success += 1;
 		//	flush_current_attempt += 1;	
@@ -529,6 +537,8 @@ bool insert_std(table* hashtable, nbc_bucket_node** new_node, int flag)
 
 }
 
+
+__thread unsigned long long last_ops = 0;
 void set_new_table(table* h, unsigned int threshold, double pub, unsigned int epb, unsigned int counter)
 {
 	nbc_bucket_node *tail;
@@ -580,6 +590,10 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 	new_size += (-(size == 1    && counter > thp2) 					   )	& thp2;
 	new_size += (-(size == thp2 && counter < threshold)				   )	& 1;
 	
+	if(new_size == 0 && (h->e_counter.count + h->d_counter.count) > RESIZE_PERIOD)
+	{
+		new_size = h->size;
+	}
 	if(new_size != 0 && new_size <= MAXIMUM_SIZE)
 	{
 		//new_h = malloc(sizeof(table));
@@ -771,6 +785,8 @@ double compute_mean_separation_time(table* h,
     
 	// Compute new width
 	newaverage = (newaverage / j) * elem_per_bucket;	/* this is the new width */
+//	printf("%d- my new bucket %.10f for %p\n", TID, newaverage, h);   
+
 	if(newaverage <= 0.0)
 		newaverage = 1.0;
 	//if(newaverage <  pow(10,-4))
@@ -830,7 +846,7 @@ void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 		);
 
 	
-	flush_current(new_h, ( unsigned long long ) hash(right_replica_field->timestamp, new_h->bucket_width), right_replica_field);
+	flush_current(new_h, ( unsigned long long ) hash(right_replica_field->timestamp, new_h->bucket_width), new_h->size, right_replica_field);
 	
 	
 	right_node_next = FETCH_AND_AND(&(right_node->next), MASK_DEL);
@@ -1157,7 +1173,7 @@ void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 {
 	nbc_bucket_node *bucket, *new_node = node_malloc(payload, timestamp, 0);
 	table * h = NULL;		
-	unsigned int index, res, dist;
+	unsigned int index, res, dist, size;
 	unsigned long long cur_enqueues = 0;
 	unsigned long long newIndex = 0;
 	
@@ -1169,7 +1185,9 @@ void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 	
 	//init the result
 	res = MOV_FOUND;
-	local_monitor = ((-(local_monitor == -1)) & TID) + ((-(local_monitor != -1)) & local_monitor);
+	//local_monitor = ((-(local_monitor == -1)) & TID) + ((-(local_monitor != -1)) & local_monitor);
+	if(local_monitor == -1)
+		local_monitor = TID;
 	bool monitor = ++local_monitor % period_monitor == 0;
 	en_samples+=monitor;
 	flush_eq++;
@@ -1181,42 +1199,44 @@ void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 		if(res == MOV_FOUND){
 			// check for a resize
 			h = read_table(&queue->hashtable, th, epb, pub);
+			// get actual size
+			size = h->size;
+	        // read the actual epoch
+        	new_node->epoch = (h->current & MASK_EPOCH);
 			// compute the index of the virtual bucket
 			newIndex = hash(timestamp, h->bucket_width);
 			// compute the index of the physical bucket
-			index = newIndex % h->size;
+			index = newIndex % size;
 			// get the bucket
 			bucket = h->array + index;
 			// read the number of executed enqueues for statistics purposes
 			if(monitor){
 				cur_enqueues =  ATOMIC_READ(&h->e_counter);
+	                        clflush(&h->e_counter);
 			}
 		}
-		// read the actual epoch
-		new_node->epoch = (h->current & MASK_EPOCH);
 		// search the two adjacent nodes that surround the new key and try to insert with a CAS 
 	    res = search_and_insert(bucket, timestamp, 0, REMOVE_DEL_INV, new_node, &new_node);
 	}
 
 	// the CAS succeeds, thus we want to ensure that the insertion becomes visible
-	flush_current(h, newIndex, new_node);
+	flush_current(h, newIndex, size, new_node);
 	
 	// updates for statistics
 	if(monitor)
 	{
-		
-		unsigned long long oldCur = h->current;
-		unsigned long long oldIndex = oldCur >> 32;
-		dist = h->size*DISTANCE_FROM_CURRENT+1;
 		concurrent_enqueue += __sync_fetch_and_add(&h->e_counter.count, flush_eq) - cur_enqueues;
 		flush_eq = 0;
 		
 		#if COMPACT_RANDOM_ENQUEUE == 1
 		// clean a random bucket
+		unsigned long long oldCur = h->current;
+		unsigned long long oldIndex = oldCur >> 32;
+		dist = size*DISTANCE_FROM_CURRENT+1;
 		double rand;
 		nbc_bucket_node *left_node, *right_node;
 		drand48_r(&seedT, &rand);
-		search(h->array+((oldIndex + dist + (unsigned int)((h->size-dist)*rand))%h->size), -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
+		search(h->array+((oldIndex + dist + (unsigned int)((size-dist)*rand))%size), -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
 		#endif
 	}
 	
@@ -1232,11 +1252,11 @@ void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
  * @return a pointer to a node that contains the dequeued value
  *
  */
- 
+
 __thread unsigned long long last_curr = 0ULL;
 __thread unsigned long long cached_curr = 0ULL;
 __thread unsigned long long num_cas = 0ULL;
-	double nbc_dequeue(nb_calqueue *queue, void** result)
+double nbc_dequeue(nb_calqueue *queue, void** result)
 {
 	nbc_bucket_node *min, *min_next, 
 					*left_node, *left_node_next, 
@@ -1261,7 +1281,9 @@ __thread unsigned long long num_cas = 0ULL;
 	double rand = 0.0;                      // <----------------------------------------
 	
 	
-	local_monitor = ((-(local_monitor == -1)) & TID) + ((-(local_monitor != -1)) & local_monitor);
+	//local_monitor = ((-(local_monitor == -1)) & TID) + ((-(local_monitor != -1)) & local_monitor);
+	if(local_monitor == -1)
+		local_monitor = TID;
 	bool monitor = local_monitor++ % period_monitor == 0;
 	de_samples+=monitor;
 	
@@ -1270,9 +1292,8 @@ begin:
 	h = read_table(&queue->hashtable, th, epb, pub);
 	
 	if(monitor)
-	{
 		cur_dequeues = ATOMIC_READ(&h->d_counter);
-	}
+	
 	size = h->size;
 	array = h->array;
 	bucket_width = h->bucket_width;
@@ -1293,7 +1314,6 @@ begin:
 	}
 	#endif
 	
-	
 	do
 	{
 		counter = 0;
@@ -1303,6 +1323,7 @@ begin:
 		assertf(index+1 > MASK_EPOCH, "\nOVERFLOW INDEX:%llu  BW:%.10f SIZE:%u TAIL:%p TABLE:%p NUM_ELEM:%u\n", index, bucket_width, size, tail, h, ATOMIC_READ(&h->counter));
 		
 		min = array + (index++ % (size));
+		__builtin_prefetch(min->next_next);
 		left_node = min_next = min->next;
 		right_limit = index*bucket_width;
 		ep = 0;
@@ -1316,6 +1337,7 @@ begin:
 		{
 				
 			left_node_next = left_node->next;
+			__builtin_prefetch(left_node->next_next);
 			left_ts = left_node->timestamp;
 			*result = left_node->payload;
 			
@@ -1369,10 +1391,11 @@ begin:
 						
 			//left_node = get_unmarked(left_node_next);
 			//counter++;
+			clflush(left_node);
 		}while( (left_node = get_unmarked(left_node_next)) && ++counter);
 		
 		
-		drand48_r(&seedT, &rand);
+		//drand48_r(&seedT, &rand);
 
 		/*
 		if( //0 &&
@@ -1436,6 +1459,8 @@ begin:
 				cached_curr = last_curr = current = new_current;
 			
 		}
+		else
+			goto begin;
 		
 	}while(1);
 	

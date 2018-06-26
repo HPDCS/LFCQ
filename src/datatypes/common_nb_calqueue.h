@@ -1,10 +1,10 @@
 /*****************************************************************************
-* 
-*	This file is part of NBQueue, a lock-free O(1) priority queue.
-* 
-*   Copyright (C) 2015, Romolo Marotta      
 *
-*   This program is free software: you can redistribute it and/or modify 
+*	This file is part of NBQueue, a lock-free O(1) priority queue.
+*
+*   Copyright (C) 2015, Romolo Marotta
+*
+*   This program is free software: you can redistribute it and/or modify
 *   it under the terms of the GNU General Public License as published by
 *   the Free Software Foundation, either version 3 of the License, or
 *   (at your option) any later version.
@@ -21,8 +21,8 @@
 /*
  * nonblockingqueue.h
  *
- *  Created on: Jul 13, 2015    
- *      Author: Romolo Marotta   
+ *  Created on: Jul 13, 2015
+ *  Author: Romolo Marotta
  */
 
 #ifndef DATATYPES_COMMON_NONBLOCKING_CALQUEUE_H_
@@ -45,7 +45,7 @@
 #define D_EQUAL(a,b) 	( (a) == (b) )
 #define GEQ(a,b) 		( (a) >= (b) )
 #define GREATER(a,b) 	( (a) >  (b) )
-#define SAMPLE_SIZE 25
+#define SAMPLE_SIZE 45
 #define HEAD_ID 0
 #define MAXIMUM_SIZE 1048576 //524288 //262144 //131072 //65536 //32768
 #define MINIMUM_SIZE 1
@@ -123,12 +123,12 @@
 
 #define SINGLE_COUNTER 0
 
-#define MONITOR_PERIOD 16
-#define READTABLE_PERIOD 32
-#define COMPACT_RANDOM_ENQUEUE 1
+#define MONITOR_PERIOD 512
+#define READTABLE_PERIOD 64
+#define COMPACT_RANDOM_ENQUEUE 0
 #define COMPACT_RANDOM_DEQUEUE 1
-#define DISTANCE_FROM_CURRENT 0.0
-
+#define DISTANCE_FROM_CURRENT 0.001
+#define RESIZE_PERIOD 200000000ULL
 
 /**
  *  Struct that define a node in a bucket
@@ -147,7 +147,7 @@ struct __bucket_node
 	nbc_bucket_node * tail;
 	nbc_bucket_node * volatile next;	// pointer to the successor
 	nbc_bucket_node * volatile replica;	// pointer to the replica
-	unsigned long long pad2;
+	nbc_bucket_node * volatile next_next;
 };
 
 
@@ -159,18 +159,18 @@ struct table
 	table * volatile new_table;
         // 8
 	unsigned int size;
-    unsigned int pad;
+    	unsigned int pad;
 	//16        
 	double bucket_width;
 	//24        
 	nbc_bucket_node* array;
 	//32
-	char zpad4[32];
+	//char zpad4[32];
 	#if SINGLE_COUNTER == 0
 	atomic_t e_counter;
-	char zpad3[60];
+	//char zpad3[60];
 	atomic_t d_counter;
-	char zpad1[60];
+	char zpad1[24];
 	#else
 	volatile unsigned long long counter;
 	char zpad1[56];
@@ -230,6 +230,7 @@ extern unsigned int threads;
 extern nbc_bucket_node *g_tail;
 extern __thread hpdcs_gc_status malloc_status;
 
+extern __thread unsigned long long near;
 
 void set_new_table(table* h, unsigned int threshold, double pub, unsigned int epb, unsigned int counter);
 
@@ -245,7 +246,7 @@ void search(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker, n
 //nbc_bucket_node* node_malloc(void *payload, double timestamp, unsigned int tie_breaker);
 //void node_free(nbc_bucket_node *pointer);
 
-void flush_current(table* h, unsigned long long newIndex, nbc_bucket_node* node);
+void flush_current(table* h, unsigned long long newIndex, unsigned int size, nbc_bucket_node* node);
 
 double nbc_prune();
 void nbc_report(unsigned int);
@@ -393,6 +394,14 @@ static inline unsigned long long hash(double timestamp, double bucket_width)
 
 }
 
+
+static inline void clflush(volatile void *p)
+{
+//        asm volatile ("mfence" ::: "memory");
+//        asm volatile ("clflush (%0)" :: "r"(p));        
+//        asm volatile ("mfence" ::: "memory");
+
+}
 
 
 
