@@ -129,6 +129,7 @@
 #define COMPACT_RANDOM_DEQUEUE 1
 #define DISTANCE_FROM_CURRENT 0.001
 #define RESIZE_PERIOD 200000000ULL
+#define ENABLE_PREFETCH 0
 
 /**
  *  Struct that define a node in a bucket

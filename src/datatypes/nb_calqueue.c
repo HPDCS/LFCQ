@@ -341,7 +341,9 @@ static unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, u
 			tmp_next = tmp->next;
 			tmp_timestamp = tmp->timestamp;
 			tmp_tie_breaker = tmp->counter;
+			#if ENABLE_PREFETCH == 1
 			__builtin_prefetch(tmp->next_next);
+			#endif
 			// Check if the right node is marked
 			marked = is_marked_for_search(tmp_next, flag);
 			
@@ -388,8 +390,10 @@ static unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, u
 		// copy left node mark			
 		if (BOOL_CAS(&(left->next), left_next, get_marked(new_node_pointer,get_mark(left_next))))
 		{
-			
+			#if ENABLE_PREFETCH == 1
 			__sync_lock_test_and_set(&left->next_next,  get_unmarked(left_next));
+			#endif
+
 			if (counter > 0)
 				connect_to_be_freed_node_list(left_next, counter);
 			return OK;
@@ -1323,7 +1327,11 @@ begin:
 		assertf(index+1 > MASK_EPOCH, "\nOVERFLOW INDEX:%llu  BW:%.10f SIZE:%u TAIL:%p TABLE:%p NUM_ELEM:%u\n", index, bucket_width, size, tail, h, ATOMIC_READ(&h->counter));
 		
 		min = array + (index++ % (size));
+		
+		#if ENABLE_PREFETCH == 1
 		__builtin_prefetch(min->next_next);
+		#endif
+
 		left_node = min_next = min->next;
 		right_limit = index*bucket_width;
 		ep = 0;
@@ -1337,7 +1345,9 @@ begin:
 		{
 				
 			left_node_next = left_node->next;
+			#if ENABLE_PREFETCH == 1
 			__builtin_prefetch(left_node->next_next);
+			#endif
 			left_ts = left_node->timestamp;
 			*result = left_node->payload;
 			
