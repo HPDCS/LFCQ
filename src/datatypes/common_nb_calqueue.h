@@ -34,6 +34,36 @@
 #include "../mm/garbagecollector.h"
 #include "../utils/hpdcs_utils.h"
 
+
+
+#define SAMPLE_SIZE 25
+#define HEAD_ID 0
+#define MAXIMUM_SIZE 1048576 //524288 //262144 //131072 //65536 //32768
+#define MINIMUM_SIZE 1
+#define MAX_NUMA_NODES 16
+
+#define FLUSH_SMART 1
+#define ENABLE_EXPANSION 1
+#define ENABLE_PRUNE 1
+#define ENABLE_HIGH_STATITISTICS 1
+#define LOG_DEQUEUE 0
+#define LOG_ENQUEUE 0
+
+
+#define SINGLE_COUNTER 0
+#define MONITOR_PERIOD 31
+#define READTABLE_PERIOD 63
+#define COMPACT_RANDOM_ENQUEUE 0
+#define COMPACT_RANDOM_DEQUEUE 1
+#define DISTANCE_FROM_CURRENT 0.0 
+#define RESIZE_PERIOD 200000000ULL
+#define ENABLE_PREFETCH 0
+#define ENABLE_CLFLUSH 0
+
+
+
+
+
 #define INFTY DBL_MAX
 //#define LESS(a,b) 		( (a) < (b) && !D_EQUAL((a), (b)) )
 //#define LEQ(a,b)		( (a) < (b) ||  D_EQUAL((a), (b)) )
@@ -45,21 +75,9 @@
 #define D_EQUAL(a,b) 	( (a) == (b) )
 #define GEQ(a,b) 		( (a) >= (b) )
 #define GREATER(a,b) 	( (a) >  (b) )
-#define SAMPLE_SIZE 45
-#define HEAD_ID 0
-#define MAXIMUM_SIZE 1048576 //524288 //262144 //131072 //65536 //32768
-#define MINIMUM_SIZE 1
-#define MAX_NUMA_NODES 16
-
-#define FLUSH_SMART 1
-#define ENABLE_EXPANSION 1
-#define ENABLE_PRUNE 1
-#define ENABLE_HIGH_STATITISTICS 1
 
 #define TID tid
 
-#define LOG_DEQUEUE 0
-#define LOG_ENQUEUE 0
 
 #define BOOL_CAS_ALE(addr, old, new)  CAS_x86(\
 										UNION_CAST(addr, volatile unsigned long long *),\
@@ -108,7 +126,7 @@
 #define MASK_CURR	(0xffffffff00000000ULL)
 
 
-#define REMOVE_DEL		 0
+#define REMOVE_DEL	 0
 #define REMOVE_DEL_INV	 1
 
 #define is_marked(...) macro_dispatcher(is_marked, __VA_ARGS__)(__VA_ARGS__)
@@ -119,17 +137,6 @@
 #define get_unmarked(pointer)		(UNION_CAST((UNION_CAST(pointer, unsigned long long) & MASK_PTR), void *))
 #define get_marked(pointer, mark)	(UNION_CAST((UNION_CAST(pointer, unsigned long long)|(mark)), void *))
 #define get_mark(pointer)			(UNION_CAST((UNION_CAST(pointer, unsigned long long) & MASK_MRK), unsigned long long))
-
-
-#define SINGLE_COUNTER 0
-
-#define MONITOR_PERIOD 512
-#define READTABLE_PERIOD 64
-#define COMPACT_RANDOM_ENQUEUE 0
-#define COMPACT_RANDOM_DEQUEUE 1
-#define DISTANCE_FROM_CURRENT 0.001
-#define RESIZE_PERIOD 200000000ULL
-#define ENABLE_PREFETCH 0
 
 
 /**
@@ -158,27 +165,22 @@ struct __bucket_node
 typedef struct table table;
 struct table
 {
-	table * volatile new_table;
-        // 8
+	table * volatile new_table;		// 8
 	unsigned int size;
-    	unsigned int pad;
-	//16        
-	double bucket_width;
-	//24        
-	nbc_bucket_node* array;
-	//32
-	//char zpad4[32];
-	#if SINGLE_COUNTER == 0
+    unsigned int pad;				//16        
+	double bucket_width;			//24        
+	nbc_bucket_node* array;			//32
+	char zpad4[32];
+#if SINGLE_COUNTER == 0
 	atomic_t e_counter;
-	//char zpad3[60];
+	char zpad3[60];
 	atomic_t d_counter;
-	char zpad1[24];
-	#else
+#else
 	volatile unsigned long long counter;
-	char zpad1[56];
-	#endif
+#endif
+	char zpad1[60];
 	volatile unsigned long long current;
-	char zpad2[56];
+	//char zpad2[56];
 	//unsigned int size;
 	//unsigned int pad;
 	//double bucket_width;
@@ -195,9 +197,10 @@ struct nb_calqueue
 	double pub_per_epb;
 	nbc_bucket_node * tail;
 	// 32
-	char zpad9[32];
+	//char zpad9[32];
 	// 64
 	table * volatile hashtable;
+	//char pad[24];
 	// 64
 };
 
@@ -233,6 +236,8 @@ extern nbc_bucket_node *g_tail;
 extern __thread hpdcs_gc_status malloc_status;
 
 extern __thread unsigned long long near;
+extern __thread unsigned long long num_cas;
+extern __thread unsigned long long num_cas_useful;
 
 void set_new_table(table* h, unsigned int threshold, double pub, unsigned int epb, unsigned int counter);
 
@@ -399,15 +404,18 @@ static inline unsigned long long hash(double timestamp, double bucket_width)
 
 static inline void clflush(volatile void *p)
 {
+	#if ENABLE_CLFLUSH == 1
 //        asm volatile ("mfence" ::: "memory");
-//        asm volatile ("clflush (%0)" :: "r"(p));        
+        asm volatile ("clflush (%0)" :: "r"(p));        
 //        asm volatile ("mfence" ::: "memory");
-
+	#endif
 }
 
 static inline void prefetch(void *p)
 {
-	__builtin_prefetch(p, 0 , 1); 
+	#if ENABLE_PREFETCH == 1
+	__builtin_prefetch(p, 1, 3);
+	#endif 
 }
 
 

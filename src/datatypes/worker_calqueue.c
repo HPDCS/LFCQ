@@ -42,8 +42,10 @@
  __thread unsigned int local_spin = 0;
  __thread unsigned int from_last_help = 0;
  
-#define NUM_MAIN_NODES 2
+#define NUM_MAIN_NODES 4
 #define CORE_PER_NODE 4
+#define SPIN_CYCLES 5000
+#define EMPTY_HELPS 8
  
 worker_calqueue* worker_nbc_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket)
 {
@@ -119,13 +121,16 @@ void helper(worker_calqueue* queue)
 	unsigned long long i = 0, cur_op= 0;
 	
 	op_descriptor * volatile desc = NULL;
-	if(from_last_help++%2)
+	if(from_last_help++%EMPTY_HELPS)
 		return;
 	for(i = 0; i< threads; i++)
 	{
 		desc = queue->pending_ops + i*8;
 		cur_op = desc->id_op;
-		if(cur_op > 2ULL && __sync_bool_compare_and_swap(&desc->id_op, cur_op, RUNNING_DESCRIPTOR))
+		if(cur_op > 2ULL &&
+		( (cur_op == ENQUEUE_DESCRIPTOR && NID <= NUM_MAIN_NODES)  || (cur_op == DEQUEUE_DESCRIPTOR && NID > NUM_MAIN_NODES)  )	&&
+		 __sync_bool_compare_and_swap(&desc->id_op, cur_op, RUNNING_DESCRIPTOR)
+		)
 		{
 			if(cur_op == ENQUEUE_DESCRIPTOR)
 				nbc_enqueue(&queue->real_queue, desc->timestamp, desc->payload);
@@ -162,9 +167,11 @@ void worker_nbc_enqueue(worker_calqueue* queue, double timestamp, void* payload)
 		desc = &queue->pending_ops[TID*8];
 		desc->timestamp = timestamp;
 		desc->payload = payload;
-		__sync_bool_compare_and_swap(&desc->id_op, EMPTY_DESCRIPTOR, ENQUEUE_DESCRIPTOR);
+		//__sync_bool_compare_and_swap(&desc->id_op, EMPTY_DESCRIPTOR, ENQUEUE_DESCRIPTOR);
+		desc->id_op = ENQUEUE_DESCRIPTOR;
 		while(desc->id_op != DONE_DESCRIPTOR){
-			if(local_spin++ % 2500000000 == 0){
+			helper(queue);
+			if(local_spin++ % SPIN_CYCLES == 0){
 				//printf("%d E -FUCK %llu\n", TID, desc->id_op);
 				if(desc->id_op == ENQUEUE_DESCRIPTOR){
 					if(__sync_bool_compare_and_swap(&desc->id_op, ENQUEUE_DESCRIPTOR, EMPTY_DESCRIPTOR)){
@@ -196,13 +203,15 @@ void worker_nbc_enqueue(worker_calqueue* queue, double timestamp, void* payload)
 double worker_nbc_dequeue(worker_calqueue *queue, void** result)
 {
 	op_descriptor *desc;
-	if(NID > NUM_MAIN_NODES)
+	if(NID <= NUM_MAIN_NODES)
 	{
 			desc = &queue->pending_ops[TID*8];
 			desc->payload = result;
-			__sync_bool_compare_and_swap(&desc->id_op, EMPTY_DESCRIPTOR, DEQUEUE_DESCRIPTOR);
+			//__sync_bool_compare_and_swap(&desc->id_op, EMPTY_DESCRIPTOR, DEQUEUE_DESCRIPTOR);
+			desc->id_op = DEQUEUE_DESCRIPTOR;
 			while(desc->id_op != DONE_DESCRIPTOR){
-				if(local_spin++ % 25000000 == 0){
+				helper(queue);
+				if(local_spin++ % SPIN_CYCLES == 0){
 					//printf("%d D-FUCK %llu\n", TID, desc->id_op);
 					if(desc->id_op == DEQUEUE_DESCRIPTOR){
 						if(__sync_bool_compare_and_swap(&desc->id_op, DEQUEUE_DESCRIPTOR, EMPTY_DESCRIPTOR)){

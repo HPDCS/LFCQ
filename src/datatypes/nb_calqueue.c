@@ -286,8 +286,8 @@ static unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, u
 	double left_timestamp, tmp_timestamp, rand;
 	bool marked, ts_equal, tie_lower, go_to_next;
 	bool is_new_key = flag == REMOVE_DEL_INV;
-	//drand48_r(&seedT, &rand);
-	//if(rand < 0.5)
+	drand48_r(&seedT, &rand);
+	//if(rand < 0.1)
 	{
 		nbc_bucket_node *lnode, *rnode;
 		search(head, -1.0, 0, &lnode, &rnode, REMOVE_DEL_INV);
@@ -327,8 +327,8 @@ static unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, u
 				left_timestamp = tmp_timestamp;
 				counter = 0;
 			}
-			else
-                        clflush(tmp);
+			//else
+            //           clflush(tmp);
 			
 			// increase the count of marked nodes met during scan
 			counter+=marked;
@@ -341,9 +341,7 @@ static unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, u
 			tmp_next = tmp->next;
 			tmp_timestamp = tmp->timestamp;
 			tmp_tie_breaker = tmp->counter;
-			#if ENABLE_PREFETCH == 1
 			prefetch(tmp->next_next);
-			#endif
 			// Check if the right node is marked
 			marked = is_marked_for_search(tmp_next, flag);
 			
@@ -386,12 +384,12 @@ static unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, u
 			*new_node = left;
 			return OK;
 		}
-		new_node_pointer->next_next = tail;
+		new_node_pointer->next_next = tmp_next;
 		// copy left node mark			
 		if (BOOL_CAS(&(left->next), left_next, get_marked(new_node_pointer,get_mark(left_next))))
 		{
 			#if ENABLE_PREFETCH == 1
-			__sync_lock_test_and_set(&left->next_next,  get_unmarked(left_next));
+			__sync_lock_test_and_set(&left->next_next,  get_unmarked(tmp_next));
 			#endif
 
 			if (counter > 0)
@@ -435,6 +433,7 @@ void flush_current(table* h, unsigned long long newIndex, unsigned int size, nbc
 	newCur =  newIndex << 32;
 	distance = newIndex - oldIndex;
 	dist = size*DISTANCE_FROM_CURRENT;
+	//dist = DISTANCE_FROM_CURRENT;
 	if(distance > 0 && distance < dist){
 		newIndex = oldIndex;
 		newCur =  newIndex << 32;
@@ -798,7 +797,7 @@ double compute_mean_separation_time(table* h,
 	if(isnan(newaverage))
 		newaverage = 1.0;	
     
-    //printf("%d- my new bucket %.10f for %p\n", TID, newaverage, h);	
+ //   printf("%d- my new bucket %.10f for %p\n", TID, newaverage, h);	
 	return newaverage;
 }
 
@@ -807,20 +806,43 @@ void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 	//nbc_bucket_node * volatile replica;
 	//nbc_bucket_node volatile **replica_new;
 	nbc_bucket_node *replica;
+	nbc_bucket_node** new_node;
 	//nbc_bucket_node *replica_new;
 	nbc_bucket_node *right_replica_field, *right_node_next;
-	int res = 0;
 	
+	nbc_bucket_node *bucket, *new_node_pointer;
+	//nbc_bucket_node *left_node_next;
+	unsigned int index;
+
+	unsigned int new_node_counter 	;
+	//unsigned int skipped_nodes 	;
+	double 		 new_node_timestamp ;
+
+	
+	int res = 0;
 	
 	//Create a new node inserted in the new table as as INValid
 	replica = node_malloc(right_node->payload, right_node->timestamp,  right_node->counter);
 	//replica_new = replica;
+	
+	new_node 			= &replica;
+	new_node_pointer 	= (*new_node);
+	new_node_counter 	= new_node_pointer->counter;
+	new_node_timestamp 	= new_node_pointer->timestamp;
+	
+	index = hash(new_node_timestamp, new_h->bucket_width) % new_h->size;
+
+	// node to be added in the hashtable
+	bucket = new_h->array + index;
 	         
     do
 	{ 
 		right_replica_field = right_node->replica;
 	}        
-	while(right_replica_field == NULL && (res = insert_std(new_h, &replica, REMOVE_DEL)) == 0);
+	while(right_replica_field == NULL && (res = 
+	//insert_std(new_h, &replica, REMOVE_DEL)
+	search_and_insert(bucket, new_node_timestamp, new_node_counter, REMOVE_DEL, new_node_pointer, new_node)
+	) == 0);
 			
 		
 	
@@ -1192,7 +1214,7 @@ void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 	//local_monitor = ((-(local_monitor == -1)) & TID) + ((-(local_monitor != -1)) & local_monitor);
 	if(local_monitor == -1)
 		local_monitor = TID;
-	bool monitor = ++local_monitor % period_monitor == 0;
+	bool monitor = (++local_monitor % period_monitor) == 0;
 	en_samples+=monitor;
 	flush_eq++;
 
@@ -1216,7 +1238,7 @@ void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 			// read the number of executed enqueues for statistics purposes
 			if(monitor){
 				cur_enqueues =  ATOMIC_READ(&h->e_counter);
-	                        clflush(&h->e_counter);
+	            clflush(&h->e_counter);
 			}
 		}
 		// search the two adjacent nodes that surround the new key and try to insert with a CAS 
@@ -1237,6 +1259,7 @@ void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 		unsigned long long oldCur = h->current;
 		unsigned long long oldIndex = oldCur >> 32;
 		dist = size*DISTANCE_FROM_CURRENT+1;
+		//dist = DISTANCE_FROM_CURRENT+1;
 		double rand;
 		nbc_bucket_node *left_node, *right_node;
 		drand48_r(&seedT, &rand);
@@ -1260,6 +1283,7 @@ void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 __thread unsigned long long last_curr = 0ULL;
 __thread unsigned long long cached_curr = 0ULL;
 __thread unsigned long long num_cas = 0ULL;
+__thread unsigned long long num_cas_useful = 0ULL;
 double nbc_dequeue(nb_calqueue *queue, void** result)
 {
 	nbc_bucket_node *min, *min_next, 
@@ -1288,7 +1312,7 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 	//local_monitor = ((-(local_monitor == -1)) & TID) + ((-(local_monitor != -1)) & local_monitor);
 	if(local_monitor == -1)
 		local_monitor = TID;
-	bool monitor = local_monitor++ % period_monitor == 0;
+	bool monitor = (++local_monitor % period_monitor) == 0;
 	de_samples+=monitor;
 	
 	
@@ -1310,8 +1334,10 @@ begin:
 		current = cached_curr;
 	
 	#if COMPACT_RANDOM_DEQUEUE == 1
-	if(monitor){
-		dist = h->size*DISTANCE_FROM_CURRENT+1;
+	drand48_r(&seedT, &rand);
+	if(rand < 0.2){
+		dist = size*DISTANCE_FROM_CURRENT+1;
+		//dist = DISTANCE_FROM_CURRENT+1;
 		drand48_r(&seedT, &rand);
 		index = current >> 32;
 		search(array+((index + dist + (unsigned int)( (size-dist)*rand))%size), -1.0, 0,  &left_nodea, &right_node, REMOVE_DEL_INV);
@@ -1328,10 +1354,8 @@ begin:
 		
 		min = array + (index++ % (size));
 		
-		#if ENABLE_PREFETCH == 1
 		prefetch(min->next_next);
-		#endif
-
+		
 		left_node = min_next = min->next;
 		right_limit = index*bucket_width;
 		ep = 0;
@@ -1345,9 +1369,8 @@ begin:
 		{
 				
 			left_node_next = left_node->next;
-			#if ENABLE_PREFETCH == 1
 			prefetch(left_node->next_next);
-			#endif
+			
 			left_ts = left_node->timestamp;
 			*result = left_node->payload;
 			
@@ -1370,7 +1393,11 @@ begin:
 			
 			//{
 				//left_node_next = VAL_CAS(&left_node->next, left_node_next, get_marked(left_node_next, DEL));
-				left_node_next = FETCH_AND_OR(&left_node->next, DEL);
+				int res = atomic_test_and_set_x64(UNION_CAST(&left_node->next, unsigned long long*));
+				if(!res)
+					left_node_next = left_node->next;
+
+				//left_node_next = FETCH_AND_OR(&left_node->next, DEL);
 				
 				if(is_marked(left_node_next, MOV))
 					goto begin;
@@ -1386,6 +1413,7 @@ begin:
 				{
 					concurrent_dequeue += __sync_fetch_and_add(&h->d_counter.count, flush_de) - cur_dequeues;
 					flush_de = 0;
+					clflush(&h->d_counter);
 				}
 				//scan_list_length += counter;				
 				
@@ -1444,6 +1472,7 @@ begin:
 			//if(new_current == current){
 			if(new_current == last_curr){
 				unsigned int dist = (size*DISTANCE_FROM_CURRENT);
+				//unsigned int dist = (DISTANCE_FROM_CURRENT);
 				//printf("index: %llu last_cur:%llu, dist: %lu, size: %lu\n",  index , (last_curr >> 32), dist, size);
 				if((index - (last_curr >> 32) -1) > dist){
 					printf("FUCK\n");
@@ -1456,8 +1485,10 @@ begin:
 					num_cas++;
 					//old_current = VAL_CAS(&(h->current), current, ((index << 32) | epoch) );
 					old_current = VAL_CAS(&(h->current), last_curr, ((index << 32) | epoch) );
-					if(old_current == last_curr)
+					if(old_current == last_curr){
 						current = ((index << 32) | epoch);
+						num_cas_useful++;
+					}
 					else
 						current = old_current;
 					cached_curr = last_curr = current;
@@ -1538,12 +1569,12 @@ void nbc_report(unsigned int TID)
 {
 	
 	printf("%d- "
-	"Dequeue: Conc.:%.3f NUMCAS: %llu ### "
+	"Dequeue: Conc.:%.3f NUMCAS: %llu : %llu ### "
 	"Enqueue: Conc.:%.3f ### "
 	"NEAR: %llu dist: %llu ### "
 	"RTC:%llu,M:%lld\n",
 			TID,
-			concurrent_dequeue*1.0/de_samples, num_cas,
+			concurrent_dequeue*1.0/de_samples, num_cas, num_cas_useful,
 			concurrent_enqueue*1.0/en_samples,
 			near,
 			dist,

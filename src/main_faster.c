@@ -346,6 +346,13 @@ void classic_hold(
 		}
 		
 		near = 0;
+		num_cas = 0;
+		num_cas_useful = 0;
+		concurrent_dequeue = 0;
+		concurrent_enqueue = 0;
+		par_count = 0;
+		ops_count[my_id] = 0;
+		
 		while((TEST_MODE != 'T' && tot_count < end_operations2) || (TEST_MODE == 'T' && !end_test))
 		{
 			par_count++;
