@@ -83,22 +83,6 @@ unsigned int TIME;
 __thread struct drand48_data seedT;
 extern __thread hpdcs_gc_status malloc_status;
 
-extern __thread unsigned long long concurrent_dequeue ;
-extern __thread unsigned long long performed_dequeue  ;
-extern __thread unsigned long long attempt_dequeue  ;
-extern __thread unsigned long long scan_list_length	;
-
-extern __thread unsigned long long concurrent_enqueue ;
-extern __thread unsigned long long performed_enqueue  ;
-extern __thread unsigned long long attempt_enqueue  ;
-
-extern __thread unsigned long long flush_current_attempt	;
-extern __thread unsigned long long flush_current_success	;
-extern __thread unsigned long long flush_current_fail	;
-
-extern __thread unsigned long long read_table_count	;
-
-
 nb_calqueue* nbcqueue;
 list(payload) lqueue;
 pq_t* skip_queue;
@@ -330,8 +314,6 @@ void classic_hold(
 		near = 0;
 		num_cas = 0;
 		num_cas_useful = 0;
-		concurrent_dequeue = 0;
-		concurrent_enqueue = 0;
 		par_count = 0;
 		ops_count[my_id] = 0;
 		

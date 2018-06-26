@@ -65,11 +65,6 @@
 
 
 #define INFTY DBL_MAX
-//#define LESS(a,b) 		( (a) < (b) && !D_EQUAL((a), (b)) )
-//#define LEQ(a,b)		( (a) < (b) ||  D_EQUAL((a), (b)) )
-//#define D_EQUAL(a,b) 	(fabs((a) - (b)) < DBL_EPSILON)
-//#define GEQ(a,b) 		( (a) > (b) ||  D_EQUAL((a), (b)) )
-//#define GREATER(a,b) 	( (a) > (b) &&  !D_EQUAL((a), (b)) )
 #define LESS(a,b) 		( (a) <  (b) )
 #define LEQ(a,b)		( (a) <= (b) )
 #define D_EQUAL(a,b) 	( (a) == (b) )
@@ -170,7 +165,8 @@ struct table
     unsigned int pad;				//16        
 	double bucket_width;			//24        
 	nbc_bucket_node* array;			//32
-	char zpad4[32];
+	unsigned int read_table_period;
+	char zpad4[28];
 #if SINGLE_COUNTER == 0
 	atomic_t e_counter;
 	char zpad3[60];
@@ -197,7 +193,8 @@ struct nb_calqueue
 	double pub_per_epb;
 	nbc_bucket_node * tail;
 	// 32
-	//char zpad9[32];
+	unsigned int read_table_period;
+	unsigned int period_monitor;   
 	// 64
 	table * volatile hashtable;
 	//char pad[24];
@@ -210,29 +207,12 @@ extern __thread unsigned int TID;
 extern __thread struct drand48_data seedT;
 extern __thread hpdcs_gc_status malloc_status;
 
-
 extern __thread nbc_bucket_node *to_free_tables_old;
 extern __thread nbc_bucket_node *to_free_tables_new;
    
-
-extern __thread unsigned long long concurrent_dequeue;
-extern __thread unsigned long long performed_dequeue ;
-extern __thread unsigned long long attempt_dequeue ;
-extern __thread unsigned long long scan_list_length ;
-
-
-extern __thread unsigned long long concurrent_enqueue;
-extern __thread unsigned long long performed_enqueue ;
-extern __thread unsigned long long attempt_enqueue ;
-extern __thread unsigned long long flush_current_attempt	;
-extern __thread unsigned long long flush_current_success	;
-extern __thread unsigned long long flush_current_fail	;
-extern __thread unsigned long long read_table_count	;
-
 extern unsigned int * volatile prune_array;
 extern unsigned int threads;
 
-extern nbc_bucket_node *g_tail;
 extern __thread hpdcs_gc_status malloc_status;
 
 extern __thread unsigned long long near;
