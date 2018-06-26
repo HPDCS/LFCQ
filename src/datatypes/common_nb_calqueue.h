@@ -371,7 +371,6 @@ static inline unsigned long long hash(double timestamp, double bucket_width)
 	int upA = 0;
 	int upB = 0;
 
-
 	if(__builtin_expect(res_d > 4294967295, 0))
 	{
 		error("Probable Overflow when computing the index: "
@@ -381,15 +380,6 @@ static inline unsigned long long hash(double timestamp, double bucket_width)
 				"2^32:%e\n",
 				timestamp, bucket_width, res_d,  pow(2, 32));
 	}
-
-	//tmp1 = res * bucket_width;
-	//if(__builtin_expect(LESS(timestamp, tmp1), 0))
-	//	//return --res;
-	//	upA = -1;
-	//tmp2 = tmp1 + bucket_width;
-	//if(__builtin_expect(GEQ(timestamp, tmp2), 0))
-	//	//return ++res;
-	//	upB = +1;
 
 	tmp1 = res * bucket_width;
 	tmp2 = (res+1) * bucket_width;

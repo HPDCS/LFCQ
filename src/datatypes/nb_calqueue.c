@@ -504,43 +504,6 @@ void flush_current(table* h, unsigned long long newIndex, unsigned int size, nbc
 		//}
 }
 
-/**
- * This function insert a new event in the nonblocking queue.
- * The cost of this operation when succeeds should be O(1) as calendar queue
- *
- * @author Romolo Marotta
- *
- * @param queue the interested queue
- * @param timestamp the timestamp of the event
- * @param payload the event to be enqueued
- *
- */
-bool insert_std(table* hashtable, nbc_bucket_node** new_node, int flag)
-{
-	nbc_bucket_node *bucket, *new_node_pointer;
-	//nbc_bucket_node *left_node_next;
-	unsigned int index;
-
-	unsigned int new_node_counter 	;
-	//unsigned int skipped_nodes 	;
-	double 		 new_node_timestamp ;
-
-	new_node_pointer 	= (*new_node);
-	new_node_counter 	= new_node_pointer->counter;
-	new_node_timestamp 	= new_node_pointer->timestamp;
-
-	index = hash(new_node_timestamp, hashtable->bucket_width) % hashtable->size;
-
-	// node to be added in the hashtable
-	bucket = hashtable->array + index;
-
-	 
-	return search_and_insert(bucket, new_node_timestamp, new_node_counter, flag, new_node_pointer, new_node);
-	//search_for_insert(bucket, new_node_timestamp, new_node_counter, &left_node, &left_node_next, &right_node, flag, &skipped_nodes);
-
-}
-
-
 __thread unsigned long long last_ops = 0;
 void set_new_table(table* h, unsigned int threshold, double pub, unsigned int epb, unsigned int counter)
 {

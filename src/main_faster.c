@@ -35,8 +35,6 @@
 #include "datatypes/list.h"
 #include "datatypes/calqueue.h"
 #include "datatypes/nb_calqueue.h"
-#include "datatypes/numa_queue.h"
-#include "datatypes/worker_calqueue.h"
 #include "datatypes/prioq.h"
 #include "datatypes/gc/gc.h"
 
@@ -102,8 +100,6 @@ extern __thread unsigned long long read_table_count	;
 
 
 nb_calqueue* nbcqueue;
-numa_nb_calqueue* numa_nbcqueue;
-worker_calqueue* worker_nbcqueue;
 list(payload) lqueue;
 pq_t* skip_queue;
 
@@ -155,12 +151,6 @@ double dequeue(void)
 		case 'F':
 			timestamp = nbc_dequeue(nbcqueue, &free_pointer);
 			break;
-		case 'N':
-			timestamp = numa_nbc_dequeue(numa_nbcqueue, &free_pointer);
-			break;
-		case 'W':
-			timestamp = worker_nbc_dequeue(worker_nbcqueue, &free_pointer);
-			break;
 		case 'S':
 			timestamp = UNION_CAST(deletemin(skip_queue), double);
 			break;
@@ -194,12 +184,6 @@ double enqueue(unsigned int my_id, struct drand48_data* seed, double local_min, 
 			break;
 		case 'F':
 			nbc_enqueue(nbcqueue, timestamp, NULL);
-			break;
-		case 'N':
-			numa_nbc_enqueue(numa_nbcqueue, timestamp, NULL);
-			break;
-		case 'W':
-			worker_nbc_enqueue(worker_nbcqueue, timestamp, NULL);
 			break;
 		case 'S':
 			insert(skip_queue, timestamp, UNION_CAST(timestamp, void*));
@@ -301,9 +285,7 @@ void classic_hold(
 			
 			if( DATASTRUCT == 'F' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
 				nbc_prune(nbcqueue);
-			else if( DATASTRUCT == 'N' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
-				nbc_prune(numa_nbcqueue);
-
+			
 			
 			if(par_count == THREADS)
 			{	
@@ -586,12 +568,6 @@ int main(int argc, char **argv)
 			break;
 		case 'F':
 			nbcqueue = nbc_init(THREADS, PERC_USED_BUCKET, ELEM_PER_BUCKET);
-			break;
-		case 'N':
-			numa_nbcqueue = numa_nbc_init(THREADS, PERC_USED_BUCKET, ELEM_PER_BUCKET);
-			break;
-		case 'W':
-			worker_nbcqueue = worker_nbc_init(THREADS, PERC_USED_BUCKET, ELEM_PER_BUCKET);
 			break;
 		case 'S':
 			_init_gc_subsystem();
