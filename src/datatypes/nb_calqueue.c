@@ -342,7 +342,7 @@ static unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, u
 			tmp_timestamp = tmp->timestamp;
 			tmp_tie_breaker = tmp->counter;
 			#if ENABLE_PREFETCH == 1
-			__builtin_prefetch(tmp->next_next);
+			prefetch(tmp->next_next);
 			#endif
 			// Check if the right node is marked
 			marked = is_marked_for_search(tmp_next, flag);
@@ -1329,7 +1329,7 @@ begin:
 		min = array + (index++ % (size));
 		
 		#if ENABLE_PREFETCH == 1
-		__builtin_prefetch(min->next_next);
+		prefetch(min->next_next);
 		#endif
 
 		left_node = min_next = min->next;
@@ -1346,7 +1346,7 @@ begin:
 				
 			left_node_next = left_node->next;
 			#if ENABLE_PREFETCH == 1
-			__builtin_prefetch(left_node->next_next);
+			prefetch(left_node->next_next);
 			#endif
 			left_ts = left_node->timestamp;
 			*result = left_node->payload;

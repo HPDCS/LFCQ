@@ -131,6 +131,7 @@
 #define RESIZE_PERIOD 200000000ULL
 #define ENABLE_PREFETCH 0
 
+
 /**
  *  Struct that define a node in a bucket
  */ 
@@ -402,6 +403,11 @@ static inline void clflush(volatile void *p)
 //        asm volatile ("clflush (%0)" :: "r"(p));        
 //        asm volatile ("mfence" ::: "memory");
 
+}
+
+static inline void prefetch(void *p)
+{
+	__builtin_prefetch(p, 0 , 1); 
 }
 
 
