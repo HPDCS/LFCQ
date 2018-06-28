@@ -323,6 +323,7 @@ void classic_hold(
 			timestamp = dequeue();
 			if(timestamp != INFTY)
 				local_min = timestamp;
+			//pthread_yield();
 
 			enqueue(my_id, seed, local_min, current_dist);
 			
@@ -340,6 +341,7 @@ void classic_hold(
 					tot_count += ops_count[j];
 
 			}
+			//pthread_yield();
 		}
 		
 		if(end_test)
@@ -368,6 +370,7 @@ void classic_hold(
 		{
 			par_count++;
 			timestamp = dequeue();
+
 			if(timestamp != INFTY)
 			{
 				local_dequeue++;
@@ -378,7 +381,7 @@ void classic_hold(
 				nbc_prune();
 			else if( DATASTRUCT == 'N' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
 				nbc_prune();
-
+			
 			if(par_count == THREADS)
 			{	
 				ops_count[my_id]+=par_count;
@@ -451,7 +454,8 @@ void* process(void *arg)
 	
 	if(DATASTRUCT == 'F' || DATASTRUCT == 'N' || DATASTRUCT == 'W')
 		nbc_report(TID);
-	
+	if(DATASTRUCT == 'S')
+		print_stats();
 	__sync_fetch_and_add(&lock, 1);
 	pthread_exit(NULL);    
 }

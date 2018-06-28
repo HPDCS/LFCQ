@@ -52,16 +52,20 @@
 
 /* interface, constant defines, and typedefs */
 #include "prioq.h"
-
+#include "common_nb_calqueue.h"
 
 /* thread state. */
 __thread ptst_t *ptst;
-
+__thread unsigned long long s_compact = 0;
+__thread unsigned long long s_tried = 0;
+__thread unsigned long long s_changed = 0;
 static int gc_id[NUM_LEVELS];
 
 __thread node_t *last_head = NULL;
 __thread node_t *last_min = NULL;
-__thread unsigned int last_offset = 0;
+__thread unsigned long long last_offset = 0;
+
+#define MASTER_THREAD 42
 
 /* initialize new node */
 static node_t *
@@ -94,7 +98,7 @@ free_node(node_t *n)
 }
 
 
-/***** locate_preds ***** 
+/***** locate_preds *****
  * Record predecessors and non-deleted successors of key k.  If k is
  * encountered during traversal of list, the node will be in succs[0].
  *
@@ -107,11 +111,11 @@ free_node(node_t *n)
  * 0 --> 7 at level 2.)
  *
  *                   del
- *                   p[0] 
+ *                   p[0]
  * p[2]  p[1]        s[1]  s[0]  s[2]
  *  |     |           |     |     |
  *  v     |           |     |     v
- *  _     v           v     |     _ 
+ *  _     v           v     |     _
  * | |    _           _	    v    | |
  * | |   | |    _    | |    _    | |
  * | |   | |   | |   | |   | |   | |
@@ -125,7 +129,7 @@ locate_preds(pq_t *pq, pkey_t k, node_t **preds, node_t **succs)
 {
     node_t *x, *x_next, *del = NULL;
     int d = 0, i;
-
+    bool flush = true;
     x = pq->head;
     i = NUM_LEVELS - 1;
     while (i >= 0)
@@ -134,7 +138,7 @@ locate_preds(pq_t *pq, pkey_t k, node_t **preds, node_t **succs)
 	d = is_marked_ref(x_next);
 	x_next = get_unmarked_ref(x_next);
 	assert(x_next != NULL);
-	
+
         while (x_next->k < k || is_marked_ref(x_next->next[0]) 
 	       || ((i == 0) && d)) {
 	    /* Record bottom level deleted node not having delete flag 
@@ -149,8 +153,12 @@ locate_preds(pq_t *pq, pkey_t k, node_t **preds, node_t **succs)
 	}
         preds[i] = x;
         succs[i] = x_next;
+	if(x == pq->head)
+	     flush = flush && false;
 	i--;
     }
+    if(flush)
+	clflush(pq->head);
     return del;
 }
 
@@ -235,6 +243,7 @@ success:
     }
     
 out:    
+    clflush(pq->head);
     critical_exit();
 }
 
@@ -259,22 +268,25 @@ out:
  *  d     d
  * 
  */
+ __thread int last_level = -1;
 static void
 restructure(pq_t *pq)
 {
     node_t *pred, *cur, *h;
     int i = NUM_LEVELS - 1;
-
+    
     pred = pq->head;
     while (i > 0) {
-        /* the order of these reads must be maintained */
+    /* the order of these reads must be maintained */
 	h = pq->head->next[i]; /* record observed head */
 	CMB();
 	cur = pred->next[i]; /* take one step forward from pred */
 	if (!is_marked_ref(h->next[0])) {
 	    i--;
 	    continue;
+	  break;
 	}
+	
 	/* traverse level until non-marked node is found 
 	 * pred will always have its delete flag set 
 	 */
@@ -288,6 +300,7 @@ restructure(pq_t *pq)
 	if (__sync_bool_compare_and_swap(&pq->head->next[i],h,cur))
 	    i--;
     }
+    clflush(pq->head);
 }
 
 
@@ -299,36 +312,50 @@ restructure(pq_t *pq)
  * Traverse level 0 next pointers until one is found that does
  * not have the delete bit set. 
  */
+__thread int period = -1;
 pval_t
 deletemin(pq_t *pq)
 {
     pval_t   v = NULL;
     node_t *x, *nxt, *obs_head = NULL, *newhead, *cur;
-    int offset, lvl;
-    
+    unsigned long long int offset, lvl;
     newhead = NULL;
     offset = lvl = 0;
+    bool reset = false;
+
+    if(period == -1) period = TID*100;
 
     critical_enter();
 
-    x = pq->head;
-    obs_head = x->next[0];
-    
-	if(last_min && last_head == obs_head){
-		x = last_min;
-		offset = last_offset;
-	}
-	else
-		last_head = obs_head;
-		
+    if(//1 ||
+     !last_min || (period % 4701) == 0 )
+    {
+	x = pq->head;
+    	obs_head = x->next[0];
+	reset = true;
+    }
+    else
+	obs_head = last_head;
+
+    period = ++period % 4701;
+
+    if(//0 && 
+    last_min && last_head == obs_head){
+	x = last_min;
+	offset = last_offset;
+    }
+    else{
+	last_head = obs_head;
+	s_changed+= last_min != NULL;
+    }
+
     do {
 	offset++;
 
-    /* expensive, high probability that this cache line has
+       /* expensive, high probability that this cache line has
 	 * been modified */
 	nxt = x->next[0];
-	
-		
+
         // tail cannot be deleted
 	if (get_unmarked_ref(nxt) == pq->tail) {
 	    goto out;
@@ -347,25 +374,24 @@ deletemin(pq_t *pq)
 	if (is_marked_ref(nxt)) continue;
 	
 	/* the marker is on the preceding pointer */
-    /* linearisation point deletemin */
+        /* linearisation point deletemin */
 	nxt = __sync_fetch_and_or(&x->next[0], 1);
-	if(newhead == NULL && !is_marked_ref(nxt)){
+	
+        if(newhead == NULL && !is_marked_ref(nxt)){
 		last_min = x;
 		last_offset = offset;
 	}
+
     }
     while ( (x = get_unmarked_ref(nxt)) && is_marked_ref(nxt) );
 
     assert(!is_marked_ref(x));
-		
     v = x->v;
 
-    
-    /* If no inserting node was traversed, then use the latest 
+    /* If no inserting node was traversed, then use the latest
      * deleted node as the new lowest-level head pointed node
      * candidate. */
     if (newhead == NULL) newhead = x;
-	
 
     /* if the offset is big enough, try to update the head node and
      * perform memory reclamation */
@@ -373,21 +399,24 @@ deletemin(pq_t *pq)
 
     /* Optimization. Marginally faster */
     if (pq->head->next[0] != obs_head) goto out;
-    
+
+	
+    //if(TID != 0) goto out;
     /* try to swing the lowest level head pointer to point to newhead,
      * which is deleted */
-    if (__sync_bool_compare_and_swap(&pq->head->next[0], obs_head, get_marked_ref(newhead)))
+    s_compact++;
+    if ( __sync_bool_compare_and_swap(&pq->head->next[0], obs_head, get_marked_ref(newhead)))
     {
+	s_tried++;
 	last_offset = 0;
 	last_min = NULL;
 	/* Update higher level pointers. */
 	restructure(pq);
-
+    
 	/* We successfully swung the upper head pointer. The nodes
 	 * between the observed head (obs_head) and the new bottom
 	 * level head pointed node (newhead) are guaranteed to be
 	 * non-live. Mark them for recycling. */
-
 	cur = get_unmarked_ref(obs_head);
 	while (cur != get_unmarked_ref(newhead)) {
 	    nxt = get_unmarked_ref(cur->next[0]);
@@ -397,6 +426,7 @@ deletemin(pq_t *pq)
 	}
     }
 out:
+    clflush(pq->head);
     critical_exit();
     return v;
 }
@@ -405,7 +435,7 @@ out:
  * Init structure, setup sentinel head and tail nodes.
  */
 pq_t *
-pq_init(int max_offset)
+pq_init(unsigned long long max_offset)
 {
     pq_t *pq;
     node_t *t, *h;
@@ -451,4 +481,8 @@ pq_destroy(pq_t *pq)
     free(pq->tail);
     free(pq->head);
     free(pq);
+}
+
+void print_stats(){
+	printf("\n%d- NEAR %llu %llu %llu", TID, s_compact, s_tried, s_changed);
 }

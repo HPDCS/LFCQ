@@ -24,7 +24,7 @@ typedef struct node_s
 
 typedef struct
 {
-    int    max_offset;
+    unsigned long long    max_offset;
     int    max_level;
     int    nthreads;
     node_t *head;
@@ -39,7 +39,7 @@ typedef struct
 
 /* Interface */
 
-extern pq_t *pq_init(int max_offset);
+extern pq_t *pq_init(unsigned long long max_offset);
 
 extern void pq_destroy(pq_t *pq);
 
@@ -48,5 +48,7 @@ extern void insert(pq_t *pq, pkey_t k, pval_t v);
 extern pval_t deletemin(pq_t *pq);
 
 extern void sequential_length(pq_t *pq);
+
+extern void print_stats();
 
 #endif // PRIOQ_H
