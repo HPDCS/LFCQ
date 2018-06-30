@@ -60,10 +60,10 @@
 __thread hpdcs_gc_status pq_malloc_status =
 {
 	.free_nodes_lists 			= NULL,
+	.free_chunk 			= NULL,
 	.to_free_nodes 				= NULL,
 	.to_free_nodes_old 			= NULL,
 	.block_size 				= sizeof(node_t),
-	.offset_next 				= offsetof(node_t, next),
 	.to_remove_nodes_count 		= 0LL,
 	.all_malloc			 		= 0LL
 };
@@ -388,7 +388,7 @@ deletemin(pq_t *pq)
             nxt = get_unmarked_ref(cur->next[0]);
             assert(is_marked_ref(cur->next[0]));
             //free_node(cur);
-            mm_node_trash(&pq_malloc_status, cur, 1);
+            mm_node_collect_connected_nodes(&pq_malloc_status, cur, 1);
             cur = nxt;
         }
     }
@@ -448,7 +448,7 @@ pq_destroy(pq_t *pq)
 }
 
 void print_stats(){
-	printf("\n%d- NEAR %llu %llu %llu", TID, s_compact, s_tried, s_changed);
+	printf("\n%d- NEAR %llu %llu %llu %llu", TID, s_compact, s_tried, s_changed, pq_malloc_status.to_remove_nodes_count);
 }
 
 void pq_prune()
@@ -463,7 +463,7 @@ void pq_prune()
     {	                                                    //<-----NEW
 		//if(counter != 0)
 		//printf("A COUNTER %u\n", counter);
-		tmp = mm_node_collect(&pq_malloc_status, &counter);    //<-----NEW
+		tmp = mm_node_get_reusable(&pq_malloc_status, &counter);    //<-----NEW
 		//if(counter != 0)
 		//printf("B COUNTER %u\n", counter);
 		while(tmp != NULL && counter-- != 0)                //<-----NEW

@@ -51,10 +51,10 @@ unsigned int * volatile prune_array;
 __thread hpdcs_gc_status malloc_status =
 {
 	.free_nodes_lists 			= NULL,
+	.free_chunk		 			= NULL,
 	.to_free_nodes 				= NULL,
 	.to_free_nodes_old 			= NULL,
 	.block_size 				= sizeof(nbc_bucket_node),
-	.offset_next 				= offsetof(nbc_bucket_node, next),
 	.to_remove_nodes_count 		= 0LL
 };
 
@@ -1396,7 +1396,7 @@ double nbc_prune()
 	
 	do 														//<-----NEW
     {	                                                    //<-----NEW
-		tmp = mm_node_collect(&malloc_status, &counter);    //<-----NEW
+		tmp = mm_node_get_reusable(&malloc_status, &counter);    //<-----NEW
 		while(tmp != NULL && counter-- != 0)                //<-----NEW
 		{                                                   //<-----NEW
 			tmp_next = tmp->next;                           //<-----NEW

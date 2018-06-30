@@ -293,7 +293,7 @@ static inline void node_free(nbc_bucket_node *pointer)
  */
 static inline void connect_to_be_freed_node_list(nbc_bucket_node *start, unsigned int counter)
 {
-	mm_node_trash(&malloc_status, get_unmarked(start), counter);
+	mm_node_collect_connected_nodes(&malloc_status, get_unmarked(start), counter);
 }
 
 static inline void connect_to_be_freed_table_list(table *h)

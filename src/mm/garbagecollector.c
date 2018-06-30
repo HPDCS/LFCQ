@@ -26,29 +26,24 @@ struct _free_list
 #define UNROLLED_FACTOR 10000
 #endif
 
+#define HEADER_SIZE 16
+
 #define USE_POSIX_MEMALIGN 0
 #define USE_GLOBAL_LIST 1
 #define NUM_GLOBAL_LISTS 16
-
-//static linked_pointer * volatile global_free_list = NULL;
-//static char pad[CACHE_LINE_SIZE];
-//static linked_pointer * volatile global_free_list_2 = NULL;
 
 #if USE_GLOBAL_LIST == 1
 static free_list global_free_list_array[NUM_GLOBAL_LISTS];
 __thread unsigned int private_alloc_node_count = 0;
 #endif
 
-#define HEADER_SIZE 16
 
 void* alloc_array_nodes(hpdcs_gc_status *status, unsigned int num_item)
 {
 	linked_gc_node *res, *tmp;
 	unsigned long long res_tmp;
-	// capire perchè con malloc non va e con calloc si
+
 	res = malloc( num_item*(status->block_size +HEADER_SIZE) + CACHE_LINE_SIZE); 
-	//res = calloc( 1,num_item*(status->block_size +HEADER_SIZE) + CACHE_LINE_SIZE);
-	
 	
 	if(res == NULL)
 		return NULL;
@@ -71,7 +66,6 @@ void* alloc_array_nodes(hpdcs_gc_status *status, unsigned int num_item)
 	return (void*) (((char*) res)  + HEADER_SIZE);
 	
 } 
-
 
 void free_array_nodes(hpdcs_gc_status *status, void *pointer)
 {
@@ -97,17 +91,15 @@ void free_array_nodes(hpdcs_gc_status *status, void *pointer)
 void* mm_node_malloc(hpdcs_gc_status *status)
 {
 	linked_pointer *res;
-	linked_pointer *tmp;
+	linked_gc_node *tmp;
 	unsigned long long res_tmp;
-	//unsigned int res_pos_mem = 0;
+	
 	int rolled = UNROLLED_FACTOR;
-	//int step = 200;
-
+	
 	linked_pointer *free_nodes_lists 	= status->free_nodes_lists 	;
 
 #if USE_GLOBAL_LIST == 1
 	linked_pointer *res_a;
-	//linked_pointer *res_b;
 	int j = 0;
 #endif
 
@@ -119,82 +111,72 @@ void* mm_node_malloc(hpdcs_gc_status *status)
 	
 	if(free_nodes_lists == NULL)
 	{	
+		
+		if(status->free_chunk == NULL)
+		{
+			status->to_remove_nodes_count += 1;
 
 #if USE_GLOBAL_LIST == 1
-		//res_a = global_free_list;
-		//res_b = global_free_list_2;
-		//
-		//while( res_a != NULL || res_b != NULL)
-		//{
-		//	if(res_a != NULL && __sync_bool_compare_and_swap(&global_free_list, res_a, res_a->next))
-		//		return (void*) (((char*) res_a)  + CACHE_LINE_SIZE);
-		//
-		//	if(res_b != NULL && __sync_bool_compare_and_swap(&global_free_list_2, res_b, res_b->next))
-		//		return (void*) (((char*) res_b)  + CACHE_LINE_SIZE);
-		//	
-		//	res_a = global_free_list;
-		//	res_b = global_free_list_2;
-		//}
-		
-		for(j=0;j<NUM_GLOBAL_LISTS*2;j++)
-			for(i=0;i<NUM_GLOBAL_LISTS;i++)
-			{
-				res_a = global_free_list_array[i].pointer;
-				if(res_a != NULL && __sync_bool_compare_and_swap(&global_free_list_array[i].pointer, res_a, res_a->next))
-					return (void*) (((char*) res_a)  + HEADER_SIZE);
-					
-			}
+			for(j=0;j<NUM_GLOBAL_LISTS*2;j++)
+				for(i=0;i<NUM_GLOBAL_LISTS;i++)
+				{
+					res_a = global_free_list_array[i].pointer;
+					if(res_a != NULL && __sync_bool_compare_and_swap(&global_free_list_array[i].pointer, res_a, res_a->next))
+						return (void*) (((char*) res_a)  + HEADER_SIZE);
+						
+				}
 #endif
 		
 #if USE_POSIX_MEMALIGN == 0 
-		res = malloc( rolled*(status->block_size + HEADER_SIZE) +CACHE_LINE_SIZE);
-		if(res == NULL)
+			res = malloc( rolled*(status->block_size + HEADER_SIZE) +CACHE_LINE_SIZE);
+			if(res == NULL)
 #else
-		res_pos_mem = posix_memalign((void**) &res, CACHE_LINE_SIZE, rolled*(status->block_size + CACHE_LINE_SIZE) );
-		if(res_pos_mem != 0)
+			res_pos_mem = posix_memalign((void**) &res, CACHE_LINE_SIZE, rolled*(status->block_size + CACHE_LINE_SIZE) );
+			if(res_pos_mem != 0)
 #endif		
-		{
-			printf("No enough memory to allocate a new node\n");
-			exit(1);
+			{
+				printf("No enough memory to allocate a new node\n");
+				exit(1);
+			}
+			res_tmp  = 	UNION_CAST(res, unsigned long long);
+			
+			if((res_tmp & (((unsigned long long) CACHE_LINE_SIZE-1))) != 0)
+			{
+				res_tmp +=	CACHE_LINE_SIZE;
+				res_tmp &=	~((unsigned long long) CACHE_LINE_SIZE-1);
+			}
+			
+			tmp = UNION_CAST(res_tmp,  linked_pointer* );
+			tmp->next = res;
+			tmp->counter = UNROLLED_FACTOR;
+			status->free_chunk = tmp;
+			
 		}
-		res_tmp  = 	UNION_CAST(res, unsigned long long);
 		
-		if((res_tmp & (((unsigned long long) CACHE_LINE_SIZE-1))) != 0)
-		{
-			res_tmp +=	CACHE_LINE_SIZE;
-			res_tmp &=	~((unsigned long long) CACHE_LINE_SIZE-1);
-		}
+		tmp = status->free_chunk;
+		status->free_chunk = (linked_pointer*) (((char*) tmp) + status->block_size + HEADER_SIZE);
+		if(tmp->counter == 1)
+			status->free_chunk = NULL;
+		else
+			status->free_chunk->counter = tmp->counter-1;
 		
-		tmp = UNION_CAST(res_tmp,  linked_pointer* );
-		tmp->base = res;
-		tmp->next = NULL;
-		res = tmp;
+		res = (linked_pointer*) tmp;
 		
-		
-		#if UNROLLED_FACTOR > 1
-		rolled_list_head = tmp = (linked_pointer*) (((char*) res) + status->block_size + HEADER_SIZE) ;
-		for(i=1;i<UNROLLED_FACTOR-1;i++)
-		{
-			tmp->next = (linked_pointer*) (((char*) tmp) + status->block_size + HEADER_SIZE) ;
-			tmp = tmp->next;
-		}
-		tmp->next = status->free_nodes_lists;
-		status->free_nodes_lists = rolled_list_head;
-		#endif
-		status->to_remove_nodes_count += 1;
-						
+		//#if UNROLLED_FACTOR > 1
+		//rolled_list_head = tmp = (linked_pointer*) (((char*) res) + status->block_size + HEADER_SIZE) ;
+		//for(i=1;i<UNROLLED_FACTOR-1;i++)
+		//{
+		//	tmp->next = (linked_pointer*) (((char*) tmp) + status->block_size + HEADER_SIZE) ;
+		//	tmp = tmp->next;
+		//}
+		//tmp->next = status->free_nodes_lists;
+		//status->free_nodes_lists = rolled_list_head;
+		//#endif
 	}
 	else
 	{
-		//status->to_remove_nodes_count -= 1;
 		res = free_nodes_lists;
-		//if(res->next==NULL && status->all_malloc > 0  && status->all_malloc < UNROLLED_FACTOR && status->all_malloc < UNROLLED_FACTOR*status->to_remove_nodes_count)
-		//{
-		//	res = NULL;
-		//	res->next = NULL;
-		//}
 		status->free_nodes_lists = res->next;
-
 	}
 	
 	status->all_malloc += 1;
@@ -222,20 +204,7 @@ void mm_node_free(hpdcs_gc_status *status, void* pointer)
 #if USE_GLOBAL_LIST == 1
 	if(private_alloc_node_count++%2 == 0)
 	{
-		//do
-		//{
-		//	tmp_global = global_free_list;
-		//	res->next = tmp_global;
-		//	if(__sync_bool_compare_and_swap(&global_free_list, tmp_global, res))
-		//		return;
-		//	
-		//	tmp_global = global_free_list_2;
-		//	res->next = tmp_global;
-		//	
-		//	if(__sync_bool_compare_and_swap(&global_free_list_2, tmp_global, res))
-		//		return;
-		//}while(1);
-		
+
 		for(i=0;i<8;i++)
 		{
 			tmp_global = global_free_list_array[ind%8].pointer;
@@ -252,19 +221,8 @@ void mm_node_free(hpdcs_gc_status *status, void* pointer)
 }
 
 
-//void mm_node_connect_to_be_freed(hpdcs_gc_status *status, void* pointer)
-//{
-//	linked_gc_node *res;
-//	linked_gc_node *tmp_lists 	= status->to_free_nodes 	;
-//	res = (linked_gc_node*) ( ((char*)pointer)- HEADER_SIZE );
-//	
-//	res->next = tmp_lists;
-//	status->to_free_nodes = (void*)res;
-//	
-//}
 
-
-void mm_node_trash(hpdcs_gc_status *status, void* pointer,  unsigned int counter)
+void mm_node_collect_connected_nodes(hpdcs_gc_status *status, void* pointer,  unsigned int counter)
 {
 	linked_gc_node *res;
 	linked_gc_node *tmp_lists 	= status->to_free_nodes 	;
@@ -276,7 +234,7 @@ void mm_node_trash(hpdcs_gc_status *status, void* pointer,  unsigned int counter
 }
 
 
-void* mm_node_collect(hpdcs_gc_status *status, unsigned int *counter)
+void* mm_node_get_reusable(hpdcs_gc_status *status, unsigned int *counter)
 {
 	linked_gc_node *res;
 	linked_gc_node *tmp_lists 	= status->to_free_nodes_old	;
@@ -304,7 +262,6 @@ void mm_new_era(hpdcs_gc_status *status, unsigned int *prune_array, unsigned int
 	
 	for(i=0;i<threads;i++)
 	{	prune_array[(tid)*threads +i] = 0;
-	//__sync_synchronize();
 	}
 }
 
@@ -323,10 +280,8 @@ bool mm_safe(unsigned int * volatile prune_array, unsigned int threads, unsigned
 	for(;i<threads;i++)
 	{
 		prune_array[(tid) + i*threads] = 1;
-	//	__sync_synchronize();
 		flag &= prune_array[(tid)*threads +i];
 	}
-	//__sync_synchronize();
 	if(flag != 1)
 		return false;
 		
