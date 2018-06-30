@@ -61,7 +61,6 @@ critical_enter()
 	if ( ptst == NULL ) exit(1);
 	    
 	memset(ptst, 0, sizeof(ptst_t));
-	ptst->gc = gc_init();
 	ptst->count = 1;
 	ptst->id = __sync_fetch_and_add(&next_id, 1);
 	rand_init(ptst);
@@ -72,7 +71,6 @@ critical_enter()
 	while ( (new_next = __sync_val_compare_and_swap(&ptst_list, next, ptst)) != next );
     }
     
-    gc_enter(ptst);
     return;
 }
 

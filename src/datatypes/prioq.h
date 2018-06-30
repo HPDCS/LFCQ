@@ -2,6 +2,7 @@
 #define PRIOQ_H
 
 #include "common.h"
+#include "../mm/garbagecollector.h"
 
 typedef double pkey_t;
 typedef void         *pval_t;
@@ -19,7 +20,8 @@ typedef struct node_s
     int       level;
     int       inserting; //char pad2[4];
     pval_t    v;
-    struct node_s *next[1];
+    struct node_s *next[NUM_LEVELS];
+    char pad[24];
 } node_t;
 
 typedef struct
@@ -50,5 +52,6 @@ extern pval_t deletemin(pq_t *pq);
 extern void sequential_length(pq_t *pq);
 
 extern void print_stats();
+extern void pq_prune();
 
 #endif // PRIOQ_H

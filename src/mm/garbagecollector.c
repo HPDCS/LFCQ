@@ -15,7 +15,6 @@ typedef struct _free_list free_list;
 struct _free_list
 {
 		linked_pointer * volatile pointer;
-		//char pad[CACHE_LINE_SIZE-8];
 };
 
 
@@ -41,9 +40,6 @@ __thread unsigned int private_alloc_node_count = 0;
 #endif
 
 #define HEADER_SIZE 16
-
-
-
 
 void* alloc_array_nodes(hpdcs_gc_status *status, unsigned int num_item)
 {
@@ -119,9 +115,11 @@ void* mm_node_malloc(hpdcs_gc_status *status)
 	linked_pointer *rolled_list_head;
 	int i = 0;
 #endif
-
+	
+	
 	if(free_nodes_lists == NULL)
 	{	
+
 #if USE_GLOBAL_LIST == 1
 		//res_a = global_free_list;
 		//res_b = global_free_list_2;
@@ -184,13 +182,19 @@ void* mm_node_malloc(hpdcs_gc_status *status)
 		status->free_nodes_lists = rolled_list_head;
 		#endif
 		status->to_remove_nodes_count += 1;
-				
+						
 	}
 	else
 	{
 		//status->to_remove_nodes_count -= 1;
 		res = free_nodes_lists;
+		//if(res->next==NULL && status->all_malloc > 0  && status->all_malloc < UNROLLED_FACTOR && status->all_malloc < UNROLLED_FACTOR*status->to_remove_nodes_count)
+		//{
+		//	res = NULL;
+		//	res->next = NULL;
+		//}
 		status->free_nodes_lists = res->next;
+
 	}
 	
 	status->all_malloc += 1;
@@ -248,16 +252,16 @@ void mm_node_free(hpdcs_gc_status *status, void* pointer)
 }
 
 
-void mm_node_connect_to_be_freed(hpdcs_gc_status *status, void* pointer)
-{
-	linked_gc_node *res;
-	linked_gc_node *tmp_lists 	= status->to_free_nodes 	;
-	res = (linked_gc_node*) ( ((char*)pointer)- HEADER_SIZE );
-	
-	res->next = tmp_lists;
-	status->to_free_nodes = (void*)res;
-	
-}
+//void mm_node_connect_to_be_freed(hpdcs_gc_status *status, void* pointer)
+//{
+//	linked_gc_node *res;
+//	linked_gc_node *tmp_lists 	= status->to_free_nodes 	;
+//	res = (linked_gc_node*) ( ((char*)pointer)- HEADER_SIZE );
+//	
+//	res->next = tmp_lists;
+//	status->to_free_nodes = (void*)res;
+//	
+//}
 
 
 void mm_node_trash(hpdcs_gc_status *status, void* pointer,  unsigned int counter)
@@ -299,7 +303,9 @@ void mm_new_era(hpdcs_gc_status *status, unsigned int *prune_array, unsigned int
 	}
 	
 	for(i=0;i<threads;i++)
-		prune_array[(tid)*threads +i] = 0;
+	{	prune_array[(tid)*threads +i] = 0;
+	//__sync_synchronize();
+	}
 }
 
 
@@ -313,12 +319,14 @@ bool mm_safe(unsigned int * volatile prune_array, unsigned int threads, unsigned
 	
 	prune_count = 0;
 
+	
 	for(;i<threads;i++)
 	{
 		prune_array[(tid) + i*threads] = 1;
+	//	__sync_synchronize();
 		flag &= prune_array[(tid)*threads +i];
 	}
-
+	//__sync_synchronize();
 	if(flag != 1)
 		return false;
 		

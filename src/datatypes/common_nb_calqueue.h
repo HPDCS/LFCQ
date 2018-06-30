@@ -53,8 +53,8 @@
 #define SINGLE_COUNTER 0
 #define MONITOR_PERIOD 31
 #define READTABLE_PERIOD 63
-#define COMPACT_RANDOM_ENQUEUE 0
-#define COMPACT_RANDOM_DEQUEUE 1
+#define COMPACT_RANDOM_ENQUEUE 1
+#define COMPACT_RANDOM_DEQUEUE 0
 #define DISTANCE_FROM_CURRENT 0.0 
 #define RESIZE_PERIOD 200000000ULL
 #define ENABLE_PREFETCH 0
@@ -151,7 +151,7 @@ struct __bucket_node
 	nbc_bucket_node * tail;
 	nbc_bucket_node * volatile next;	// pointer to the successor
 	nbc_bucket_node * volatile replica;	// pointer to the replica
-	nbc_bucket_node * volatile next_next;
+	//nbc_bucket_node * volatile next_next;
 };
 
 

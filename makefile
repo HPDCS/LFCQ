@@ -10,10 +10,10 @@ SRC_DIR := src
 
 L1_CACHE_LINE_SIZE := $(shell getconf LEVEL1_DCACHE_LINESIZE)
 MACRO := -DARCH_X86_64  -DCACHE_LINE_SIZE=$(L1_CACHE_LINE_SIZE) -DINTEL
-OPTIMIZATION := -O3
+OPTIMIZATION := -O0
 DEBUG := -g3
 
-FILTER_OUT_SRC := src/main.c src/main_2.c src/mm/mm.c src/mm/mm.h
+FILTER_OUT_SRC := src/main.c src/main_2.c src/mm/mm.c src/mm/mm.h src/datatypes/gc/gc.*
 
 OBJS_DIR 	:= $(strip $(MAKECMDGOALS))
 

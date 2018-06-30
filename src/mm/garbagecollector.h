@@ -2,6 +2,8 @@
 #define __HPDCS_MM__
 
 #include <stdlib.h>
+#include <stdbool.h>
+
 
 typedef struct _linked_pointer linked_pointer;
 typedef struct _linked_gc_node linked_gc_node;

@@ -13,10 +13,6 @@
 
 typedef struct ptst_st ptst_t;
 
-//#include <gsl/gsl_rng.h>
-
-#include "gc.h"
-
 struct ptst_st
 {
     /* Thread id */
@@ -26,7 +22,6 @@ struct ptst_st
     unsigned int count;
 
     /* Utility structures */
-    gc_t        *gc;
     char pad[56];
     unsigned int rand;
 };
@@ -38,7 +33,7 @@ struct ptst_st
 
 void critical_enter(void );
 
-#define critical_exit() gc_exit(ptst)
+#define critical_exit() {}
 
 /* Iterators */
 extern ptst_t *ptst_list;

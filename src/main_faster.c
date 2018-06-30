@@ -36,7 +36,6 @@
 #include "datatypes/calqueue.h"
 #include "datatypes/nb_calqueue.h"
 #include "datatypes/prioq.h"
-#include "datatypes/gc/gc.h"
 
 #include "utils/hpdcs_utils.h"
 #include "utils/hpdcs_math.h"
@@ -269,6 +268,10 @@ void classic_hold(
 			
 			if( DATASTRUCT == 'F' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
 				nbc_prune(nbcqueue);
+			else if( DATASTRUCT == 'N' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
+				nbc_prune();
+			else if( DATASTRUCT == 'S' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
+				pq_prune();
 			
 			
 			if(par_count == THREADS)
@@ -331,6 +334,9 @@ void classic_hold(
 				nbc_prune();
 			else if( DATASTRUCT == 'N' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
 				nbc_prune();
+			else if( DATASTRUCT == 'S' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
+				pq_prune();
+				
 
 			if(par_count == THREADS && TEST_MODE != 'T')
 			{	
@@ -556,7 +562,6 @@ int main(int argc, char **argv)
 			nbcqueue = nbc_init(THREADS, PERC_USED_BUCKET, ELEM_PER_BUCKET);
 			break;
 		case 'S':
-			_init_gc_subsystem();
 			skip_queue = pq_init(ELEM_PER_BUCKET);
 			break;
 		default:
