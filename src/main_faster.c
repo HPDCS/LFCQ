@@ -553,6 +553,7 @@ int main(int argc, char **argv)
 			calqueue_init();
 			break;
 		case 'F':
+			_init_gc_subsystem();
 			nbcqueue = nbc_init(THREADS, PERC_USED_BUCKET, ELEM_PER_BUCKET);
 			break;
 		case 'S':

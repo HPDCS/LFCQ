@@ -59,7 +59,7 @@ __thread ptst_t *ptst;
 __thread unsigned long long s_compact = 0;
 __thread unsigned long long s_tried = 0;
 __thread unsigned long long s_changed = 0;
-static int gc_id[NUM_LEVELS];
+int gc_id[NUM_LEVELS];
 
 __thread node_t *last_head = NULL;
 __thread node_t *last_min = NULL;

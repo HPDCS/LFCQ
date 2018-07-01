@@ -34,6 +34,11 @@
 #include "../mm/garbagecollector.h"
 #include "../utils/hpdcs_utils.h"
 
+#include "gc/ptst.h"
+extern __thread ptst_t *ptst;
+extern int gc_id[];
+
+
 
 
 #define SAMPLE_SIZE 25
@@ -44,7 +49,7 @@
 
 #define FLUSH_SMART 1
 #define ENABLE_EXPANSION 1
-#define ENABLE_PRUNE 1
+#define ENABLE_PRUNE 0
 #define ENABLE_HIGH_STATITISTICS 1
 #define LOG_DEQUEUE 0
 #define LOG_ENQUEUE 0
@@ -255,8 +260,10 @@ static inline nbc_bucket_node* node_malloc(void *payload, double timestamp, unsi
 {
 	nbc_bucket_node* res;
 	
-	res = mm_node_malloc(&malloc_status);
+	//res = mm_node_malloc(&malloc_status);
 	
+    res = gc_alloc(ptst, gc_id[0]);
+    
 	if (unlikely(is_marked(res) || res == NULL))
 	{
 		error("%lu - Not aligned Node or No memory\n", TID);
@@ -293,7 +300,15 @@ static inline void node_free(nbc_bucket_node *pointer)
  */
 static inline void connect_to_be_freed_node_list(nbc_bucket_node *start, unsigned int counter)
 {
-	mm_node_trash(&malloc_status, get_unmarked(start), counter);
+	//mm_node_trash(&malloc_status, get_unmarked(start), counter);
+	nbc_bucket_node *tmp_next;
+	start = get_unmarked(start);
+	while(start != NULL && counter-- != 0)                //<-----NEW
+	{                                                   //<-----NEW
+		tmp_next = start->next;                           //<-----NEW
+		gc_free(ptst, (void *)start, gc_id[0]);
+		start =  get_unmarked(tmp_next);                  //<-----NEW
+	}                                                   //<-----NEW
 }
 
 static inline void connect_to_be_freed_table_list(table *h)

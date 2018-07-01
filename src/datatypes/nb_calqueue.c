@@ -62,6 +62,7 @@ __thread nbc_bucket_node *to_free_tables_old = NULL;
 __thread nbc_bucket_node *to_free_tables_new = NULL;
 
 
+
 /*************************************
  * VARIABLES FOR ENQUEUE  *
  *************************************/
@@ -92,6 +93,8 @@ __thread unsigned long long num_cas_useful = 0ULL;
 
 __thread unsigned long long near = 0;
 __thread unsigned long long dist = 0;
+
+
 
 #define MOV_FOUND 	3
 #define OK			1
@@ -1038,6 +1041,10 @@ nb_calqueue* nbc_init(unsigned int threshold, double perc_used_bucket, unsigned 
 		free(res);
 	}
 
+	gc_id[0] = gc_add_allocator(sizeof(nbc_bucket_node));
+	critical_enter();
+	critical_exit();
+	
 	res->tail = node_malloc(NULL, INFTY, 0);
 	res->tail->next = NULL;
 
@@ -1048,7 +1055,6 @@ nb_calqueue* nbc_init(unsigned int threshold, double perc_used_bucket, unsigned 
 		res->hashtable->array[i].timestamp = i * 1.0;
 		res->hashtable->array[i].counter = 0;
 	}
-
 
 	return res;
 }
@@ -1068,6 +1074,8 @@ nb_calqueue* nbc_init(unsigned int threshold, double perc_used_bucket, unsigned 
  */
 void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 {
+	
+	critical_enter();
 	nbc_bucket_node *bucket, *new_node = node_malloc(payload, timestamp, 0);
 	table * h = NULL;		
 	unsigned int index, res, size;
@@ -1080,6 +1088,7 @@ void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 	unsigned int th = queue->threshold;
 	unsigned int period_monitor = queue->period_monitor;
 	
+
 	//init the result
 	res = MOV_FOUND;
 	//local_monitor = ((-(local_monitor == -1)) & TID) + ((-(local_monitor != -1)) & local_monitor);
@@ -1132,7 +1141,8 @@ void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 		search(h->array+((oldIndex + dist + (unsigned int)((size-dist)*rand))%size), -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
 		#endif
 	}
-	
+	critical_exit();
+
 }
 
 /**
@@ -1175,7 +1185,8 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 		local_monitor = TID;
 	bool monitor = (++local_monitor % period_monitor) == 0;
 	
-	
+	critical_enter();
+
 begin:
 	h = read_table(&queue->hashtable, th, epb, pub);
 	size = h->size;
@@ -1276,7 +1287,8 @@ begin:
 				#if LOG_DEQUEUE == 1
 					LOG("DEQUEUE: %f %u - %llu %llu\n",left_ts, left_node->counter, index, index % size);
 				#endif
-								
+				critical_exit();
+
 				return left_ts;
 				//}
 			//}
@@ -1314,6 +1326,7 @@ begin:
 			LOG("DEQUEUE: NULL 0 - %llu %llu\n", index, index % size);
 			#endif
 			*result = NULL;
+				critical_exit();
 			return INFTY;
 		}
 
