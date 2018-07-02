@@ -79,9 +79,11 @@ alloc_node(pq_t *q)
     assert(1 <= level && level <= 32);
 
     n = gc_alloc(ptst, gc_id[level - 1]);
+    //n = gc_alloc(ptst, gc_id[NUM_LEVELS-1]);
     n->level = level;
     n->inserting = 1;
     memset(n->next, 0, level * sizeof(node_t *));
+    //memset(n->next, 0, NUM_LEVELS*sizeof(node_t*));
     return n;
 }
 
@@ -91,6 +93,7 @@ static void
 free_node(node_t *n)
 {
     gc_free(ptst, (void *)n, gc_id[(n->level) - 1]);
+    //gc_free(ptst, (void *)n, gc_id[NUM_LEVELS-1]);
 }
 
 
@@ -314,7 +317,7 @@ deletemin(pq_t *pq)
     x = pq->head;
     obs_head = x->next[0];
     
-	if(last_min && last_head == obs_head){
+	if(0 && last_min && last_head == obs_head){
 		x = last_min;
 		offset = last_offset;
 	}

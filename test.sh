@@ -1,7 +1,7 @@
 DIST=$5
 OPS=4000000
 SIZE=64000
-PRUNE=500
+PRUNE=5000000000000
 TIME=20
 MODE=T
 
@@ -10,7 +10,7 @@ then
     PRE="gdb --args"
 elif [ "$6" = "PR" ]
 then
-    PRE="perf record"
+    PRE1="perf record"
     POST="perf report"
 elif [ "$6" = "PS" ]
 then
