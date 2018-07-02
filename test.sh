@@ -7,7 +7,7 @@ MODE=T
 
 if [ "$6" = "G" ]
 then
-    PRE="gdb --args"
+    PRE1="gdb --args"
 elif [ "$6" = "PR" ]
 then
     PRE1="perf record"

@@ -34,18 +34,14 @@
 #include "../mm/garbagecollector.h"
 #include "../utils/hpdcs_utils.h"
 
-#define INFTY DBL_MAX
-//#define LESS(a,b) 		( (a) < (b) && !D_EQUAL((a), (b)) )
-//#define LEQ(a,b)		( (a) < (b) ||  D_EQUAL((a), (b)) )
-//#define D_EQUAL(a,b) 	(fabs((a) - (b)) < DBL_EPSILON)
-//#define GEQ(a,b) 		( (a) > (b) ||  D_EQUAL((a), (b)) )
-//#define GREATER(a,b) 	( (a) > (b) &&  !D_EQUAL((a), (b)) )
-#define LESS(a,b) 		( (a) <  (b) )
-#define LEQ(a,b)		( (a) <= (b) )
-#define D_EQUAL(a,b) 	( (a) == (b) )
-#define GEQ(a,b) 		( (a) >= (b) )
-#define GREATER(a,b) 	( (a) >  (b) )
-#define SAMPLE_SIZE 45
+#include "gc/ptst.h"
+extern __thread ptst_t *ptst;
+extern int gc_id[];
+
+
+
+
+#define SAMPLE_SIZE 25
 #define HEAD_ID 0
 #define MAXIMUM_SIZE 1048576 //524288 //262144 //131072 //65536 //32768
 #define MINIMUM_SIZE 1
@@ -53,13 +49,35 @@
 
 #define FLUSH_SMART 1
 #define ENABLE_EXPANSION 1
-#define ENABLE_PRUNE 1
+#define ENABLE_PRUNE 0
 #define ENABLE_HIGH_STATITISTICS 1
+#define LOG_DEQUEUE 0
+#define LOG_ENQUEUE 0
+
+
+#define SINGLE_COUNTER 0
+#define MONITOR_PERIOD 31
+#define READTABLE_PERIOD 63
+#define COMPACT_RANDOM_ENQUEUE 1
+#define COMPACT_RANDOM_DEQUEUE 0
+#define DISTANCE_FROM_CURRENT 0.0 
+#define RESIZE_PERIOD 200000000ULL
+#define ENABLE_PREFETCH 0
+#define ENABLE_CLFLUSH 0
+
+
+
+
+
+#define INFTY DBL_MAX
+#define LESS(a,b) 		( (a) <  (b) )
+#define LEQ(a,b)		( (a) <= (b) )
+#define D_EQUAL(a,b) 	( (a) == (b) )
+#define GEQ(a,b) 		( (a) >= (b) )
+#define GREATER(a,b) 	( (a) >  (b) )
 
 #define TID tid
 
-#define LOG_DEQUEUE 0
-#define LOG_ENQUEUE 0
 
 #define BOOL_CAS_ALE(addr, old, new)  CAS_x86(\
 										UNION_CAST(addr, volatile unsigned long long *),\
@@ -108,7 +126,7 @@
 #define MASK_CURR	(0xffffffff00000000ULL)
 
 
-#define REMOVE_DEL		 0
+#define REMOVE_DEL	 0
 #define REMOVE_DEL_INV	 1
 
 #define is_marked(...) macro_dispatcher(is_marked, __VA_ARGS__)(__VA_ARGS__)
@@ -119,17 +137,6 @@
 #define get_unmarked(pointer)		(UNION_CAST((UNION_CAST(pointer, unsigned long long) & MASK_PTR), void *))
 #define get_marked(pointer, mark)	(UNION_CAST((UNION_CAST(pointer, unsigned long long)|(mark)), void *))
 #define get_mark(pointer)			(UNION_CAST((UNION_CAST(pointer, unsigned long long) & MASK_MRK), unsigned long long))
-
-
-#define SINGLE_COUNTER 0
-
-#define MONITOR_PERIOD 512
-#define READTABLE_PERIOD 64
-#define COMPACT_RANDOM_ENQUEUE 0
-#define COMPACT_RANDOM_DEQUEUE 1
-#define DISTANCE_FROM_CURRENT 0.001
-#define RESIZE_PERIOD 200000000ULL
-#define ENABLE_PREFETCH 0
 
 
 /**
@@ -158,27 +165,23 @@ struct __bucket_node
 typedef struct table table;
 struct table
 {
-	table * volatile new_table;
-        // 8
+	table * volatile new_table;		// 8
 	unsigned int size;
-    	unsigned int pad;
-	//16        
-	double bucket_width;
-	//24        
-	nbc_bucket_node* array;
-	//32
-	//char zpad4[32];
-	#if SINGLE_COUNTER == 0
+    unsigned int pad;				//16        
+	double bucket_width;			//24        
+	nbc_bucket_node* array;			//32
+	unsigned int read_table_period;
+	char zpad4[28];
+#if SINGLE_COUNTER == 0
 	atomic_t e_counter;
-	//char zpad3[60];
+	char zpad3[60];
 	atomic_t d_counter;
-	char zpad1[24];
-	#else
+#else
 	volatile unsigned long long counter;
-	char zpad1[56];
-	#endif
+#endif
+	char zpad1[60];
 	volatile unsigned long long current;
-	char zpad2[56];
+	//char zpad2[56];
 	//unsigned int size;
 	//unsigned int pad;
 	//double bucket_width;
@@ -195,9 +198,11 @@ struct nb_calqueue
 	double pub_per_epb;
 	nbc_bucket_node * tail;
 	// 32
-	char zpad9[32];
+	unsigned int read_table_period;
+	unsigned int period_monitor;   
 	// 64
 	table * volatile hashtable;
+	//char pad[24];
 	// 64
 };
 
@@ -207,11 +212,9 @@ extern __thread unsigned int TID;
 extern __thread struct drand48_data seedT;
 extern __thread hpdcs_gc_status malloc_status;
 
-
 extern __thread nbc_bucket_node *to_free_tables_old;
 extern __thread nbc_bucket_node *to_free_tables_new;
    
-
 extern __thread unsigned long long concurrent_dequeue;
 extern __thread unsigned long long performed_dequeue ;
 extern __thread unsigned long long attempt_dequeue ;
@@ -221,10 +224,11 @@ extern __thread unsigned long long scan_list_length ;
 extern __thread unsigned long long concurrent_enqueue;
 extern __thread unsigned long long performed_enqueue ;
 extern __thread unsigned long long attempt_enqueue ;
-extern __thread unsigned long long flush_current_attempt	;
-extern __thread unsigned long long flush_current_success	;
-extern __thread unsigned long long flush_current_fail	;
-extern __thread unsigned long long read_table_count	;
+extern __thread unsigned long long flush_current_attempt       ;
+extern __thread unsigned long long flush_current_success       ;
+extern __thread unsigned long long flush_current_fail  ;
+extern __thread unsigned long long read_table_count    ;
+
 
 extern unsigned int * volatile prune_array;
 extern unsigned int threads;
@@ -233,6 +237,10 @@ extern nbc_bucket_node *g_tail;
 extern __thread hpdcs_gc_status malloc_status;
 
 extern __thread unsigned long long near;
+extern __thread unsigned long long num_cas;
+extern __thread unsigned long long num_cas_useful;
+
+
 
 void set_new_table(table* h, unsigned int threshold, double pub, unsigned int epb, unsigned int counter);
 
@@ -270,8 +278,10 @@ static inline nbc_bucket_node* node_malloc(void *payload, double timestamp, unsi
 {
 	nbc_bucket_node* res;
 	
-	res = mm_node_malloc(&malloc_status);
+	//res = mm_node_malloc(&malloc_status);
 	
+    res = gc_alloc(ptst, gc_id[0]);
+    
 	if (unlikely(is_marked(res) || res == NULL))
 	{
 		error("%lu - Not aligned Node or No memory\n", TID);
@@ -308,7 +318,15 @@ static inline void node_free(nbc_bucket_node *pointer)
  */
 static inline void connect_to_be_freed_node_list(nbc_bucket_node *start, unsigned int counter)
 {
-	mm_node_trash(&malloc_status, get_unmarked(start), counter);
+	//mm_node_collect_connected_nodes(&malloc_status, get_unmarked(start), counter);
+	nbc_bucket_node *tmp_next;
+	start = get_unmarked(start);
+	while(start != NULL && counter-- != 0)                //<-----NEW
+	{                                                   //<-----NEW
+		tmp_next = start->next;                           //<-----NEW
+		gc_free(ptst, (void *)start, gc_id[0]);
+		start =  get_unmarked(tmp_next);                  //<-----NEW
+	}                                                   //<-----NEW
 }
 
 static inline void connect_to_be_freed_table_list(table *h)
@@ -366,7 +384,6 @@ static inline unsigned long long hash(double timestamp, double bucket_width)
 	int upA = 0;
 	int upB = 0;
 
-
 	if(__builtin_expect(res_d > 4294967295, 0))
 	{
 		error("Probable Overflow when computing the index: "
@@ -376,15 +393,6 @@ static inline unsigned long long hash(double timestamp, double bucket_width)
 				"2^32:%e\n",
 				timestamp, bucket_width, res_d,  pow(2, 32));
 	}
-
-	//tmp1 = res * bucket_width;
-	//if(__builtin_expect(LESS(timestamp, tmp1), 0))
-	//	//return --res;
-	//	upA = -1;
-	//tmp2 = tmp1 + bucket_width;
-	//if(__builtin_expect(GEQ(timestamp, tmp2), 0))
-	//	//return ++res;
-	//	upB = +1;
 
 	tmp1 = res * bucket_width;
 	tmp2 = (res+1) * bucket_width;
@@ -399,15 +407,18 @@ static inline unsigned long long hash(double timestamp, double bucket_width)
 
 static inline void clflush(volatile void *p)
 {
+	#if ENABLE_CLFLUSH == 1
 //        asm volatile ("mfence" ::: "memory");
-//        asm volatile ("clflush (%0)" :: "r"(p));        
+        asm volatile ("clflush (%0)" :: "r"(p));        
 //        asm volatile ("mfence" ::: "memory");
-
+	#endif
 }
 
 static inline void prefetch(void *p)
 {
-	__builtin_prefetch(p, 0 , 1); 
+	#if ENABLE_PREFETCH == 1
+	__builtin_prefetch(p, 1, 3);
+	#endif 
 }
 
 

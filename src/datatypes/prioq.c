@@ -52,22 +52,41 @@
 
 /* interface, constant defines, and typedefs */
 #include "prioq.h"
+#include "common_nb_calqueue.h"
+#include <stddef.h>
 
+
+
+__thread hpdcs_gc_status pq_malloc_status =
+{
+	.free_nodes_lists 			= NULL,
+	.free_chunk 			= NULL,
+	.to_free_nodes 				= NULL,
+	.to_free_nodes_old 			= NULL,
+	.block_size 				= sizeof(node_t),
+	.to_remove_nodes_count 		= 0LL,
+	.all_malloc			 		= 0LL
+};
 
 /* thread state. */
 __thread ptst_t *ptst;
+__thread unsigned long long s_compact = 0;
+__thread unsigned long long s_tried = 0;
+__thread unsigned long long s_changed = 0;
 
-static int gc_id[NUM_LEVELS];
+int gc_id[NUM_LEVELS];
 
 __thread node_t *last_head = NULL;
 __thread node_t *last_min = NULL;
-__thread unsigned int last_offset = 0;
+__thread unsigned long long last_offset = 0;
+
+#define MASTER_THREAD 42
 
 /* initialize new node */
 static node_t *
-alloc_node(pq_t *q)
+alloc_node()
 {
-    node_t *n;
+	node_t *n;
     int level = 1;
     /* crappy rng */
     unsigned int r = ptst->rand;
@@ -78,12 +97,19 @@ alloc_node(pq_t *q)
 	++level;
     assert(1 <= level && level <= 32);
 
+#if FRASER_ALLOCATOR == 1
     n = gc_alloc(ptst, gc_id[level - 1]);
     //n = gc_alloc(ptst, gc_id[NUM_LEVELS-1]);
     n->level = level;
     n->inserting = 1;
     memset(n->next, 0, level * sizeof(node_t *));
     //memset(n->next, 0, NUM_LEVELS*sizeof(node_t*));
+#else
+    n = mm_node_malloc(&pq_malloc_status);
+    memset(n, 0, sizeof(node_t));
+    n->level = level;
+    n->inserting = 1;
+#endif
     return n;
 }
 
@@ -92,12 +118,16 @@ alloc_node(pq_t *q)
 static void 
 free_node(node_t *n)
 {
+#if FRASER_ALLOCATOR == 1
     gc_free(ptst, (void *)n, gc_id[(n->level) - 1]);
     //gc_free(ptst, (void *)n, gc_id[NUM_LEVELS-1]);
+#else
+    mm_node_free(&pq_malloc_status, n);
+#endif
 }
 
 
-/***** locate_preds ***** 
+/***** locate_preds *****
  * Record predecessors and non-deleted successors of key k.  If k is
  * encountered during traversal of list, the node will be in succs[0].
  *
@@ -110,11 +140,11 @@ free_node(node_t *n)
  * 0 --> 7 at level 2.)
  *
  *                   del
- *                   p[0] 
+ *                   p[0]
  * p[2]  p[1]        s[1]  s[0]  s[2]
  *  |     |           |     |     |
  *  v     |           |     |     v
- *  _     v           v     |     _ 
+ *  _     v           v     |     _
  * | |    _           _	    v    | |
  * | |   | |    _    | |    _    | |
  * | |   | |   | |   | |   | |   | |
@@ -122,9 +152,8 @@ free_node(node_t *n)
  *  d     d     d
  *
  */
-
 static node_t *
-locate_preds(pq_t *pq, pkey_t k, node_t **preds, node_t **succs)
+locate_preds(pq_t * restrict pq, pkey_t k, node_t ** restrict preds, node_t ** restrict succs)
 {
     node_t *x, *x_next, *del = NULL;
     int d = 0, i;
@@ -133,26 +162,26 @@ locate_preds(pq_t *pq, pkey_t k, node_t **preds, node_t **succs)
     i = NUM_LEVELS - 1;
     while (i >= 0)
     {
-	x_next = x->next[i];
-	d = is_marked_ref(x_next);
-	x_next = get_unmarked_ref(x_next);
-	assert(x_next != NULL);
+       x_next = x->next[i];
+       d = is_marked_ref(x_next);
+       x_next = get_unmarked_ref(x_next);
+       assert(x_next != NULL);
 	
-        while (x_next->k < k || is_marked_ref(x_next->next[0]) 
-	       || ((i == 0) && d)) {
-	    /* Record bottom level deleted node not having delete flag 
-	     * set, if traversed. */
-	    if (i == 0 && d)
-		del = x_next;
-	    x = x_next;
-	    x_next = x->next[i];
-	    d = is_marked_ref(x_next);
-	    x_next = get_unmarked_ref(x_next);
-	    assert(x_next != NULL);
-	}
-        preds[i] = x;
-        succs[i] = x_next;
-	i--;
+       while (x_next->k < k || is_marked_ref(x_next->next[0])
+              || ((i == 0) && d)) {
+           /* Record bottom level deleted node not having delete flag
+            * set, if traversed. */
+           if (i == 0 && d)
+               del = x_next;
+           x = x_next;
+           x_next = x->next[i];
+           d = is_marked_ref(x_next);
+           x_next = get_unmarked_ref(x_next);
+           assert(x_next != NULL);
+       }
+       preds[i] = x;
+       succs[i] = x_next;
+       i--;
     }
     return del;
 }
@@ -173,72 +202,73 @@ insert(pq_t *pq, pkey_t k, pval_t v)
     node_t *preds[NUM_LEVELS], *succs[NUM_LEVELS];
     node_t *new = NULL, *del = NULL;
     
-    assert(SENTINEL_KEYMIN < k && k < SENTINEL_KEYMAX);
     critical_enter();
+
+    assert(SENTINEL_KEYMIN < k && k < SENTINEL_KEYMAX);
     
     /* Initialise a new node for insertion. */
-    new    = alloc_node(pq);
+    new    = alloc_node();
     new->k = k;
     new->v = v;
 
     /* lowest level insertion retry loop */
-retry:
+ retry:
     del = locate_preds(pq, k, preds, succs);
 
     /* return if key already exists, i.e., is present in a non-deleted
      * node */
     if (succs[0]->k == k && !is_marked_ref(preds[0]->next[0]) && preds[0]->next[0] == succs[0]) {
-	new->inserting = 0;
-	free_node(new);
-	goto out;
+        new->inserting = 0;
+        free_node(new);
+        goto out;
     }
     new->next[0] = succs[0];
 
     /* The node is logically inserted once it is present at the bottom
      * level. */
     if (!__sync_bool_compare_and_swap(&preds[0]->next[0], succs[0], new)) {
-	/* either succ has been deleted (modifying preds[0]),
-	 * or another insert has succeeded or preds[0] is head, 
-	 * and a restructure operation has updated it */
-	goto retry;
+        /* either succ has been deleted (modifying preds[0]),
+         * or another insert has succeeded or preds[0] is head,
+         * and a restructure operation has updated it */
+        goto retry;
     }
 
     /* Insert at each of the other levels in turn. */
     int i = 1;
     while ( i < new->level)
     {
-	/* If successor of new is deleted, we're done. (We're done if
-	 * only new is deleted as well, but this we can't tell) If a
-	 * candidate successor at any level is deleted, we consider
-	 * the operation completed. */
-	if (is_marked_ref(new->next[0]) ||
-	    is_marked_ref(succs[i]->next[0]) || 
-	    del == succs[i])
-	    goto success;
+        /* If successor of new is deleted, we're done. (We're done if
+         * only new is deleted as well, but this we can't tell) If a
+         * candidate successor at any level is deleted, we consider
+         * the operation completed. */
+        if (is_marked_ref(new->next[0]) ||
+            is_marked_ref(succs[i]->next[0]) ||
+            del == succs[i])
+            goto success;
 
-	/* prepare next pointer of new node */
-	new->next[i] = succs[i];
+        /* prepare next pointer of new node */
+        new->next[i] = succs[i];
         if (!__sync_bool_compare_and_swap(&preds[i]->next[i], succs[i], new))
         {
-	    /* failed due to competing insert or restruct */
+            /* failed due to competing insert or restructure */
             del = locate_preds(pq, k, preds, succs);
 
-	    /* if new has been deleted, we're done */
-	    if (succs[0] != new) goto success;
+            /* if new has been deleted, we're done */
+            if (succs[0] != new) goto success;
 	    
         } else {
-	    /* Succeeded at this level. */
-	    i++;
-	}
+            /* Succeeded at this level. */
+            i++;
+        }
     }
-success:
+ success:
     if (new) {
         /* this flag must be reset *after* all CAS have completed */
-	new->inserting = 0;
+        new->inserting = 0;
     }
     
 out:    
-    critical_exit();
+      critical_exit();
 }
 
 
@@ -271,25 +301,25 @@ restructure(pq_t *pq)
     pred = pq->head;
     while (i > 0) {
         /* the order of these reads must be maintained */
-	h = pq->head->next[i]; /* record observed head */
-	CMB();
-	cur = pred->next[i]; /* take one step forward from pred */
-	if (!is_marked_ref(h->next[0])) {
-	    i--;
-	    continue;
-	}
-	/* traverse level until non-marked node is found 
-	 * pred will always have its delete flag set 
-	 */
-	while(is_marked_ref(cur->next[0])) {
-	    pred = cur;
-	    cur = pred->next[i];
-	}
-	assert(is_marked_ref(pred->next[0]));
+        h = pq->head->next[i]; /* record observed head */
+        CMB();
+        cur = pred->next[i]; /* take one step forward from pred */
+        if (!is_marked_ref(h->next[0])) {
+            i--;
+            continue;
+        }
+        /* traverse level until non-marked node is found
+         * pred will always have its delete flag set
+         */
+        while(is_marked_ref(cur->next[0])) {
+            pred = cur;
+            cur = pred->next[i];
+        }
+        assert(is_marked_ref(pred->next[0]));
 	
-	/* swing head pointer */
-	if (__sync_bool_compare_and_swap(&pq->head->next[i],h,cur))
-	    i--;
+        /* swing head pointer */
+        if (__sync_bool_compare_and_swap(&pq->head->next[i],h,cur))
+            i--;
     }
 }
 
@@ -311,56 +341,37 @@ deletemin(pq_t *pq)
     
     newhead = NULL;
     offset = lvl = 0;
-
-    critical_enter();
-
+	critical_enter();
     x = pq->head;
     obs_head = x->next[0];
-    
-	if(0 && last_min && last_head == obs_head){
-		x = last_min;
-		offset = last_offset;
-	}
-	else
-		last_head = obs_head;
-		
+
     do {
-	offset++;
+        offset++;
 
-    /* expensive, high probability that this cache line has
-	 * been modified */
-	nxt = x->next[0];
-	
-		
+        /* expensive, high probability that this cache line has
+         * been modified */
+        nxt = x->next[0];
+
         // tail cannot be deleted
-	if (get_unmarked_ref(nxt) == pq->tail) {
-	    goto out;
-	}
+        if (get_unmarked_ref(nxt) == pq->tail) {
+            goto out;
+        }
 
-	/* Do not allow head to point past a node currently being
-	 * inserted. This makes the lock-freedom quite a theoretic
-	 * matter. */
-	if (newhead == NULL && x->inserting){
-		 newhead = x;
-		 last_min = newhead;
-		 last_offset = offset;
-	}
-	
-	/* optimization */
-	if (is_marked_ref(nxt)) continue;
-	
-	/* the marker is on the preceding pointer */
-    /* linearisation point deletemin */
-	nxt = __sync_fetch_and_or(&x->next[0], 1);
-	if(newhead == NULL && !is_marked_ref(nxt)){
-		last_min = x;
-		last_offset = offset;
-	}
+        /* Do not allow head to point past a node currently being
+         * inserted. This makes the lock-freedom quite a theoretic
+         * matter. */
+        if (newhead == NULL && x->inserting) newhead = x;
+
+        /* optimization */
+        if (is_marked_ref(nxt)) continue;
+        /* the marker is on the preceding pointer */
+        /* linearisation point deletemin */
+        nxt = __sync_fetch_and_or(&x->next[0], 1);
     }
     while ( (x = get_unmarked_ref(nxt)) && is_marked_ref(nxt) );
 
     assert(!is_marked_ref(x));
-		
+
     v = x->v;
 
     
@@ -368,7 +379,6 @@ deletemin(pq_t *pq)
      * deleted node as the new lowest-level head pointed node
      * candidate. */
     if (newhead == NULL) newhead = x;
-	
 
     /* if the offset is big enough, try to update the head node and
      * perform memory reclamation */
@@ -381,26 +391,25 @@ deletemin(pq_t *pq)
      * which is deleted */
     if (__sync_bool_compare_and_swap(&pq->head->next[0], obs_head, get_marked_ref(newhead)))
     {
-	last_offset = 0;
-	last_min = NULL;
-	/* Update higher level pointers. */
-	restructure(pq);
+        /* Update higher level pointers. */
+        restructure(pq);
 
-	/* We successfully swung the upper head pointer. The nodes
-	 * between the observed head (obs_head) and the new bottom
-	 * level head pointed node (newhead) are guaranteed to be
-	 * non-live. Mark them for recycling. */
+        /* We successfully swung the upper head pointer. The nodes
+         * between the observed head (obs_head) and the new bottom
+         * level head pointed node (newhead) are guaranteed to be
+         * non-live. Mark them for recycling. */
 
-	cur = get_unmarked_ref(obs_head);
-	while (cur != get_unmarked_ref(newhead)) {
-	    nxt = get_unmarked_ref(cur->next[0]);
-	    assert(is_marked_ref(cur->next[0]));
-	    free_node(cur);
-	    cur = nxt;
-	}
+        cur = get_unmarked_ref(obs_head);
+        while (cur != get_unmarked_ref(newhead)) {
+            nxt = get_unmarked_ref(cur->next[0]);
+            assert(is_marked_ref(cur->next[0]));
+            free_node(cur);
+            //mm_node_collect_connected_nodes(&pq_malloc_status, cur, 1);
+            cur = nxt;
+        }
     }
-out:
-    critical_exit();
+ out:
+	critical_exit();
     return v;
 }
 
@@ -408,12 +417,14 @@ out:
  * Init structure, setup sentinel head and tail nodes.
  */
 pq_t *
-pq_init(int max_offset)
+pq_init(unsigned long long max_offset)
 {
     pq_t *pq;
     node_t *t, *h;
     int i;
-
+	
+	prune_array = calloc(threads*threads, sizeof(unsigned int));
+	
     /* head and tail nodes */
     t = calloc(1, sizeof *t + (NUM_LEVELS-1)*sizeof(node_t *));
     h = calloc(1, sizeof *h + (NUM_LEVELS-1)*sizeof(node_t *));
@@ -426,16 +437,14 @@ pq_init(int max_offset)
     h->level = NUM_LEVELS;
     t->level = NUM_LEVELS;
     
-    for ( i = 0; i < NUM_LEVELS; i++ )
+    for ( i = 0; i < NUM_LEVELS; i++ ){
         h->next[i] = t;
-
+		gc_id[i] = gc_add_allocator(i*sizeof(node_t*)+sizeof(node_t));
+    }
     pq = malloc(sizeof *pq);
     pq->head = h;
     pq->tail = t;
     pq->max_offset = max_offset;
-
-    for (i = 0; i < NUM_LEVELS; i++ )
-	gc_id[i] = gc_add_allocator(sizeof(node_t) + i*sizeof(node_t *));
 
     return pq;
 }
@@ -454,4 +463,36 @@ pq_destroy(pq_t *pq)
     free(pq->tail);
     free(pq->head);
     free(pq);
+}
+
+void print_stats(){
+	printf("\n%d- NEAR %llu %llu %llu %llu", TID, s_compact, s_tried, s_changed, pq_malloc_status.to_remove_nodes_count);
+}
+
+void pq_prune()
+{
+	node_t  *tmp, *tmp_next;
+	unsigned int counter = 0;
+	
+	if(!mm_safe(prune_array, threads, TID))
+		return;
+	
+	do 														//<-----NEW
+    {	                                                    //<-----NEW
+		//if(counter != 0)
+		//printf("A COUNTER %u\n", counter);
+		tmp = mm_node_get_reusable(&pq_malloc_status, &counter);    //<-----NEW
+		//if(counter != 0)
+		//printf("B COUNTER %u\n", counter);
+		while(tmp != NULL && counter-- != 0)                //<-----NEW
+		{                                                   //<-----NEW
+			tmp_next = tmp->next[0];                        //<-----NEW
+			free_node(tmp);                                 //<-----NEW
+			tmp =  get_unmarked_ref(tmp_next);                  //<-----NEW
+		}
+		//printf("C COUNTER %u\n", counter);                  //<-----NEW
+	}                                                       //<-----NEW
+    while(tmp != NULL);										//<-----NEW
+
+	mm_new_era(&pq_malloc_status, prune_array, threads, TID);
 }

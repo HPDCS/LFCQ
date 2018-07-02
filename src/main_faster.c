@@ -84,22 +84,27 @@ unsigned int TIME;
 
 __thread struct drand48_data seedT;
 extern __thread hpdcs_gc_status malloc_status;
-
+ 
 extern __thread unsigned long long concurrent_dequeue ;
 extern __thread unsigned long long performed_dequeue  ;
 extern __thread unsigned long long attempt_dequeue  ;
-extern __thread unsigned long long scan_list_length	;
+extern __thread unsigned long long scan_list_length    ;
 
 extern __thread unsigned long long concurrent_enqueue ;
 extern __thread unsigned long long performed_enqueue  ;
 extern __thread unsigned long long attempt_enqueue  ;
 
-extern __thread unsigned long long flush_current_attempt	;
-extern __thread unsigned long long flush_current_success	;
-extern __thread unsigned long long flush_current_fail	;
+extern __thread unsigned long long flush_current_attempt       ;
+extern __thread unsigned long long flush_current_success       ;
+extern __thread unsigned long long flush_current_fail  ;
 
-extern __thread unsigned long long read_table_count	;
+extern __thread unsigned long long read_table_count    ;
 
+extern __thread unsigned long long flush_current_attempt       ;
+extern __thread unsigned long long flush_current_success       ;
+extern __thread unsigned long long flush_current_fail  ;
+
+extern __thread unsigned long long read_table_count    ;
 
 nb_calqueue* nbcqueue;
 numa_nb_calqueue* numa_nbcqueue;
@@ -302,8 +307,10 @@ void classic_hold(
 			if( DATASTRUCT == 'F' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
 				nbc_prune(nbcqueue);
 			else if( DATASTRUCT == 'N' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
-				nbc_prune(numa_nbcqueue);
-
+				nbc_prune();
+			else if( DATASTRUCT == 'S' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
+				pq_prune();
+			
 			
 			if(par_count == THREADS)
 			{	
@@ -346,12 +353,18 @@ void classic_hold(
 		}
 		
 		near = 0;
+		num_cas = 0;
+		num_cas_useful = 0;
+		par_count = 0;
+		ops_count[my_id] = 0;
+		
 		while((TEST_MODE != 'T' && tot_count < end_operations2) || (TEST_MODE == 'T' && !end_test))
 		{
 			par_count++;
 			timestamp = dequeue();
 			if(timestamp != INFTY)
 				local_min = timestamp;
+			//pthread_yield();
 
 			enqueue(my_id, seed, local_min, current_dist);
 			
@@ -359,6 +372,9 @@ void classic_hold(
 				nbc_prune();
 			else if( DATASTRUCT == 'N' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
 				nbc_prune();
+			else if( DATASTRUCT == 'S' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
+				pq_prune();
+				
 
 			if(par_count == THREADS && TEST_MODE != 'T')
 			{	
@@ -369,6 +385,7 @@ void classic_hold(
 					tot_count += ops_count[j];
 
 			}
+			//pthread_yield();
 		}
 		
 		if(end_test)
@@ -397,6 +414,7 @@ void classic_hold(
 		{
 			par_count++;
 			timestamp = dequeue();
+
 			if(timestamp != INFTY)
 			{
 				local_dequeue++;
@@ -407,7 +425,7 @@ void classic_hold(
 				nbc_prune();
 			else if( DATASTRUCT == 'N' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
 				nbc_prune();
-
+			
 			if(par_count == THREADS)
 			{	
 				ops_count[my_id]+=par_count;
@@ -480,7 +498,8 @@ void* process(void *arg)
 	
 	if(DATASTRUCT == 'F' || DATASTRUCT == 'N' || DATASTRUCT == 'W')
 		nbc_report(TID);
-	
+	if(DATASTRUCT == 'S')
+		print_stats();
 	__sync_fetch_and_add(&lock, 1);
 	pthread_exit(NULL);    
 }
@@ -578,12 +597,15 @@ int main(int argc, char **argv)
 			calqueue_init();
 			break;
 		case 'F':
+			_init_gc_subsystem();
 			nbcqueue = nbc_init(THREADS, PERC_USED_BUCKET, ELEM_PER_BUCKET);
 			break;
 		case 'N':
+			_init_gc_subsystem();
 			numa_nbcqueue = numa_nbc_init(THREADS, PERC_USED_BUCKET, ELEM_PER_BUCKET);
 			break;
 		case 'W':
+			_init_gc_subsystem();
 			worker_nbcqueue = worker_nbc_init(THREADS, PERC_USED_BUCKET, ELEM_PER_BUCKET);
 			break;
 		case 'S':

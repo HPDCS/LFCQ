@@ -30,6 +30,26 @@
 
 __thread unsigned long long performed_enqueue;
 
+__thread unsigned long long concurrent_dequeue;
+__thread unsigned long long performed_dequeue ;
+__thread unsigned long long attempt_dequeue ;
+__thread unsigned long long scan_list_length ;
+
+
+__thread unsigned long long concurrent_enqueue;
+__thread unsigned long long performed_enqueue ;
+__thread unsigned long long attempt_enqueue ;
+__thread unsigned long long flush_current_attempt       ;
+__thread unsigned long long flush_current_success       ;
+__thread unsigned long long flush_current_fail  ;
+
+nbc_bucket_node *g_tail = NULL;
+
+bool insert_std(table* hashtable, nbc_bucket_node **node, int flag)
+{
+	return 0;
+}
+
 /**
  * This function commits a value in the current field of a queue. It retries until the timestamp
  * associated with current is strictly less than the value that has to be committed
