@@ -20,6 +20,7 @@
 ******************************************************************************/
 
 
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,6 +28,7 @@
 
 #include <pthread.h>
 #include <stdarg.h>
+#include <sched.h>
 #include <sys/time.h>
 
 #include "datatypes/list.h"
@@ -87,6 +89,9 @@ unsigned int EMPTY_QUEUE;
 double PERC_USED_BUCKET; 	
 unsigned int ELEM_PER_BUCKET;
 
+unsigned int BARRIER = 0;
+unsigned int lock = 1;
+
 __thread unsigned int TID;
 __thread unsigned int num_op=0;
 
@@ -123,10 +128,12 @@ double dequeue(unsigned int my_id)
 	double timestamp = INFTY;
 	unsigned int counter = 1;
 	void* free_pointer = NULL;
-	clock_gettime(CLOCK_MONOTONIC, &startTV2);
 	payload *new_nbc_node;
 	calqueue_node *new_cal_node;
 
+	//if(VERBOSE)
+	//	clock_gettime(CLOCK_MONOTONIC, &startTV2);
+	
 	switch(DATASTRUCT)
 	{
 		case 'L':
@@ -158,30 +165,30 @@ double dequeue(unsigned int my_id)
 			break;
 	}	
 
-	clock_gettime(CLOCK_MONOTONIC,&endTV2);
 
-
-	d_time.tv_sec += endTV2.tv_sec - startTV2.tv_sec  - (endTV2.tv_nsec > startTV2.tv_nsec ? 0 : 1);
-
-	d_time.tv_nsec += endTV2.tv_nsec > startTV2.tv_nsec ? ( endTV2.tv_nsec - startTV2.tv_nsec) : (1000000000+ endTV2.tv_nsec - startTV2.tv_nsec);
-
-	assertf(
-		counter == 0,
-		"%u-%d:%d\tDEQUEUE should never return a HEAD node %.10f - %d\n",
-		my_id, (int)d_time.tv_sec, (int)d_time.tv_nsec, timestamp, counter
-		);
-
+	//if( VERBOSE )
+	//{
+	//	clock_gettime(CLOCK_MONOTONIC,&endTV2);
+	//	d_time.tv_sec += endTV2.tv_sec - startTV2.tv_sec  - (endTV2.tv_nsec > startTV2.tv_nsec ? 0 : 1);
+	//	d_time.tv_nsec += endTV2.tv_nsec > startTV2.tv_nsec ? ( endTV2.tv_nsec - startTV2.tv_nsec) : (1000000000+ endTV2.tv_nsec - startTV2.tv_nsec);
+	//}
+	//assertf(
+	//	counter == 0,
+	//	"%u-%d:%d\tDEQUEUE should never return a HEAD node %.10f - %d\n",
+	//	my_id, (int)d_time.tv_sec, (int)d_time.tv_nsec, timestamp, counter
+	//	);
+    //
 	if(free_pointer != NULL)
 	{
 		free(free_pointer);
 	}
-	if( VERBOSE )
-	{
-		if(timestamp == INFTY )
-			test_log(my_id, "%u-%d:%d\tDEQUEUE EMPTY\n", my_id, d_time.tv_sec, d_time.tv_nsec);
-		else
-			test_log(my_id, "%u-%d:%d\tDEQUEUE %.15f - %d\n", my_id, d_time.tv_sec, d_time.tv_nsec, timestamp, counter);
-	}
+	//if( VERBOSE )
+	//{
+	//	if(timestamp == INFTY )
+	//		test_log(my_id, "%u-%d:%d\tDEQUEUE EMPTY\n", my_id, d_time.tv_sec, d_time.tv_nsec);
+	//	else
+	//		test_log(my_id, "%u-%d:%d\tDEQUEUE %.15f - %d\n", my_id, d_time.tv_sec, d_time.tv_nsec, timestamp, counter);
+	//}
 	
 	return timestamp;
 }
@@ -226,7 +233,8 @@ double enqueue(unsigned int my_id, struct drand48_data* seed, double local_min, 
 	{
 		timestamp = 0;
 	}	
-clock_gettime(CLOCK_MONOTONIC, &startTV2);
+
+	//clock_gettime(CLOCK_MONOTONIC, &startTV2);
 
 	switch(DATASTRUCT)
 	{
@@ -250,14 +258,14 @@ clock_gettime(CLOCK_MONOTONIC, &startTV2);
 			exit(1);
 	}
 	
-clock_gettime(CLOCK_MONOTONIC, &endTV2);
-	e_time.tv_sec += endTV2.tv_sec - startTV2.tv_sec - (endTV2.tv_nsec > startTV2.tv_nsec ? 0 : 1);
-	e_time.tv_nsec +=  endTV2.tv_nsec > startTV2.tv_nsec ? ( endTV2.tv_nsec - startTV2.tv_nsec) : (1000000000+ endTV2.tv_nsec - startTV2.tv_nsec);
-
-	//local_min = timestamp;
-
-	if( VERBOSE )
-		test_log(my_id, "%u-%d:%d\tENQUEUE %.15f - %u\n", my_id, (int)diff.tv_sec, (int)diff.tv_usec, timestamp, counter);
+	//clock_gettime(CLOCK_MONOTONIC, &endTV2);
+	//e_time.tv_sec += endTV2.tv_sec - startTV2.tv_sec - (endTV2.tv_nsec > startTV2.tv_nsec ? 0 : 1);
+	//e_time.tv_nsec +=  endTV2.tv_nsec > startTV2.tv_nsec ? ( endTV2.tv_nsec - startTV2.tv_nsec) : (1000000000+ endTV2.tv_nsec - startTV2.tv_nsec);
+    //
+	////local_min = timestamp;
+    //
+	//if( VERBOSE )
+	//	test_log(my_id, "%u-%d:%d\tENQUEUE %.15f - %u\n", my_id, (int)diff.tv_sec, (int)diff.tv_usec, timestamp, counter);
 
 	return timestamp;
 
@@ -292,6 +300,7 @@ void classic_hold(
 	double local_min = 0.0;
 	double random_num = 0.0;
 	long long tot_count = 0;
+	long long par_count = 0;
 	double min;
 	double tmp;
 
@@ -301,7 +310,14 @@ void classic_hold(
 	char current_dist = PROB_DISTRIBUTION1;
 
 
+	
+    __sync_fetch_and_add(&BARRIER, 1);
+	
+	while(!__sync_bool_compare_and_swap(&lock, 0, 0));
+	
 	gettimeofday(&startTV, NULL);
+
+	
 
 	while(tot_count < TOTAL_OPS*iterations)
 	{
@@ -347,7 +363,7 @@ void classic_hold(
 		}
 
 
-		if( PRUNE_PERIOD != 0 && DATASTRUCT == 'F' && ops_count[my_id]%(PRUNE_PERIOD) == 0)
+		if( DATASTRUCT == 'F' && PRUNE_PERIOD != 0 &&  ops_count[my_id]%(PRUNE_PERIOD) == 0)
 		{
 			min = INFTY;
 			j =0;
@@ -368,7 +384,7 @@ void classic_hold(
 
 		}
 
-		if(my_id == 0 && ops_count[my_id]%(LOG_PERIOD) == 0 && ENABLE_LOG)
+		if(ENABLE_LOG && my_id == 0 && ops_count[my_id]%(LOG_PERIOD) == 0)
 		{
 			min = computeGVT();
 			gettimeofday(&endTV, NULL);
@@ -378,26 +394,31 @@ void classic_hold(
 
 		ops_count[my_id]++;
 		j=0;
-		tot_count = 0;
-		for(j=0;j<THREADS;j++)
-			tot_count += ops_count[j];
+		par_count++;
+		if(par_count == THREADS)
+		{	
+			par_count = 0;
+			tot_count = 0;
+			for(j=0;j<THREADS;j++)
+				tot_count += ops_count[j];
 
-		if( tot_count%(TOTAL_OPS) < TOTAL_OPS1)
-		{
-			current_dist = PROB_DISTRIBUTION1;
-			current_prob = PROB_DEQUEUE1;
-		}
+			if( tot_count%(TOTAL_OPS) < TOTAL_OPS1)
+			{
+				current_dist = PROB_DISTRIBUTION1;
+				current_prob = PROB_DEQUEUE1;
+			}
 
-		if( tot_count%(TOTAL_OPS) > TOTAL_OPS1 && tot_count%(TOTAL_OPS) < TOTAL_OPS2 )
-		{
-			current_dist = PROB_DISTRIBUTION2;
-			current_prob = PROB_DEQUEUE2;
-		}
+			if( tot_count%(TOTAL_OPS) > TOTAL_OPS1 && tot_count%(TOTAL_OPS) < TOTAL_OPS2 )
+			{
+				current_dist = PROB_DISTRIBUTION2;
+				current_prob = PROB_DEQUEUE2;
+			}
 
-		if( tot_count%(TOTAL_OPS) > TOTAL_OPS2)
-		{
-			current_dist = PROB_DISTRIBUTION3;
-			current_prob = PROB_DEQUEUE3;
+			if( tot_count%(TOTAL_OPS) > TOTAL_OPS2)
+			{
+				current_dist = PROB_DISTRIBUTION3;
+				current_prob = PROB_DEQUEUE3;
+			}
 		}
 
 	}
@@ -482,7 +503,8 @@ void* process(void *arg)
 		fclose(f);
 		test_log(my_id,"%u- DONE + %d, %u, %u, %u\n", my_id, (int)diff.tv_sec, n_dequeue, n_enqueue, ops_count[my_id]);
 	}
-
+	
+	//printf("%u %u\n", removed_nodes_count, to_remove_nodes_count);
 	pthread_exit(NULL);
 }
 
@@ -601,12 +623,23 @@ int main(int argc, char **argv)
 	
 	gettimeofday(&startTV, NULL);
 
-	for(;i<THREADS;i++)
+	for(i=0;i<THREADS;i++)
 	{
 		id[i] = i;
 		ops_count[i] = 0;
 		pthread_create(tid +i, NULL, process, id+i);
+		
+		//cpu_set_t cpuset;
+		//CPU_ZERO(&cpuset);
+		//CPU_SET(i, &cpuset);
+		//sched_setaffinity(tid[i], sizeof(cpu_set_t), &cpuset);
 	}
+	
+	while(!__sync_bool_compare_and_swap(&BARRIER, THREADS, 0));
+	
+	printf("VIA\n");
+	
+    __sync_lock_test_and_set(&lock, 0);
 
 	for(i=0;i<THREADS;i++)
 		pthread_join(tid[i], (void*)&id);

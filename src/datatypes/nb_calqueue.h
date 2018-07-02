@@ -1,8 +1,8 @@
 /*****************************************************************************
-*
+* 
 *	This file is part of NBQueue, a lock-free O(1) priority queue.
-*
-*   Copyright (C) 2015, Romolo Marotta
+* 
+*   Copyright (C) 2015, Romolo Marotta      
 *
 *   This program is free software: you can redistribute it and/or modify
 *   it under the terms of the GNU General Public License as published by
@@ -21,15 +21,15 @@
 /*
  * nonblockingqueue.h
  *
- *  Created on: Jul 13, 2015
+ *  Created on: Jul 13, 2015    
  *      Author: Romolo Marotta
  */
 
 #ifndef DATATYPES_NONBLOCKING_CALQUEUE_H_
 #define DATATYPES_NONBLOCKING_CALQUEUE_H_
 
-#include <stdbool.h>
 #include <float.h>
+#include <math.h>
 #include "../arch/atomic.h"
 
 #define INFTY DBL_MAX
@@ -50,6 +50,7 @@
 #define TID tid
 
 extern __thread unsigned int TID;
+extern __thread struct drand48_data seedT;
 
 
 /**
@@ -68,6 +69,7 @@ struct __bucket_node
 	//void *generator;	// pointer to the successor
 	void *payload;  				// general payload
 	double timestamp;  				// key
+	unsigned long long epoch;		//enqueue's epoch
 	unsigned int counter; 			// used to resolve the conflict with same timestamp using a FIFO policy
 	//char zpad3[36];					// actually used only to distinguish head nodes
 };
@@ -97,13 +99,16 @@ typedef struct nb_calqueue nb_calqueue;
 struct nb_calqueue
 {
 	unsigned int threshold;
-	char zpad9[56];
+	unsigned elem_per_bucket;
+	double perc_used_bucket;
+	double pub_per_epb;
+	char zpad9[40];
 	table * volatile hashtable;
 };
 
 extern void nbc_enqueue(nb_calqueue *queue, double timestamp, void* payload);
 extern void* nbc_dequeue(nb_calqueue *queue);
 extern double nbc_prune(nb_calqueue *queue, double timestamp);
-extern nb_calqueue* nb_calqueue_init(unsigned int threashold);
+extern nb_calqueue* nb_calqueue_init(unsigned int threashold, double perc_used_bucket, unsigned int elem_per_bucket);
 
 #endif /* DATATYPES_NONBLOCKING_QUEUE_H_ */

@@ -88,6 +88,10 @@ for line in conf.readlines():
 		distribution = line[1].split(",")
 	elif line[0] == "enable_log":
 		enable_log = line[1] == "1"
+	elif line[0] == "elem_per_bucket":
+		elem_per_bucket = line[1].split(",")
+	elif line[0] == "usage_factor":
+		usage_factor = line[1].split(",")
 
 cmd1="time"
 cmd2="-f"
@@ -183,21 +187,26 @@ if __name__ == "__main__":
 				test_pool[t] = []
 			for d  in distribution:
 				for size in queue_size:
-					for run in xrange(start_from, iterations + start_from):
-						test_pool[t] += [ [  struct, str(t), str(overall_iterations), 		# STRUCT, THREADS, OVERALL SIZE
-											 d, "0.0", size, 								# DISTRIBUTION, PROB_DEQUEUE, OPS  
-											 d, "0.5", operations, 							# DISTRIBUTION, PROB_DEQUEUE, OPS  
-											 d, "1.0", str(0), 								# DISTRIBUTION, PROB_DEQUEUE, OPS  
-											 prune_period, prune_tresh, 					# PRUNE_PERIOD, PRUNE_TRESHOLD
-											 verbose,										# VERBOSE
-											 log,											# LOG
-											 str(safety),									# SAFETY 
-											 str(empty_queue),								# EMPTY_QUEUE
-											 str(run)]	]									# RUN
-						count_test +=1
-						id_string = struct + str(t) + str(overall_iterations) + d + "0.0" + size + d + "0.5" + operations +  d + "1.0" + str(0) 
-						residual_iter[id_string] = iterations
-						instance[id_string] = 0
+					for nepb in elem_per_bucket:
+						for uf in usage_factor:
+							for run in xrange(start_from, iterations + start_from):
+								
+								test_pool[t] += [ [  struct, str(t), str(overall_iterations), 		# STRUCT, THREADS, OVERALL SIZE
+													 d, "0.0", size, 								# DISTRIBUTION, PROB_DEQUEUE, OPS  
+													 d, "0.5", operations, 							# DISTRIBUTION, PROB_DEQUEUE, OPS  
+													 d, "1.0", str(0), 								# DISTRIBUTION, PROB_DEQUEUE, OPS 
+													 uf,											# USAGE_FACTOR
+													 nepb,											# ELEM_PER_BUCKET 
+													 prune_period, prune_tresh, 					# PRUNE_PERIOD, PRUNE_TRESHOLD
+													 verbose,										# VERBOSE
+													 log,											# LOG
+													 str(safety),									# SAFETY 
+													 str(empty_queue),								# EMPTY_QUEUE
+													 str(run)]	]									# RUN
+								count_test +=1
+								id_string = struct + str(t) + str(overall_iterations) + d + "0.0" + size + d + "0.5" + operations +  d + "1.0" + str(0) +uf +nepb
+								residual_iter[id_string] = iterations
+								instance[id_string] = 0
 	num_test = count_test
 	
 	print_log(True)
@@ -214,7 +223,7 @@ if __name__ == "__main__":
 				filename = tmp_dir+"/"+"-".join(cmdline).replace(".", "_")
 				f = open(filename, "w")
 				p = Popen(cmd+cmdline[:-1], stdout=f, stderr=f)
-				id_string = cmdline[0] + cmdline[1] + cmdline[2] + cmdline[3] + cmdline[4] + cmdline[5] + cmdline[6] + cmdline[7] + cmdline[8] + cmdline[9] + cmdline[10] + cmdline[11] 
+				id_string = cmdline[0] + cmdline[1] + cmdline[2] + cmdline[3] + cmdline[4] + cmdline[5] + cmdline[6] + cmdline[7] + cmdline[8] + cmdline[9] + cmdline[10] + cmdline[11] + cmdline[12] + cmdline[13] 
 				residual_iter[id_string]-=1
 				instance[id_string]+=1
 				core_avail -= min(t,core)

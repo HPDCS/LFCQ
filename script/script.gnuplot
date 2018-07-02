@@ -37,7 +37,8 @@ set style line 2 lt 2 lw 3
 set size 1,1.4
 #set offset 0.5,0.5,0.5,0.5
 
-set xrange[0:17]
+set xrange[0:33]
+set yrange[-1:15]
 
 #set title filename
 

@@ -28,21 +28,18 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
-
-//#include <sys/types.h>
-#include <float.h>
+#include <stdbool.h>
 #include <pthread.h>
 #include <math.h>
-//#include <assert.h>
 
 //#include "atomic.h"
 #include "nb_calqueue.h"
-#include "../utils/util.h"
+#include "../utils/hpdcs_utils.h"
 //#include "core.h"
 
 
-#define LOG_DEQUEUE 1
-#define LOG_ENQUEUE 1
+#define LOG_DEQUEUE 0
+#define LOG_ENQUEUE 0
 
 #define BOOL_CAS_ALE(addr, old, new)  CAS_x86(\
 										UNION_CAST(addr, volatile unsigned long long *),\
@@ -50,30 +47,43 @@
 										UNION_CAST(new,  unsigned long long)\
 									  )
 									  	
-
 #define BOOL_CAS_GCC(addr, old, new)  __sync_bool_compare_and_swap(\
 										(addr),\
 										(old),\
 										(new)\
 									  )
 
+#define VAL_CAS_GCC(addr, old, new)  __sync_val_compare_and_swap(\
+										(addr),\
+										(old),\
+										(new)\
+									  )
 
-#define BOOL_CAS BOOL_CAS_GCC 
+#define VAL_CAS  VAL_CAS_GCC 
+#define BOOL_CAS BOOL_CAS_GCC
 
+#define FETCH_AND_AND 				__sync_fetch_and_and
+#define FETCH_AND_OR 				__sync_fetch_and_or
+
+#define ATOMIC_INC					atomic_inc_x86
+#define ATOMIC_DEC					atomic_dec_x86
 
 #define VAL (0ULL)
 #define DEL (1ULL)
-#define MOV (2ULL)
-#define INV (3ULL)
+#define INV (2ULL)
+#define MOV (3ULL)
 
-#define MASK_PTR (-4LL)
-#define MASK_MRK (3ULL)
+#define MASK_PTR 	(-4LL)
+#define MASK_MRK 	(3ULL)
+#define MASK_DEL 	(-3LL)
+
+#define MAX_UINT 			(0xffffffffU)
+#define MASK_EPOCH	(0x00000000ffffffffULL)
+#define MASK_CURR	(0xffffffff00000000ULL)
+
 
 #define REMOVE_DEL		 0
 #define REMOVE_DEL_INV	 1
-
-#define MAX_INT 4294967295
-#define MASK_ABA 4294967295ULL
 
 #define is_marked(...) macro_dispatcher(is_marked, __VA_ARGS__)(__VA_ARGS__)
 #define is_marked2(w,r) is_marked_2(w,r)
@@ -128,10 +138,7 @@ static void error(const char *msg, ...) {
 static inline unsigned long long hash(double timestamp, double bucket_width)
 {
 	double tmp1;
-//	double tmp2;
-	unsigned long long ret = 0;
-	bool end = false;
-
+	double tmp2;
 	double res_d = (timestamp / bucket_width);
 	unsigned long long res =  (unsigned long long) res_d;
 
@@ -145,29 +152,15 @@ static inline unsigned long long hash(double timestamp, double bucket_width)
 				timestamp, bucket_width, res_d,  pow(2, 32));
 
 
-//	tmp1 = res * bucket_width;
-//	tmp2 = tmp1 + bucket_width;
-//
-//	if(LESS(timestamp, tmp1))
-//		return --res;
-//	if(GEQ(timestamp, tmp2))
-//		return ++res;
-//	return res;
+	tmp1 = res * bucket_width;
+	tmp2 = tmp1 + bucket_width;
+    
+	if(LESS(timestamp, tmp1))
+		return --res;
+	if(GEQ(timestamp, tmp2))
+		return ++res;
+	return res;
 
-	res -= (res & (-(res < 3ULL))) +  (3ULL & (-(res >= 3ULL))); 
-
-	while( !end )
-	{
-		tmp1 = res*bucket_width;
-
-		ret = ((res) & (-(D_EQUAL(tmp1, timestamp)))) +  ((res-1) & (-(GREATER(tmp1, timestamp))));
-		end = D_EQUAL(tmp1, timestamp) || GREATER(tmp1, timestamp);
-
-		assertf(res+1 < res, "Overflow when computing the index\n%s", "");
-		res++;
-	}
-
-	return ret;
 }
 
 /**
@@ -252,28 +245,6 @@ static inline unsigned long long get_mark(void *pointer)
 }
 
 /**
-* This function generates a mark value that is unique w.r.t. the previous values for each Logical Process.
-* It is based on the Cantor Pairing Function, which maps 2 naturals to a single natural.
-* The two naturals are the LP gid (which is unique in the system) and a non decreasing number
-* which gets incremented (on a per-LP basis) upon each function call.
-* It's fast to calculate the mark, it's not fast to invert it. Therefore, inversion is not
-* supported at all in the code.
-*
-* @author Alessandro Pellegrini
-*
-* @param tid The local Id of the Light Process
-* @return A value to be used as a unique mark for the message within the LP
-*/
-static inline unsigned long long generate_ABA_mark() {
-	//cantor_p1 += cantor_p2++;
-	//return (MASK_ABA & cantor_p1);
-		
-	unsigned long long sum = ((TID) + (++mark));
-	return ( MASK_ABA & (( (sum)*(sum +1ULL)/2ULL) + mark ));
-	//return (MASK_ABA & ((unsigned long long)( ((sum)*(sum +1)/2) + mark )));
-}
-
-/**
  *  This function is an helper to allocate a node and filling its fields.
  *
  *  @author Romolo Marotta
@@ -287,7 +258,6 @@ static inline unsigned long long generate_ABA_mark() {
 static nbc_bucket_node* node_malloc(void *payload, double timestamp, unsigned int tie_breaker)
 {
 	nbc_bucket_node* res = malloc(sizeof(nbc_bucket_node));
-	//nbc_bucket_node* res = (nbc_bucket_node*) malloc(sizeof(nbc_bucket_node));
 
 	if (is_marked(res) || res == NULL)
 	{
@@ -299,6 +269,7 @@ static nbc_bucket_node* node_malloc(void *payload, double timestamp, unsigned in
 	res->next = NULL;
 	res->replica = NULL;
 	res->payload = payload;
+	res->epoch = 0;
 	res->timestamp = timestamp;
 
 	return res;
@@ -352,7 +323,7 @@ static inline void connect_to_be_freed_table_list(table *h)
  * @param left_node a pointer to a pointer used to return the left node
  * @param left_node_next a pointer to a pointer used to return the next field of the left node 
  *
- */
+ */   
 
 static void search(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
 						nbc_bucket_node **left_node, nbc_bucket_node **right_node, int flag)
@@ -363,10 +334,14 @@ static void search(nbc_bucket_node *head, double timestamp, unsigned int tie_bre
 	tail = g_tail;
 
 	do
-	{
+	{;
 		/// Fetch the head and its next node
 		tmp = head;
 		tmp_next = tmp->next;
+		left = tmp = head;
+		left_next = tmp_next = tmp->next;
+		assertf(head == NULL, "PANIC %s\n", "");
+		assertf(tmp_next == NULL, "PANIC1 %s\n", "");
 		counter = 0;
 		do
 		{
@@ -409,16 +384,13 @@ static void search(nbc_bucket_node *head, double timestamp, unsigned int tie_bre
 		//right =  ((unsigned long long)tmp | (MASK_MRK &  (unsigned long long) left_next));
 
 		//left node and right node have to be adjacent. If not try with CAS
-		if (left_next != right)
+		if (!is_marked_for_search(left_next, flag) && left_next != right)
+		//if (left_next != right)
 		{
+			//LOG("TI ODIO %p %p %p %p %p\n", &(left->next), left, left_next, tail, &(tail->next));
 			// if CAS succeeds connect the removed nodes to to_be_freed_list
-			if (!BOOL_CAS(
-						&(left->next),
-						left_next,
-						right
-						)
-					)
-				continue;
+			if (!BOOL_CAS(&(left->next), left_next, right))
+					continue;
 			connect_to_be_freed_node_list(left_next, counter);
 		}
 		
@@ -443,41 +415,48 @@ static void search(nbc_bucket_node *head, double timestamp, unsigned int tie_bre
  */
 static inline void nbc_flush_current(table* h, nbc_bucket_node* node)
 {
-	unsigned long long oldCur;
-	unsigned long long oldIndex;
-	unsigned long long newIndex = ( unsigned long long ) hash(node->timestamp, h->bucket_width);
-	unsigned long long newCur =  newIndex << 32;
-	newCur |= generate_ABA_mark();
-
-	// Retry until it is ensured that the current is moved back to index
-
+	unsigned long long oldCur, oldIndex, oldEpoch;
+	unsigned long long newIndex, newCur, tmpCur;
+	
+	// Retrieve the old index and compute the new one
 	oldCur = h->current;
+	oldEpoch = oldCur & MASK_EPOCH;
 	oldIndex = oldCur >> 32;
+	newIndex = ( unsigned long long ) hash(node->timestamp, h->bucket_width);
+	newCur =  newIndex << 32;
+	
+	// Try to update the current if it need	
 	if(
 		newIndex > oldIndex
 		|| is_marked(node->next)
-		|| BOOL_CAS(
-					&(h->current),
-					oldCur,
-					newCur
-					)
-				) return;
-
+		|| oldCur 	== 	(tmpCur =  VAL_CAS(
+										&(h->current), 
+										oldCur, 
+										(newCur | (oldEpoch + 1))
+									) 
+						)
+		)
+	{
+		return;
+	}
+						 
+	//At this point someone else has update the current from the begin of this function
 	do
 	{
-
-		oldCur = h->current;
+		oldCur = tmpCur;
+		oldEpoch = oldCur & MASK_EPOCH;
 		oldIndex = oldCur >> 32;
 	}
 	while (
-			newIndex <	oldIndex 
-			&& is_marked(node->next, VAL)
-			&& !BOOL_CAS(
-						&(h->current),
-						oldCur,
-						newCur
+		newIndex <	oldIndex 
+		&& is_marked(node->next, VAL)
+		&& oldCur 	!= 	(tmpCur = 	VAL_CAS(
+										&(h->current), 
+										oldCur, 
+										(newCur | (oldEpoch + 1))
+									) 
 						)
-					);
+		);
 }
 
 /**
@@ -549,11 +528,7 @@ static bool insert_std(table* hashtable, nbc_bucket_node** new_node, int flag)
 				*new_node = left_node;
 				return true;
 			}
-
-			// first replica to be inserted
-			
-			// copy left node mark
-			
+			// copy left node mark			
 			new_node_pointer = get_marked(new_node_pointer,get_mark(right_node));
 			//new_node_pointer =  (nbc_bucket_node*) (
 			//					((unsigned long long) new_node_pointer) | 
@@ -585,71 +560,83 @@ static bool insert_std(table* hashtable, nbc_bucket_node** new_node, int flag)
 
 }
 
-static void set_new_table(table* h, unsigned int threshold )
+static void set_new_table(table* h, unsigned int threshold, double pub, unsigned int epb)
 {
 	nbc_bucket_node *tail = g_tail;
 	int signed_counter = atomic_read( &h->counter );
 	unsigned int counter = (unsigned int) ( (-(signed_counter >= 0)) & signed_counter);
 	unsigned int i = 0;
 	unsigned int size = h->size;
-	unsigned int thp2 = threshold *2;
+	unsigned int thp2, size_thp2;
 	unsigned int new_size = 0;
+	double pub_per_epb = pub*epb;
 	table *new_h;
 	nbc_bucket_node *array;
+	
+	thp2 = threshold *2;
+	//size_thp2 = (unsigned int) ((thp2) / ( pub * epb ));
+	//if(thp2 > size_thp2) thp2 = size_thp2;
 
-	if 		(size >= thp2 && counter > 2*size)
-		new_size = 2*size;
-	else if (size > thp2 && counter < 0.5*size)
-		new_size =  0.5*size;
-	else if	(size == 1 && counter > thp2)
+//	if 		(size >= thp2/pub_per_epb && counter > 2   * (pub_per_epb*size))
+//		new_size = 2   * size;
+//	else if (size >  thp2/pub_per_epb && counter < 0.5 * (pub_per_epb*size))
+//		new_size = 0.5 * size;
+//	else if	(size == 1    && counter > thp2)
+//		new_size = thp2/pub_per_epb;
+//	else if (size == thp2/pub_per_epb && counter < threshold/pub_per_epb)
+//		new_size = 1;
+
+	if 		(size >= thp2 && counter > 2   * (pub_per_epb*size))
+		new_size = 2   * size;
+	else if (size >  thp2 && counter < 0.5 * (pub_per_epb*size))
+		new_size = 0.5 * size;
+	else if	(size == 1    && counter > thp2)
 		new_size = thp2;
 	else if (size == thp2 && counter < threshold)
 		new_size = 1;
+
+	//if 		(size >= thp2 && counter > 2*size)
+	//	new_size = 2*size;
+	//else if (size > thp2 && counter < 0.5*size)
+	//	new_size =  0.5*size;
+	//else if	(size == 1 && counter > thp2)
+	//	new_size = thp2;
+	//else if (size == thp2 && counter < threshold)
+	//	new_size = 1;
 	
 	
 	if(new_size != 0 && new_size <= MAXIMUM_SIZE)
 	{
-
 		new_h = malloc(sizeof(table));
-		//new_h = (table*) malloc(sizeof(table));
 		if(new_h == NULL)
 			error("No enough memory to new table structure\n");
 
-		new_h->bucket_width = -1.0;
-		new_h->size 		= new_size;
-		new_h->new_table 	= NULL;
-		new_h->counter.count= 0;
-		new_h->current 		= ((unsigned long long)-1) << 32;
+		new_h->bucket_width  = -1.0;
+		new_h->size 		 = new_size;
+		new_h->new_table 	 = NULL;
+		new_h->counter.count = 0;
+		new_h->current 		 = ((unsigned long long)-1) << 32;
 
-
-		
 		array =  calloc(new_size, sizeof(nbc_bucket_node));
-		//array =  (nbc_bucket_node*) malloc(sizeof(nbc_bucket_node) * new_size);
+
 		if(array == NULL)
 		{
 			free(new_h);
 			error("No enough memory to allocate new table array %u\n", new_size);
 		}
 
-		//memset(array, 0, sizeof(nbc_bucket_node) * new_size);
-
 		for (i = 0; i < new_size; i++)
 			array[i].next = tail;
 
+		new_h->array = array;
 
-		new_h->array 	= array;
-
-		if(!BOOL_CAS(
-				&(h->new_table),
-				NULL,
-				new_h))
+		if(!BOOL_CAS(&(h->new_table), NULL,	new_h))
 		{
 			free(new_h->array);
 			free(new_h);
 		}
-
 		else
-			LOG("CHANGE SIZE from %u to %u, items %u OLD_TABLE:%p NEW_TABLE:%p\n", size, new_size, counter, h, new_h);
+			LOG("%u - CHANGE SIZE from %u to %u, items %u OLD_TABLE:%p NEW_TABLE:%p\n", TID, size, new_size, counter, h, new_h);
 	}
 }
 
@@ -659,27 +646,48 @@ static void block_table(table* h)
 	unsigned int size = h->size;
 	nbc_bucket_node *array = h->array;
 	nbc_bucket_node *bucket, *bucket_next;
+	nbc_bucket_node *left_node, *right_node; 
+	nbc_bucket_node *right_node_next, *left_node_next;
+	nbc_bucket_node *tail = g_tail;
+	double rand = 0.0;			// <----------------------------------------
+	unsigned int start = 0;		// <----------------------------------------
 	
+	drand48_r(&seedT, &rand); // <----------------------------------------
+	start = (unsigned int) rand * size;	// <----------------------------
 	for(i = 0; i < size; i++)
 	{
-		bucket = array + ((i + (TID)) % size);
-		
+		bucket = array + ((i + start) % size);	// <---------------------
+		//bucket = array + ((i + (TID)) % size);
+		//Try to ark the head as MOV
 		do
 		{
 			bucket_next = bucket->next;
 		}
 		while( !is_marked(bucket_next, MOV) &&
-				!BOOL_CAS(
-					&(bucket->next),
-					bucket_next,
-					get_marked(bucket_next, MOV)
-				) 
+				!BOOL_CAS(&(bucket->next), bucket_next,	get_marked(bucket_next, MOV)) 
+		);
+		//Try to mark the first VALid node as MOV
+		do
+		{
+			search(bucket, -1.0, 0, &left_node, &left_node_next, REMOVE_DEL_INV);
+			right_node = get_unmarked(left_node_next);
+			right_node_next = right_node->next;	
+		}
+		while(
+				right_node != tail &&
+				(
+					is_marked(right_node_next, DEL) ||
+					(
+						is_marked(right_node_next, VAL) 
+						&& !BOOL_CAS(&(right_node->next), right_node_next, get_marked(right_node_next, MOV))
+					)
+				)
 		);
 	}
 }
 
 static double compute_mean_separation_time(table* h,
-		unsigned int new_size, unsigned int threashold)
+		unsigned int new_size, unsigned int threashold, unsigned int elem_per_bucket)
 {
 	nbc_bucket_node *tail = g_tail;
 
@@ -718,8 +726,7 @@ static double compute_mean_separation_time(table* h,
     //read nodes until the total samples is reached or until someone else do it
 	while(counter != sample_size && new_h->bucket_width == -1.0)
 	{   
-		//se non salto gli anni vuoti, posso semplificare di molto il codice 
-		for (i = 0; i < size; i++) // Se togliamo la gestione degli anni vuoti, si può togliere
+		for (i = 0; i < size; i++)
 		{
 			tmp = array + (index + i) % size; 	//get the head of the bucket
 			tmp = get_unmarked(tmp->next);		//pointer to first node
@@ -780,8 +787,8 @@ static double compute_mean_separation_time(table* h,
 	}
     
 	// Compute new width
-	newaverage = (newaverage / j) * 3.0;	/* this is the new width */
-	if(newaverage <= 0.0) //è possibile?
+	newaverage = (newaverage / j) * elem_per_bucket;	/* this is the new width */
+	if(newaverage <= 0.0)
 		newaverage = 1.0;
 	//if(newaverage <  pow(10,-4))
 	//	newaverage = pow(10,-3);
@@ -797,19 +804,13 @@ static void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 	
 	//Create a new node inserted in the new table as as INValid
 	replica = node_malloc(right_node->payload, right_node->timestamp,  right_node->counter);
-	
-	//if(replica == tail)
-	//	error("A\n");
-             
+
     do
 	{ 
 		right_replica_field = right_node->replica;
 	}        
 	while(right_replica_field == NULL && !insert_std(new_h, &replica, REMOVE_DEL));
 	
-	//if(replica2 == tail)
-	//	error("B %p %p %p\n", replica, replica2, tail);
-             
 	if( right_replica_field == NULL && 
 			BOOL_CAS(
 				&(right_node->replica),
@@ -818,13 +819,10 @@ static void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 				)
 		)
 	{
-		atomic_inc_x86(&(new_h->counter));
+		ATOMIC_INC(&(new_h->counter));
     }
              
 	right_replica_field = right_node->replica;
-             
-	//if(right_replica_field == tail)
-	//	error("%u - C %p %p %p %p %p\n", tid, replica, replica2, tail, right_replica_field, right_node->replica);
             
 	do
 	{
@@ -839,16 +837,20 @@ static void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 
 	nbc_flush_current(new_h, right_replica_field);
 	
-	do{
-		//non possiamo sostituirlo con un fetch&or(00) senza do/while?
-		right_node_next = right_node->next;
-	}while( 
-		!is_marked(right_node_next, DEL) && 
-		!BOOL_CAS(	&(right_node->next),
-					right_node_next,
-					get_marked(get_unmarked(right_node_next), DEL)
-				) 
-		) ;
+	
+	right_node_next = FETCH_AND_AND(&(right_node->next), MASK_DEL);
+	//right_node_next = __sync_and_and_fetch(&(right_node->next), MASK_DEL);
+	//LOG("VALUE after fetch&and %p\n", right_node_next);
+	
+	//do{
+	//	right_node_next = right_node->next;
+	//}while( 
+	//	!is_marked(right_node_next, DEL) && 
+	//	!BOOL_CAS(	&(right_node->next),
+	//				right_node_next,
+	//				get_marked(get_unmarked(right_node_next), DEL)
+	//			) 
+	//	) ;
 	
 }
 
@@ -864,18 +866,24 @@ static table* read_table(nb_calqueue *queue)
 	table 			*new_h 			;
 	double 			 new_bw 		;
 	double 			 newaverage		;
+	double 			 pub_per_epb	;
 	nbc_bucket_node *bucket, *array	;
-	nbc_bucket_node *right_node, *left_node, *right_node_next;
+	nbc_bucket_node *right_node, *left_node, *right_node_next, *node;
 	
 	int counter = atomic_read(&h->counter);
 	
 	//printf("SIZE H %d\n", h->counter.count);
-
+	
+	pub_per_epb = queue->pub_per_epb;
 	if( 
-		(counter < 0.5*size || counter > 2*size)
+		(	
+			counter < pub_per_epb * 0.5 * size ||
+			counter > pub_per_epb * 2   * size
+		)
+		//(counter < 0.5*size || counter > 2*size)
 		&& (h->new_table == NULL)
 		)
-		set_new_table(h, queue->threshold);
+		set_new_table(h, queue->threshold, queue->perc_used_bucket, queue->elem_per_bucket);
 
 	if(h->new_table != NULL)
 	{
@@ -887,95 +895,113 @@ static table* read_table(nb_calqueue *queue)
 		if(new_bw < 0)
 		{
 			block_table(h);
-			newaverage = compute_mean_separation_time(h, new_h->size, queue->threshold);
+			newaverage = compute_mean_separation_time(h, new_h->size, queue->threshold, queue->elem_per_bucket);
 			if
 			(
-			BOOL_CAS(
-					UNION_CAST(&new_h->bucket_width, unsigned long long *),
-					UNION_CAST(new_bw,unsigned long long),
-					UNION_CAST(newaverage, unsigned long long)
-				)
+				BOOL_CAS(
+						UNION_CAST(&(new_h->bucket_width), unsigned long long *),
+						UNION_CAST(new_bw,unsigned long long),
+						UNION_CAST(newaverage, unsigned long long)
+					)
 			)
-//			{
-					LOG("COMPUTE BW -  OLD:%.20f NEW:%.20f %u\n", new_bw, newaverage, new_h->size)
-				;
-//			}
+				LOG("COMPUTE BW -  OLD:%.20f NEW:%.20f %u\n", new_bw, newaverage, new_h->size);
 		}
 
-		//First try: try to migrati the nodes, if a marked node is found, continue to the next bucket
-		for(i=0; i < size; i++)
+		//First try: try to migrate the nodes, if a marked node is found, continue to the next bucket
+		double rand;			// <----------------------------------------
+		unsigned int start;		// <----------------------------------------
+		
+		drand48_r(&seedT, &rand); // <----------------------------------------
+		start = (unsigned int) rand * size;	// <----------------------------
+		for(i = 0; i < size; i++)
 		{
-			bucket = array + ((i + (TID)) % size);
-
+			bucket = array + ((i + start) % size);	// <---------------------
+		//for(i=0; i < size; i++)
+		//{
+			//bucket = array + ((i + (TID)) % size);
+			node = get_unmarked(bucket->next);		//node = left_node??
 			do
 			{
+				if(node == tail)
+					break;
 				//Try to mark the top node
-				search(bucket, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
+				search(node, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
+			
 				right_node = get_unmarked(right_node);
 				right_node_next = right_node->next;
-				
-				if(
-						!is_marked(right_node_next, MOV) &&
-						right_node != tail &&
+        
+				if( right_node == tail ||
+					is_marked(right_node_next) || 
 						!BOOL_CAS(
 								&(right_node->next),
-								get_unmarked(right_node_next),
+								right_node_next,
 								get_marked(right_node_next, MOV)
-								)								
+							)								
 				)
 					break;
-
-				if(right_node == tail)
-					break;
 				
-				migrate_node(right_node, new_h);
+				migrate_node(node, new_h);
+				node = right_node;
 				
 			}while(true);
 		}
-		
-		
-		//Second try: try to migrati the nodes and continue until each bucket is empty
-		for(i=0; i < size; i++)
+	
+		//Second try: try to migrate the nodes and continue until each bucket is empty
+		drand48_r(&seedT, &rand); // <----------------------------------------
+		start = (unsigned int) rand + size;	// <----------------------------
+		for(i = 0; i < size; i++)
 		{
-			bucket = array + ((i + (TID)) % size);
-
+			bucket = array + ((i + start) % size);	// <---------------------
+		//for(i=0; i < size; i++)
+		//{
+		//	bucket = array + ((i + (TID)) % size);
+			node = get_unmarked(bucket->next);		//node = left_node??
 			do
 			{
+				if(node == tail)
+					break;
 				//Try to mark the top node
+					
 				do
 				{
-					search(bucket, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
+					search(node, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
 					right_node = get_unmarked(right_node);
 					right_node_next = right_node->next;
 				}
 				while(
-						!is_marked(right_node_next, MOV) &&
 						right_node != tail &&
-						!BOOL_CAS(
-								&(right_node->next),
-								get_unmarked(right_node_next),
-								get_marked(right_node_next, MOV)
-								)								
+						(
+							is_marked(right_node_next, DEL) ||
+							(
+								is_marked(right_node_next, VAL) 
+								&& !BOOL_CAS(&(right_node->next), right_node_next, get_marked(right_node_next, MOV))
+							)
+						)
 				);
-
-				if(right_node == tail)
-					break;
-				
-				migrate_node(right_node, new_h);
+			
+				if(is_marked(node->next, MOV))
+				{
+					migrate_node(node, new_h);
+				}
+				node = right_node;
 				
 			}while(true);
+	
+			search(bucket, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
+			assertf(get_unmarked(right_node) != tail, "Fail in line 972 %p %p %p %p %p %p\n",
+			 bucket,
+			  left_node,
+			   right_node, 
+			   ((nbc_bucket_node*)get_unmarked(right_node))->next, 
+			   ((nbc_bucket_node*)get_unmarked(right_node))->replica, 
+			 //  ((nbc_bucket_node*)get_unmarked(right_node))->replica->next, 
+			   tail); 
+	
 		}
 
 		//Try to replace the old table with the new one
-		if(BOOL_CAS(
-				&(queue->hashtable),
-				h,
-				new_h
-		))
+		if( BOOL_CAS(&(queue->hashtable), h, new_h) )
 		{
-//			printf("%u %f %llu %u %f %llu\n",
-//					h->counter.count, h->bucket_width, h->current>>32,
-//					new_h->counter.count, new_h->bucket_width , new_h->current>>32);
 			connect_to_be_freed_table_list(h);
 		}
 
@@ -993,23 +1019,23 @@ static table* read_table(nb_calqueue *queue)
  *
  * @return a pointer a new queue
  */
-nb_calqueue* nb_calqueue_init(unsigned int threshold)
+nb_calqueue* nb_calqueue_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket)
 {
 	unsigned int i = 0;
 
 	threads = threshold;
 	prune_array = calloc(threshold*threshold, sizeof(unsigned int));
-	//prune_array = (unsigned int*) malloc(sizeof(unsigned int)*threshold*threshold);
-	
+
 	nb_calqueue* res = calloc(1, sizeof(nb_calqueue));
-	//nb_calqueue* res = (nb_calqueue*) malloc(sizeof(nb_calqueue));
 	if(res == NULL)
 		error("No enough memory to allocate queue\n");
-	
+
 	res->threshold = threshold;
+	res->perc_used_bucket = perc_used_bucket;
+	res->elem_per_bucket = elem_per_bucket;
+	res->pub_per_epb = perc_used_bucket * elem_per_bucket;
 
 	res->hashtable = malloc(sizeof(table));
-	//res->hashtable = (table*) malloc(sizeof(table));
 	if(res->hashtable == NULL)
 	{
 		free(res);
@@ -1020,7 +1046,7 @@ nb_calqueue* nb_calqueue_init(unsigned int threshold)
 	res->hashtable->size = MINIMUM_SIZE;
 
 	res->hashtable->array = calloc(MINIMUM_SIZE, sizeof(nbc_bucket_node) );
-	//res->hashtable->array = (nbc_bucket_node*) malloc(MINIMUM_SIZE * sizeof(nbc_bucket_node) );
+
 	if(res->hashtable->array == NULL)
 	{
 		free(res->hashtable);
@@ -1058,19 +1084,20 @@ nb_calqueue* nb_calqueue_init(unsigned int threshold)
 void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 {
 	nbc_bucket_node *new_node = node_malloc(payload, timestamp, 0);
-	table *h;
+	table *h, *old_h = NULL;	
 
-	//printf("ENQ %p %f %u\n", new_node, new_node->timestamp, new_node->counter);
 	do
 	{
-		h  = read_table(queue);
+		if(old_h != (h = read_table(queue)))
+		{
+			old_h = h;
+			new_node->epoch = (h->current & MASK_EPOCH);
+		}
 	} while(!insert_std(h, &new_node, REMOVE_DEL_INV));
 
 	nbc_flush_current(h, new_node);
 	
-	atomic_inc_x86(&(h->counter));
-	
-	//printf("nbc_enqueue: evt type %u\n", ((msg_t*)(new_node->payload))->type);//da_cancellare
+	ATOMIC_INC(&(h->counter));
 }
 
 static inline bool CAS_for_mark( nbc_bucket_node* right_node, nbc_bucket_node* right_node_next)
@@ -1103,168 +1130,93 @@ static inline bool CAS_for_increase_cur(table* h, unsigned long long current, un
  */
 void* nbc_dequeue(nb_calqueue *queue)
 {
-	nbc_bucket_node *right_node, *min, *right_node_next, *res, *tail, *left_node;
+	nbc_bucket_node *min, *min_next, 
+					*left_node, *left_node_next, 
+					*res, *tail, *array;
 	table * h;
 	
 	unsigned long long current;
-	unsigned long long newCur;
-
 	unsigned long long index;
-	unsigned long long newInd;
+	unsigned long long epoch;
 	
 	unsigned int size;
-	unsigned int tie;
-	nbc_bucket_node *array;
-	double right_timestamp;
+	unsigned int counter;
 	double bucket_width;
-	//double old = INFTY;
-
 
 	tail = g_tail;
-	res = NULL;
+	
 	do
 	{
+		counter = 0;
 		h = read_table(queue);
-
 		current = h->current;
 		size = h->size;
 		array = h->array;
 		bucket_width = h->bucket_width;
 
 		index = current >> 32;
+		epoch = current & MASK_EPOCH;
 
-
-		min = array + (index % size);
-
-		search(min, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
-		
-		//printf("nbc_dequeue: -1 evt type %u\n", ((msg_t*)(right_node->payload))->type); //da_cancellare
-
-		if(is_marked(right_node, MOV))
-			continue;
-
-		right_timestamp = right_node->timestamp;
-
-
-		if(right_node == tail && size == 1 )
-			return NULL;
-
-		else if( LESS(right_timestamp, (index)*bucket_width) )
-		{	
-			nbc_flush_current(h, right_node);
-//			printf("ER %f %u %f %p %u %u %u %u - %u %u\n",
-//					right_timestamp,
-//					right_node->counter,
-//					(index)*bucket_width,
-//					h,
-//					is_marked(right_node_next, DEL),
-//					is_marked(right_node_next, INV),
-//					is_marked(right_node_next, VAL),
-//					is_marked(right_node_next, MOV),
-//					index,
-//					index % size
-//					);
-//			if(old == right_timestamp)
-//				exit(1);
-//			old = right_timestamp;
-		}
-		else if( GREATER(right_timestamp, (index+1)*bucket_width) )
-		{
-
-			newCur =  ( index+1 ) << 32;
-			newCur |= (current & MASK_ABA);
-			
-			//LOG("INCREASE CUR - TS_LEFT:%.20f TS_RIGHT:%.20f INDEX: %llu TABLE:%p\n", min->timestamp, right_timestamp, index, h); 
-			
-			assertf(
-				index+1 > MASK_ABA, 
-				"\nOVERFLOW INDEX:%llu  BW:%.10f SIZE:%u RIGHT_TS:%.20f TAIL:%p RIGHT_NODE:%p TABLE:%p NUM_ELEM:%u\n",
-				index, bucket_width, size, right_timestamp, tail, right_node, h, atomic_read(&h->counter)
+		assertf(
+				index+1 > MASK_EPOCH, 
+				"\nOVERFLOW INDEX:%llu  BW:%.10f SIZE:%u TAIL:%p TABLE:%p NUM_ELEM:%u\n",
+				index, bucket_width, size, tail, h, atomic_read(&h->counter)
 			);
+		min = array + (index++ % size);
 
-			
-			//assertf((newCur >> 32) == MASK_ABA, "TANA %llu\n", newCur);
-
-//			CAS_x86(
-//					(volatile unsigned long long *)&(h->current),
-//					(unsigned long long)			current,
-//					(unsigned long long) 			newCur				);
-			
-			
-			if(
-				CAS_for_increase_cur(h, current, newCur)
-				)
-			//LOG("NEW INDEX : %llu\n", (newCur >> 32))
-			;
-			
-			
-			
-		}
-		else
-		{ 
-			newCur = h->current;
-			newInd = (newCur >> 32);
-
-			if( 
-				newInd < index  || 
-				( newInd == index && newCur != current) 
-			   )
-				continue;
-			
-
-			right_node_next = right_node->next;
-			res = right_node->payload;
-			tie = right_node->counter;
-
-			if( !is_marked(right_node_next, DEL) &&
-//					CAS_x86(
-//								(volatile unsigned long long *)&(right_node->next),
-//								(unsigned long long) get_unmarked(right_node_next),
-//								(unsigned long long) get_marked(right_node_next, DEL)
-//								)
-					CAS_for_mark(right_node, right_node_next)
-				)
+		left_node = min_next = min->next;
+		
+		if(is_marked(min_next, MOV))
+			continue;
+		
+		while(left_node->epoch <= epoch)
+		{	
+			left_node_next = left_node->next;
+			if(!is_marked(left_node_next))
 			{
-				search(min, right_timestamp, tie,  &left_node, &right_node, REMOVE_DEL_INV);
-				atomic_dec_x86(&(h->counter));
+				if(left_node->timestamp < index*bucket_width)
+				{
+					res = left_node->payload;
+					left_node_next = FETCH_AND_OR(&left_node->next, DEL);
+					if(!is_marked(left_node_next))
+					{
+						ATOMIC_DEC(&(h->counter));
+						#if LOG_DEQUEUE == 1
+							LOG("DEQUEUE: %f %u - %llu %llu\n", left_node->timestamp, left_node->counter, index, index % size);
+						#endif
+						return res;
+					}
+				}
+				else
+				{
+					if(left_node == tail && size == 1 )
+					{
+						#if LOG_DEQUEUE == 1
+						LOG("DEQUEUE: NULL 0 - %llu %llu\n", index, index % size);
+						#endif
+						return NULL;
+					}
+					if(counter > 0 && BOOL_CAS(&(min->next), min_next, left_node))
+					{
+						
+						connect_to_be_freed_node_list(min_next, counter);
+					}
+					BOOL_CAS(&(h->current), current, ((index << 32) | epoch) );
+					break;	
+				}
 				
-				#if LOG_DEQUEUE == 1
-					LOG("DEQUEUE: %f %u - %llu %llu\n", right_timestamp, tie, index, index % size);
-				#endif
-				//printf("nbc_dequeue: 2 evt type %u\n", ((msg_t*)(res->payload))->type); //da_cancellare
-				return res;
 			}
+			
+			if(is_marked(left_node_next, MOV))
+			{
+				break;
+			}
+			left_node = get_unmarked(left_node_next);
+			counter++;
 		}
-//		else if(is_marked(right_node_next, DEL))
-//		{
-//				printf("IS MARKED "
-//						"R:%p "
-//						"R_N:%p "
-//						"TIE:%u "
-//						"TIME:%.10f "
-//						"IS_INV:%u "
-//						"CUR:%u "
-//						"NUM:%u "
-//						"TSIZE:%u "
-//						"BW: %.10f "
-//						"\n",
-//						right_node,
-//						right_node_next,
-//						right_node->counter,
-//						right_node->timestamp,
-//						is_marked(right_node_next, INV),
-//						index,
-//						h->counter.count,
-//						h->size,
-//						h->bucket_width)		;
-//		}
-//		else if(right_node == tail )
-//			error("NOOOOOOOOOOO\n");
-//		}
-		//else
-		//	printf("NUM ELEMS %u %p %u %llu %llu\n", h->counter.count, h, index, current, current >> 32);
 
 	}while(1);
+	
 	return NULL;
 }
 
@@ -1291,12 +1243,10 @@ double nbc_prune(nb_calqueue *queue, double timestamp)
 	unsigned int i=0;
 	unsigned int flag = 1;
 
-	if(++prune_count < 100)
+	if(++prune_count < 1)
 		return 0.0;
 	
 	prune_count = 0;
-
-	LOG("PRUNE %s\n", "");
 
 	for(;i<threads;i++)
 	{
@@ -1365,9 +1315,7 @@ double nbc_prune(nb_calqueue *queue, double timestamp)
 		free(meta_tmp);
        
 	}
-	
-	//to_remove_nodes_count -= committed; //<-- si usa?
-	
+		
 	to_free_tables_old = to_free_tables_new;
 	to_free_tables_new = NULL;
 	

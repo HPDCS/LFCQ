@@ -9,6 +9,8 @@
 
 #include "calqueue.h"
 #include "../arch/atomic.h"
+#include "../utils/hpdcs_utils.h"
+#include "../utils/advanced_spinlock.h"
 
 
 
@@ -19,6 +21,7 @@ static calqueue_node **calendar;	// Pointer to use as a sub-array to calq
 static pthread_spinlock_t cal_spinlock;
 static pthread_mutex_t cal_mutex;
 static spinlock_t cal_spinx86;
+static advanced_spin_lock cal_myspin;
 
 int queue_lock = 0;
 
@@ -32,7 +35,6 @@ static double buckettop, cwidth;
 static calqueue_node *calqueue_deq(void);
 static void calqueue_enq(calqueue_node *new_node);
 
-static pthread_spinlock_t cal_spinlock;
 
 /*initializes a bucket array within the array a[].
    Bucket width is set equal to bwidth. Bucket[0] is made
@@ -168,7 +170,7 @@ static void resize(int newsize) {
 	// Find new bucket width
 	bwidth = new_width();
 	
-	//printf("Bucket:%f %d\n", bwidth, newsize);
+	LOG("Bucket:%f %d\n", bwidth, newsize);
 
 	// Save location and size of old calendar for use when copying calendar
 	oldcalendar = calendar;
@@ -328,6 +330,10 @@ void calqueue_init(void) {
 	pthread_spin_init(&cal_spinlock, 0);
 	pthread_mutex_init(&cal_mutex, NULL);
 	spinlock_init(&cal_spinx86);
+	spinlock_init(&(cal_myspin.list_spinlock));
+	spinlock_init(&(cal_myspin.main_spinlock));
+	cal_myspin.next = NULL;
+	cal_myspin.tail = NULL;
 }
 
 void calqueue_put(double timestamp, void *payload) {
@@ -348,15 +354,22 @@ void calqueue_put(double timestamp, void *payload) {
 	}
 
 //	  pthread_spin_lock(&cal_spinlock);
-    pthread_mutex_lock(&cal_mutex);
+	  acquire_lock(&cal_myspin);
+
+
+
+//    pthread_mutex_lock(&cal_mutex);
 //	  spin_lock_x86(&cal_spinx86);
 
 //while(__sync_lock_test_and_set(&queue_lock, 1))
 //        while(queue_lock);
 
 	calqueue_enq(new_node);
+
+  release_lock(&cal_myspin);
 //	  pthread_spin_unlock(&cal_spinlock);
-    pthread_mutex_unlock(&cal_mutex);
+
+//    pthread_mutex_unlock(&cal_mutex);
 //    spin_unlock_x86(&cal_spinx86);
 
 //__sync_lock_release(&queue_lock);
@@ -366,19 +379,26 @@ void calqueue_put(double timestamp, void *payload) {
 calqueue_node *calqueue_get(void) {
 	calqueue_node *node;
 
-    pthread_mutex_lock(&cal_mutex);
+	  acquire_lock(&cal_myspin);
 //	  pthread_spin_lock(&cal_spinlock);
+
+
+//    pthread_mutex_lock(&cal_mutex);
 //    spin_lock_x86(&cal_spinx86);
 
 //while(__sync_lock_test_and_set(&queue_lock, 1))
   //      while(queue_lock);
 
 	node = calqueue_deq();
+release_lock(&cal_myspin);
+//	  pthread_spin_unlock(&cal_spinlock);
+
 
 //__sync_lock_release(&queue_lock);
 
+
 //    spin_unlock_x86(&cal_spinx86);
-	pthread_mutex_unlock(&cal_mutex);
+//	pthread_mutex_unlock(&cal_mutex);
 
 
 	if (node == NULL) {
