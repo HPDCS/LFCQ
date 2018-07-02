@@ -269,6 +269,10 @@ void classic_hold(
 			
 			if( DATASTRUCT == 'F' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
 				nbc_prune(nbcqueue);
+			else if( DATASTRUCT == 'N' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
+				nbc_prune();
+			else if( DATASTRUCT == 'S' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
+				pq_prune();
 			
 			
 			if(par_count == THREADS)
@@ -331,6 +335,9 @@ void classic_hold(
 				nbc_prune();
 			else if( DATASTRUCT == 'N' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
 				nbc_prune();
+			else if( DATASTRUCT == 'S' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
+				pq_prune();
+				
 
 			if(par_count == THREADS && TEST_MODE != 'T')
 			{	

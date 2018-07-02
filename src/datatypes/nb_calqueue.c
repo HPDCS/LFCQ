@@ -51,10 +51,10 @@ unsigned int * volatile prune_array;
 __thread hpdcs_gc_status malloc_status =
 {
 	.free_nodes_lists 			= NULL,
+	.free_chunk		 			= NULL,
 	.to_free_nodes 				= NULL,
 	.to_free_nodes_old 			= NULL,
 	.block_size 				= sizeof(nbc_bucket_node),
-	.offset_next 				= offsetof(nbc_bucket_node, next),
 	.to_remove_nodes_count 		= 0LL
 };
 
@@ -80,16 +80,13 @@ __thread unsigned long long read_table_count	 = 0;
  * VARIABLES FOR DEQUEUE	  		 *
  *************************************/
   
-
 __thread unsigned int local_monitor = -1;
 __thread unsigned int flush_de = 0;
-
 
 __thread unsigned long long last_curr = 0ULL;
 __thread unsigned long long cached_curr = 0ULL;
 __thread unsigned long long num_cas = 0ULL;
 __thread unsigned long long num_cas_useful = 0ULL;
-
 
 __thread unsigned long long near = 0;
 __thread unsigned long long dist = 0;
@@ -301,7 +298,7 @@ static unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, u
 			tmp_next = tmp->next;
 			tmp_timestamp = tmp->timestamp;
 			tmp_tie_breaker = tmp->counter;
-			prefetch(tmp->next_next);
+			//prefetch(tmp->next_next);
 			// Check if the right node is marked
 			marked = is_marked_for_search(tmp_next, flag);
 			
@@ -344,7 +341,7 @@ static unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, u
 			*new_node = left;
 			return OK;
 		}
-		new_node_pointer->next_next = tmp_next;
+		//new_node_pointer->next_next = tmp_next;
 		// copy left node mark			
 		if (BOOL_CAS(&(left->next), left_next, get_marked(new_node_pointer,get_mark(left_next))))
 		{
@@ -1221,7 +1218,7 @@ begin:
 		
 		min = array + (index++ % (size));
 		
-		prefetch(min->next_next);
+		//prefetch(min->next_next);
 		
 		left_node = min_next = min->next;
 		right_limit = index*bucket_width;
@@ -1236,7 +1233,7 @@ begin:
 		{
 				
 			left_node_next = left_node->next;
-			prefetch(left_node->next_next);
+			//prefetch(left_node->next_next);
 			
 			left_ts = left_node->timestamp;
 			*result = left_node->payload;
@@ -1412,7 +1409,7 @@ double nbc_prune()
 	
 	do 														//<-----NEW
     {	                                                    //<-----NEW
-		tmp = mm_node_collect(&malloc_status, &counter);    //<-----NEW
+		tmp = mm_node_get_reusable(&malloc_status, &counter);    //<-----NEW
 		while(tmp != NULL && counter-- != 0)                //<-----NEW
 		{                                                   //<-----NEW
 			tmp_next = tmp->next;                           //<-----NEW

@@ -58,8 +58,8 @@ extern int gc_id[];
 #define SINGLE_COUNTER 0
 #define MONITOR_PERIOD 31
 #define READTABLE_PERIOD 63
-#define COMPACT_RANDOM_ENQUEUE 0
-#define COMPACT_RANDOM_DEQUEUE 1
+#define COMPACT_RANDOM_ENQUEUE 1
+#define COMPACT_RANDOM_DEQUEUE 0
 #define DISTANCE_FROM_CURRENT 0.0 
 #define RESIZE_PERIOD 200000000ULL
 #define ENABLE_PREFETCH 0
@@ -156,7 +156,7 @@ struct __bucket_node
 	nbc_bucket_node * tail;
 	nbc_bucket_node * volatile next;	// pointer to the successor
 	nbc_bucket_node * volatile replica;	// pointer to the replica
-	nbc_bucket_node * volatile next_next;
+	//nbc_bucket_node * volatile next_next;
 };
 
 
@@ -300,7 +300,7 @@ static inline void node_free(nbc_bucket_node *pointer)
  */
 static inline void connect_to_be_freed_node_list(nbc_bucket_node *start, unsigned int counter)
 {
-	//mm_node_trash(&malloc_status, get_unmarked(start), counter);
+	//mm_node_collect_connected_nodes(&malloc_status, get_unmarked(start), counter);
 	nbc_bucket_node *tmp_next;
 	start = get_unmarked(start);
 	while(start != NULL && counter-- != 0)                //<-----NEW
