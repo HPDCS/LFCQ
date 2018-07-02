@@ -24,6 +24,7 @@
  *  Created on: Jul 13, 2015
  *      Author: Romolo Marotta
  */
+
 #ifndef DATATYPES_NONBLOCKING_CALQUEUE_H_
 #define DATATYPES_NONBLOCKING_CALQUEUE_H_
 
@@ -42,9 +43,13 @@
 #define MAXIMUM_SIZE 65536//32768 //65536
 #define MINIMUM_SIZE 1
 
-#define peppe
+#define FLUSH_SMART 1
+#define ENABLE_EXPANSION 1
+#define ENABLE_PRUNE 1
 
-extern __thread unsigned int  lid;
+#define TID tid
+
+extern __thread unsigned int TID;
 
 
 /**
@@ -97,7 +102,7 @@ struct nb_calqueue
 };
 
 extern void nbc_enqueue(nb_calqueue *queue, double timestamp, void* payload);
-extern nbc_bucket_node* nbc_dequeue(nb_calqueue *queue);
+extern void* nbc_dequeue(nb_calqueue *queue);
 extern double nbc_prune(nb_calqueue *queue, double timestamp);
 extern nb_calqueue* nb_calqueue_init(unsigned int threashold);
 

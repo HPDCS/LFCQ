@@ -28,12 +28,12 @@
 
 
 #include <stdlib.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <float.h>
 #include <math.h>
 
 #include "list.h"
-#include "../mm/myallocator.h"
 
 
 #define D_EQUAL(a,b) (fabs((a) - (b)) < DBL_EPSILON)
@@ -72,7 +72,7 @@ char *__list_insert_head(void *li, unsigned int size, void *data) {
 	struct rootsim_list_node *new_n;
 
 	// Create the new node and populate the entry
-	new_n = rsalloc(sizeof(struct rootsim_list_node) + size);
+	new_n = malloc(sizeof(struct rootsim_list_node) + size);
 	bzero(new_n, sizeof(struct rootsim_list_node) + size);
 	memcpy(&new_n->data, data, size);
 
@@ -132,7 +132,7 @@ char *__list_insert_tail(void *li, unsigned int size, void *data) {
 	struct rootsim_list_node *new_n;
 
 	// Create the new node and populate the entry
-	new_n = rsalloc(sizeof(struct rootsim_list_node) + size);
+	new_n = malloc(sizeof(struct rootsim_list_node) + size);
 	bzero(new_n, sizeof(struct rootsim_list_node) + size);
 	memcpy(&new_n->data, data, size);
 
@@ -202,7 +202,7 @@ char *__list_insert(void *li, unsigned int size, size_t key_position, void *data
 	struct rootsim_list_node *new_n;
 
 	// Create the new node and populate the entry
-	new_n = rsalloc(sizeof(struct rootsim_list_node) + size);
+	new_n = malloc(sizeof(struct rootsim_list_node) + size);
 	memcpy(&new_n->data, data, size);
 
 	pthread_spin_lock(&l->spinlock);
@@ -317,12 +317,12 @@ char *__list_extract(void *li, unsigned int size, double key, size_t key_positio
 				n->prev->next = n->next;
 			}
 
-			content = rsalloc(size);
+			content = malloc(size);
 			memcpy(content, &n->data, size);
 			n->next = (void *)0xDEADBEEF;
 			n->prev = (void *)0xDEADBEEF;
 			bzero(n->data, size);
-			rsfree(n);
+			free(n);
 
 			l->size--;
 			assert(l->size == (size_before - 1));
@@ -362,7 +362,7 @@ bool __list_delete(void *li, unsigned int size, double key, size_t key_position)
 	void *content;
 	if((content =__list_extract(li, size, key, key_position)) != NULL) {
 		bzero(&content, size);
-		rsfree(content);
+		free(content);
 		return true;
 	}
 	return false;
@@ -427,13 +427,13 @@ char *__list_extract_by_content(void *li, unsigned int size, void *ptr, bool cop
 	}
 
 	if(copy) {
-		content = rsalloc(size);
+		content = malloc(size);
 		memcpy(content, &n->data, size);
 	}
 	n->next = (void *)0xDEADC0DE;
 	n->prev = (void *)0xDEADC0DE;
 	bzero(n->data, size);
-	rsfree(n);
+	free(n);
 
 	l->size--;
 	assert(l->size == (size_before - 1));
@@ -528,7 +528,7 @@ void* list_pop(void *li) {
 		n_next = n->next;
 		n->next = (void *)0xDEFEC8ED;
 		n->prev = (void *)0xDEFEC8ED;
-		//rsfree(n);
+		//free(n);
 		n = n_next;
 		l->size--;
 		size_after = l->size;
@@ -568,7 +568,7 @@ unsigned int __list_trunc(void *li, double key, size_t key_position, unsigned sh
                 n_adjacent = n->next;
                 n->next = (void *)0xBAADF00D;
                 n->prev = (void *)0xBAADF00D;
-                rsfree(n);
+                free(n);
                 n = n_adjacent;
 	}
 	l->head = n;

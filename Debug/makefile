@@ -8,7 +8,6 @@ RM := rm -rf
 
 # All of the sources participating in the build are defined here
 -include sources.mk
--include src/mm/subdir.mk
 -include src/datatypes/subdir.mk
 -include src/arch/subdir.mk
 -include src/subdir.mk
@@ -20,6 +19,7 @@ ifneq ($(strip $(C_DEPS)),)
 -include $(C_DEPS)
 endif
 endif
+
 
 -include ../makefile.defs
 
@@ -40,6 +40,7 @@ NBCQ: $(OBJS) $(USER_OBJS)
 clean:
 	-$(RM) $(EXECUTABLES)$(OBJS)$(C_DEPS) NBCQ
 	-@echo ' '
+	-clear
 
 .PHONY: all clean dependents
 .SECONDARY:

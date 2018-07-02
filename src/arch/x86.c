@@ -37,6 +37,7 @@
 #include "atomic.h"
 
 
+
 /**
 * This function implements a compare-and-swap atomic operation on x86 for long long values
 *

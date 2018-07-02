@@ -347,17 +347,17 @@ void calqueue_put(double timestamp, void *payload) {
 		abort();
 	}
 
-//	pthread_spin_lock(&cal_spinlock);
-//        pthread_mutex_lock(&cal_mutex);
-	spin_lock_x86(&cal_spinx86);
+//	  pthread_spin_lock(&cal_spinlock);
+    pthread_mutex_lock(&cal_mutex);
+//	  spin_lock_x86(&cal_spinx86);
 
 //while(__sync_lock_test_and_set(&queue_lock, 1))
 //        while(queue_lock);
 
 	calqueue_enq(new_node);
-//	pthread_spin_unlock(&cal_spinlock);
-//        pthread_mutex_unlock(&cal_mutex);
-        spin_unlock_x86(&cal_spinx86);
+//	  pthread_spin_unlock(&cal_spinlock);
+    pthread_mutex_unlock(&cal_mutex);
+//    spin_unlock_x86(&cal_spinx86);
 
 //__sync_lock_release(&queue_lock);
 
@@ -366,9 +366,9 @@ void calqueue_put(double timestamp, void *payload) {
 calqueue_node *calqueue_get(void) {
 	calqueue_node *node;
 
-//        pthread_mutex_lock(&cal_mutex);
-//	pthread_spin_lock(&cal_spinlock);
-        spin_lock_x86(&cal_spinx86);
+    pthread_mutex_lock(&cal_mutex);
+//	  pthread_spin_lock(&cal_spinlock);
+//    spin_lock_x86(&cal_spinx86);
 
 //while(__sync_lock_test_and_set(&queue_lock, 1))
   //      while(queue_lock);
@@ -377,9 +377,8 @@ calqueue_node *calqueue_get(void) {
 
 //__sync_lock_release(&queue_lock);
 
-  spin_unlock_x86(&cal_spinx86);
-
-//	pthread_mutex_unlock(&cal_mutex);
+//    spin_unlock_x86(&cal_spinx86);
+	pthread_mutex_unlock(&cal_mutex);
 
 
 	if (node == NULL) {
