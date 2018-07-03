@@ -373,7 +373,6 @@ deletemin(pq_t *pq)
     assert(!is_marked_ref(x));
 
     v = x->v;
-
     
     /* If no inserting node was traversed, then use the latest 
      * deleted node as the new lowest-level head pointed node
@@ -471,6 +470,7 @@ void print_stats(){
 
 void pq_prune()
 {
+	return;
 	node_t  *tmp, *tmp_next;
 	unsigned int counter = 0;
 	
