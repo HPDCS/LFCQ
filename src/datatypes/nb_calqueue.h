@@ -19,7 +19,7 @@
 *
 ******************************************************************************/
 /*
- * nonblockingqueue.h
+ * nb_calqueue.h
  *
  *  Created on: Jul 13, 2015    
  *      Author: Romolo Marotta   
@@ -36,4 +36,4 @@ extern void nbc_enqueue(nb_calqueue *queue, double timestamp, void* payload);
 extern double nbc_dequeue(nb_calqueue *queue, void **payload);
 extern nb_calqueue* nbc_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket);
 
-#endif /* DATATYPES_NONBLOCKING_QUEUE_H_ */
+#endif /* DATATYPES_NONBLOCKING_CALQUEUE_H_ */
