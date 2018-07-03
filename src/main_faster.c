@@ -83,29 +83,7 @@ unsigned int TIME;
 
 
 __thread struct drand48_data seedT;
-extern __thread hpdcs_gc_status malloc_status;
  
-extern __thread unsigned long long concurrent_dequeue ;
-extern __thread unsigned long long performed_dequeue  ;
-extern __thread unsigned long long attempt_dequeue  ;
-extern __thread unsigned long long scan_list_length    ;
-
-extern __thread unsigned long long concurrent_enqueue ;
-extern __thread unsigned long long performed_enqueue  ;
-extern __thread unsigned long long attempt_enqueue  ;
-
-extern __thread unsigned long long flush_current_attempt       ;
-extern __thread unsigned long long flush_current_success       ;
-extern __thread unsigned long long flush_current_fail  ;
-
-extern __thread unsigned long long read_table_count    ;
-
-extern __thread unsigned long long flush_current_attempt       ;
-extern __thread unsigned long long flush_current_success       ;
-extern __thread unsigned long long flush_current_fail  ;
-
-extern __thread unsigned long long read_table_count    ;
-
 nb_calqueue* nbcqueue;
 numa_nb_calqueue* numa_nbcqueue;
 worker_calqueue* worker_nbcqueue;
@@ -466,9 +444,8 @@ void* process(void *arg)
     
 	CPU_ZERO(&cpuset);
 	CPU_SET(my_id, &cpuset);
-	//sched_setaffinity(p_tid[my_id], sizeof(cpu_set_t), &cpuset);
 	pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
-    //printf("%u %u %u\n", TID, NID, NUMA_NODES);
+
 
     __sync_fetch_and_add(&BARRIER, 1);
     
@@ -587,6 +564,8 @@ int main(int argc, char **argv)
 	
 	
 	NUMA_NODES  = numa_num_configured_nodes();
+	_init_gc_subsystem();
+		
 	switch(DATASTRUCT)
 	{
 		case 'L':
@@ -597,19 +576,15 @@ int main(int argc, char **argv)
 			calqueue_init();
 			break;
 		case 'F':
-			_init_gc_subsystem();
 			nbcqueue = nbc_init(THREADS, PERC_USED_BUCKET, ELEM_PER_BUCKET);
 			break;
 		case 'N':
-			_init_gc_subsystem();
 			numa_nbcqueue = numa_nbc_init(THREADS, PERC_USED_BUCKET, ELEM_PER_BUCKET);
 			break;
 		case 'W':
-			_init_gc_subsystem();
 			worker_nbcqueue = worker_nbc_init(THREADS, PERC_USED_BUCKET, ELEM_PER_BUCKET);
 			break;
 		case 'S':
-			_init_gc_subsystem();
 			skip_queue = pq_init(ELEM_PER_BUCKET);
 			break;
 		default:
@@ -659,16 +634,7 @@ int main(int argc, char **argv)
 	}
 	
 	avg = sum/THREADS;
-	//printf(	"CD = Average Concurrent Dequeue," 
-	//		"APD = Attempts per Dequeue, "
-	//		"LPD = Scan list per Dequeue, "
-	//		"CE = Concurrent Enqueues, "
-	//		"APE = Attempts per Enqueue, "
-	//		"FPE = Flush Attempts per Enqueue, "
-	//		"FSU = Flush Succes Rate, "
-	//		"FFA = Flush Fail Rate,"
-	//		"RTC = READ table count\n"); 
-
+	
 	printf("CHECK:%lld," , qsi);
 	printf("SUM OP:%lld,", sum);
 	if(TEST_MODE == 'T'){
@@ -680,6 +646,5 @@ int main(int argc, char **argv)
 	printf("AVG OP:%lld,", avg);
 	printf("MAL OP:%lld,\n", mal);
 	
-
 	return 0;
 }
