@@ -13,8 +13,6 @@
 
 typedef struct ptst_st ptst_t;
 
-//#include <gsl/gsl_rng.h>
-
 #include "gc.h"
 
 struct ptst_st

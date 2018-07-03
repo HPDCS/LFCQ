@@ -29,7 +29,7 @@
 
 typedef unsigned long int_addr_t;
 
-#include "../../mm/mm.h"
+#include "../../mm/garbagecollector.h"
 
 extern __thread hpdcs_gc_status malloc_status;
 
