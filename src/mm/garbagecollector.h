@@ -40,7 +40,7 @@ void* mm_node_get_reusable(hpdcs_gc_status *status, unsigned int *counter);
 void  mm_new_era(hpdcs_gc_status *status, unsigned int *prune_array, unsigned int threads, unsigned int tid);
 void  mm_node_connect_to_be_freed(hpdcs_gc_status *status, void* pointer);
 void* alloc_array_nodes(hpdcs_gc_status *status, unsigned int num_item);
-void free_array_nodes(hpdcs_gc_status *status, void *pointer);
-bool mm_safe(unsigned int * volatile prune_array, unsigned int threads, unsigned int tid);
+void  free_array_nodes(hpdcs_gc_status *status, void *pointer);
+bool  mm_safe(unsigned int * volatile prune_array, unsigned int threads, unsigned int tid);
 
 #endif
