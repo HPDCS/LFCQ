@@ -35,10 +35,9 @@
 #include "../utils/hpdcs_utils.h"
 
 #include "gc/ptst.h"
+
 extern __thread ptst_t *ptst;
 extern int gc_id[];
-
-
 
 
 #define SAMPLE_SIZE 25
@@ -54,7 +53,6 @@ extern int gc_id[];
 #define LOG_DEQUEUE 0
 #define LOG_ENQUEUE 0
 
-
 #define SINGLE_COUNTER 0
 #define MONITOR_PERIOD 31
 #define READTABLE_PERIOD 63
@@ -62,12 +60,6 @@ extern int gc_id[];
 #define COMPACT_RANDOM_DEQUEUE 0
 #define DISTANCE_FROM_CURRENT 0.0 
 #define RESIZE_PERIOD 200000000ULL
-#define ENABLE_PREFETCH 0
-#define ENABLE_CLFLUSH 0
-
-
-
-
 
 #define INFTY DBL_MAX
 #define LESS(a,b) 		( (a) <  (b) )
@@ -155,8 +147,10 @@ struct __bucket_node
 	//32
 	nbc_bucket_node * tail;
 	nbc_bucket_node * volatile next;	// pointer to the successor
+	//48
 	nbc_bucket_node * volatile replica;	// pointer to the replica
 	nbc_bucket_node * volatile next_next;
+	//64
 };
 
 
@@ -242,24 +236,16 @@ extern __thread unsigned long long num_cas_useful;
 
 
 
-void set_new_table(table* h, unsigned int threshold, double pub, unsigned int epb, unsigned int counter);
-
-bool insert_std(table* hashtable, nbc_bucket_node** new_node, int flag);
-
-table* read_table(table * volatile *hashtable, unsigned int threshold, unsigned int elem_per_bucket, double perc_used_bucket);
-void block_table(table* h);
-double compute_mean_separation_time(table* h, unsigned int new_size, unsigned int threashold, unsigned int elem_per_bucket);
-void migrate_node(nbc_bucket_node *right_node,	table *new_h);
-
-void search(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker, nbc_bucket_node **left_node, nbc_bucket_node **right_node, int flag);
-
-//nbc_bucket_node* node_malloc(void *payload, double timestamp, unsigned int tie_breaker);
-//void node_free(nbc_bucket_node *pointer);
-
-void flush_current(table* h, unsigned long long newIndex, unsigned int size, nbc_bucket_node* node);
-
-double nbc_prune();
-void nbc_report(unsigned int);
+extern void set_new_table(table* h, unsigned int threshold, double pub, unsigned int epb, unsigned int counter);
+extern bool insert_std(table* hashtable, nbc_bucket_node** new_node, int flag);
+extern table* read_table(table * volatile *hashtable, unsigned int threshold, unsigned int elem_per_bucket, double perc_used_bucket);
+extern void block_table(table* h);
+extern double compute_mean_separation_time(table* h, unsigned int new_size, unsigned int threashold, unsigned int elem_per_bucket);
+extern void migrate_node(nbc_bucket_node *right_node,	table *new_h);
+extern void search(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker, nbc_bucket_node **left_node, nbc_bucket_node **right_node, int flag);
+extern void flush_current(table* h, unsigned long long newIndex, unsigned int size, nbc_bucket_node* node);
+extern double nbc_prune();
+extern void nbc_report(unsigned int);
 
 
 
@@ -346,25 +332,6 @@ static inline bool is_marked_for_search(void *pointer, unsigned int research_fla
 }
 
 
-static inline bool CAS_for_mark( nbc_bucket_node* right_node, nbc_bucket_node* right_node_next)
-{
-	return BOOL_CAS(
-			&(right_node->next),
-			get_unmarked(right_node_next),
-			get_marked(right_node_next, DEL)
-			);
-
-}
-
-static inline bool CAS_for_increase_cur(table* h, unsigned long long current, unsigned long long newCur)
-{
-	return BOOL_CAS(
-			&(h->current),
-			current,
-			newCur				);
-}
-
-
 /**
  * This function computes the index of the destination bucket in the hashtable
  *
@@ -407,21 +374,15 @@ static inline unsigned long long hash(double timestamp, double bucket_width)
 
 static inline void clflush(volatile void *p)
 {
-	#if ENABLE_CLFLUSH == 1
-//        asm volatile ("mfence" ::: "memory");
         asm volatile ("clflush (%0)" :: "r"(p));        
-//        asm volatile ("mfence" ::: "memory");
-	#endif
 }
 
 static inline void prefetch(void *p)
 {
-	#if ENABLE_PREFETCH == 1
 	__builtin_prefetch(p, 1, 3);
-	#endif 
 }
 
 
 
 
-#endif /* DATATYPES_NONBLOCKING_QUEUE_H_ */
+#endif /* DATATYPES_COMMON_NONBLOCKING_CALQUEUE_H_ */
