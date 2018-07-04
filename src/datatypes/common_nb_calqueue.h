@@ -51,7 +51,6 @@ extern int gc_id[];
 #define ENABLE_PRUNE 0
 #define ENABLE_HIGH_STATITISTICS 1
 
-#define MONITOR_PERIOD 31
 #define READTABLE_PERIOD 63
 #define COMPACT_RANDOM_ENQUEUE 1
 #define DISTANCE_FROM_CURRENT 0.0 
@@ -181,7 +180,7 @@ struct nb_calqueue
 	nbc_bucket_node * tail;
 	// 32
 	unsigned int read_table_period;
-	unsigned int period_monitor;   
+	unsigned int pad;   
 	// 64
 	table * volatile hashtable;
 	//char pad[24];

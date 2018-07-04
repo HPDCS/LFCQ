@@ -465,6 +465,9 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 	// is time for periodic resize?
 	if(new_size == 0 && (h->e_counter.count + h->d_counter.count) > RESIZE_PERIOD)
 		new_size = h->size;
+	
+	if(new_size == 0 && h->last_resize_count != 0 && (counter >  h->last_resize_count*2 || counter < h->last_resize_count/2 ) )
+		new_size = h->size;
 
 	if(new_size != 0 && new_size <= MAXIMUM_SIZE)
 	{
@@ -478,6 +481,7 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 		new_h->new_table 	 = NULL;
 		new_h->d_counter.count = 0;
 		new_h->e_counter.count = 0;
+		new_h->last_resize_count = counter;
 		new_h->current 		 = ((unsigned long long)-1) << 32;
 		new_h->read_table_period = h->read_table_period;
 
@@ -587,7 +591,7 @@ double compute_mean_separation_time(table* h,
 	if(new_bw >= 0)
 		return new_bw;
 	
-	if(new_size <= threashold*2)
+	if(new_size < threashold*2)
 		return 1.0;
 	
 	sample_size = (new_size <= 5) ? (new_size/2) : (5 + (unsigned int)((double)new_size / 10));
@@ -942,7 +946,6 @@ nb_calqueue* nbc_init(unsigned int threshold, double perc_used_bucket, unsigned 
 	res->perc_used_bucket = perc_used_bucket;
 	res->elem_per_bucket = elem_per_bucket;
 	res->pub_per_epb = perc_used_bucket * elem_per_bucket;
-	res->period_monitor = MONITOR_PERIOD;
 	res->read_table_period = READTABLE_PERIOD;
 
 	//res->hashtable = malloc(sizeof(table));
@@ -957,6 +960,7 @@ nb_calqueue* nbc_init(unsigned int threshold, double perc_used_bucket, unsigned 
 	res->hashtable->new_table = NULL;
 	res->hashtable->size = MINIMUM_SIZE;
 	res->hashtable->current = 0;
+	res->hashtable->last_resize_count = 0;
 	res->hashtable->e_counter.count = 0;
 	res->hashtable->d_counter.count = 0;
     res->hashtable->read_table_period = res->read_table_period;	
@@ -1015,17 +1019,13 @@ void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 	double pub = queue->perc_used_bucket;
 	unsigned int epb = queue->elem_per_bucket;
 	unsigned int th = queue->threshold;
-	unsigned int period_monitor = queue->period_monitor;
 	
 	unsigned int con_en = 0;
 	
 
 	//init the result
 	res = MOV_FOUND;
-	local_monitor = ((-(local_monitor == -1)) & TID) + ((-(local_monitor != -1)) & local_monitor);
-	bool monitor = (++local_monitor % period_monitor) == 0;
-	flush_eq++;
-
+	
 	//repeat until a successful insert
 	while(res != OK){
 		
@@ -1055,23 +1055,20 @@ void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 	
 	// updates for statistics
 	
-	concurrent_enqueue += __sync_fetch_and_add(&h->e_counter.count, flush_eq) - con_en;
+	concurrent_enqueue += __sync_fetch_and_add(&h->e_counter.count, 1) - con_en;
 	performed_enqueue++;
-	flush_eq = 0;
 	
-	if(monitor)
-	{		
-		#if COMPACT_RANDOM_ENQUEUE == 1
-		// clean a random bucket
-		unsigned long long oldCur = h->current;
-		unsigned long long oldIndex = oldCur >> 32;
-		dist = size*DISTANCE_FROM_CURRENT+1;
-		double rand;
-		nbc_bucket_node *left_node, *right_node;
-		drand48_r(&seedT, &rand);
-		search(h->array+((oldIndex + dist + (unsigned int)((size-dist)*rand))%size), -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
-		#endif
-	}
+	#if COMPACT_RANDOM_ENQUEUE == 1
+	// clean a random bucket
+	unsigned long long oldCur = h->current;
+	unsigned long long oldIndex = oldCur >> 32;
+	dist = size*DISTANCE_FROM_CURRENT+1;
+	double rand;
+	nbc_bucket_node *left_node, *right_node;
+	drand48_r(&seedT, &rand);
+	search(h->array+((oldIndex + dist + (unsigned int)((size-dist)*rand))%size), -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
+	#endif
+	
 	critical_exit();
 
 }
@@ -1104,15 +1101,11 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 	double pub = queue->perc_used_bucket;
 	unsigned int epb = queue->elem_per_bucket;
 	unsigned int th = queue->threshold;
-	unsigned int period_monitor = queue->period_monitor;
-		tail = queue->tail;
 	unsigned int ep = 0;
 	unsigned int con_de = 0;
 	
+	tail = queue->tail;
 	performed_dequeue++;
-	
-	if(local_monitor == -1)	local_monitor = TID;
-	bool monitor = (++local_monitor % period_monitor) == 0;
 	
 	critical_enter();
 
@@ -1172,10 +1165,9 @@ begin:
 
 			if(is_marked(left_node_next, DEL))	continue;
 				
-			flush_de++;
+			scan_list_length += counter;
 
-			concurrent_dequeue += __sync_fetch_and_add(&h->d_counter.count, flush_de) - con_de;
-			flush_de = 0;
+			concurrent_dequeue += __sync_fetch_and_add(&h->d_counter.count, 1) - con_de;
 				
 			critical_exit();
 
@@ -1286,13 +1278,14 @@ void nbc_report(unsigned int TID)
 {
 	
 	printf("%d- "
-	"Enqueue: %.10f ###"
-	"Dequeue: %.10f NUMCAS: %llu : %llu ### "
+	"Enqueue: %.10f ### "
+	"Dequeue: %.10f LEN: %.10f NUMCAS: %llu : %llu ### "
 	"NEAR: %llu dist: %llu ### "
 	"RTC:%llu,M:%lld\n",
 			TID,
 			((float)concurrent_enqueue)/performed_enqueue,
 			((float)concurrent_dequeue)/performed_dequeue,
+			((float)scan_list_length)/performed_dequeue,
 			num_cas, num_cas_useful,
 			near,
 			dist,
