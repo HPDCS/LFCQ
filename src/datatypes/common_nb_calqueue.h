@@ -50,14 +50,10 @@ extern int gc_id[];
 #define ENABLE_EXPANSION 1
 #define ENABLE_PRUNE 0
 #define ENABLE_HIGH_STATITISTICS 1
-#define LOG_DEQUEUE 0
-#define LOG_ENQUEUE 0
 
-#define SINGLE_COUNTER 0
 #define MONITOR_PERIOD 31
 #define READTABLE_PERIOD 63
 #define COMPACT_RANDOM_ENQUEUE 1
-#define COMPACT_RANDOM_DEQUEUE 0
 #define DISTANCE_FROM_CURRENT 0.0 
 #define RESIZE_PERIOD 200000000ULL
 
@@ -164,22 +160,14 @@ struct table
     unsigned int pad;				//16        
 	double bucket_width;			//24        
 	nbc_bucket_node* array;			//32
-	unsigned int read_table_period;
-	char zpad4[28];
-#if SINGLE_COUNTER == 0
+	unsigned int read_table_period; 
+	unsigned int last_resize_count; //40
+	char zpad4[24];
 	atomic_t e_counter;
 	char zpad3[60];
 	atomic_t d_counter;
-#else
-	volatile unsigned long long counter;
-#endif
 	char zpad1[60];
 	volatile unsigned long long current;
-	//char zpad2[56];
-	//unsigned int size;
-	//unsigned int pad;
-	//double bucket_width;
-	//nbc_bucket_node* array;
 };
 
 typedef struct nb_calqueue nb_calqueue;

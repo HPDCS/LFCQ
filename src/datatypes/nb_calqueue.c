@@ -1017,6 +1017,8 @@ void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 	unsigned int th = queue->threshold;
 	unsigned int period_monitor = queue->period_monitor;
 	
+	unsigned int con_en = 0;
+	
 
 	//init the result
 	res = MOV_FOUND;
@@ -1042,6 +1044,7 @@ void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 			// get the bucket
 			bucket = h->array + index;
 			// read the number of executed enqueues for statistics purposes
+			con_en = h->e_counter.count;
 		}
 		// search the two adjacent nodes that surround the new key and try to insert with a CAS 
 	    res = search_and_insert(bucket, timestamp, 0, REMOVE_DEL_INV, new_node, &new_node);
@@ -1051,11 +1054,13 @@ void nbc_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 	flush_current(h, newIndex, size, new_node);
 	
 	// updates for statistics
+	
+	concurrent_enqueue += __sync_fetch_and_add(&h->e_counter.count, flush_eq) - con_en;
+	performed_enqueue++;
+	flush_eq = 0;
+	
 	if(monitor)
-	{
-		__sync_fetch_and_add(&h->e_counter.count, flush_eq);
-		flush_eq = 0;
-		
+	{		
 		#if COMPACT_RANDOM_ENQUEUE == 1
 		// clean a random bucket
 		unsigned long long oldCur = h->current;
@@ -1102,13 +1107,9 @@ double nbc_dequeue(nb_calqueue *queue, void** result)
 	unsigned int period_monitor = queue->period_monitor;
 		tail = queue->tail;
 	unsigned int ep = 0;
+	unsigned int con_de = 0;
 	
-	#if COMPACT_RANDOM_DEQUEUE == 1
-	double rand = 0.0;
-	nbc_bucket_node *left_nodea, *right_node;
-	unsigned int dist;
-	#endif
-	
+	performed_dequeue++;
 	
 	if(local_monitor == -1)	local_monitor = TID;
 	bool monitor = (++local_monitor % period_monitor) == 0;
@@ -1121,22 +1122,12 @@ begin:
 	array = h->array;
 	bucket_width = h->bucket_width;
 	current = h->current;
-	
+	con_de = h->d_counter.count;
 	if(last_curr != current){
 		cached_curr = last_curr = current;
 	}
 	else
 		current = cached_curr;
-	
-	#if COMPACT_RANDOM_DEQUEUE == 1
-	drand48_r(&seedT, &rand);
-	if(rand < 0.2){
-		dist = size*DISTANCE_FROM_CURRENT+1;
-		drand48_r(&seedT, &rand);
-		index = current >> 32;
-		search(array+((index + dist + (unsigned int)( (size-dist)*rand))%size), -1.0, 0,  &left_nodea, &right_node, REMOVE_DEL_INV);
-	}
-	#endif
 	
 	do
 	{
@@ -1183,16 +1174,9 @@ begin:
 				
 			flush_de++;
 
-			if(monitor)
-			{
-				__sync_fetch_and_add(&h->d_counter.count, flush_de);
-				flush_de = 0;
-				clflush(&h->d_counter);
-			}
+			concurrent_dequeue += __sync_fetch_and_add(&h->d_counter.count, flush_de) - con_de;
+			flush_de = 0;
 				
-			#if LOG_DEQUEUE == 1
-				LOG("DEQUEUE: %f %u - %llu %llu\n",left_ts, left_node->counter, index, index % size);
-			#endif
 			critical_exit();
 
 			return left_ts;
@@ -1201,9 +1185,6 @@ begin:
 		
 		if(left_node == tail && size == 1 && !is_marked(min->next, MOV))
 		{
-			#if LOG_DEQUEUE == 1
-			LOG("DEQUEUE: NULL 0 - %llu %llu\n", index, index % size);
-			#endif
 			*result = NULL;
 				critical_exit();
 			return INFTY;
@@ -1240,7 +1221,6 @@ begin:
 			goto begin;
 		
 	}while(1);
-	
 	
 	return INFTY;
 }
@@ -1306,10 +1286,13 @@ void nbc_report(unsigned int TID)
 {
 	
 	printf("%d- "
-	"Dequeue: NUMCAS: %llu : %llu ### "
+	"Enqueue: %.10f ###"
+	"Dequeue: %.10f NUMCAS: %llu : %llu ### "
 	"NEAR: %llu dist: %llu ### "
 	"RTC:%llu,M:%lld\n",
 			TID,
+			((float)concurrent_enqueue)/performed_enqueue,
+			((float)concurrent_dequeue)/performed_dequeue,
 			num_cas, num_cas_useful,
 			near,
 			dist,
