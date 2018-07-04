@@ -241,6 +241,7 @@ static unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, u
 	nbc_bucket_node *left, *left_next, *tmp, *tmp_next, *tail;
 	unsigned int counter;
 	unsigned int left_tie_breaker, tmp_tie_breaker;
+	unsigned int len;
 	double left_timestamp, tmp_timestamp, rand;
 	bool marked, ts_equal, tie_lower, go_to_next;
 	bool is_new_key = flag == REMOVE_DEL_INV;
@@ -254,6 +255,7 @@ static unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, u
 	tail = head->tail;
 	do
 	{
+		len = 0;
 		/// Fetch the head and its next node
 		left = tmp = head;
 		// read all data from the head (hopefully only the first access is a cache miss)
@@ -274,7 +276,7 @@ static unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, u
 		
 		do
 		{
-			
+			len++;
 			//Find the left node compatible with value of 'flag'
 			// potentially this if can be removed
 			if (!marked)
@@ -343,6 +345,10 @@ static unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, u
 		// copy left node mark			
 		if (BOOL_CAS(&(left->next), left_next, get_marked(new_node_pointer,get_mark(left_next))))
 		{
+			if(is_new_key)
+			{
+				scan_list_length_en += len;
+			}
 			if (counter > 0)
 				connect_to_be_freed_node_list(left_next, counter);
 			return OK;
@@ -1278,12 +1284,13 @@ void nbc_report(unsigned int TID)
 {
 	
 	printf("%d- "
-	"Enqueue: %.10f ### "
+	"Enqueue: %.10f LEN: %.10f ### "
 	"Dequeue: %.10f LEN: %.10f NUMCAS: %llu : %llu ### "
 	"NEAR: %llu dist: %llu ### "
 	"RTC:%llu,M:%lld\n",
 			TID,
 			((float)concurrent_enqueue)/performed_enqueue,
+			((float)scan_list_length_en)/performed_enqueue,
 			((float)concurrent_dequeue)/performed_dequeue,
 			((float)scan_list_length)/performed_dequeue,
 			num_cas, num_cas_useful,

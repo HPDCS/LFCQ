@@ -34,6 +34,7 @@ __thread unsigned long long concurrent_dequeue;
 __thread unsigned long long performed_dequeue ;
 __thread unsigned long long attempt_dequeue ;
 __thread unsigned long long scan_list_length ;
+__thread unsigned long long scan_list_length_en ;
 
 
 __thread unsigned long long concurrent_enqueue;

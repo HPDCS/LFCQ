@@ -200,6 +200,7 @@ extern __thread unsigned long long concurrent_dequeue;
 extern __thread unsigned long long performed_dequeue ;
 extern __thread unsigned long long attempt_dequeue ;
 extern __thread unsigned long long scan_list_length ;
+extern __thread unsigned long long scan_list_length_en ;
 
 
 extern __thread unsigned long long concurrent_enqueue;
