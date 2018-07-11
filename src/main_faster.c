@@ -28,6 +28,7 @@
 
 #include <pthread.h>
 #include <numa.h>
+#include <numaif.h>
 #include <stdarg.h>
 #include <sched.h>
 #include <sys/time.h>
@@ -43,6 +44,8 @@
 #include "utils/hpdcs_utils.h"
 #include "utils/hpdcs_math.h"
 #include "mm/garbagecollector.h"
+
+ 
 
 
 struct payload
@@ -487,6 +490,7 @@ int main(int argc, char **argv)
 	int par = 1;
 	int num_par = 19;//19;
 	unsigned int i = 0;
+	unsigned long numa_mask = 1;
 	unsigned long long sum = 0;
 	unsigned long long min = -1;
 	unsigned long long max = 0;
@@ -565,6 +569,8 @@ int main(int argc, char **argv)
 	
 	NUMA_NODES  = numa_num_configured_nodes();
 	_init_gc_subsystem();
+	
+	set_mempolicy(MPOL_BIND, &numa_mask, 2);
 		
 	switch(DATASTRUCT)
 	{
