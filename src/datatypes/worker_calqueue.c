@@ -42,7 +42,7 @@
  __thread unsigned int local_spin = 0;
  __thread unsigned int from_last_help = 0;
  
-#define NUM_MAIN_NODES 2
+#define NUM_MAIN_NODES 0
 #define CORE_PER_NODE 4
  
 worker_calqueue* worker_nbc_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket)
@@ -71,8 +71,8 @@ void helper(worker_calqueue* queue)
 	unsigned long long i = 0, cur_op= 0;
 	
 	op_descriptor * volatile desc = NULL;
-	if(from_last_help++%2)
-		return;
+	//if(from_last_help++%2)
+	//	return;
 	for(i = 0; i< threads; i++)
 	{
 		desc = queue->pending_ops + i;
@@ -115,7 +115,7 @@ void worker_nbc_enqueue(worker_calqueue* queue, double timestamp, void* payload)
 		desc->payload = payload;
 		__sync_bool_compare_and_swap(&desc->id_op, EMPTY_DESCRIPTOR, ENQUEUE_DESCRIPTOR);
 		while(desc->id_op != DONE_DESCRIPTOR){
-			if(local_spin++ % 2500000000 == 0){
+			if(0 && (local_spin++ % 2500000000 == 0) ){
 				if(desc->id_op == ENQUEUE_DESCRIPTOR){
 					if(__sync_bool_compare_and_swap(&desc->id_op, ENQUEUE_DESCRIPTOR, EMPTY_DESCRIPTOR)){
 						nbc_enqueue(queue->real_queue, timestamp, payload);
@@ -152,7 +152,7 @@ double worker_nbc_dequeue(worker_calqueue *queue, void** result)
 			desc->payload = result;
 			__sync_bool_compare_and_swap(&desc->id_op, EMPTY_DESCRIPTOR, DEQUEUE_DESCRIPTOR);
 			while(desc->id_op != DONE_DESCRIPTOR){
-				if(local_spin++ % 25000000 == 0){
+				if( 0 && (local_spin++ % 25000000 == 0) ){
 					if(desc->id_op == DEQUEUE_DESCRIPTOR){
 						if(__sync_bool_compare_and_swap(&desc->id_op, DEQUEUE_DESCRIPTOR, EMPTY_DESCRIPTOR)){
 							return nbc_dequeue(queue->real_queue,result);
