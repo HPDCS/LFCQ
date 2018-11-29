@@ -10,8 +10,8 @@ SRC_DIR := src
 TARGETS := NBCQ LIND MARO NUMA #WORK
 
 NBCQ_value := src/datatypes/nb_calqueue.o   src/datatypes/common_nb_calqueue.o 
-LIND_value := src/datatypes/prioq.o  
-MARO_value := src/datatypes/prioq_v2.o
+LIND_value := src/datatypes/prioq.o  src/datatypes/common_prioq.o
+MARO_value := src/datatypes/prioq_v2.o src/datatypes/common_prioq.o
 NUMA_value := src/datatypes/numa_queue.o  src/datatypes/common_nb_calqueue.o 
 WORK_value := src/datatypes/worker_queue.o  src/datatypes/common_nb_calqueue.o 
 
