@@ -44,6 +44,32 @@ __thread unsigned long long flush_current_attempt       ;
 __thread unsigned long long flush_current_success       ;
 __thread unsigned long long flush_current_fail  ;
 
+
+
+__thread ptst_t *ptst;
+int gc_id[1];
+
+
+/*************************************
+ * VARIABLES FOR GARBAGE COLLECTION  *
+ *************************************/
+
+__thread hpdcs_gc_status malloc_status =
+{
+	.free_nodes_lists 			= NULL,
+	.free_chunk		 			= NULL,
+	.to_free_nodes 				= NULL,
+	.to_free_nodes_old 			= NULL,
+	.block_size 				= sizeof(nbc_bucket_node),
+	.to_remove_nodes_count 		= 0LL
+};
+
+__thread nbc_bucket_node *to_free_tables_old = NULL;
+__thread nbc_bucket_node *to_free_tables_new = NULL;
+
+
+
+
 nbc_bucket_node *g_tail = NULL;
 
 bool insert_std(table* hashtable, nbc_bucket_node **node, int flag)
@@ -166,7 +192,7 @@ void numa_flush_current(numa_nb_calqueue *queue, table* h, nbc_bucket_node* node
  *
  * @return a pointer a new queue
  */
-numa_nb_calqueue* numa_nbc_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket)
+numa_nb_calqueue* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket)
 {
 	unsigned int i = 0, j=0;
 	//unsigned int new_threshold = 1;
@@ -250,7 +276,7 @@ numa_nb_calqueue* numa_nbc_init(unsigned int threshold, double perc_used_bucket,
  *
  * @return true if the event is inserted in the hashtable, else false
  */
-void numa_nbc_enqueue(numa_nb_calqueue* queue, double timestamp, void* payload)
+void pq_enqueue(numa_nb_calqueue* queue, double timestamp, void* payload)
 {
 	nbc_bucket_node *new_node = node_malloc(payload, timestamp, 0);
 	table * h = NULL;		
@@ -315,7 +341,7 @@ void numa_nbc_enqueue(numa_nb_calqueue* queue, double timestamp, void* payload)
  * @return a pointer to a node that contains the dequeued value
  *
  */
-double numa_nbc_dequeue(numa_nb_calqueue *queue, void** result)
+double pq_dequeue(numa_nb_calqueue *queue, void** result)
 {
 	nbc_bucket_node *min, *min_next, 
 					*left_node, *left_node_next, 
