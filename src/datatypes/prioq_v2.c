@@ -59,13 +59,13 @@
 
 __thread hpdcs_gc_status malloc_status =
 {
-	.free_nodes_lists 			= NULL,
-	.free_chunk 			    = NULL,
-	.to_free_nodes 				= NULL,
-	.to_free_nodes_old 			= NULL,
-	.block_size 				= sizeof(node_t),
-	.to_remove_nodes_count 		= 0LL,
-	.all_malloc			 		= 0LL
+    .free_nodes_lists           = NULL,
+    .free_chunk                 = NULL,
+    .to_free_nodes              = NULL,
+    .to_free_nodes_old          = NULL,
+    .block_size                 = sizeof(node_t),
+    .to_remove_nodes_count      = 0LL,
+    .all_malloc                 = 0LL
 };
 
 /* thread state. */
@@ -76,13 +76,17 @@ __thread unsigned long long s_changed = 0;
 
 int gc_id[NUM_LEVELS];
 
+__thread node_t *last_head = NULL;
+__thread node_t *last_min = NULL;
+__thread unsigned long long last_offset = 0;
+
 #define MASTER_THREAD 42
 
 /* initialize new node */
 static node_t *
 alloc_node()
 {
-	node_t *n;
+    node_t *n;
     int level = 1;
     /* crappy rng */
     unsigned int r = ptst->rand;
@@ -90,7 +94,7 @@ alloc_node()
     r &= (1u << (NUM_LEVELS - 1)) - 1;
     /* uniformly distributed bits => geom. dist. level, p = 0.5 */
     while ((r >>= 1) & 1)
-	++level;
+    ++level;
     assert(1 <= level && level <= 32);
 
     n = gc_alloc(ptst, gc_id[level - 1]);
@@ -130,7 +134,7 @@ free_node(node_t *n)
  *  |     |           |     |     |
  *  v     |           |     |     v
  *  _     v           v     |     _
- * | |    _           _	    v    | |
+ * | |    _           _     v    | |
  * | |   | |    _    | |    _    | |
  * | |   | |   | |   | |   | |   | |
  *  0     1     2     4     6     7
@@ -151,7 +155,7 @@ locate_preds(pq_t * restrict pq, pkey_t k, node_t ** restrict preds, node_t ** r
        d = is_marked_ref(x_next);
        x_next = get_unmarked_ref(x_next);
        assert(x_next != NULL);
-	
+    
        while (x_next->k < k || is_marked_ref(x_next->next[0])
               || ((i == 0) && d)) {
            /* Record bottom level deleted node not having delete flag
@@ -240,7 +244,7 @@ pq_enqueue(pq_t *pq, pkey_t k, pval_t v)
 
             /* if new has been deleted, we're done */
             if (succs[0] != new) goto success;
-	    
+        
         } else {
             /* Succeeded at this level. */
             i++;
@@ -271,7 +275,7 @@ out:
  *              |     |     |
  *              |     |     v
  *  _           |     v     _ 
- * | |    _     v     _	   | |
+ * | |    _     v     _    | |
  * | |   | |    _    | |   | |
  * | |   | |   | |   | |   | |
  *  d     d
@@ -301,7 +305,7 @@ restructure(pq_t *pq)
             cur = pred->next[i];
         }
         assert(is_marked_ref(pred->next[0]));
-	
+    
         /* swing head pointer */
         if (__sync_bool_compare_and_swap(&pq->head->next[i],h,cur))
             i--;
@@ -326,9 +330,16 @@ pq_dequeue(pq_t *pq)
     
     newhead = NULL;
     offset = lvl = 0;
-	critical_enter();
+    critical_enter();
     x = pq->head;
     obs_head = x->next[0];
+
+    if( last_min && last_head == obs_head){
+        x = last_min;
+        offset = last_offset;
+    }
+    else
+        last_head = obs_head;
 
     do {
         offset++;
@@ -345,13 +356,22 @@ pq_dequeue(pq_t *pq)
         /* Do not allow head to point past a node currently being
          * inserted. This makes the lock-freedom quite a theoretic
          * matter. */
-        if (newhead == NULL && x->inserting) newhead = x;
+        if (newhead == NULL && x->inserting) {
+            newhead = x;
+            last_min = newhead;
+            last_offset = offset;
+        }
 
         /* optimization */
         if (is_marked_ref(nxt)) continue;
         /* the marker is on the preceding pointer */
         /* linearisation point deletemin */
         nxt = __sync_fetch_and_or(&x->next[0], 1);
+        if(newhead == NULL && !is_marked_ref(nxt)){
+               last_min = x;
+               last_offset = offset;
+       }
+
     }
     while ( (x = get_unmarked_ref(nxt)) && is_marked_ref(nxt) );
 
@@ -375,6 +395,8 @@ pq_dequeue(pq_t *pq)
      * which is deleted */
     if (__sync_bool_compare_and_swap(&pq->head->next[0], obs_head, get_marked_ref(newhead)))
     {
+        last_offset = 0;
+        last_min = NULL;
         /* Update higher level pointers. */
         restructure(pq);
 
@@ -392,7 +414,7 @@ pq_dequeue(pq_t *pq)
         }
     }
  out:
-	critical_exit();
+    critical_exit();
     return v;
 }
 
@@ -405,7 +427,9 @@ pq_init(unsigned int threads, double none, unsigned long long max_offset)
     pq_t *pq;
     node_t *t, *h;
     int i;
-	
+    
+    //prune_array = calloc(threads*threads, sizeof(unsigned int));
+    
     /* head and tail nodes */
     t = calloc(1, sizeof *t + (NUM_LEVELS-1)*sizeof(node_t *));
     h = calloc(1, sizeof *h + (NUM_LEVELS-1)*sizeof(node_t *));
@@ -420,7 +444,7 @@ pq_init(unsigned int threads, double none, unsigned long long max_offset)
     
     for ( i = 0; i < NUM_LEVELS; i++ ){
         h->next[i] = t;
-		gc_id[i] = gc_add_allocator(i*sizeof(node_t*)+sizeof(node_t));
+        gc_id[i] = gc_add_allocator(i*sizeof(node_t*)+sizeof(node_t));
     }
     pq = malloc(sizeof *pq);
     pq->head = h;
@@ -437,9 +461,9 @@ pq_destroy(pq_t *pq)
     node_t *cur, *pred;
     cur = pq->head;
     while (cur != pq->tail) {
-	pred = cur;
-	cur = get_unmarked_ref(pred->next[0]);
-	free_node(pred);
+    pred = cur;
+    cur = get_unmarked_ref(pred->next[0]);
+    free_node(pred);
     }
     free(pq->tail);
     free(pq->head);
@@ -447,7 +471,7 @@ pq_destroy(pq_t *pq)
 }
 
 void pq_report(){
-	printf("\n%d- NEAR %llu %llu %llu %llu", TID, s_compact, s_tried, s_changed, malloc_status.to_remove_nodes_count);
+    printf("\n%d- NEAR %llu %llu %llu %llu", TID, s_compact, s_tried, s_changed, malloc_status.to_remove_nodes_count);
 }
 
 void pq_prune(){ return; }
