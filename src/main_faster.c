@@ -28,24 +28,51 @@
 
 #include <pthread.h>
 #include <numa.h>
+#include <float.h>
 #include <numaif.h>
 #include <stdarg.h>
 #include <sched.h>
 #include <sys/time.h>
 
-#include "datatypes/list.h"
-#include "datatypes/calqueue.h"
-#include "datatypes/nb_calqueue.h"
-#include "datatypes/numa_queue.h"
-#include "datatypes/worker_calqueue.h"
-#include "datatypes/prioq.h"
+//#include "datatypes/list.h"
+//#include "datatypes/calqueue.h"
+//#include "datatypes/nb_calqueue.h"
+//#include "datatypes/numa_queue.h"
+//#include "datatypes/worker_calqueue.h"
+//#include "datatypes/prioq.h"
 #include "datatypes/gc/gc.h"
 
 #include "utils/hpdcs_utils.h"
 #include "utils/hpdcs_math.h"
+#include "utils/common.h"
 #include "mm/garbagecollector.h"
 
+//extern void pq_enqueue(void *queue, double timestamp, void* payload);
+//extern double pq_dequeue(void *queue, void **payload);
+//extern void pq_prune(void *queue);
+//extern void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket);
+//extern void pq_report(unsigned int threshold);
+//extern void pq_reset_thread_local_statistics();
+//extern unsigned int pq_thread_local_mallocs();
  
+
+#define INFTY DBL_MAX
+
+#define NID nid
+#define TID tid
+
+
+extern void   pq_enqueue(void *queue, double timestamp, void* payload);
+extern double pq_dequeue(void *queue, void **payload);
+extern void*  pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket);
+extern void pq_report(unsigned int threshold);
+extern void pq_prune();
+extern void pq_reset_statistics();
+extern unsigned int pq_num_malloc();
+
+
+
+
 
 
 struct payload
@@ -87,11 +114,7 @@ unsigned int TIME;
 
 __thread struct drand48_data seedT;
  
-nb_calqueue* nbcqueue;
-numa_nb_calqueue* numa_nbcqueue;
-worker_calqueue* worker_nbcqueue;
-list(payload) lqueue;
-pq_t* skip_queue;
+void* nbcqueue;
 
 pthread_t *p_tid;
 
@@ -121,38 +144,8 @@ double dequeue(void)
 
 	double timestamp = INFTY;
 	void* free_pointer = NULL;
-	payload *new_nbc_node;
 	
-	switch(DATASTRUCT)
-	{
-		case 'L':
-			free_pointer = list_pop(lqueue);
-			new_nbc_node =  node_payload(lqueue,free_pointer);
-	
-			if(free_pointer != NULL)
-			{
-				timestamp = new_nbc_node->timestamp;
-				free(free_pointer);
-			}
-			break;
-		case 'C':
-			timestamp = calqueue_get(&free_pointer);
-			break;
-		case 'F':
-			timestamp = nbc_dequeue(nbcqueue, &free_pointer);
-			break;
-		case 'N':
-			timestamp = numa_nbc_dequeue(numa_nbcqueue, &free_pointer);
-			break;
-		case 'W':
-			timestamp = worker_nbc_dequeue(worker_nbcqueue, &free_pointer);
-			break;
-		case 'S':
-			timestamp = UNION_CAST(deletemin(skip_queue), double);
-			break;
-		default:
-			break;
-	}	
+	timestamp = pq_dequeue(nbcqueue, &free_pointer);
 	
 	return timestamp;
 }
@@ -161,7 +154,6 @@ double enqueue(unsigned int my_id, struct drand48_data* seed, double local_min, 
 {
 	double timestamp = 0.0;
 	double update = 0.0;
-	payload data;
 
 	update = current_prob(seed, MEAN_INTERARRIVAL_TIME);
 	timestamp = local_min + update;
@@ -169,31 +161,7 @@ double enqueue(unsigned int my_id, struct drand48_data* seed, double local_min, 
 	if(timestamp < 0.0)
 		timestamp = 0.0;
 
-	switch(DATASTRUCT)
-	{
-		case 'L':
-			data.timestamp = timestamp;
-			list_insert(lqueue, timestamp, &data);
-			break;
-		case 'C':
-			calqueue_put(timestamp, NULL);
-			break;
-		case 'F':
-			nbc_enqueue(nbcqueue, timestamp, NULL);
-			break;
-		case 'N':
-			numa_nbc_enqueue(numa_nbcqueue, timestamp, NULL);
-			break;
-		case 'W':
-			worker_nbc_enqueue(worker_nbcqueue, timestamp, NULL);
-			break;
-		case 'S':
-			insert(skip_queue, timestamp, UNION_CAST(timestamp, void*));
-			break;
-		default:
-			printf("#ERROR: Unknown data structure\n");
-			exit(1);
-	}
+	pq_enqueue(nbcqueue, timestamp, NULL);
 	
 	return timestamp;
 
@@ -285,13 +253,8 @@ void classic_hold(
 			//local_enqueue++;
 			++par_count;
 			
-			if( DATASTRUCT == 'F' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
-				nbc_prune(nbcqueue);
-			else if( DATASTRUCT == 'N' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
-				nbc_prune();
-			else if( DATASTRUCT == 'S' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
-				pq_prune();
-			
+			if( PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
+				pq_prune(nbcqueue);
 			
 			if(par_count == THREADS)
 			{	
@@ -333,9 +296,7 @@ void classic_hold(
 				exit(1);
 		}
 		
-		near = 0;
-		num_cas = 0;
-		num_cas_useful = 0;
+		pq_reset_statistics();
 		par_count = 0;
 		ops_count[my_id] = 0;
 		
@@ -349,14 +310,9 @@ void classic_hold(
 
 			enqueue(my_id, seed, local_min, current_dist);
 			
-			if( DATASTRUCT == 'F' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
-				nbc_prune();
-			else if( DATASTRUCT == 'N' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
-				nbc_prune();
-			else if( DATASTRUCT == 'S' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
+			if( PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
 				pq_prune();
-				
-
+			
 			if(par_count == THREADS && TEST_MODE != 'T')
 			{	
 				ops_count[my_id]+=par_count;
@@ -402,10 +358,8 @@ void classic_hold(
 				local_min = timestamp;
 			}
 			
-			if( DATASTRUCT == 'F' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
-				nbc_prune();
-			else if( DATASTRUCT == 'N' && PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
-				nbc_prune();
+			if( PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
+				pq_prune();
 			
 			if(par_count == THREADS)
 			{	
@@ -468,7 +422,7 @@ void* process(void *arg)
 	}
 
 	ops[my_id] = n_enqueue - n_dequeue;
-	malloc_op[my_id] =  malloc_status.to_remove_nodes_count;
+	malloc_op[my_id] =  pq_num_malloc();
 	
 	__sync_fetch_and_add(&BARRIER, 1);
 
@@ -476,10 +430,8 @@ void* process(void *arg)
 	
 	while(lock != TID);
 	
-	if(DATASTRUCT == 'F' || DATASTRUCT == 'N' || DATASTRUCT == 'W')
-		nbc_report(TID);
-	if(DATASTRUCT == 'S')
-		print_stats();
+	pq_report(TID);
+
 	__sync_fetch_and_add(&lock, 1);
 	pthread_exit(NULL);    
 }
@@ -570,34 +522,10 @@ int main(int argc, char **argv)
 	NUMA_NODES  = numa_num_configured_nodes();
 	_init_gc_subsystem();
 	
-	set_mempolicy(MPOL_BIND, &numa_mask, 2);
+	//set_mempolicy(MPOL_BIND, &numa_mask, 2);
 		
-	switch(DATASTRUCT)
-	{
-		case 'L':
-			lqueue = new_list(payload);
-			pthread_spin_init(&(((struct rootsim_list*)lqueue)->spinlock), 0);
-			break;
-		case 'C':
-			calqueue_init();
-			break;
-		case 'F':
-			nbcqueue = nbc_init(THREADS, PERC_USED_BUCKET, ELEM_PER_BUCKET);
-			break;
-		case 'N':
-			numa_nbcqueue = numa_nbc_init(THREADS, PERC_USED_BUCKET, ELEM_PER_BUCKET);
-			break;
-		case 'W':
-			worker_nbcqueue = worker_nbc_init(THREADS, PERC_USED_BUCKET, ELEM_PER_BUCKET);
-			break;
-		case 'S':
-			skip_queue = pq_init(ELEM_PER_BUCKET);
-			break;
-		default:
-			printf("#ERROR: Unknown data structure\n");
-			exit(1);
-	}
-
+	nbcqueue = pq_init(THREADS, PERC_USED_BUCKET, ELEM_PER_BUCKET);
+	
 	for(i=0;i<THREADS;i++)
 	{
 		id[i] = i;
