@@ -1,3 +1,9 @@
+#1 Datastructure
+#2 threads
+#3 epb
+#4 butilization
+#5 distribution
+
 DIST=$5
 OPS=4000000
 SIZE=64000
@@ -23,5 +29,5 @@ else
 fi
 
 echo $PRE ./Debug/NBCQ $1 $2 1 $DIST 0.3 $SIZE $DIST  0.5 $OPS $DIST 0 0 $4 $3 $PRUNE 0 $MODE $TIME
-time $PRE1$PRE2 ./Debug/NBCQ $1 $2 1 $DIST 0.3 $SIZE $DIST  0.5 $OPS $DIST 0 0 $4 $3 $PRUNE 0 $MODE $TIME
+time $PRE1$PRE2 ./Debug/test-$1 $1 $2 1 $DIST 0.3 $SIZE $DIST  0.5 $OPS $DIST 0 0 $4 $3 $PRUNE 0 $MODE $TIME
 $POST

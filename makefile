@@ -7,13 +7,21 @@ EXECUTABLES :=
 USER_OBJS :=
 LIBS := -lpthread -lm -lnuma
 SRC_DIR := src
+TARGETS := NBCQ LIND MARO NUMA #WORK
+
+NBCQ_value := src/datatypes/nb_calqueue.o   src/datatypes/common_nb_calqueue.o 
+LIND_value := src/datatypes/prioq.o  
+MARO_value := src/datatypes/prioq_v2.o
+NUMA_value := src/datatypes/numa_queue.o  src/datatypes/common_nb_calqueue.o 
+WORK_value := src/datatypes/worker_queue.o  src/datatypes/common_nb_calqueue.o 
 
 L1_CACHE_LINE_SIZE := $(shell getconf LEVEL1_DCACHE_LINESIZE)
 MACRO := -DARCH_X86_64  -DCACHE_LINE_SIZE=$(L1_CACHE_LINE_SIZE) -DINTEL
 OPTIMIZATION := -O3
 DEBUG := -g3
 
-FILTER_OUT_SRC := src/main.c src/main_2.c src/mm/mm.c src/mm/mm.h
+FILTER_OUT_SRC := src/main.c src/main_2.c src/mm/mm.c src/mm/mm.h 
+FILTER_OUT_DIR := src/datatypes
 
 OBJS_DIR 	:= $(strip $(MAKECMDGOALS))
 
@@ -36,12 +44,18 @@ else
 endif
 
 
-SUBDIRS 	:= $(shell find src -type d)
-C_SRCS		:= $(shell ls   $(patsubst %, %/*.c, $(SUBDIRS)) )
-C_SRCS 		:= $(filter-out $(FILTER_OUT_SRC), $(C_SRCS))
-OBJS		:= $(strip $(subst .c,.o, $(C_SRCS)))
-ASM		:= $(strip $(subst .c,.S, $(C_SRCS)))
-C_DEPS		:= $(patsubst %, $(OBJS_DIR)/%, $(subst .o,.d, $(OBJS)))
+SUBDIRS 		:= $(shell find src -type d)
+C_SRCS			:= $(shell ls   $(patsubst %, %/*.c, $(SUBDIRS)) )
+C_SRCS 			:= $(filter-out $(FILTER_OUT_SRC), $(C_SRCS))
+OBJS			:= $(strip $(subst .c,.o, $(C_SRCS)))
+COMMON_SUBDIRS 	:= $(filter-out $(FILTER_OUT_DIR), $(SUBDIRS))
+COMMON_C_SRCS	:= $(shell ls   $(patsubst %, %/*.c, $(COMMON_SUBDIRS)) )
+COMMON_C_SRCS 	:= $(filter-out $(FILTER_OUT_SRC), $(COMMON_C_SRCS))
+COMMON_OBJS		:= $(strip $(subst .c,.o, $(COMMON_C_SRCS)))
+ASM				:= $(strip $(subst .c,.S, $(C_SRCS)))
+C_DEPS			:= $(patsubst %, $(OBJS_DIR)/%, $(subst .o,.d, $(OBJS)))
+
+REAL_TARGETS := $(patsubst %, $(OBJS_DIR)/test-%, $(TARGETS))
 
 
 FLAGS=
@@ -57,14 +71,15 @@ FLAGS := $(FLAGS) -DUNROLLED_FACTOR=$(UNROLLED_FACTOR)
 endif
 	
 
-all Debug Release GProf: $(OBJS_DIR)/NBCQ
+all Debug Release GProf: $(REAL_TARGETS)
 
 # Tool invocations
-$(OBJS_DIR)/NBCQ: $(patsubst %, $(OBJS_DIR)/%, $(OBJS)) $(USER_OBJS)  
+$(OBJS_DIR)/test-%: $(patsubst %, $(OBJS_DIR)/%, $(OBJS)) $(USER_OBJS)  
 	@echo 'Objects: $(OBJS)'
 	@echo 'Building target: $@'
 	@echo 'Invoking: Cross GCC Linker'
-	gcc  -o "$(OBJS_DIR)/NBCQ" $(patsubst %, $(OBJS_DIR)/%, $(OBJS)) $(USER_OBJS) $(LIBS) $(DEBUG)
+	@echo 'Specific OBJS for $(strip $(subst test-,, $(@F))): $($(strip $(subst test-,, $(@F)))_value)'
+	gcc  -o "$(OBJS_DIR)/$(@F)" $(patsubst %, $(OBJS_DIR)/%, $(COMMON_OBJS))  $(patsubst %, $(OBJS_DIR)/%, $($(strip $(subst test-,, $(@F)))_value)) $(USER_OBJS) $(LIBS) $(DEBUG)
 	@echo 'Finished building target: $@'
 	@echo ' '
 
@@ -90,7 +105,7 @@ clean:
 	-$(RM) NBCQ	
 	-$(RM) $(EXECUTABLES) $(OBJS) $(C_DEPS)
 	-@echo ' '
-	-clear
+	#-clear
 
 .PHONY: all clean 
 
