@@ -54,7 +54,14 @@ extern int gc_id[];
 #define READTABLE_PERIOD 63
 #define COMPACT_RANDOM_ENQUEUE 1
 #define DISTANCE_FROM_CURRENT 0.0 
-#define RESIZE_PERIOD 200000000ULL
+
+#define BASE 1000000ULL 
+#ifndef RESIZE_PERIOD_FACTOR 
+#define RESIZE_PERIOD_FACTOR 2000ULL
+#endif
+#define RESIZE_PERIOD RESIZE_PERIOD_FACTOR*BASE
+
+
 
 #define INFTY DBL_MAX
 #define LESS(a,b) 		( (a) <  (b) )
@@ -124,6 +131,11 @@ extern int gc_id[];
 #define get_unmarked(pointer)		(UNION_CAST((UNION_CAST(pointer, unsigned long long) & MASK_PTR), void *))
 #define get_marked(pointer, mark)	(UNION_CAST((UNION_CAST(pointer, unsigned long long)|(mark)), void *))
 #define get_mark(pointer)			(UNION_CAST((UNION_CAST(pointer, unsigned long long) & MASK_MRK), unsigned long long))
+
+#define MOV_FOUND 	3
+#define OK			1
+#define ABORT		0
+
 
 
 /**
@@ -221,7 +233,7 @@ extern __thread hpdcs_gc_status malloc_status;
 extern __thread unsigned long long near;
 extern __thread unsigned long long num_cas;
 extern __thread unsigned long long num_cas_useful;
-
+extern __thread unsigned long long dist;
 
 
 extern void set_new_table(table* h, unsigned int threshold, double pub, unsigned int epb, unsigned int counter);
@@ -234,6 +246,8 @@ extern void search(nbc_bucket_node *head, double timestamp, unsigned int tie_bre
 extern void flush_current(table* h, unsigned long long newIndex, unsigned int size, nbc_bucket_node* node);
 extern double nbc_prune();
 extern void nbc_report(unsigned int);
+extern unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
+						 int flag, nbc_bucket_node *new_node_pointer, nbc_bucket_node **new_node);
 
 
 
