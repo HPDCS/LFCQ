@@ -1,7 +1,7 @@
 #ifndef PRIOQ_H
 #define PRIOQ_H
 
-#include "common.h"
+#include "../utils/common.h"
 #include "../mm/garbagecollector.h"
 
 typedef double pkey_t;
@@ -47,7 +47,7 @@ typedef struct
 
 /* Interface */
 
-extern pq_t *pq_init(unsigned long long max_offset);
+extern pq_t *pq_init(unsigned int threads, double none, unsigned long long max_offset);
 
 extern void pq_destroy(pq_t *pq);
 
