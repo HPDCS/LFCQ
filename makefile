@@ -9,9 +9,9 @@ LIBS := -lpthread -lm -lnuma
 SRC_DIR := src
 TARGETS := NBCQ LIND MARO #NUMA #WORK
 
-NBCQ_value := src/datatypes/nb_calqueue.o   src/datatypes/common_nb_calqueue.o 
-LIND_value := src/datatypes/prioq.o  src/datatypes/common_prioq.o
-MARO_value := src/datatypes/prioq_v2.o src/datatypes/common_prioq.o
+NBCQ_value := src/datatypes/nbcalendars/nb_calqueue.o   src/datatypes/nbcalendars/common_nb_calqueue.o 
+LIND_value := src/datatypes/nbskiplists/prioq.o  src/datatypes/nbskiplists/common_prioq.o
+MARO_value := src/datatypes/nbskiplists/prioq_v2.o src/datatypes/nbskiplists/common_prioq.o
 NUMA_value := src/datatypes/numa_queue.o  src/datatypes/common_nb_calqueue.o 
 WORK_value := src/datatypes/worker_queue.o  src/datatypes/common_nb_calqueue.o 
 
@@ -20,8 +20,8 @@ MACRO := -DARCH_X86_64  -DCACHE_LINE_SIZE=$(L1_CACHE_LINE_SIZE) -DINTEL
 OPTIMIZATION := -O3
 DEBUG := -g3
 
-FILTER_OUT_SRC := src/main.c src/main_2.c src/mm/mm.c src/mm/mm.h src/datatypes/numa_queue.c src/datatypes/worker_calqueue.c
-FILTER_OUT_DIR := src/datatypes
+FILTER_OUT_SRC := src/main.c src/main_2.c src/mm/mm.c src/mm/mm.h src/datatypes src/datatypes/nbcalendars/numa_queue.c src/datatypes/nbcalendars/worker_calqueue.c
+FILTER_OUT_DIR := src/datatypes src/datatypes/nbcalendars src/datatypes/nbskiplists src/datatypes/nohotspot src/datatypes/numask src/datatypes/rotating
 
 OBJS_DIR 	:= $(strip $(MAKECMDGOALS))
 

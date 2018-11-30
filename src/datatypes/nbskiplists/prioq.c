@@ -44,19 +44,12 @@
 #include <assert.h>
 #include <stdlib.h>
 
-/* some utilities (e.g. memory barriers) */
-#include "../utils/common.h"
 
 /* interface, constant defines, and typedefs */
 #include "prioq.h"
-#include "common_nb_calqueue.h"
+
 #include <stddef.h>
 
-
-
-__thread node_t *last_head = NULL;
-__thread node_t *last_min = NULL;
-__thread unsigned long long last_offset = 0;
 
 
 /* deletemin
@@ -76,16 +69,9 @@ pq_dequeue(pq_t *pq)
     
     newhead = NULL;
     offset = lvl = 0;
-    critical_enter();
+	critical_enter();
     x = pq->head;
     obs_head = x->next[0];
-
-    if( last_min && last_head == obs_head){
-        x = last_min;
-        offset = last_offset;
-    }
-    else
-        last_head = obs_head;
 
     do {
         offset++;
@@ -102,22 +88,13 @@ pq_dequeue(pq_t *pq)
         /* Do not allow head to point past a node currently being
          * inserted. This makes the lock-freedom quite a theoretic
          * matter. */
-        if (newhead == NULL && x->inserting) {
-            newhead = x;
-            last_min = newhead;
-            last_offset = offset;
-        }
+        if (newhead == NULL && x->inserting) newhead = x;
 
         /* optimization */
         if (is_marked_ref(nxt)) continue;
         /* the marker is on the preceding pointer */
         /* linearisation point deletemin */
         nxt = __sync_fetch_and_or(&x->next[0], 1);
-        if(newhead == NULL && !is_marked_ref(nxt)){
-               last_min = x;
-               last_offset = offset;
-       }
-
     }
     while ( (x = get_unmarked_ref(nxt)) && is_marked_ref(nxt) );
 
@@ -141,8 +118,6 @@ pq_dequeue(pq_t *pq)
      * which is deleted */
     if (__sync_bool_compare_and_swap(&pq->head->next[0], obs_head, get_marked_ref(newhead)))
     {
-        last_offset = 0;
-        last_min = NULL;
         /* Update higher level pointers. */
         restructure(pq);
 
@@ -160,6 +135,6 @@ pq_dequeue(pq_t *pq)
         }
     }
  out:
-    critical_exit();
+	critical_exit();
     return v;
 }

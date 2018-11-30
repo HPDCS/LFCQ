@@ -44,12 +44,8 @@
 #include <assert.h>
 #include <stdlib.h>
 
-/* some utilities (e.g. memory barriers) */
-#include "../utils/common.h"
-
 /* interface, constant defines, and typedefs */
 #include "prioq.h"
-#include "common_nb_calqueue.h"
 #include <stddef.h>
 
 

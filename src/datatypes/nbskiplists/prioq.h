@@ -1,12 +1,15 @@
 #ifndef PRIOQ_H
 #define PRIOQ_H
 
-#include "../utils/common.h"
+#include "../../utils/common.h"
 /* keir fraser's garbage collection */
-#include "../gc/ptst.h"
+#include "../../gc/ptst.h"
 
 typedef double pkey_t;
 typedef void         *pval_t;
+
+#define TID tid
+
 
 #define KEY_NULL 0
 #define NUM_LEVELS 32
@@ -44,6 +47,10 @@ typedef struct
 #define get_marked_ref(_p)      ((void *)(((uintptr_t)(_p)) | 1))
 #define get_unmarked_ref(_p)    ((void *)(((uintptr_t)(_p)) & ~1))
 #define is_marked_ref(_p)       (((uintptr_t)(_p)) & 1)
+
+extern __thread unsigned int TID;
+extern __thread ptst_t *ptst;
+extern int gc_id[];
 
 
 /* Interface */
