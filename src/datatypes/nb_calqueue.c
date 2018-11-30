@@ -32,7 +32,7 @@
 #include <pthread.h>
 #include <math.h>
 
-#include "nb_calqueue.h"
+#include "common_nb_calqueue.h"
 
 
 /*************************************
@@ -49,7 +49,8 @@ __thread unsigned long long scan_list_length_en ;
 
 
 __thread ptst_t *ptst;
-int gc_id[1];
+int gc_aid[1];
+int gc_hid[1];
 
 
 
@@ -59,19 +60,7 @@ int gc_id[1];
  * VARIABLES FOR GARBAGE COLLECTION  *
  *************************************/
 
-__thread hpdcs_gc_status malloc_status =
-{
-	.free_nodes_lists 			= NULL,
-	.free_chunk		 			= NULL,
-	.to_free_nodes 				= NULL,
-	.to_free_nodes_old 			= NULL,
-	.block_size 				= sizeof(nbc_bucket_node),
-	.to_remove_nodes_count 		= 0LL
-};
-
-__thread nbc_bucket_node *to_free_tables_old = NULL;
-__thread nbc_bucket_node *to_free_tables_new = NULL;
-
+__thread unsigned long long malloc_count;
 
 
 /*************************************
@@ -99,6 +88,9 @@ __thread unsigned long long cached_curr = 0ULL;
 #define MOV_FOUND 	3
 #define OK			1
 #define ABORT		0
+
+
+void my_hook(ptst_t *p, void *ptr){	free(ptr); }
 
 
 /**
@@ -164,7 +156,8 @@ nb_calqueue* pq_init(unsigned int threshold, double perc_used_bucket, unsigned i
 		free(res);
 	}
 
-	gc_id[0] = gc_add_allocator(sizeof(nbc_bucket_node));
+	gc_aid[0] = gc_add_allocator(sizeof(nbc_bucket_node));
+	gc_hid[0] = gc_add_hook(my_hook);
 	critical_enter();
 	critical_exit();
 	

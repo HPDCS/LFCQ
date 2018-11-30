@@ -57,16 +57,7 @@
 
 
 
-__thread hpdcs_gc_status malloc_status =
-{
-	.free_nodes_lists 			= NULL,
-	.free_chunk 			    = NULL,
-	.to_free_nodes 				= NULL,
-	.to_free_nodes_old 			= NULL,
-	.block_size 				= sizeof(node_t),
-	.to_remove_nodes_count 		= 0LL,
-	.all_malloc			 		= 0LL
-};
+__thread unsigned long long malloc_count = 0;
 
 /* thread state. */
 __thread ptst_t *ptst;
@@ -360,12 +351,9 @@ pq_destroy(pq_t *pq)
 }
 
 void pq_report(){
-	printf("\n%d- NEAR %llu %llu %llu %llu", TID, s_compact, s_tried, s_changed, malloc_status.to_remove_nodes_count);
+	printf("\n%d- NEAR %llu %llu %llu %llu", TID, s_compact, s_tried, s_changed, malloc_count);
 }
-
-void pq_prune(){ return; }
-
 
 void pq_reset_statistics(){ }
 
-unsigned int pq_num_malloc(){  return malloc_status.to_remove_nodes_count;}
+unsigned int pq_num_malloc(){  return malloc_count;}

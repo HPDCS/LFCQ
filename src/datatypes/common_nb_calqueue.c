@@ -1,4 +1,4 @@
-
+#include <stdlib.h>
 
 #include "common_nb_calqueue.h"
 
@@ -849,64 +849,6 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 }
 
 
-
-/**
- * This function frees any node in the hashtable with a timestamp strictly less than a given threshold,
- * assuming that any thread does not hold any pointer related to any nodes
- * with timestamp lower than the threshold.
- *
- * @author Romolo Marotta
- *
- * @param queue the interested queue
- * @param timestamp the threshold such that any node with timestamp strictly less than it is removed and freed
- *
- */
-double pq_prune()
-{
-#if ENABLE_PRUNE == 0
-	return 0.0;
-#endif
-	
-	nbc_bucket_node  *tmp, *tmp_next;
-	unsigned int counter;
-	
-	
-	if(!mm_safe(prune_array, threads, TID))
-		return 0.0;
-		
-	
-	while(to_free_tables_old != NULL)
-	{
-		nbc_bucket_node *my_tmp = to_free_tables_old;
-		to_free_tables_old = to_free_tables_old->next;
-    
-		table *h = (table*) my_tmp->payload;
-		//free_array_nodes(&malloc_status, h->array); 
-		free(h->array); 
-		free(h);
-		node_free(my_tmp); 
-	}
-	
-	do 														
-    {	                                                    
-		tmp = mm_node_get_reusable(&malloc_status, &counter);    
-		while(tmp != NULL && counter-- != 0)                
-		{                                                   
-			tmp_next = tmp->next;                           
-			node_free(tmp);                                 
-			tmp =  get_unmarked(tmp_next);                  
-		}                                                   
-	}                                                       
-    while(tmp != NULL);										
-
-	to_free_tables_old = to_free_tables_new;
-	to_free_tables_new = NULL;
-	
-	mm_new_era(&malloc_status, prune_array, threads, TID);
-	
-	return 0.0;
-}
-
 void pq_report(unsigned int TID)
 {
 	
@@ -924,7 +866,7 @@ void pq_report(unsigned int TID)
 			near,
 			dist,
 			read_table_count	  ,
-			malloc_status.to_remove_nodes_count);
+			malloc_count);
 }
 
 void pq_reset_statistics(){
@@ -935,5 +877,5 @@ void pq_reset_statistics(){
 }
 
 unsigned int pq_num_malloc(){
-		return malloc_status.to_remove_nodes_count;
+		return malloc_count;
 }

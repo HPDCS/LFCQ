@@ -77,10 +77,10 @@ critical_enter()
 }
 
 
-
+/*
 static void ptst_destructor(ptst_t *ptst) 
 {
     ptst->count = 0;
 }
-
+*/
 

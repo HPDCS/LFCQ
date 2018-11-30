@@ -31,13 +31,13 @@
 #include <float.h>
 #include <math.h>
 #include "../arch/atomic.h"
-#include "../mm/garbagecollector.h"
 #include "../utils/hpdcs_utils.h"
 
 #include "gc/ptst.h"
 
 extern __thread ptst_t *ptst;
-extern int gc_id[];
+extern int gc_aid[];
+extern int gc_hid[];
 
 
 #define SAMPLE_SIZE 25
@@ -203,7 +203,6 @@ struct nb_calqueue
 
 extern __thread unsigned int TID;
 extern __thread struct drand48_data seedT;
-extern __thread hpdcs_gc_status malloc_status;
 
 extern __thread nbc_bucket_node *to_free_tables_old;
 extern __thread nbc_bucket_node *to_free_tables_new;
@@ -228,7 +227,7 @@ extern unsigned int * volatile prune_array;
 extern unsigned int threads;
 
 extern nbc_bucket_node *g_tail;
-extern __thread hpdcs_gc_status malloc_status;
+extern __thread unsigned long long malloc_count;
 
 extern __thread unsigned long long near;
 extern __thread unsigned long long num_cas;
@@ -268,7 +267,7 @@ static inline nbc_bucket_node* node_malloc(void *payload, double timestamp, unsi
 	
 	//res = mm_node_malloc(&malloc_status);
 	
-    res = gc_alloc(ptst, gc_id[0]);
+    res = gc_alloc(ptst, gc_aid[0]);
     
 	if (unlikely(is_marked(res) || res == NULL))
 	{
@@ -286,10 +285,11 @@ static inline nbc_bucket_node* node_malloc(void *payload, double timestamp, unsi
 	return res;
 }
 
-static inline void node_free(nbc_bucket_node *pointer)
-{	
-	mm_node_free(&malloc_status, pointer);
+static inline void node_free(void *ptr){
+	gc_free(ptst, ptr, gc_aid[0]);
 }
+
+
 
 
 /**
@@ -312,16 +312,15 @@ static inline void connect_to_be_freed_node_list(nbc_bucket_node *start, unsigne
 	while(start != NULL && counter-- != 0)                //<-----NEW
 	{                                                   //<-----NEW
 		tmp_next = start->next;                           //<-----NEW
-		gc_free(ptst, (void *)start, gc_id[0]);
+		gc_free(ptst, (void *)start, gc_aid[0]);
 		start =  get_unmarked(tmp_next);                  //<-----NEW
 	}                                                   //<-----NEW
 }
 
 static inline void connect_to_be_freed_table_list(table *h)
 {
-	nbc_bucket_node *tmp = node_malloc(h, INFTY, 0);
-	tmp->next = to_free_tables_new;
-	to_free_tables_new = tmp;
+	gc_add_ptr_to_hook_list(ptst, h, 		 gc_hid[0]);
+	gc_add_ptr_to_hook_list(ptst, h->array,  gc_hid[0]);
 }
 
 static inline bool is_marked_for_search(void *pointer, unsigned int research_flag)

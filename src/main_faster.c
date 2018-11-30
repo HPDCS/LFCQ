@@ -34,27 +34,11 @@
 #include <sched.h>
 #include <sys/time.h>
 
-//#include "datatypes/list.h"
-//#include "datatypes/calqueue.h"
-//#include "datatypes/nb_calqueue.h"
-//#include "datatypes/numa_queue.h"
-//#include "datatypes/worker_calqueue.h"
-//#include "datatypes/prioq.h"
 #include "datatypes/gc/gc.h"
 
 #include "utils/hpdcs_utils.h"
 #include "utils/hpdcs_math.h"
 #include "utils/common.h"
-#include "mm/garbagecollector.h"
-
-//extern void pq_enqueue(void *queue, double timestamp, void* payload);
-//extern double pq_dequeue(void *queue, void **payload);
-//extern void pq_prune(void *queue);
-//extern void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket);
-//extern void pq_report(unsigned int threshold);
-//extern void pq_reset_thread_local_statistics();
-//extern unsigned int pq_thread_local_mallocs();
- 
 
 #define INFTY DBL_MAX
 
@@ -252,10 +236,7 @@ void classic_hold(
 			//enqueue(my_id, seed, local_min, current_dist);
 			//local_enqueue++;
 			++par_count;
-			
-			if( PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
-				pq_prune(nbcqueue);
-			
+						
 			if(par_count == THREADS)
 			{	
 				ops_count[my_id]+=par_count;
@@ -309,10 +290,7 @@ void classic_hold(
 			//pthread_yield();
 
 			enqueue(my_id, seed, local_min, current_dist);
-			
-			if( PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
-				pq_prune();
-			
+						
 			if(par_count == THREADS && TEST_MODE != 'T')
 			{	
 				ops_count[my_id]+=par_count;
@@ -357,9 +335,6 @@ void classic_hold(
 				local_dequeue++;
 				local_min = timestamp;
 			}
-			
-			if( PRUNE_PERIOD != 0 &&  (ops_count[my_id] + par_count) %(PRUNE_PERIOD) == 0)
-				pq_prune();
 			
 			if(par_count == THREADS)
 			{	
@@ -440,7 +415,7 @@ void* process(void *arg)
 int main(int argc, char **argv)
 {
 	int par = 1;
-	int num_par = 19;//19;
+	int num_par = 19;;
 	unsigned int i = 0;
 	unsigned long numa_mask = 1;
 	unsigned long long sum = 0;
