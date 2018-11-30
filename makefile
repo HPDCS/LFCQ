@@ -7,7 +7,7 @@ EXECUTABLES :=
 USER_OBJS :=
 LIBS := -lpthread -lm -lnuma
 SRC_DIR := src
-TARGETS := NBCQ LIND MARO NUMA #WORK
+TARGETS := NBCQ LIND MARO #NUMA #WORK
 
 NBCQ_value := src/datatypes/nb_calqueue.o   src/datatypes/common_nb_calqueue.o 
 LIND_value := src/datatypes/prioq.o  src/datatypes/common_prioq.o
@@ -20,7 +20,7 @@ MACRO := -DARCH_X86_64  -DCACHE_LINE_SIZE=$(L1_CACHE_LINE_SIZE) -DINTEL
 OPTIMIZATION := -O3
 DEBUG := -g3
 
-FILTER_OUT_SRC := src/main.c src/main_2.c src/mm/mm.c src/mm/mm.h 
+FILTER_OUT_SRC := src/main.c src/main_2.c src/mm/mm.c src/mm/mm.h src/datatypes/numa_queue.c src/datatypes/worker_calqueue.c
 FILTER_OUT_DIR := src/datatypes
 
 OBJS_DIR 	:= $(strip $(MAKECMDGOALS))
@@ -77,7 +77,7 @@ endif
 all Debug Release GProf: $(REAL_TARGETS)
 
 # Tool invocations
-$(OBJS_DIR)/test-%: $(patsubst %, $(OBJS_DIR)/%, $(OBJS)) $(USER_OBJS)  
+$(OBJS_DIR)/test-%: $(patsubst %, $(OBJS_DIR)/%, $(COMMON_OBJS))  $(patsubst %, $(OBJS_DIR)/%, $($(strip $(subst test-,, $(@F)))_value)) $(USER_OBJS)  
 	@echo 'Objects: $(OBJS)'
 	@echo 'Building target: $@'
 	@echo 'Invoking: Cross GCC Linker'
@@ -106,7 +106,7 @@ clean:
 	-$(RM) Release
 	-$(RM) GProf	
 	-$(RM) NBCQ	
-	-$(RM) $(EXECUTABLES) $(OBJS) $(C_DEPS)
+	-$(RM) $(EXECUTABLES) $(OBJS) $(C_DEPS) $(subst .o,.S, $(OBJS))
 	-@echo ' '
 	#-clear
 
