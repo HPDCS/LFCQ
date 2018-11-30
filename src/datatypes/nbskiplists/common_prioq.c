@@ -78,11 +78,9 @@ alloc_node()
     assert(1 <= level && level <= 32);
 
     n = gc_alloc(ptst, gc_id[level - 1]);
-    //n = gc_alloc(ptst, gc_id[NUM_LEVELS-1]);
     n->level = level;
     n->inserting = 1;
     memset(n->next, 0, level * sizeof(node_t *));
-    //memset(n->next, 0, NUM_LEVELS*sizeof(node_t*));
 
     return n;
 }

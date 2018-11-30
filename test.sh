@@ -28,6 +28,6 @@ else
     PRE=""
 fi
 
-echo $PRE ./Debug/NBCQ $1 $2 1 $DIST 0.3 $SIZE $DIST  0.5 $OPS $DIST 0 0 $4 $3 $PRUNE 0 $MODE $TIME
+echo $PRE ./Debug/test-$1 $2 1 $DIST 0.3 $SIZE $DIST  0.5 $OPS $DIST 0 0 $4 $3 0 $MODE $TIME
 time $PRE1$PRE2 ./Debug/test-$1 $2 1 $DIST 0.3 $SIZE $DIST  0.5 $OPS $DIST 0 0 $4 $3 0 $MODE $TIME
 $POST

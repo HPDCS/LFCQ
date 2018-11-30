@@ -64,8 +64,8 @@ __thread unsigned long long last_offset = 0;
  * Traverse level 0 next pointers until one is found that does
  * not have the delete bit set. 
  */
-pval_t
-pq_dequeue(pq_t *pq)
+pkey_t
+pq_dequeue(pq_t *pq, void **result)
 {
     pval_t   v = NULL;
     node_t *x, *nxt, *obs_head = NULL, *newhead, *cur;
@@ -158,5 +158,6 @@ pq_dequeue(pq_t *pq)
     }
  out:
     critical_exit();
-    return v;
+    *result = v;
+    return x->k;
 }
