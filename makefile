@@ -7,9 +7,10 @@ EXECUTABLES :=
 USER_OBJS :=
 LIBS := -lpthread -lm -lnuma
 SRC_DIR := src
-TARGETS := NBCQ LIND MARO #NUMA #WORK
+TARGETS := NBCQ V2CQ LIND MARO #NUMA #WORK
 
 NBCQ_value := src/datatypes/nbcalendars/nb_calqueue.o   src/datatypes/nbcalendars/common_nb_calqueue.o 
+V2CQ_value := src/datatypes/nbcalendars/nb_calqueue_last_min.o   src/datatypes/nbcalendars/common_nb_calqueue.o 
 LIND_value := src/datatypes/nbskiplists/prioq.o  src/datatypes/nbskiplists/common_prioq.o
 MARO_value := src/datatypes/nbskiplists/prioq_v2.o src/datatypes/nbskiplists/common_prioq.o
 NUMA_value := src/datatypes/numa_queue.o  src/datatypes/common_nb_calqueue.o 

@@ -62,6 +62,11 @@ extern int gc_hid[];
 
 
 
+#define MOV_FOUND 	3
+#define OK			1
+#define ABORT		0
+
+
 #define INFTY DBL_MAX
 #define LESS(a,b) 		( (a) <  (b) )
 #define LEQ(a,b)		( (a) <= (b) )

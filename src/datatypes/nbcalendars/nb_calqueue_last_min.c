@@ -34,8 +34,10 @@
 
 #include "common_nb_calqueue.h"
 
-__thread unsigned long long last_curr = 0ULL;
+__thread unsigned long long last_curr 	= 0ULL;
 __thread unsigned long long cached_curr = 0ULL;
+__thread nbc_bucket_node *last_head 	= NULL;
+__thread nbc_bucket_node *last_min 		= NULL;
 
 /**
  * This function dequeue from the nonblocking queue. The cost of this operation when succeeds should be O(1)
@@ -83,9 +85,9 @@ begin:
 
 	if(last_curr != current){
 		cached_curr = last_curr = current;
+		last_head 	= NULL;
+		last_min  	= NULL;
 	}
-	else
-		current = cached_curr;
 	
 	do
 	{
@@ -98,11 +100,19 @@ begin:
 		min = array + (index++ % (size));
 		
 		left_node = min_next = min->next;
+
+		if(left_node != last_head){ 
+			last_head = left_node;
+			last_min = NULL;
+		}
+		else if(last_min){
+			left_node = last_min;
+		}
+
 		right_limit = index*bucket_width;
 		ep = 0;
 		
-		if(is_marked(min_next, MOV))
-			goto begin;
+		if(is_marked(min_next, MOV)) goto begin;
 		
 		do
 		{
@@ -133,9 +143,9 @@ begin:
 			scan_list_length += counter;
 
 			concurrent_dequeue += __sync_fetch_and_add(&h->d_counter.count, 1) - con_de;
-				
+							
 			critical_exit();
-
+			last_min = left_node;
 			return left_ts;
 										
 		}while( (left_node = get_unmarked(left_node_next)) && ++counter);
