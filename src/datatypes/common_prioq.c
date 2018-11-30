@@ -44,9 +44,6 @@
 #include <assert.h>
 #include <stdlib.h>
 
-/* keir fraser's garbage collection */
-#include "gc/ptst.h"
-
 /* some utilities (e.g. memory barriers) */
 #include "../utils/common.h"
 

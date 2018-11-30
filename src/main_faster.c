@@ -34,8 +34,6 @@
 #include <sched.h>
 #include <sys/time.h>
 
-#include "datatypes/gc/gc.h"
-
 #include "utils/hpdcs_utils.h"
 #include "utils/hpdcs_math.h"
 #include "utils/common.h"
@@ -67,8 +65,6 @@ struct payload
 typedef struct payload payload;
 
 
-char		DATASTRUCT;
-
 unsigned int THREADS;		// Number of threads
 unsigned int OPERATIONS; 	// Number of operations per thread
 unsigned int ITERATIONS;	// = 800000;
@@ -87,7 +83,6 @@ unsigned int TOTAL_OPS3;	// = 800000;
 double PROB_DEQUEUE3;		// Probability to dequeue
 char   PROB_DISTRIBUTION3;
 
-unsigned int PRUNE_PERIOD;	// Number of ops before calling prune
 double MEAN_INTERARRIVAL_TIME = 1.00;			// Maximum distance from the current event owned by the thread
 unsigned int EMPTY_QUEUE;
 double PERC_USED_BUCKET; 	
@@ -415,7 +410,7 @@ void* process(void *arg)
 int main(int argc, char **argv)
 {
 	int par = 1;
-	int num_par = 19;;
+	int num_par = 17;
 	unsigned int i = 0;
 	unsigned long numa_mask = 1;
 	unsigned long long sum = 0;
@@ -432,7 +427,6 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
-	DATASTRUCT = argv[par++][0];
 	THREADS  = (unsigned int) strtol(argv[par++], (char **)NULL, 10);
 	ITERATIONS  = (unsigned int) strtol(argv[par++], (char **)NULL, 10);
 
@@ -453,9 +447,6 @@ int main(int argc, char **argv)
 	PERC_USED_BUCKET 			= strtod(argv[par++], (char **)NULL);
 	ELEM_PER_BUCKET 			= (unsigned int) strtol(argv[par++], (char **)NULL, 10);
 	
-	
-	PRUNE_PERIOD 			= (unsigned int) strtol(argv[par++], (char **)NULL, 10);
-
 	OPERATIONS 					= (TOTAL_OPS/THREADS);
 	//PROB_ROLL 					= strtod(argv[par++], (char **)NULL);
 	//MEAN_INTERARRIVAL_TIME	 	= strtod(argv[par++], (char **)NULL);
@@ -471,11 +462,9 @@ int main(int argc, char **argv)
 	p_tid = malloc(THREADS*sizeof(pthread_t));
 	
 
-	printf("D:%c,", DATASTRUCT);
 	printf("T:%u,", THREADS);
 	printf("ITERATIONS:%u,", ITERATIONS);
 	printf("OPS:%u,", TOTAL_OPS);
-	printf("PRUNE_PER:%u,", PRUNE_PERIOD);
 	printf("OPS1:%u,", TOTAL_OPS1);
 	printf("PROB_DIST1:%c,",PROB_DISTRIBUTION1);
 	printf("P_DEQUEUE1:%f,", PROB_DEQUEUE1);

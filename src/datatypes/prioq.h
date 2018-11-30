@@ -2,6 +2,8 @@
 #define PRIOQ_H
 
 #include "../utils/common.h"
+/* keir fraser's garbage collection */
+#include "../gc/ptst.h"
 
 typedef double pkey_t;
 typedef void         *pval_t;

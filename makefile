@@ -77,7 +77,7 @@ endif
 all Debug Release GProf: $(REAL_TARGETS)
 
 # Tool invocations
-$(OBJS_DIR)/test-%: $(patsubst %, $(OBJS_DIR)/%, $(COMMON_OBJS))  $(patsubst %, $(OBJS_DIR)/%, $($(strip $(subst test-,, $(@F)))_value)) $(USER_OBJS)  
+$(OBJS_DIR)/test-%: $(patsubst %, $(OBJS_DIR)/%, $(OBJS))  
 	@echo 'Objects: $(OBJS)'
 	@echo 'Building target: $@'
 	@echo 'Invoking: Cross GCC Linker'

@@ -33,7 +33,7 @@
 #include "../arch/atomic.h"
 #include "../utils/hpdcs_utils.h"
 
-#include "gc/ptst.h"
+#include "../gc/ptst.h"
 
 extern __thread ptst_t *ptst;
 extern int gc_aid[];
