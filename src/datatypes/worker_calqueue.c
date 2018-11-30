@@ -25,9 +25,40 @@
  *  Author: Romolo Marotta
  */
 
-#include "nb_calqueue.h"
-#include "worker_calqueue.h"
 
+#include "common_nb_calqueue.h"
+
+#define NID nid
+
+extern __thread unsigned int NID;
+extern unsigned int NUMA_NODES;
+
+#define EMPTY_DESCRIPTOR 	0ULL
+#define DONE_DESCRIPTOR 	1ULL
+#define RUNNING_DESCRIPTOR 	2ULL
+#define ENQUEUE_DESCRIPTOR 	4ULL
+#define DEQUEUE_DESCRIPTOR 	8ULL
+
+typedef struct op_descriptor op_descriptor;
+struct op_descriptor
+{
+	volatile unsigned long long id_op;
+	volatile double timestamp;
+	//16
+	void * volatile payload;
+	//24
+	char pad[40];
+	
+};
+
+typedef struct worker_calqueue worker_calqueue;
+struct worker_calqueue
+{
+	nb_calqueue *real_queue;
+	unsigned long long num_threads;
+	op_descriptor *pending_ops;
+
+};
 
 /**
  * This function create an instance of a non-blocking calendar queue.

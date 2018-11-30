@@ -25,8 +25,29 @@
  *  Author: Romolo Marotta
  */
 
+#include "common_nb_calqueue.h"
 
-#include "numa_queue.h"
+#define NID nid
+
+
+extern __thread unsigned int NID;
+
+
+typedef struct numa_nb_calqueue numa_nb_calqueue;
+struct numa_nb_calqueue
+{
+	unsigned int threshold;
+	unsigned int elem_per_bucket;
+	double perc_used_bucket;
+	double pub_per_epb;
+	volatile unsigned int global_epoch;
+	char zpad9[36];
+	table * volatile hashtable[MAX_NUMA_NODES];
+};
+
+
+
+extern unsigned int NUMA_NODES;
 
 __thread unsigned long long performed_enqueue;
 
@@ -47,7 +68,7 @@ __thread unsigned long long flush_current_fail  ;
 
 
 __thread ptst_t *ptst;
-int gc_id[1];
+int gc_aid[1];
 
 
 /*************************************

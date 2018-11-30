@@ -2,7 +2,6 @@
 #define PRIOQ_H
 
 #include "../utils/common.h"
-#include "../mm/garbagecollector.h"
 
 typedef double pkey_t;
 typedef void         *pval_t;
@@ -59,5 +58,9 @@ extern void sequential_length(pq_t *pq);
 
 extern void print_stats();
 extern void pq_prune();
+
+extern void free_node(node_t *n);
+
+extern void restructure(pq_t *pq);
 
 #endif // PRIOQ_H
