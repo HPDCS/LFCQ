@@ -55,9 +55,11 @@
 /* Update Integer location, return Old value. */
 #define CASIO CAS
 #define FASIO FAS
+
 /* Update Pointer location, return Old value. */
 #define CASPO CAS
 #define FASPO FAS
+
 /* Update 32/64-bit location, return Old value. */
 #define CAS32O CAS
 #define CAS64O CAS64

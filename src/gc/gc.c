@@ -176,7 +176,7 @@ struct gc_st
 
 #define MEM_FAIL(_s)                                                         \
 do {                                                                         \
-    fprintf(stderr, "OUT OF MEMORY: %d bytes at line %d\n", (_s), __LINE__); \
+    fprintf(stderr, "OUT OF MEMORY: %d bytes at line %d\n", (int) (_s), __LINE__); \
     exit(1);                                                                 \
 } while ( 0 )
 
@@ -339,7 +339,8 @@ static void gc_reclaim(ptst_t * our_ptst)
     gc_t         *gc = NULL;
     unsigned long curr_epoch;
     chunk_t      *ch, *t;
-    int           two_ago, three_ago, i, j;
+    //int           two_ago, three_ago, i, j;
+    int           three_ago, i, j;
     
     /* Barrier to entering the reclaim critical section. */
     if ( gc_global.inreclaim || CASIO(&gc_global.inreclaim, 0, 1) ) return;
@@ -362,7 +363,7 @@ static void gc_reclaim(ptst_t * our_ptst)
      * Three-epoch-old garbage lists move to allocation lists.
      * Two-epoch-old garbage lists are cleaned out.
      */
-    two_ago   = (curr_epoch+2) % NR_EPOCHS;
+    //two_ago   = (curr_epoch+2) % NR_EPOCHS;
     three_ago = (curr_epoch+1) % NR_EPOCHS;
     //if ( gc_global.nr_hooks != 0 )
         //our_ptst = (ptst_t *)pthread_getspecific(ptst_key);

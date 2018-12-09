@@ -18,10 +18,7 @@ __thread unsigned long long scan_list_length_en ;
 
 __thread ptst_t *ptst;
 int gc_aid[1];
-int gc_hid[1];
-
-
-
+int gc_hid[2];
 
 
 /*************************************
@@ -49,23 +46,12 @@ __thread unsigned int flush_eq = 0;
 __thread unsigned int local_monitor = -1;
 __thread unsigned int flush_de = 0;
 
-
-
-
-
 __thread unsigned long long read_table_count	 = 0;
-  
-
 
 __thread unsigned long long dist = 0;
 __thread unsigned long long num_cas = 0ULL;
 __thread unsigned long long num_cas_useful = 0ULL;
 __thread unsigned long long near = 0;
-
-unsigned int threads;
-unsigned int * volatile prune_array;
-
-
 
 /**
  * This function commits a value in the current field of a queue. It retries until the timestamp
@@ -140,7 +126,6 @@ void flush_current(table* h, unsigned long long newIndex, unsigned int size, nbc
 		);
 }
 
-
 /**
  * This function implements the search of a node that contains a given timestamp t. It finds two adjacent nodes,
  * left and right, such that: left.timestamp <= t and right.timestamp > t.
@@ -159,10 +144,10 @@ void flush_current(table* h, unsigned long long newIndex, unsigned int size, nbc
  *
  */   
 
-void search(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
-						nbc_bucket_node **left_node, nbc_bucket_node **right_node, int flag)
+void search(sentinel_node *head, double timestamp, unsigned int tie_breaker,
+						nbc_bucket_node **left_node, nbc_bucket_node **right_node, int flag, nbc_bucket_node *tail)
 {
-	nbc_bucket_node *left, *right, *left_next, *tmp, *tmp_next, *tail;
+	nbc_bucket_node *left, *right, *left_next, *tmp, *tmp_next;
 	unsigned int counter;
 	unsigned int tmp_tie_breaker;
 	double tmp_timestamp;
@@ -171,9 +156,8 @@ void search(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
 	do
 	{
 		/// Fetch the head and its next node
-		left = tmp = head;
-		left_next = tmp_next = tmp->next;
-		tail = tmp->tail;
+		left = tmp = (nbc_bucket_node*) head;
+		left_next = tmp_next = hf_field(tmp)->next;
 		assertf(head == NULL, "PANIC %s\n", "");
 		assertf(tmp_next == NULL, "PANIC1 %s\n", "");
 		assertf(is_marked_for_search(left_next, flag), "PANIC2 %s\n", "");
@@ -194,10 +178,10 @@ void search(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
 			
 			// Retrieve timestamp and next field from the current node (tmp)
 			
-			tmp = get_unmarked(tmp_next);
-			tmp_next = tmp->next;
-			tmp_timestamp = tmp->timestamp;
-			tmp_tie_breaker = tmp->counter;
+			tmp 			= get_unmarked(tmp_next);
+			tmp_next 		= hf_field(tmp)->next;
+			tmp_timestamp 	= hf_field(tmp)->timestamp;
+			tmp_tie_breaker = lf_field(tmp)->counter;
 			
 			// Check if the node is marked
 			marked = is_marked_for_search(tmp_next, flag);
@@ -205,7 +189,7 @@ void search(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
 			go_to_next = LESS(tmp_timestamp, timestamp);
 			ts_equal = D_EQUAL(tmp_timestamp, timestamp);
 			// Check tie breaker
-			tie_lower = 		(
+			tie_lower = 	(
 								tie_breaker == 0 || 
 								(tie_breaker != 0 && tmp_tie_breaker <= tie_breaker)
 							);
@@ -240,13 +224,6 @@ void search(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
 		
 	} while (1);
 }
-
-
-
-
-
-
-
 
 
 
@@ -289,35 +266,36 @@ void search(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
  *
  */   
  
-unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
+unsigned int search_and_insert(sentinel_node *head, double timestamp, unsigned int tie_breaker,
 						 int flag, nbc_bucket_node *new_node_pointer, nbc_bucket_node **new_node)
 {
 	nbc_bucket_node *left, *left_next, *tmp, *tmp_next, *tail;
+	nbc_bucket_node *lnode, *rnode;
 	unsigned int counter;
 	unsigned int left_tie_breaker, tmp_tie_breaker;
 	unsigned int len;
-	double left_timestamp, tmp_timestamp, rand;
+	double left_timestamp, tmp_timestamp;
 	bool marked, ts_equal, tie_lower, go_to_next;
 	bool is_new_key = flag == REMOVE_DEL_INV;
-	drand48_r(&seedT, &rand);
 	
+
 	// clean the heading zone of the bucket
-	nbc_bucket_node *lnode, *rnode;
-	search(head, -1.0, 0, &lnode, &rnode, REMOVE_DEL_INV);
+	
+	tail = head->tail;
+	search(head, -1.0, 0, &lnode, &rnode, REMOVE_DEL_INV, tail);
 	
 	// read tail from head (this is done for avoiding an additional cache miss)
-	tail = head->tail;
 	do
 	{
 		len = 0;
 		/// Fetch the head and its next node
-		left = tmp = head;
+		left = tmp = (nbc_bucket_node*) head;
 		// read all data from the head (hopefully only the first access is a cache miss)
 		left_next = tmp_next = tmp->next;
 			
 		// since such head does not change, probably we can cache such data with a local copy
-		left_tie_breaker = tmp_tie_breaker = tmp->counter;
-		left_timestamp 	= tmp_timestamp    = tmp->timestamp;
+		left_tie_breaker = tmp_tie_breaker = 0;//lf_field(tmp)->counter;
+		left_timestamp 	= tmp_timestamp    = hf_field(tmp)->timestamp;
 		
 		// SANITY CHECKS
 		assertf(head == NULL, "PANIC %s\n", "");
@@ -327,6 +305,8 @@ unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, unsigned
 		// init variables useful during iterations
 		counter = 0;
 		marked = is_marked_for_search(tmp_next, flag);
+
+		nbc_bucket_node *old_tmp;
 		
 		do
 		{
@@ -337,28 +317,71 @@ unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, unsigned
 			{
 				left = tmp;
 				left_next = tmp_next;
-				left_tie_breaker = tmp_tie_breaker;
+				left_tie_breaker = ((nbc_bucket_node*) head == tmp) ? 0 : lf_field(tmp)->counter; //tmp_tie_breaker;
 				left_timestamp = tmp_timestamp;
 				counter = 0;
 			}
 			
 			// increase the count of marked nodes met during scan
 			counter+=marked;
-			
+			old_tmp = tmp;	
 			// get an unmarked reference to the tmp node
+		IMB();
+			if(tmp == tmp_next){
+				printf("%d- A PUNTA SE STESSO %p %p\n",TID, tmp, new_node_pointer->next);
+				old_tmp = NULL;
+				old_tmp->next = NULL;
+			}
+			
+			if(tmp == NULL){
+				printf("%d- A2 PUNTA NULL %p %p %p\n",TID, tmp, tmp_next, new_node_pointer->next);
+				old_tmp = NULL;
+				old_tmp->next = NULL;
+			}
+
+			if(tmp_next == NULL){
+				printf("%d- A7 PUNTA NULL %p %p %p\n",TID, tmp, tmp_next, new_node_pointer->next);
+				old_tmp = NULL;
+				old_tmp->next = NULL;
+			}
+		IMB();
 			tmp = get_unmarked(tmp_next);
+		IMB();
 			
 			// Retrieve timestamp and next field from the current node (tmp)
-			tmp_next = tmp->next;
-			tmp_timestamp = tmp->timestamp;
-			tmp_tie_breaker = tmp->counter;
+
+			if(tmp == NULL){
+				printf("%d- A3 PUNTA NULL %p %p %p\n",TID, tmp, tmp_next, new_node_pointer->next);
+				old_tmp = NULL;
+				old_tmp->next = NULL;
+			}
+			tmp_next 		= hf_field(tmp)->next;
+		IMB();
+
+			if(tmp != tail && tmp_next == NULL){
+				printf("%d- A4 PUNTA NULL %p %p\n",TID, tmp, new_node_pointer->next);
+				old_tmp = NULL;
+				old_tmp->next = NULL;
+			}
+			tmp_timestamp 	= hf_field(tmp)->timestamp;
+
+
+			if(tmp == NULL){
+				printf("%d- A5 PUNTA NULL %p %p\n",TID, tmp, new_node_pointer->next);
+				old_tmp = NULL;
+				old_tmp->next = NULL;
+			}
+		IMB();
+		
+			ts_equal = D_EQUAL(tmp_timestamp, timestamp);
+			
+			if(ts_equal) tmp_tie_breaker = lf_field(tmp)->counter;
 			
 			// Check if the right node is marked
 			marked = is_marked_for_search(tmp_next, flag);
 			
 			// Check if the right node timestamp and tie_breaker satisfies the conditions 
 			go_to_next = LESS(tmp_timestamp, timestamp);
-			ts_equal = D_EQUAL(tmp_timestamp, timestamp);
 			tie_lower = 		(
 								is_new_key || 
 								(!is_new_key && tmp_tie_breaker <= tie_breaker)
@@ -385,8 +408,15 @@ unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, unsigned
 		// 1+T1 		IF K1 == timestamp AND flag == REMOVE_DEL_INV 
 		// 1			IF K1 != timestamp AND flag == REMOVE_DEL_INV
 		// UNCHANGED 	IF flag != REMOVE_DEL_INV
-		new_node_pointer->counter =  ( (-(is_new_key)) & (1 + ( -D_EQUAL(timestamp, left_timestamp ) & left_tie_breaker ))) +
+		lf_field(new_node_pointer)->counter =  ( (-(is_new_key)) & (1 + ( -D_EQUAL(timestamp, left_timestamp ) & left_tie_breaker ))) +
 									 (~(-(is_new_key)) & tie_breaker);
+
+		if(new_node_pointer == new_node_pointer->next){
+				printf("%d- A1 PUNTA SE STESSO %p %p\n", TID, tmp, new_node_pointer->next);		
+				old_tmp = NULL;
+				old_tmp->next = NULL;
+		
+			}
 
 		// node already exists
 		if(!is_new_key && D_EQUAL(timestamp, left_timestamp ) && left_tie_breaker == tie_breaker)
@@ -395,7 +425,101 @@ unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, unsigned
 			*new_node = left;
 			return OK;
 		}
+
+		bool is_set = false;
+		bool is_set_b = false;
+		if((void*)left != (void*) head){
+			nbc_bucket_node *new = acquire_from_chunk(left, new_node_pointer->next);
+			if(new != NULL){
+				//printf("REUSING FROM LEFT for %f \n", new_node_pointer->timestamp);
+
+			if(new_node_pointer == new_node_pointer->next){
+				printf("%d- B PUNTA SE STESSO %p %p\n", TID, tmp, new_node_pointer->next);		
+				old_tmp = NULL;
+				old_tmp->next = NULL;
 		
+			}
+				hf_field(new)->timestamp = hf_field(new_node_pointer)->timestamp;
+				hf_field(new)->next      = hf_field(new_node_pointer)->next     ;
+				lf_field(new)->payload   = lf_field(new_node_pointer)->payload  ;
+				lf_field(new)->epoch     = lf_field(new_node_pointer)->epoch    ;
+				lf_field(new)->counter   = lf_field(new_node_pointer)->counter  ;
+				lf_field(new)->nid       = lf_field(new_node_pointer)->nid      ;
+				lf_field(new)->tail      = lf_field(new_node_pointer)->tail     ;
+				lf_field(new)->replica   = lf_field(new_node_pointer)->replica  ;
+				lf_field(new)->next_next = lf_field(new_node_pointer)->next_next;
+
+				gc_free(ptst, new_node_pointer, gc_aid[0]);
+				new_node_pointer = new;
+				is_set = true;
+			}
+		}
+		
+		if(!is_set && tmp != tail){
+			if(tmp != new_node_pointer->next){
+				printf("SONO DIVERSI %p %p\n", tmp, new_node_pointer->next);
+
+			}
+
+			if(new_node_pointer == new_node_pointer->next){
+				printf("%d- C PUNTA SE STESSO %p %p\n", TID, tmp, new_node_pointer->next);
+						old_tmp = NULL;
+				old_tmp->next = NULL;
+		
+			}
+			nbc_bucket_node *new = acquire_from_chunk(tmp, new_node_pointer->next);
+
+			if(new == new_node_pointer->next){
+				printf("%d- C1 PUNTA SE STESSO TMP:%p NEW_P:%p NEW_P_N:%p\n", TID, tmp, new_node_pointer, new_node_pointer->next);
+						old_tmp = NULL;
+				old_tmp->next = NULL;
+		
+			}
+			if(new != NULL){
+				//printf("REUSING FROM RIGHT for %f \n", new_node_pointer->timestamp);
+
+				hf_field(new)->timestamp = hf_field(new_node_pointer)->timestamp;
+				hf_field(new)->next      = hf_field(new_node_pointer)->next     ;
+				lf_field(new)->payload   = lf_field(new_node_pointer)->payload  ;
+				lf_field(new)->epoch     = lf_field(new_node_pointer)->epoch    ;
+				lf_field(new)->counter   = lf_field(new_node_pointer)->counter  ;
+				lf_field(new)->nid       = lf_field(new_node_pointer)->nid      ;
+				lf_field(new)->tail      = lf_field(new_node_pointer)->tail     ;
+				lf_field(new)->replica   = lf_field(new_node_pointer)->replica  ;
+				lf_field(new)->next_next = lf_field(new_node_pointer)->next_next;
+
+				gc_free(ptst, new_node_pointer, gc_aid[0]);
+				new_node_pointer = new;
+				is_set_b = true;
+			}
+		}
+
+		if(new_node_pointer == new_node_pointer->next){
+			printf("%d- D PUNTA SE STESSO %p %p %d %d %d\n",TID, tmp, new_node_pointer->next, ITEMS_PER_CACHELINE, is_set, is_set_b);
+					old_tmp = NULL;
+				old_tmp->next = NULL;
+		
+		}
+
+		//lf_field(new_node_pointer)->next_next = old_tmp;
+
+		//if(!is_set)
+		//	printf("NEW CHUNK %p for %f\n", new_node_pointer, new_node_pointer->timestamp);
+
+		if(new_node_pointer == new_node_pointer->next){
+			printf("%d- E PUNTA SE STESSO %p %p\n",TID, tmp, new_node_pointer->next);
+					old_tmp = NULL;
+				old_tmp->next = NULL;
+		
+		}
+
+		if(NULL == new_node_pointer->next){
+			printf("%d- F PUNTA NULL %p %p\n",TID, tmp, new_node_pointer->next);
+					old_tmp = NULL;
+				old_tmp->next = NULL;
+		
+		}
+
 		// copy left node mark			
 		if (BOOL_CAS(&(left->next), left_next, get_marked(new_node_pointer,get_mark(left_next))))
 		{
@@ -425,7 +549,7 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 	unsigned int res = 0;
 	double pub_per_epb = pub*epb;
 	table *new_h = NULL;
-	nbc_bucket_node *array;
+	sentinel_node *array;
 	unsigned int thp2_tmp = 1;
 	thp2 = threshold *2;
 	
@@ -462,7 +586,8 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 		if(res != 0)
 			error("No enough memory to new table structure\n");
 		
-		tail = h->array->tail;
+		tail = h->tail;
+		new_h->tail = tail;
 		new_h->bucket_width  = -1.0;
 		new_h->size 		 = new_size;
 		new_h->new_table 	 = NULL;
@@ -473,7 +598,7 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 		new_h->read_table_period = h->read_table_period;
 
 		//array =  alloc_array_nodes(&malloc_status, new_size);
-		array =  malloc(new_size*sizeof(nbc_bucket_node));
+		array =  malloc(new_size*sizeof(sentinel_node));
 		if(array == NULL)
 		{
 			free(new_h);
@@ -483,10 +608,10 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 
 		for (i = 0; i < new_size; i++)
 		{
-			array[i].next = tail;
-			array[i].tail = tail;
-			array[i].counter = 0;
-			array[i].epoch = 0;
+			array[i].next 	 = tail;
+			array[i].tail 	 = tail;
+			array[i].epoch  = 0;
+			array[i].counter= 0;
 		}
 		new_h->array = array;
 
@@ -497,7 +622,7 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 			free(new_h);
 		}
 		else
-			LOG("%u - CHANGE SIZE from %u to %u, items %u OLD_TABLE:%p NEW_TABLE:%p\n", TID, size, new_size, counter, h, new_h);
+			LOG("%u - CHANGE SIZE from %u to %u, items %u OLD_TABLE:%p NEW_TABLE:%p TAIL:%p H->TAIL:%p\n", TID, size, new_size, counter, h, new_h, tail, h->tail);
 	}
 }
 
@@ -505,11 +630,11 @@ void block_table(table* h)
 {
 	unsigned int i=0;
 	unsigned int size = h->size;
-	nbc_bucket_node *array = h->array;
-	nbc_bucket_node *bucket, *bucket_next;
+	sentinel_node *bucket, *array = h->array;
+	nbc_bucket_node *bucket_next;
 	nbc_bucket_node *left_node, *right_node; 
 	nbc_bucket_node *right_node_next, *left_node_next;
-	nbc_bucket_node *tail = array->tail;
+	nbc_bucket_node *tail = h->tail;
 	double rand = 0.0;			
 	unsigned int start = 0;		
 		
@@ -532,7 +657,7 @@ void block_table(table* h)
 		//Try to mark the first VALid node as MOV
 		do
 		{
-			search(bucket, -1.0, 0, &left_node, &left_node_next, REMOVE_DEL_INV);
+			search(bucket, -1.0, 0, &left_node, &left_node_next, REMOVE_DEL_INV, tail);
 			right_node = get_unmarked(left_node_next);
 			right_node_next = right_node->next;	
 		}
@@ -556,12 +681,12 @@ double compute_mean_separation_time(table* h,
 	unsigned int i = 0, index;
 
 	table *new_h = h->new_table;
-	nbc_bucket_node *array = h->array;
+	sentinel_node *array = h->array;
 	double old_bw = h->bucket_width;
 	unsigned int size = h->size;
 	double new_bw = new_h->bucket_width;
 
-	nbc_bucket_node *tail = array->tail;	
+	nbc_bucket_node *tail = h->tail;	
 	unsigned int sample_size;
 	double average = 0.0;
 	double newaverage = 0.0;
@@ -591,7 +716,7 @@ double compute_mean_separation_time(table* h,
 	{   
 		for (i = 0; i < size; i++)
 		{
-			tmp = array + (index + i) % size; 	//get the head of the bucket
+			tmp = (nbc_bucket_node*) ( array + ( (index + i) % size ) ); 	//get the head of the bucket
 			tmp = get_unmarked(tmp->next);		//pointer to first node
 			
 			lower_bound = (index + i) * old_bw;
@@ -670,7 +795,8 @@ void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 	nbc_bucket_node** new_node;
 	nbc_bucket_node *right_replica_field, *right_node_next;
 	
-	nbc_bucket_node *bucket, *new_node_pointer;
+	sentinel_node *bucket;
+	nbc_bucket_node *new_node_pointer;
 	unsigned int index;
 
 	unsigned int new_node_counter 	;
@@ -680,12 +806,12 @@ void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 	int res = 0;
 	
 	//Create a new node inserted in the new table as as INValid
-	replica = node_malloc(right_node->payload, right_node->timestamp,  right_node->counter);
+	replica = node_malloc( lf_field(right_node)->payload, hf_field(right_node)->timestamp,  lf_field(right_node)->counter);
 	
 	new_node 			= &replica;
 	new_node_pointer 	= (*new_node);
-	new_node_counter 	= new_node_pointer->counter;
-	new_node_timestamp 	= new_node_pointer->timestamp;
+	new_node_counter 	= lf_field(new_node_pointer)->counter;
+	new_node_timestamp 	= hf_field(new_node_pointer)->timestamp;
 	
 	index = hash(new_node_timestamp, new_h->bucket_width) % new_h->size;
 
@@ -694,7 +820,7 @@ void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 	         
     do
 	{ 
-		right_replica_field = right_node->replica;
+		right_replica_field = lf_field(right_node)->replica;
 	}        
 	while(right_replica_field == NULL && (res = 
 	search_and_insert(bucket, new_node_timestamp, new_node_counter, REMOVE_DEL, new_node_pointer, new_node)
@@ -703,14 +829,14 @@ void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 	
 	if( right_replica_field == NULL && 
 			BOOL_CAS(
-				&(right_node->replica),
+				&(lf_field(right_node)->replica),
 				NULL,
 				replica
 				)
 		)
 		ATOMIC_INC(&(new_h->e_counter));
              
-	right_replica_field = right_node->replica;
+	right_replica_field = lf_field(right_node)->replica;
             
 	do
 	{
@@ -743,7 +869,7 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 	double 			 new_bw 		;
 	double 			 newaverage		;
 	//double 			 pub_per_epb	;
-	nbc_bucket_node *bucket, *array	;
+	sentinel_node *bucket, *array	;
 	int a,b,signed_counter;
 	unsigned int counter;
 	nbc_bucket_node *right_node, *left_node, *right_node_next, *node;
@@ -779,7 +905,7 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 		new_h 			= h->new_table;
 		array 			= h->array;
 		new_bw 			= new_h->bucket_width;
-		tail = array->tail;	
+		tail 			= h->tail;	
 
 		if(new_bw < 0)
 		{
@@ -813,7 +939,7 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 					break;
 					
 				//Try to mark the top node
-				search(node, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
+				search( (sentinel_node*)node, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV, tail);
 				
 				right_node = get_unmarked(right_node);
 				right_node_next = right_node->next;
@@ -851,7 +977,7 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 					
 				do
 				{
-					search(node, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
+					search((sentinel_node*)node, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV, tail);
 				
 					right_node = get_unmarked(right_node);
 					right_node_next = right_node->next;
@@ -875,7 +1001,7 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 				
 			}while(true);
 	
-			search(bucket, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
+			search(bucket, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV, tail);
 			assertf(get_unmarked(right_node) != tail, "Fail in line 972 %p %p %p %p %p %p\n",
 			 bucket,
 			  left_node,
@@ -934,6 +1060,25 @@ unsigned int pq_num_malloc(){
 void my_hook(ptst_t *p, void *ptr){	free(ptr); }
 
 
+void my_hk(ptst_t *p, void *ptr){
+	nbc_bucket_node* old = ((nbc_bucket_node*)ptr)->next;
+	if(!BOOL_CAS(&((nbc_bucket_node*)ptr)->next, old, 1ULL)) 
+		{printf("PROBLEMA: nodo in 2 hook diversi");
+		old =NULL;
+		old->next = NULL;
+			} 
+
+	nbc_bucket_node* base = base_address(ptr);
+	int i =0;
+
+	for(; i< ITEMS_PER_CACHELINE; i++)
+		if(base[i].next != (void*) 1ULL) 
+			return;
+
+	gc_free(ptst, base, gc_aid[0]);
+ 
+}
+
 /**
  * This function create an instance of a non-blocking calendar queue.
  *
@@ -949,29 +1094,33 @@ nb_calqueue* pq_init(unsigned int threshold, double perc_used_bucket, unsigned i
 	//unsigned int new_threshold = 1;
 	unsigned int res_mem_posix = 0;
 
-	threads = threshold;
-	prune_array = calloc(threshold*threshold, sizeof(unsigned int));
-
 	//nb_calqueue* res = calloc(1, sizeof(nb_calqueue));
 	nb_calqueue* res = NULL; 
+	
+	gc_aid[0] = gc_add_allocator( 4*(sizeof(nbc_bucket_node)+sizeof(lf)));
+	gc_hid[0] = gc_add_hook(my_hook);
+	gc_hid[1] = gc_add_hook(my_hk);
+	critical_enter();
+	critical_exit();
+
 	res_mem_posix = posix_memalign((void**)(&res), CACHE_LINE_SIZE, sizeof(nb_calqueue));
 	if(res_mem_posix != 0)
 	{
 		error("No enough memory to allocate queue\n");
 	}
-	//if(res == NULL)
-	//	error("No enough memory to allocate queue\n");
 
 	//while(new_threshold <= threshold)
 	//	new_threshold <<=1;
 
-	res->threshold = threads;
+	res->threshold = threshold;
 	res->perc_used_bucket = perc_used_bucket;
 	res->elem_per_bucket = elem_per_bucket;
-	res->pub_per_epb = perc_used_bucket * elem_per_bucket;
+	//res->pub_per_epb = perc_used_bucket * elem_per_bucket;
 	res->read_table_period = READTABLE_PERIOD;
 
-	//res->hashtable = malloc(sizeof(table));
+	res->tail = node_malloc(NULL, INFTY, 0);
+	res->tail->next = NULL;
+
 	res_mem_posix = posix_memalign((void**)(&res->hashtable), CACHE_LINE_SIZE, sizeof(table));
 	
 	if(res_mem_posix != 0)
@@ -979,6 +1128,8 @@ nb_calqueue* pq_init(unsigned int threshold, double perc_used_bucket, unsigned i
 		free(res);
 		error("No enough memory to allocate queue\n");
 	}
+
+
 	res->hashtable->bucket_width = 1.0;
 	res->hashtable->new_table = NULL;
 	res->hashtable->size = MINIMUM_SIZE;
@@ -986,9 +1137,10 @@ nb_calqueue* pq_init(unsigned int threshold, double perc_used_bucket, unsigned i
 	res->hashtable->last_resize_count = 0;
 	res->hashtable->e_counter.count = 0;
 	res->hashtable->d_counter.count = 0;
-    res->hashtable->read_table_period = res->read_table_period;	
-	//res->hashtable->array =  alloc_array_nodes(&malloc_status, MINIMUM_SIZE);
-	res->hashtable->array =  malloc(MINIMUM_SIZE*sizeof(nbc_bucket_node));
+    res->hashtable->read_table_period = res->read_table_period;			
+    res->hashtable->tail = res->tail;
+
+	res->hashtable->array =  malloc(MINIMUM_SIZE*sizeof(sentinel_node));
 	
 	if(res->hashtable->array == NULL)
 	{
@@ -997,20 +1149,16 @@ nb_calqueue* pq_init(unsigned int threshold, double perc_used_bucket, unsigned i
 		free(res);
 	}
 
-	gc_aid[0] = gc_add_allocator(sizeof(nbc_bucket_node));
-	gc_hid[0] = gc_add_hook(my_hook);
-	critical_enter();
-	critical_exit();
 	
-	res->tail = node_malloc(NULL, INFTY, 0);
-	res->tail->next = NULL;
+
+	printf("TAIL: %p\n", res->tail);
 
 	for (i = 0; i < MINIMUM_SIZE; i++)
 	{
-		res->hashtable->array[i].next = res->tail;
-		res->hashtable->array[i].tail = res->tail;
-		res->hashtable->array[i].timestamp = i * 1.0;
-		res->hashtable->array[i].counter = 0;
+		res->hashtable->array[i].next 	 	= res->tail;
+		res->hashtable->array[i].timestamp	= i * 1.0;
+		res->hashtable->array[i].tail 	 	= res->tail;
+		res->hashtable->array[i].counter   = 0;
 	}
 
 	return res;
@@ -1029,24 +1177,22 @@ nb_calqueue* pq_init(unsigned int threshold, double perc_used_bucket, unsigned i
  *
  * @return true if the event is inserted in the hashtable, else false
  */
+
 void pq_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 {
-	
 	critical_enter();
-	nbc_bucket_node *bucket, *new_node = node_malloc(payload, timestamp, 0);
-	table * h = NULL;		
+	nbc_bucket_node *new_node = node_malloc(payload, timestamp, 0);
+	table * h = NULL;
+	sentinel_node *bucket;		
 	unsigned int index, res, size;
 	unsigned long long newIndex = 0;
-	
 	
 	// get configuration of the queue
 	double pub = queue->perc_used_bucket;
 	unsigned int epb = queue->elem_per_bucket;
 	unsigned int th = queue->threshold;
-	
 	unsigned int con_en = 0;
 	
-
 	//init the result
 	res = MOV_FOUND;
 	
@@ -1060,7 +1206,7 @@ void pq_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 			// get actual size
 			size = h->size;
 	        // read the actual epoch
-        	new_node->epoch = (h->current & MASK_EPOCH);
+        	lf_field(new_node)->epoch = (h->current & MASK_EPOCH);
 			// compute the index of the virtual bucket
 			newIndex = hash(timestamp, h->bucket_width);
 			// compute the index of the physical bucket
@@ -1081,17 +1227,6 @@ void pq_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 	
 	concurrent_enqueue += __sync_fetch_and_add(&h->e_counter.count, 1) - con_en;
 	performed_enqueue++;
-	
-	#if COMPACT_RANDOM_ENQUEUE == 1
-	// clean a random bucket
-	unsigned long long oldCur = h->current;
-	unsigned long long oldIndex = oldCur >> 32;
-	dist = size*DISTANCE_FROM_CURRENT+1;
-	double rand;
-	nbc_bucket_node *left_node, *right_node;
-	drand48_r(&seedT, &rand);
-	search(h->array+((oldIndex + dist + (unsigned int)((size-dist)*rand))%size), -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
-	#endif
 	
 	critical_exit();
 

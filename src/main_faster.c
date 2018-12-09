@@ -37,6 +37,7 @@
 #include "utils/hpdcs_utils.h"
 #include "utils/hpdcs_math.h"
 #include "utils/common.h"
+#include "gc/gc.h"
 
 #define INFTY DBL_MAX
 

@@ -3,7 +3,10 @@
 
 
 #include <stdarg.h>
+
 #include <stdio.h>
+
+
 
 
 #define COLOR_RED     "\x1b[31m"
@@ -26,7 +29,7 @@
 #define likely(x)       __builtin_expect((x),1)
 #define unlikely(x)     __builtin_expect((x),0)
 
-#define UNION_CAST(x, destType) (((union {__typeof__(x) a; destType b;})x).b)
+#define UNION_CAST(x, destType) (((union {__typeof__(x) a; destType b;})(x)).b)
 
 //#ifndef NDEBUG
 //#define assertf(CONDITION, STRING,  ...)	if(CONDITION) { printf( (STRING), __VA_ARGS__); exit(1); }
@@ -44,7 +47,7 @@
  * This function blocks the execution of the process.
  * Used for debug purposes.
  */
-inline static void error(const char *msg, ...) {
+inline static void error(const char *msg, ...) { 
 	char buf[1024];
 	va_list args;
 
