@@ -90,16 +90,16 @@ begin:
 	
 	do
 	{
-		attempts++;
-		if( h && h->read_table_period == attempts){
+		if( h->read_table_period == attempts){
 			goto begin;
 		}
+		attempts++;
 
 		counter = 0;
 		index = current >> 32;
 		epoch = current & MASK_EPOCH;
 
-		prob_overflow = index+1 > MASK_EPOCH;
+		prob_overflow = (index+1 > MASK_EPOCH);
 		min = array + (index++ % (size));
 		
 		left_node = min_next = min->next;

@@ -69,7 +69,7 @@ double pq_dequeue(nb_calqueue *queue, void** result)
 	unsigned int th = queue->threshold;
 	unsigned int ep = 0;
 	unsigned int con_de = 0;
-	bool prob_overflow  =false;
+	bool prob_overflow  = false;
 	
 	tail = queue->tail;
 	performed_dequeue++;
@@ -93,16 +93,16 @@ begin:
 	
 	do
 	{
-		attempts++;
-		if( h && h->read_table_period == attempts){
+		if( h->read_table_period == attempts){
 			goto begin;
 		}
+		attempts++;
 
 		counter = 0;
 		index = current >> 32;
 		epoch = current & MASK_EPOCH;
 		
-		prob_overflow = index+1 > MASK_EPOCH;
+		prob_overflow = (index+1 > MASK_EPOCH);
 		
 		min = array + (index++ % (size));
 		
