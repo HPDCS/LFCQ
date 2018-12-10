@@ -8,8 +8,9 @@ DIST=$5
 OPS=4000000
 SIZE=64000
 PRUNE=500
-TIME=5
+TIME=20
 MODE=T
+cmd=resize-unit-test
 
 if [ "$6" = "G" ]
 then
@@ -28,7 +29,6 @@ else
     PRE=""
 fi
 
-echo $PRE ./Debug/test-$1 $2 1 $DIST 0.3 $SIZE $DIST  0.5 $OPS $DIST 0 0 $4 $3 0 $MODE $TIME
-#time $PRE1$PRE2 
-gdb --args ./Debug/test-$1 $2 1 $DIST 0.3 $SIZE $DIST  0.5 $OPS $DIST 0 0 $4 $3 0 $MODE $TIME
+echo $PRE ./Debug/$cmd-$1 $2 1 $DIST 0.3 $SIZE $DIST  0.5 $OPS $DIST 0 0 $4 $3 0 $MODE $TIME
+time $PRE1$PRE2 ./Debug/$cmd-$1 $2 1 $DIST 0.3 $SIZE $DIST  0.5 $OPS $DIST 0 0 $4 $3 0 $MODE $TIME
 $POST
