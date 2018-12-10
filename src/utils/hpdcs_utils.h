@@ -31,11 +31,12 @@
 
 #define UNION_CAST(x, destType) (((union {__typeof__(x) a; destType b;})(x)).b)
 
-//#ifndef NDEBUG
-//#define assertf(CONDITION, STRING,  ...)	if(CONDITION) { printf( (STRING), __VA_ARGS__); exit(1); }
-//#else
+#ifndef NDEBUG
+#include <signal.h>
+#define assertf(CONDITION, STRING,  ...)	if(CONDITION) { printf((STRING),  __VA_ARGS__); printf( "line: %s:%d \n" ,__FILE__, __LINE__); raise(SIGINT); }
+#else
 #define assertf(CONDITION, STRING,  ...) {}
-//#endif
+#endif
 
 #ifndef NDEBUG
 #define LOG(STRING,  ...)     (printf( (STRING), __VA_ARGS__))

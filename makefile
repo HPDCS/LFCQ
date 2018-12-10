@@ -46,7 +46,8 @@ else ifeq ($(OBJS_DIR), Debug)
 	OBJS_DIR 	:= Debug
 else ifeq ($(OBJS_DIR), Release)
 	OBJS_DIR 	:= Release
-	OPTIMIZATION:=-O0 
+	MACRO += -DNDEBUG
+	OPTIMIZATION:=-O3
 	DEBUG:=
 else ifeq ($(OBJS_DIR), GProf)
 	OBJS_DIR 	:= GProf
