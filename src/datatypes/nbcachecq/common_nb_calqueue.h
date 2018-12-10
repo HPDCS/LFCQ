@@ -47,12 +47,11 @@ extern int gc_hid[];
 #define MAX_NUMA_NODES 16
 
 #define FLUSH_SMART 1
-#define ENABLE_EXPANSION 0
+#define ENABLE_EXPANSION 1
 #define ENABLE_PRUNE 0
 #define ENABLE_HIGH_STATITISTICS 1
 
-#define READTABLE_PERIOD 63
-#define COMPACT_RANDOM_ENQUEUE 1
+#define READTABLE_PERIOD 1
 #define DISTANCE_FROM_CURRENT 0.0 
 
 #define BASE 1000000ULL 
@@ -305,26 +304,26 @@ extern unsigned int search_and_insert(sentinel_node *head, double timestamp, uns
 #include <string.h>
 
 
-//#define base_address(x)	( UNION_CAST( UNION_CAST(x, unsigned long long) & (-0x40LL), void*))
-//#define get_position_in_chunk(x) ((UNION_CAST(x, unsigned long long) & 0x30ULL ) >> 4 )
-//#define hf_field(x)	( ( (nbc_bucket_node*)  base_address(x) )+   get_position_in_chunk(x))
-//#define lf_field(x)	( (         (lf*)       base_address(x) )+1+ get_position_in_chunk(x))
+#define base_address(x)	( UNION_CAST( UNION_CAST(x, unsigned long long) & (-0x40LL), void*))
+#define get_position_in_chunk(x) ((UNION_CAST(x, unsigned long long) & 0x30ULL ) >> 4 )
+#define hf_field(x)	( ( (nbc_bucket_node*)  base_address(x) )+   get_position_in_chunk(x))
+#define lf_field(x)	( (         (lf*)       base_address(x) )+1+ get_position_in_chunk(x))
 
 
 
 
-static nbc_bucket_node* base_address(nbc_bucket_node* x)	{
- return UNION_CAST( UNION_CAST(x, unsigned long long) & (-0x40LL), nbc_bucket_node*);
-} 
-static int get_position_in_chunk(nbc_bucket_node* x)  {
-	return (UNION_CAST(x, unsigned long long) & 0x30ULL ) >> 4 ;
-	 }
-static nbc_bucket_node* hf_field(void* x)	{
- return  base_address(x) +   get_position_in_chunk(x);
-}
-static lf* lf_field(nbc_bucket_node* x)	{
-	return (         (lf*)       base_address(x) )+1+ get_position_in_chunk(x);
-} 
+//static nbc_bucket_node* base_address(nbc_bucket_node* x)	{
+// return UNION_CAST( UNION_CAST(x, unsigned long long) & (-0x40LL), nbc_bucket_node*);
+//} 
+//static int get_position_in_chunk(nbc_bucket_node* x)  {
+//	return (UNION_CAST(x, unsigned long long) & 0x30ULL ) >> 4 ;
+//	 }
+//static nbc_bucket_node* hf_field(void* x)	{
+// return  base_address(x) +   get_position_in_chunk(x);
+//}
+//static lf* lf_field(nbc_bucket_node* x)	{
+//	return (         (lf*)       base_address(x) )+1+ get_position_in_chunk(x);
+//} 
 
 
 
@@ -370,17 +369,13 @@ static inline nbc_bucket_node* node_malloc(void *payload, double timestamp, unsi
 
 
 	memset(res, 0, CHUNK_SIZE);
-	int i=0;
-	for(i=5;i<ITEMS_PER_CACHELINE;i++)
-		hf_field(res +i)->next 	= (void*) 1;
-		
 
 	lf_field(res)->counter 	= tie_breaker;
 	lf_field(res)->replica 	= NULL;
 	lf_field(res)->payload 	= payload;
 	lf_field(res)->epoch	= 0;
 	
-	hf_field(res)->next 	= NULL;
+	hf_field(res)->next 	= (void*)0xDEADC0D0;
 	hf_field(res)->timestamp= timestamp;
 
 	return res;    
@@ -391,7 +386,7 @@ static inline void node_free(void *ptr){
 }
 
 
-static nbc_bucket_node* acquire_from_chunk(nbc_bucket_node *ptr, nbc_bucket_node *next){
+static inline nbc_bucket_node* acquire_from_chunk(nbc_bucket_node *ptr, nbc_bucket_node *next){
 	nbc_bucket_node *base = base_address(ptr), *ab = NULL;
 	int i=0;
 
