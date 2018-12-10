@@ -77,6 +77,7 @@ CPP_ASM			:= $(strip $(subst .cpp,.S, $(CPP_SRCS)))
 CPP_DEPS		:= $(patsubst %, $(OBJS_DIR)/%, $(subst .opp,.d, $(CPP_OBJS)))
 
 REAL_TARGETS := $(patsubst %, $(OBJS_DIR)/test-%, $(TARGETS))
+UNIT_TARGETS := $(patsubst %, $(OBJS_DIR)/resize-unit-test-%, $(TARGETS))
 
 
 FLAGS=
@@ -95,9 +96,10 @@ ifdef RESIZE_PERIOD_FACTOR
 FLAGS := $(FLAGS) -DRESIZE_PERIOD_FACTOR=$(RESIZE_PERIOD_FACTOR)
 endif
 
-all Debug Release GProf: $(patsubst %, $(OBJS_DIR)/%, $(C_OBJS)) $(patsubst %, $(OBJS_DIR)/%, $(CPP_OBJS)) $(REAL_TARGETS)
+all Debug Release GProf: $(patsubst %, $(OBJS_DIR)/%, $(C_OBJS)) $(patsubst %, $(OBJS_DIR)/%, $(CPP_OBJS)) $(REAL_TARGETS) $(UNIT_TARGETS)
 
 -include $(patsubst %, %.d, $(REAL_TARGETS))
+-include $(patsubst %, %.d, $(UNIT_TARGETS))
 #-include Debug/test-V3CQ.d
 
 # Tool invocations
@@ -111,6 +113,17 @@ $(OBJS_DIR)/test-%:
 	@echo 'Finished building target: $@'
 	@echo ' '
 
+
+$(OBJS_DIR)/resize-unit-test-%: 
+	@echo 'Objects: $^'
+	@echo 'Building target: $@'
+	@echo 'Invoking: Cross GCC Linker'
+	@echo 'Specific OBJS for $(strip $(subst resize-unit-test-,, $(@F))): $($(strip $(subst resize-unit-test-,, $(@F)))_value)'
+	gcc  -o "$(OBJS_DIR)/$(@F)" $(OBJS_DIR)/$(SRC_DIR)/unit_test_resize.o $(patsubst %, $(OBJS_DIR)/%, $($(strip $(subst resize-unit-test-,, $(@F)))_value)) $(USER_OBJS) $(LIBS) $(DEBUG)
+	echo $(OBJS_DIR)/$(@F): $(OBJS_DIR)/$(SRC_DIR)/unit_test_resize.o $(patsubst %, $(OBJS_DIR)/%, $($(strip $(subst resize-unit-test-,, $(@F)))_value)) > $(OBJS_DIR)/$(@F).d
+	@echo 'Finished building target: $@'
+	@echo ' '
+
 -include $(C_DEPS)
 
 $(OBJS_DIR)/%.o: %.c
@@ -120,7 +133,7 @@ $(OBJS_DIR)/%.o: %.c
 	-mkdir -p  $(subst $(shell basename $@),, $@)
 	gcc $(MACRO) $(OPTIMIZATION) $(DEBUG) $(FLAGS) $(LIBS) -Wall -c -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o "$@" "$<"
 	#gcc $(MACRO) $(OPTIMIZATION) $(DEBUG) $(FLAGS) $(LIBS) -Wall -S -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o "$(@:%.o=%.s)" "$<"
-	objdump -S --disassemble $(@) > $(@:%.o=%.s) 
+	#objdump -S --disassemble $(@) > $(@:%.o=%.s) 
 	@echo 'Finished building: $<'
 	@echo ' '
 
@@ -131,7 +144,7 @@ $(OBJS_DIR)/%.opp: %.cpp
 	-mkdir -p  $(subst $(shell basename $@),, $@)
 	g++  $(MACRO) $(OPTIMIZATION) $(DEBUG) $(FLAGS) $(LIBS) -Wall -c -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o "$@" "$<"
 	#gcc $(MACRO) $(OPTIMIZATION) $(DEBUG) $(FLAGS) $(LIBS) -Wall -S -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o "$(@:%.o=%.s)" "$<"
-	objdump -S --disassemble $(@) > $(@:%.opp=%.s) 
+	#objdump -S --disassemble $(@) > $(@:%.opp=%.s) 
 	@echo 'Finished building: $<'
 	@echo ' '
 
