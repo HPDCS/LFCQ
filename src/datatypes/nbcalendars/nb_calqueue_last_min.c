@@ -60,7 +60,7 @@ double pq_dequeue(nb_calqueue *queue, void** result)
 	unsigned long long index;
 	unsigned long long epoch;
 	
-	unsigned int size;
+	unsigned int size, attempts;
 	unsigned int counter;
 	double bucket_width, left_ts, right_limit;
 	
@@ -69,6 +69,7 @@ double pq_dequeue(nb_calqueue *queue, void** result)
 	unsigned int th = queue->threshold;
 	unsigned int ep = 0;
 	unsigned int con_de = 0;
+	bool prob_overflow  =false;
 	
 	tail = queue->tail;
 	performed_dequeue++;
@@ -82,6 +83,7 @@ begin:
 	bucket_width = h->bucket_width;
 	current = h->current;
 	con_de = h->d_counter.count;
+	attempts = 0;
 
 	if(last_curr != current){
 		cached_curr = last_curr = current;
@@ -91,11 +93,16 @@ begin:
 	
 	do
 	{
+		attempts++;
+		if( h && h->read_table_period == attempts){
+			goto begin;
+		}
+
 		counter = 0;
 		index = current >> 32;
 		epoch = current & MASK_EPOCH;
 		
-		assertf(index+1 > MASK_EPOCH, "\nOVERFLOW INDEX:%llu  BW:%.10f SIZE:%u TAIL:%p TABLE:%p NUM_ELEM:%u\n", index, bucket_width, size, tail, h, ATOMIC_READ(&h->counter));
+		prob_overflow = index+1 > MASK_EPOCH;
 		
 		min = array + (index++ % (size));
 		
@@ -163,7 +170,10 @@ begin:
 			if(new_current == last_curr){
 				unsigned int dist = (size*DISTANCE_FROM_CURRENT);
 				
-				assertf((index - (last_curr >> 32) -1) <= dist, "%s", "");
+				if(prob_overflow && h->e_counter.count == 0)
+					goto begin;
+				assertf(prob_overflow, "\nOVERFLOW INDEX:%llu  BW:%.10f SIZE:%u TAIL:%p TABLE:%p\n", index, bucket_width, size, tail, h);
+
 				if(  //1 || 
 				 (index - (last_curr >> 32) -1) == dist 
 				 )
