@@ -1,6 +1,10 @@
 #ifndef PRIOQ_H
 #define PRIOQ_H
 
+
+#include <float.h>
+#define INFTY DBL_MAX
+
 #include "../../utils/common.h"
 /* keir fraser's garbage collection */
 #include "../../gc/ptst.h"

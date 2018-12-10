@@ -82,7 +82,8 @@ pq_dequeue(pq_t *pq, void **result)
 
         // tail cannot be deleted
         if (get_unmarked_ref(nxt) == pq->tail) {
-            goto out;
+            *result = NULL;
+            return INFTY;
         }
 
         /* Do not allow head to point past a node currently being
