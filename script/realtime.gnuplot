@@ -35,15 +35,24 @@ set offset 2,2,10,10
 set title 'Queue Size = '.queue
 set xlabel '#Threads'
 set grid  lc rgb "#888888"
-set ylabel 'CPU Time (s)' offset 2
-set xtics 0,4,32
+set ylabel 'Throughput (Ops/ms)' offset 2
+set xtics 0,2,32
 	
-set yrange [0:14]
+set yrange [500:4500]
+set xrange [0:9]
 set offset 2,2,1,1
-set ylabel 'Wall-Clock Time (s)'
-set output out.'/Real-'.queue.'.eps'
 
-plot \
+start=2
+outfile=out.'/Real-'.queue.start.'.eps'
+
+set output outfile
+
+plot for [col=start:27:1] file using 1:col with lines t columnheader
+
+system(sprintf("epstopdf %s", outfile)) 
+
+
+#plot \
 './dat/5000-1_000000-'.queue.'-E-0_300000-25000000-E-0_500000-0-E-1_000000-0-F.dat' using 1:2 w points 	linecolor rgb "#000000" pt 4 ps 1.5 title "Non-Blocking", \
 './dat/5000-1_000000-'.queue.'-N-0_300000-25000000-N-0_500000-0-N-1_000000-0-F.dat' using 1:2 w points 	linecolor rgb "#000000" pt 4 ps 1.5 notitle, \
 './dat/5000-1_000000-'.queue.'-T-0_300000-25000000-T-0_500000-0-T-1_000000-0-F.dat' using 1:2 w points 	linecolor rgb "#000000" pt 4 ps 1.5 notitle, \
