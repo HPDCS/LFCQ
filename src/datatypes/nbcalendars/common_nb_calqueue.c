@@ -303,7 +303,7 @@ unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, unsigned
 	
 	// clean the heading zone of the bucket
 	nbc_bucket_node *lnode, *rnode;
-	search(head, -1.0, 0, &lnode, &rnode, REMOVE_DEL_INV);
+	search(head, -1.0, 0, &lnode, &rnode, flag);
 	
 	// read tail from head (this is done for avoiding an additional cache miss)
 	tail = head->tail;
