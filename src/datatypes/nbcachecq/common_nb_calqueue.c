@@ -325,54 +325,13 @@ unsigned int search_and_insert(sentinel_node *head, double timestamp, unsigned i
 			// increase the count of marked nodes met during scan
 			counter+=marked;
 			old_tmp = tmp;	
+	
 			// get an unmarked reference to the tmp node
-		IMB();
-			if(tmp == tmp_next){
-				printf("%d- A PUNTA SE STESSO %p %p\n",TID, tmp, new_node_pointer->next);
-				old_tmp = NULL;
-				old_tmp->next = NULL;
-			}
-			
-			if(tmp == NULL){
-				printf("%d- A2 PUNTA NULL %p %p %p\n",TID, tmp, tmp_next, new_node_pointer->next);
-				old_tmp = NULL;
-				old_tmp->next = NULL;
-			}
-
-			if(tmp_next == NULL){
-				printf("%d- A7 PUNTA NULL %p %p %p\n",TID, tmp, tmp_next, new_node_pointer->next);
-				old_tmp = NULL;
-				old_tmp->next = NULL;
-			}
-		IMB();
 			tmp = get_unmarked(tmp_next);
-		IMB();
 			
 			// Retrieve timestamp and next field from the current node (tmp)
-
-			if(tmp == NULL){
-				printf("%d- A3 PUNTA NULL %p %p %p\n",TID, tmp, tmp_next, new_node_pointer->next);
-				old_tmp = NULL;
-				old_tmp->next = NULL;
-			}
 			tmp_next 		= hf_field(tmp)->next;
-		IMB();
-
-			if(tmp != tail && tmp_next == NULL){
-				printf("%d- A4 PUNTA NULL %p %p\n",TID, tmp, new_node_pointer->next);
-				old_tmp = NULL;
-				old_tmp->next = NULL;
-			}
 			tmp_timestamp 	= hf_field(tmp)->timestamp;
-
-
-			if(tmp == NULL){
-				printf("%d- A5 PUNTA NULL %p %p\n",TID, tmp, new_node_pointer->next);
-				old_tmp = NULL;
-				old_tmp->next = NULL;
-			}
-		IMB();
-		
 			ts_equal = D_EQUAL(tmp_timestamp, timestamp);
 			
 			if(ts_equal) tmp_tie_breaker = lf_field(tmp)->counter;
@@ -411,13 +370,6 @@ unsigned int search_and_insert(sentinel_node *head, double timestamp, unsigned i
 		lf_field(new_node_pointer)->counter =  ( (-(is_new_key)) & (1 + ( -D_EQUAL(timestamp, left_timestamp ) & left_tie_breaker ))) +
 									 (~(-(is_new_key)) & tie_breaker);
 
-		if(new_node_pointer == new_node_pointer->next){
-				printf("%d- A1 PUNTA SE STESSO %p %p\n", TID, tmp, new_node_pointer->next);		
-				old_tmp = NULL;
-				old_tmp->next = NULL;
-		
-			}
-
 		// node already exists
 		if(!is_new_key && D_EQUAL(timestamp, left_timestamp ) && left_tie_breaker == tie_breaker)
 		{
@@ -429,16 +381,9 @@ unsigned int search_and_insert(sentinel_node *head, double timestamp, unsigned i
 		bool is_set = false;
 		bool is_set_b = false;
 		if((void*)left != (void*) head){
+
 			nbc_bucket_node *new = acquire_from_chunk(left, new_node_pointer->next);
 			if(new != NULL){
-				//printf("REUSING FROM LEFT for %f \n", new_node_pointer->timestamp);
-
-			if(new_node_pointer == new_node_pointer->next){
-				printf("%d- B PUNTA SE STESSO %p %p\n", TID, tmp, new_node_pointer->next);		
-				old_tmp = NULL;
-				old_tmp->next = NULL;
-		
-			}
 				hf_field(new)->timestamp = hf_field(new_node_pointer)->timestamp;
 				hf_field(new)->next      = hf_field(new_node_pointer)->next     ;
 				lf_field(new)->payload   = lf_field(new_node_pointer)->payload  ;
@@ -456,28 +401,9 @@ unsigned int search_and_insert(sentinel_node *head, double timestamp, unsigned i
 		}
 		
 		if(!is_set && tmp != tail){
-			if(tmp != new_node_pointer->next){
-				printf("SONO DIVERSI %p %p\n", tmp, new_node_pointer->next);
 
-			}
-
-			if(new_node_pointer == new_node_pointer->next){
-				printf("%d- C PUNTA SE STESSO %p %p\n", TID, tmp, new_node_pointer->next);
-						old_tmp = NULL;
-				old_tmp->next = NULL;
-		
-			}
 			nbc_bucket_node *new = acquire_from_chunk(tmp, new_node_pointer->next);
-
-			if(new == new_node_pointer->next){
-				printf("%d- C1 PUNTA SE STESSO TMP:%p NEW_P:%p NEW_P_N:%p\n", TID, tmp, new_node_pointer, new_node_pointer->next);
-						old_tmp = NULL;
-				old_tmp->next = NULL;
-		
-			}
 			if(new != NULL){
-				//printf("REUSING FROM RIGHT for %f \n", new_node_pointer->timestamp);
-
 				hf_field(new)->timestamp = hf_field(new_node_pointer)->timestamp;
 				hf_field(new)->next      = hf_field(new_node_pointer)->next     ;
 				lf_field(new)->payload   = lf_field(new_node_pointer)->payload  ;
@@ -492,32 +418,6 @@ unsigned int search_and_insert(sentinel_node *head, double timestamp, unsigned i
 				new_node_pointer = new;
 				is_set_b = true;
 			}
-		}
-
-		if(new_node_pointer == new_node_pointer->next){
-			printf("%d- D PUNTA SE STESSO %p %p %d %d %d\n",TID, tmp, new_node_pointer->next, ITEMS_PER_CACHELINE, is_set, is_set_b);
-					old_tmp = NULL;
-				old_tmp->next = NULL;
-		
-		}
-
-		//lf_field(new_node_pointer)->next_next = old_tmp;
-
-		//if(!is_set)
-		//	printf("NEW CHUNK %p for %f\n", new_node_pointer, new_node_pointer->timestamp);
-
-		if(new_node_pointer == new_node_pointer->next){
-			printf("%d- E PUNTA SE STESSO %p %p\n",TID, tmp, new_node_pointer->next);
-					old_tmp = NULL;
-				old_tmp->next = NULL;
-		
-		}
-
-		if(NULL == new_node_pointer->next){
-			printf("%d- F PUNTA NULL %p %p\n",TID, tmp, new_node_pointer->next);
-					old_tmp = NULL;
-				old_tmp->next = NULL;
-		
 		}
 
 		// copy left node mark			
