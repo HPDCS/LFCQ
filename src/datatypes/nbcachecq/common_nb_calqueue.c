@@ -160,7 +160,7 @@ void search(sentinel_node *head, double timestamp, unsigned int tie_breaker,
 		left_next = tmp_next = hf_field(tmp)->next;
 		assertf(head == NULL, "PANIC %s\n", "");
 		assertf(tmp_next == NULL, "PANIC1 %s\n", "");
-		assertf(is_marked_for_search(left_next, flag), "PANIC2 %s\n", "");
+		//assertf(is_marked_for_search(left_next, flag), "PANIC2 %s\n", "");
 		counter = 0;
 		marked = is_marked_for_search(tmp_next, flag);
 		
@@ -276,13 +276,12 @@ unsigned int search_and_insert(sentinel_node *head, double timestamp, unsigned i
 	unsigned int len;
 	double left_timestamp, tmp_timestamp;
 	bool marked, ts_equal, tie_lower, go_to_next;
-	bool is_new_key = flag == REMOVE_DEL_INV;
-	
+	bool is_new_key = flag == REMOVE_DEL_INV, is_set = false;
 
 	// clean the heading zone of the bucket
 	
 	tail = head->tail;
-	search(head, -1.0, 0, &lnode, &rnode, REMOVE_DEL_INV, tail);
+	search(head, -1.0, 0, &lnode, &rnode, flag, tail);
 	
 	// read tail from head (this is done for avoiding an additional cache miss)
 	do
@@ -306,8 +305,6 @@ unsigned int search_and_insert(sentinel_node *head, double timestamp, unsigned i
 		counter = 0;
 		marked = is_marked_for_search(tmp_next, flag);
 
-		nbc_bucket_node *old_tmp;
-		
 		do
 		{
 			len++;
@@ -324,14 +321,14 @@ unsigned int search_and_insert(sentinel_node *head, double timestamp, unsigned i
 			
 			// increase the count of marked nodes met during scan
 			counter+=marked;
-			old_tmp = tmp;	
-	
+
 			// get an unmarked reference to the tmp node
 			tmp = get_unmarked(tmp_next);
-			
+		
 			// Retrieve timestamp and next field from the current node (tmp)
 			tmp_next 		= hf_field(tmp)->next;
 			tmp_timestamp 	= hf_field(tmp)->timestamp;
+
 			ts_equal = D_EQUAL(tmp_timestamp, timestamp);
 			
 			if(ts_equal) tmp_tie_breaker = lf_field(tmp)->counter;
@@ -378,8 +375,6 @@ unsigned int search_and_insert(sentinel_node *head, double timestamp, unsigned i
 			return OK;
 		}
 
-		bool is_set = false;
-		bool is_set_b = false;
 		if((void*)left != (void*) head){
 
 			nbc_bucket_node *new = acquire_from_chunk(left, new_node_pointer->next);
@@ -394,7 +389,6 @@ unsigned int search_and_insert(sentinel_node *head, double timestamp, unsigned i
 				lf_field(new)->replica   = lf_field(new_node_pointer)->replica  ;
 				lf_field(new)->next_next = lf_field(new_node_pointer)->next_next;
 
-				gc_free(ptst, new_node_pointer, gc_aid[0]);
 				new_node_pointer = new;
 				is_set = true;
 			}
@@ -404,6 +398,7 @@ unsigned int search_and_insert(sentinel_node *head, double timestamp, unsigned i
 
 			nbc_bucket_node *new = acquire_from_chunk(tmp, new_node_pointer->next);
 			if(new != NULL){
+
 				hf_field(new)->timestamp = hf_field(new_node_pointer)->timestamp;
 				hf_field(new)->next      = hf_field(new_node_pointer)->next     ;
 				lf_field(new)->payload   = lf_field(new_node_pointer)->payload  ;
@@ -414,15 +409,18 @@ unsigned int search_and_insert(sentinel_node *head, double timestamp, unsigned i
 				lf_field(new)->replica   = lf_field(new_node_pointer)->replica  ;
 				lf_field(new)->next_next = lf_field(new_node_pointer)->next_next;
 
-				gc_free(ptst, new_node_pointer, gc_aid[0]);
 				new_node_pointer = new;
-				is_set_b = true;
+				is_set = true;
 			}
 		}
 
 		// copy left node mark			
 		if (BOOL_CAS(&(left->next), left_next, get_marked(new_node_pointer,get_mark(left_next))))
 		{
+			if(is_set){
+				gc_unsafe_free(ptst, *new_node, gc_aid[0]);
+				*new_node = new_node_pointer;
+			}
 			if(is_new_key)
 			{
 				scan_list_length_en += len;
@@ -430,6 +428,10 @@ unsigned int search_and_insert(sentinel_node *head, double timestamp, unsigned i
 			if (counter > 0)
 				connect_to_be_freed_node_list(left_next, counter);
 			return OK;
+		}
+
+		if(is_set){
+			new_node_pointer->next = NULL;
 		}
 		
 		// this could be avoided
@@ -480,8 +482,10 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 	if(new_size == 0 && h->last_resize_count != 0 && (counter >  h->last_resize_count*2 || counter < h->last_resize_count/2 ) )
 		new_size = h->size;
 
+
 	if(new_size != 0 && new_size <= MAXIMUM_SIZE)
 	{
+		
 		res = posix_memalign((void**)&new_h, CACHE_LINE_SIZE, sizeof(table));
 		if(res != 0)
 			error("No enough memory to new table structure\n");
@@ -722,11 +726,11 @@ void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 	{ 
 		right_replica_field = lf_field(right_node)->replica;
 	}        
-	while(right_replica_field == NULL && (res = 
-	search_and_insert(bucket, new_node_timestamp, new_node_counter, REMOVE_DEL, new_node_pointer, new_node)
-	) == ABORT);
-			
-	
+	while(
+		right_replica_field == NULL && 
+		(res = search_and_insert(bucket, new_node_timestamp, new_node_counter, REMOVE_DEL, new_node_pointer, new_node)) == ABORT
+	);
+
 	if( right_replica_field == NULL && 
 			BOOL_CAS(
 				&(lf_field(right_node)->replica),
@@ -734,7 +738,7 @@ void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 				replica
 				)
 		)
-		ATOMIC_INC(&(new_h->e_counter));
+		__sync_fetch_and_add(&new_h->e_counter.count, 1);
              
 	right_replica_field = lf_field(right_node)->replica;
             
@@ -755,6 +759,7 @@ void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 	
 	right_node_next = FETCH_AND_AND(&(right_node->next), MASK_DEL);
 }
+
 
 table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsigned int elem_per_bucket, double perc_used_bucket)
 {
@@ -794,7 +799,6 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 		signed_counter =  (sample_a < sample_b) ? samples[0] : samples[1];
 		
 		counter = (unsigned int) ( (-(signed_counter >= 0)) & signed_counter);
-		
 		
 		if( h->new_table == NULL )
 			set_new_table(h, threshold, perc_used_bucket, elem_per_bucket, counter);
@@ -901,24 +905,26 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 				
 			}while(true);
 	
+	
 			search(bucket, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV, tail);
 			assertf(get_unmarked(right_node) != tail, "Fail in line 972 %p %p %p %p %p %p\n",
 			 bucket,
 			  left_node,
 			   right_node, 
-			   ((nbc_bucket_node*)get_unmarked(right_node))->next, 
-			   ((nbc_bucket_node*)get_unmarked(right_node))->replica, 
+			   (hf_field(get_unmarked(right_node)))->next, 
+			   (lf_field(get_unmarked(right_node)))->replica, 
 			   tail); 
-	
 		}
 		
 		// TODO scan new table for find out what is the minimum bucket 
 
 		//Try to replace the old table with the new one
-		if( BOOL_CAS(curr_table_ptr, h, new_h) )
+		if( BOOL_CAS(curr_table_ptr, h, new_h) ){
 			connect_to_be_freed_table_list(h);
+		}
 		
 		h = new_h;
+
 	}
 	
 	return h;
