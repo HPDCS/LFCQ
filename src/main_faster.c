@@ -401,8 +401,10 @@ void* process(void *arg)
 	
 	while(lock != TID);
 	
+	#ifndef NDEBUG
 	pq_report(TID);
-
+	#endif
+	
 	__sync_fetch_and_add(&lock, 1);
 	pthread_exit(NULL);    
 }
