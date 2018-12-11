@@ -523,19 +523,20 @@ int main(int argc, char **argv)
 
 	struct timespec elapsed = timediff(start, end);
     double dt = elapsed.tv_sec + (double)elapsed.tv_nsec / 1000000000.0;
-	for(i=0;i<THREADS;i++)
-	{
-		qsi += ops[i];
-		tmp = ops_count[i];
-		mal += malloc_op[i];
-		sum += tmp;
-		min = min < tmp ? min : tmp;
-		max = max > tmp ? max : tmp;
-		printf("OPS-%d:%lld ", i, tmp);
-	}
 	
+    for(i=0;i<THREADS;i++)
+    {
+            qsi += ops[i];
+            tmp = ops_count[i];
+            mal += malloc_op[i];
+            sum += tmp;
+            min = min < tmp ? min : tmp;
+            max = max > tmp ? max : tmp;
+    }
+
 	avg = sum/THREADS;
 	
+
 	printf("CHECK:%lld," , qsi);
 	printf("SUM OP:%lld,", sum);
 	if(TEST_MODE == 'T'){
@@ -545,7 +546,13 @@ int main(int argc, char **argv)
 	printf("MIN OP:%lld,", min);
 	printf("MAX OP:%lld,", max);
 	printf("AVG OP:%lld,", avg);
-	printf("MAL OP:%lld,\n", mal);
+	printf("MAL OP:%lld,", mal);
 	
+	for(i=0;i<THREADS;i++)
+	{
+	//	printf("OPS-%d:%lld ", i, tmp);
+	}
+	
+
 	return 0;
 }
