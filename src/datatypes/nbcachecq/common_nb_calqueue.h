@@ -51,7 +51,7 @@ extern int gc_hid[];
 #define ENABLE_PRUNE 0
 #define ENABLE_HIGH_STATITISTICS 1
 
-#define READTABLE_PERIOD 1
+#define READTABLE_PERIOD 63
 #define DISTANCE_FROM_CURRENT 0.0 
 
 #define BASE 1000000ULL 
