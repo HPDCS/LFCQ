@@ -1056,9 +1056,6 @@ nb_calqueue* pq_init(unsigned int threshold, double perc_used_bucket, unsigned i
 	}
 
 	
-
-	printf("TAIL: %p\n", res->tail);
-
 	for (i = 0; i < MINIMUM_SIZE; i++)
 	{
 		res->hashtable->array[i].next 	 	= res->tail;
