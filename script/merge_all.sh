@@ -27,8 +27,8 @@ for DIST in $distributions; do
 			echo $line > $out
 			for t in $threads; do
 				line="$t        "
-				for e in $elem_per_bucket; do
-					for p in $data_types; do
+				for p in $data_types; do
+					for e in `eval echo '$'elem_per_bucket_$p`; do
 						ofile="$version-$cmd-$p-$t-1-$DIST-0.3-$SIZE-$DIST-0.5-$OPS-$DIST-0-0-$u-$e-0-$MODE-$TIME"
 						echo "$ofile"
 						count=0
