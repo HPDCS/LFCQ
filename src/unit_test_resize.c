@@ -143,7 +143,7 @@ double enqueue(unsigned int my_id, struct drand48_data* seed, double local_min, 
 	if(timestamp < 0.0)
 		timestamp = 0.0;
 
-	pq_enqueue(nbcqueue, timestamp, NULL);
+	pq_enqueue(nbcqueue, timestamp, UNION_CAST(1, void*));
 	
 	return timestamp;
 
@@ -206,12 +206,16 @@ void* process(void *arg)
 			exit(1);
 	}
 		
-	while(n_enqueue < 25600/THREADS)
+	while(n_enqueue < 25/THREADS)
 	{
 		enqueue(my_id, &seed, local_min, current_dist);
 		n_enqueue++;
 	}
-	
+
+
+	__sync_fetch_and_add(&BARRIER, 1);
+	while(BARRIER != THREADS);
+
 	while(1)
 	{
 		timestamp = dequeue();
@@ -224,11 +228,7 @@ void* process(void *arg)
 	ops[my_id] = n_enqueue - n_dequeue;
 	malloc_op[my_id] =  pq_num_malloc();
 	
-	__sync_fetch_and_add(&BARRIER, 1);
-
-	while(lock != TID);
 	
-	__sync_fetch_and_add(&lock, 1);
 	pthread_exit(NULL);    
 }
 
@@ -309,10 +309,11 @@ int main(int argc, char **argv)
 	}
 	
 	
-	while(!__sync_bool_compare_and_swap(&BARRIER, THREADS, 0));
+	while(BARRIER != THREADS);
+
+    __sync_bool_compare_and_swap(&BARRIER, THREADS, 0);
 	
-	
-    __sync_lock_test_and_set(&lock, 0);
+    __sync_bool_compare_and_swap(&lock, 1, 0);
     
    for(i=0;i<THREADS;i++)
 		pthread_join(p_tid[i], (void*)&id);
