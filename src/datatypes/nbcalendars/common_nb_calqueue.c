@@ -176,7 +176,7 @@ void search(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
 		tail = tmp->tail;
 		assertf(head == NULL, "PANIC %s\n", "");
 		assertf(tmp_next == NULL, "PANIC1 %s\n", "");
-		assertf(is_marked_for_search(left_next, flag), "PANIC2 %s\n", "");
+		//assertf(is_marked_for_search(left_next, flag), "PANIC2 %s\n", "");
 		counter = 0;
 		marked = is_marked_for_search(tmp_next, flag);
 		
@@ -948,6 +948,7 @@ nb_calqueue* pq_init(unsigned int threshold, double perc_used_bucket, unsigned i
 	unsigned int i = 0;
 	//unsigned int new_threshold = 1;
 	unsigned int res_mem_posix = 0;
+	_init_gc_subsystem();
 
 	threads = threshold;
 	prune_array = calloc(threshold*threshold, sizeof(unsigned int));

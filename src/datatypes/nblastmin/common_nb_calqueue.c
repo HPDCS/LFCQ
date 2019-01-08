@@ -950,6 +950,7 @@ nb_calqueue* pq_init(unsigned int threshold, double perc_used_bucket, unsigned i
 	//unsigned int new_threshold = 1;
 	unsigned int res_mem_posix = 0;
 
+	_init_gc_subsystem();
 	threads = threshold;
 	prune_array = calloc(threshold*threshold, sizeof(unsigned int));
 

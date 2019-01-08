@@ -1003,6 +1003,7 @@ nb_calqueue* pq_init(unsigned int threshold, double perc_used_bucket, unsigned i
 	//nb_calqueue* res = calloc(1, sizeof(nb_calqueue));
 	nb_calqueue* res = NULL; 
 	
+	_init_gc_subsystem();
 	gc_aid[0] = gc_add_allocator( 4*(sizeof(nbc_bucket_node)+sizeof(lf)));
 	gc_hid[0] = gc_add_hook(my_hook);
 	gc_hid[1] = gc_add_hook(my_hk);

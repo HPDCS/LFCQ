@@ -301,6 +301,7 @@ pq_init(unsigned int threads, double none, unsigned long long max_offset)
     node_t *t, *h;
     int i;
 	
+    _init_gc_subsystem();
     /* head and tail nodes */
     t = calloc(1, sizeof *t + (NUM_LEVELS-1)*sizeof(node_t *));
     h = calloc(1, sizeof *h + (NUM_LEVELS-1)*sizeof(node_t *));
