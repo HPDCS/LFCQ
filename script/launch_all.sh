@@ -21,7 +21,7 @@ for i in $iterations; do
 				for t in $threads; do
 					for p in $data_types; do
 						for e in `eval echo '$'elem_per_bucket_$p`; do
-							cmd_line="../$version/$cmd-$p $t 1 $DIST 0.3 $SIZE $DIST 0.5 $OPS $DIST 0 0 $u $e 0 $MODE $TIME"
+							cmd_line="../$version/$p-$cmd $t 1 $DIST 0.3 $SIZE $DIST 0.5 $OPS $DIST 0 0 $u $e 0 $MODE $TIME"
 							file="$version-$cmd-$p-$t-1-$DIST-0.3-$SIZE-$DIST-0.5-$OPS-$DIST-0-0-$u-$e-0-$MODE-$TIME-$i"
 							file=`echo "$file" | tr '.' '_'`.dat
 							file=$results/$file

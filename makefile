@@ -1,4 +1,6 @@
 # All of the sources participating in the build are defined here
+
+
 OBJ_SRCS := 
 ASM_SRCS := 
 O_SRCS := 
@@ -7,7 +9,7 @@ EXECUTABLES :=
 USER_OBJS :=
 LIBS := -lpthread -lm -lnuma -lrt
 SRC_DIR := src
-TARGETS := NBCQ V2CQ V3CQ LIND MARO NOHO NOH2 LMCQ #NUMA #WORK
+TARGETS := CBCQ  #NBCQ V2CQ V3CQ LIND MARO NOHO NOH2 LMCQ CBCQ #NUMA #WORK
 
 UTIL_value := src/utils/common.o src/utils/hpdcs_math.o 
 GACO_value := src/gc/gc.o src/gc/ptst.o
@@ -24,6 +26,29 @@ NOH2_value := src/datatypes/nohotspot2/background.o  src/datatypes/nohotspot2/no
               src/datatypes/nohotspot2/garbagecoll.o src/datatypes/nohotspot2/ptst.o  $(UTIL_value) 
 NUMA_value := src/datatypes/numa_queue.o  src/datatypes/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
 WORK_value := src/datatypes/worker_queue.o  src/datatypes/common_nb_calqueue.o  $(UTIL_value) $(GACO_value) $(ARCH_value)
+CBCQ_value := src/datatypes/ChunkBasedPriorityQueue/cbpq.opp src/datatypes/ChunkBasedPriorityQueue/Atomicable.opp\
+  src/datatypes/ChunkBasedPriorityQueue/listNode.o\
+			  src/datatypes/ChunkBasedPriorityQueue/skipListCommon.o\
+			   src/datatypes/ChunkBasedPriorityQueue/skipList.o\
+			  src/datatypes/ChunkBasedPriorityQueue/ChunkedPriorityQueue.opp $(UTIL_value) 
+
+
+# src/datatypes/ChunkBasedPriorityQueue/LinkedList.opp\
+
+
+NBCQ_link := gcc 
+V2CQ_link := gcc 
+LMCQ_link := gcc 
+V3CQ_link := gcc 
+LIND_link := gcc 
+MARO_link := gcc 
+NOHO_link := gcc 
+NOH2_link := gcc
+
+NUMA_link := gcc 
+WORK_link := gcc 
+CBCQ_link := g++
+	 
 
 L1_CACHE_LINE_SIZE := $(shell getconf LEVEL1_DCACHE_LINESIZE)
 MACRO := -DARCH_X86_64  -DCACHE_LINE_SIZE=$(L1_CACHE_LINE_SIZE) -DINTEL
@@ -53,8 +78,6 @@ else ifeq ($(OBJS_DIR), Release)
 else ifeq ($(OBJS_DIR), GProf)
 	OBJS_DIR 	:= GProf
 	DEBUG+=-pg
-else
-	OBJS_DIR 	:= 
 endif
 
 
@@ -78,9 +101,8 @@ CPP_OBJS		:= $(strip $(subst .cpp,.opp, $(CPP_SRCS)))
 CPP_ASM			:= $(strip $(subst .cpp,.S, $(CPP_SRCS)))
 CPP_DEPS		:= $(patsubst %, $(OBJS_DIR)/%, $(subst .opp,.d, $(CPP_OBJS)))
 
-REAL_TARGETS := $(patsubst %, $(OBJS_DIR)/test-%, $(TARGETS))
-UNIT_TARGETS := $(patsubst %, $(OBJS_DIR)/resize-unit-test-%, $(TARGETS))
-
+REAL_TARGETS := $(patsubst %, $(OBJS_DIR)/%-test, $(TARGETS))
+UNIT_TARGETS := $(patsubst %, $(OBJS_DIR)/%-resize-unit-test, $(TARGETS))
 
 FLAGS=
 
@@ -97,28 +119,29 @@ all Debug Release GProf: $(patsubst %, $(OBJS_DIR)/%, $(C_OBJS)) $(patsubst %, $
 
 
 # Tool invocations
-$(OBJS_DIR)/test-%: 
+$(OBJS_DIR)/%-test: 
 	@echo 'Objects: $^'
 	@echo 'Building target: $@'
 	@echo 'Invoking: Cross GCC Linker'
-	@echo 'Specific OBJS for $(strip $(subst test-,, $(@F))): $($(strip $(subst test-,, $(@F)))_value)'
-	gcc  -o "$(OBJS_DIR)/$(@F)" $(OBJS_DIR)/$(SRC_DIR)/main_faster.o $(patsubst %, $(OBJS_DIR)/%, $($(strip $(subst test-,, $(@F)))_value)) $(USER_OBJS) $(LIBS) $(DEBUG)
-	echo $(OBJS_DIR)/$(@F): $(OBJS_DIR)/$(SRC_DIR)/main_faster.o $(patsubst %, $(OBJS_DIR)/%, $($(strip $(subst test-,, $(@F)))_value)) > $(OBJS_DIR)/$(@F).d
+	@echo 'Specific OBJS for $(strip $(subst -test,, $(@F))): $($(strip $(subst -test,, $(@F)))_value)'
+	$($(strip $(subst -test,, $(@F)))_link)  -o "$(OBJS_DIR)/$(@F)" $(OBJS_DIR)/$(SRC_DIR)/main_faster.o $(patsubst %, $(OBJS_DIR)/%, $($(strip $(subst -test,, $(@F)))_value)) $(USER_OBJS) $(LIBS) $(DEBUG)
+	echo $(OBJS_DIR)/$(@F): $(OBJS_DIR)/$(SRC_DIR)/main_faster.o $(patsubst %, $(OBJS_DIR)/%, $($(strip $(subst -test,, $(@F)))_value)) > $(OBJS_DIR)/$(@F).d
 	@echo 'Finished building target: $@'
 	@echo ' '
 
 
-$(OBJS_DIR)/resize-unit-test-%: 
+$(OBJS_DIR)/%-resize-unit-test: 
 	@echo 'Objects: $^'
 	@echo 'Building target: $@'
 	@echo 'Invoking: Cross GCC Linker'
-	@echo 'Specific OBJS for $(strip $(subst resize-unit-test-,, $(@F))): $($(strip $(subst resize-unit-test-,, $(@F)))_value)'
-	gcc  -o "$(OBJS_DIR)/$(@F)" $(OBJS_DIR)/$(SRC_DIR)/unit_test_resize.o $(patsubst %, $(OBJS_DIR)/%, $($(strip $(subst resize-unit-test-,, $(@F)))_value)) $(USER_OBJS) $(LIBS) $(DEBUG)
-	echo $(OBJS_DIR)/$(@F): $(OBJS_DIR)/$(SRC_DIR)/unit_test_resize.o $(patsubst %, $(OBJS_DIR)/%, $($(strip $(subst resize-unit-test-,, $(@F)))_value)) > $(OBJS_DIR)/$(@F).d
+	@echo 'Specific OBJS for $(strip $(subst -resize-unit-test,, $(@F))): $($(strip $(subst -resize-unit-test,, $(@F)))_value)'
+	$($(strip $(subst -test,, $(@F)))_link)  -o "$(OBJS_DIR)/$(@F)" $(OBJS_DIR)/$(SRC_DIR)/unit_test_resize.o $(patsubst %, $(OBJS_DIR)/%, $($(strip $(subst -resize-unit-test,, $(@F)))_value)) $(USER_OBJS) $(LIBS) $(DEBUG)
+	echo $(OBJS_DIR)/$(@F): $(OBJS_DIR)/$(SRC_DIR)/unit_test_resize.o $(patsubst %, $(OBJS_DIR)/%, $($(strip $(subst -resize-unit-test,, $(@F)))_value)) > $(OBJS_DIR)/$(@F).d
 	@echo 'Finished building target: $@'
 	@echo ' '
 
 -include $(C_DEPS)
+-include $(CPP_DEPS)
 
 $(OBJS_DIR)/%.o: %.c
 	@echo 'Building target: $@'
@@ -126,8 +149,6 @@ $(OBJS_DIR)/%.o: %.c
 	@echo 'Invoking: Cross GCC Compiler'
 	-mkdir -p  $(subst $(shell basename $@),, $@)
 	gcc $(MACRO) $(OPTIMIZATION) $(DEBUG) $(FLAGS) $(LIBS) -Wall -c -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o "$@" "$<"
-	#gcc $(MACRO) $(OPTIMIZATION) $(DEBUG) $(FLAGS) $(LIBS) -Wall -S -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o "$(@:%.o=%.s)" "$<"
-	#objdump -S --disassemble $(@) > $(@:%.o=%.s) 
 	@echo 'Finished building: $<'
 	@echo ' '
 
@@ -136,59 +157,24 @@ $(OBJS_DIR)/%.opp: %.cpp
 	@echo 'Building file: $<'
 	@echo 'Invoking: Cross GCC Compiler'
 	-mkdir -p  $(subst $(shell basename $@),, $@)
-	g++  $(MACRO) $(OPTIMIZATION) $(DEBUG) $(FLAGS) $(LIBS) -Wall -c -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o "$@" "$<"
-	#gcc $(MACRO) $(OPTIMIZATION) $(DEBUG) $(FLAGS) $(LIBS) -Wall -S -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o "$(@:%.o=%.s)" "$<"
-	#objdump -S --disassemble $(@) > $(@:%.opp=%.s) 
+	g++  $(MACRO) $(OPTIMIZATION) $(DEBUG) $(FLAGS) $(LIBS) -Wall -c -fmessage-length=0 -MMD -MP -MF"$(@:%.opp=%.d)" -MT"$(@)" -o "$@" "$<"
 	@echo 'Finished building: $<'
 	@echo ' '
 
 
-# Other Targets
+
 clean:
 	-$(RM) Debug
 	-$(RM) Release
 	-$(RM) GProf	
-	-$(RM) NBCQ	
-	-$(RM) $(EXECUTABLES) $(OBJS) $(C_DEPS) $(subst .o,.S, $(OBJS))
-	-@echo ' '
-	#-clear
+	
 
-.PHONY: all clean 
-
-#.PRECIOUS: $(OBJS)
-#.SECONDARY: $(OBJS)
+	
+.PHONY: clean 
 
 
-#Debug GProf Release: %/NBCQ
 
-#Debug: Debug/NBCQ
-#
-#
-#Release: Release/NBCQ
-
-#ifneq ($(MAKECMDGOALS),clean)
-#ifneq ($(strip $(C_DEPS)),)
-#-include $(C_DEPS)
-#endif
-#endif
-
-#-include ../makefile.defs
-#-include ../makefile.targets
-
-
-#%/NBCQ: $(addprefix %/, $(OBJS)) $(USER_OBJS)  
-#	@echo 'Objects: $(addprefix $(dir $@), $(OBJS))'
-#	@echo 'Building target: $@'
-#	@echo 'Invoking: Cross GCC Linker'
-#	gcc  -o "$(addprefix $(dir $@), NBCQ)"  $(addprefix $(dir $@), $(OBJS)) $(USER_OBJS) $(LIBS)
-#	@echo 'Finished building target: $@'
-#	@echo ' '
-#
-#Debug/%.o Release/%.o GProg/%.o: %.c
-#	@echo 'Building target: $@'
-#	@echo 'Building file: $<'
-#	@echo 'Invoking: Cross GCC Compiler'
-#	-mkdir -p  $(subst $(shell basename $@),, $@)
-#	gcc $(MACRO) $(OPTIMIZATION) $(DEBUG) -Wall -c -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o "$@" "$<"
-#	@echo 'Finished building: $<'
-#	@echo ' '
+#gcc $(MACRO) $(OPTIMIZATION) $(DEBUG) $(FLAGS) $(LIBS) -Wall -S -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o "$(@:%.o=%.s)" "$<"
+#objdump -S --disassemble $(@) > $(@:%.o=%.s) 
+#gcc $(MACRO) $(OPTIMIZATION) $(DEBUG) $(FLAGS) $(LIBS) -Wall -S -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o "$(@:%.o=%.s)" "$<"
+#objdump -S --disassemble $(@) > $(@:%.opp=%.s) 

@@ -32,7 +32,7 @@ else
     PRE=""
 fi
 
-cmd_line="$PRE1$PRE2 ./$version/$cmd-$1 $2 1 $DIST 0.3 $SIZE $DIST  0.5 $OPS $DIST 0 0 $4 $3 0 $MODE $TIME"
+cmd_line="$PRE1$PRE2 ./$version/$1-$cmd $2 1 $DIST 0.3 $SIZE $DIST  0.5 $OPS $DIST 0 0 $4 $3 0 $MODE $TIME"
 
 echo ${cmd_line}
 time ${cmd_line}
