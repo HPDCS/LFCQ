@@ -28,28 +28,89 @@
 reset
 
 set term postscript eps enhanced color font "Helvetica" 16
-#set key bmargin center  horizontal Left
-set key top left
+set key bmargin center  horizontal Left
+#set key top left
 set size 0.6,0.7
 set offset 2,2,10,10
 set title 'Queue Size = '.queue
 set xlabel '#Threads'
 set grid  lc rgb "#888888"
 set ylabel 'Throughput (Ops/ms)' offset 2
-set xtics 0,2,32
+set xtics 0,4,50
+
+set style line  2 dt  1 lc rgb "#000000"
+set style line  3 dt  2 lc rgb "#000000"
+set style line  4 dt  3 lc rgb "#000000"
+set style line  5 dt  4 lc rgb "#000000"
+set style line  6 dt  5 lc rgb "#000000"
+set style line  7 dt  6 lc rgb "#000000"
+set style line  8 dt  7 lc rgb "#000000"
+set style line  9 dt  8 lc rgb "#000000"
+set style line 10 dt  9 lc rgb "#000000"
+set style line 11 dt 10 lc rgb "#000000"
+set style line 12 dt 11 lc rgb "#000000"
+
 	
-set yrange [500:4500]
-set xrange [0:9]
+set yrange [500:5500]
+set xrange [0:50]
 set offset 2,2,1,1
+
+maxitems=56
+
+start=5
+outfile=out.'/Real-'.queue.start.'.eps'
+
+set output outfile
+
+
+plot for [col=start:maxitems:5] file using 1:col with lines ls col t columnheader
+system(sprintf("epstopdf %s", outfile)) 
 
 start=2
 outfile=out.'/Real-'.queue.start.'.eps'
 
 set output outfile
 
-plot for [col=start:27:1] file using 1:col with lines t columnheader
+
+plot for [col=start:maxitems:5] file using 1:col with lines ls col t columnheader
+system(sprintf("epstopdf %s", outfile)) 
+
+start=3
+outfile=out.'/Real-'.queue.start.'.eps'
+
+set output outfile
+
+
+plot for [col=start:maxitems:5] file using 1:col with lines ls col t columnheader
+system(sprintf("epstopdf %s", outfile)) 
+
+start=4
+outfile=out.'/Real-'.queue.start.'.eps'
+
+set output outfile
+
+
+plot for [col=start:maxitems:5] file using 1:col with lines ls col t columnheader
+system(sprintf("epstopdf %s", outfile)) 
+
+start=5
+outfile=out.'/Real-'.queue.start.'.eps'
+
+set output outfile
+
+plot for [col=start:maxitems:5] file using 1:col with lines ls col t columnheader
 
 system(sprintf("epstopdf %s", outfile)) 
+
+start=6
+outfile=out.'/Real-'.queue.start.'.eps'
+
+set output outfile
+
+plot for [col=start:maxitems:5] file using 1:col with lines ls (col/5) t columnheader
+
+system(sprintf("epstopdf %s", outfile)) 
+
 
 
 #plot \
