@@ -176,7 +176,7 @@ void search(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
 		tail = tmp->tail;
 		assertf(head == NULL, "PANIC %s\n", "");
 		assertf(tmp_next == NULL, "PANIC1 %s\n", "");
-		//assertf(is_marked_for_search(left_next, flag), "PANIC2 %s\n", "");
+		assertf(flag == REMOVE_DEL_INV && is_marked_for_search(left_next, flag), "PANIC2 %s\n", "");
 		counter = 0;
 		marked = is_marked_for_search(tmp_next, flag);
 		
