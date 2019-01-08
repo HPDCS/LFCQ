@@ -7,7 +7,7 @@ EXECUTABLES :=
 USER_OBJS :=
 LIBS := -lpthread -lm -lnuma -lrt
 SRC_DIR := src
-TARGETS := NBCQ V2CQ V3CQ LIND MARO NOHO NOH2 #NUMA #WORK
+TARGETS := NBCQ V2CQ V3CQ LIND MARO NOHO NOH2 LMCQ #NUMA #WORK
 
 UTIL_value := src/utils/common.o src/utils/hpdcs_math.o 
 GACO_value := src/gc/gc.o src/gc/ptst.o
@@ -15,6 +15,7 @@ ARCH_value := src/arch/x86.o
 
 NBCQ_value := src/datatypes/nbcalendars/nb_calqueue.o   src/datatypes/nbcalendars/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
 V2CQ_value := src/datatypes/nbcalendars/nb_calqueue_last_min.o   src/datatypes/nbcalendars/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
+LMCQ_value := src/datatypes/nblastmin/nb_calqueue_last_min_v2.o   src/datatypes/nblastmin/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
 V3CQ_value := src/datatypes/nbcachecq/nb_calqueue_last_min.o   src/datatypes/nbcachecq/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
 LIND_value := src/datatypes/nbskiplists/prioq.o  src/datatypes/nbskiplists/common_prioq.o $(UTIL_value) $(GACO_value) $(ARCH_value)
 MARO_value := src/datatypes/nbskiplists/prioq_v2.o src/datatypes/nbskiplists/common_prioq.o $(UTIL_value) $(GACO_value) $(ARCH_value)
@@ -67,7 +68,7 @@ C_ASM				:= $(strip $(subst .c,.S, $(C_SRCS)))
 C_DEPS			:= $(patsubst %, $(OBJS_DIR)/%, $(subst .o,.d, $(C_OBJS)))
 
 SUBDIRS 		:= $(filter-out src/datatypes src src/utils src/gc src/arch\
-                                src/datatypes/nbcalendars src/datatypes/nbcachecq\
+                                src/datatypes/nbcalendars src/datatypes/nblastmin src/datatypes/nbcachecq\
                                 src/datatypes/nbskiplists src/datatypes/nohotspot\
                                 src/datatypes/nohotspot2 src/datatypes/rotating, $(SUBDIRS))
 
