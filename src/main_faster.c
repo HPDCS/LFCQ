@@ -487,7 +487,6 @@ int main(int argc, char **argv)
 	
 	
 	NUMA_NODES  = numa_num_configured_nodes();
-	_init_gc_subsystem();
 	
 	//set_mempolicy(MPOL_BIND, &numa_mask, 2);
 		
