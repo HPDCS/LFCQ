@@ -276,7 +276,7 @@ void classic_hold(
 		pq_reset_statistics();
 		par_count = 0;
 		ops_count[my_id] = 0;
-		printf("%s\n", "START");		
+				
 		while((TEST_MODE != 'T' && tot_count < end_operations2) || (TEST_MODE == 'T' && !end_test))
 		{
 			par_count++;
