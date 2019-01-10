@@ -22,8 +22,8 @@ using namespace std;
 /* ------------------------ CONSTANTS DEFINITIONS  ------------------------ */
 const int MIN_IDX 		= 0; 							// minimal VALID value for the index in the chunk
 const int MAX_IDX		= (CHUNK_SIZE);					// maximal INVALID value for the index in the chunk
-const int MIN_VAL		= 0;							// minimal value to never be inserted to the PQ
-const int MAX_VAL 		= (0x7fffffff-1);				// maximal value to never be inserted to the PQ, -1
+const cb_key_t MIN_VAL		= 0.0;							// minimal value to never be inserted to the PQ
+const cb_key_t MAX_VAL 		= (INFTY);				// maximal value to never be inserted to the PQ, -1
 // is needed to distinguish it from SL max sentinel
 const int DELETED_PTR	= 0x00000001;					// the mask for the least significant bit being set
 /************************************************************************************************/
@@ -37,7 +37,7 @@ class Chunk
 public:
 	struct metadata{				// the chunks meta data, takes one cache line
 		Atomicable 		status;		// the index for insertion or deletion, state and frozen index
-		volatile int 	max;		// constant value initialized on chunk creation
+		volatile cb_key_t	max;		// constant value initialized on chunk creation
 		volatile Chunk* next;		// pointer to the next chunk in the linked list
 		volatile Chunk* buffer;		// used only for first chunk
 		volatile u64 				// used for freeze optimization: a bit is set for each frozen value
@@ -59,7 +59,7 @@ public:
 	}
 
 	// special initialization method and not a constructor is used, as chunks are statically allocated
-	dev void init(int max, Chunk *next, ChunkState s, int initIdx){
+	dev void init(cb_key_t max, Chunk *next, ChunkState s, int initIdx){
 		//memset(this, 0, sizeof(Chunk));
 		meta.max = max;
 		meta.next = next;

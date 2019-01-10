@@ -46,6 +46,7 @@ struct sl_set {
         inode_t *top;
         node_t  *head;
         int raises;
+        volatile int epoch;
 };
 
 node_t* node_new(sl_key_t key, val_t val, node_t *prev, node_t *next,

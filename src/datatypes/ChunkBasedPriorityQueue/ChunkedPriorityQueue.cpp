@@ -25,8 +25,8 @@ using namespace std;
 
 /******************************************************************************************************/
 // checkInputInsert(int key)	- only keys between MIN_VAL and MAX_VAL (not included) are acceptable
-static inline void checkInputInsert(int key){
-	if ((key <= MIN_VAL)||(key >= MAX_VAL)){
+static inline void checkInputInsert(cb_key_t key){
+	if ((key < MIN_VAL)||(key == MAX_VAL)){
 		cout<<"NOT VALID KEY"<<endl;
 		_assert(false);
 	}
@@ -46,7 +46,8 @@ inline bool ChunkedPriorityQueue::recursiveRecovery(ThrInf* t, Chunk** prev, Chu
 
 	// There is a need to freeze previous chunk in order to get the local list of values
 	// NOTE: we can call readFrozenChunk (for the above line)
-	int svalsL[CHUNK_SIZE], lenL;	
+	int lenL;	
+	cb_key_t svalsL[CHUNK_SIZE]; 
 	freezeChunk(*prev, svalsL, &lenL, FREEZE_RECOVERY, t);			
 
 	c = getChunk(prev, &p);		// search the previous to previous chunk (in the list, not skip list)
@@ -96,17 +97,17 @@ dev void ChunkedPriorityQueue::print()
 /******************************************************************************************************/
 
 
-/******************************************************************************************************/
+/*****************************************************************************************************/
 // ChunkedPriorityQueue::debugPrintLoopInInsert(...)	- printing for debugging issues
 inline void ChunkedPriorityQueue::debugPrintLoopInInsert(	
-		ThrInf* t, Chunk* prevPrev, Chunk* prevCurr, int key,
+		ThrInf* t, Chunk* prevPrev, Chunk* prevCurr, cb_key_t key,
 		Chunk* prev, Chunk* curr, int iter, int r){
 
 	if (prevPrev)
-		printf("   <<< Thread %d for key %d is repeatedly getting (%d times): prev=%p and curr=%p from getChunk, prevPrev = %p (%s), prevCurr=%p (%s).\n",
+		printf("   <<< Thread %d for key %f is repeatedly getting (%d times): prev=%p and curr=%p from getChunk, prevPrev = %p (%s), prevCurr=%p (%s).\n",
 				t->id, key, iter, prev, curr, prevPrev, prevPrev->meta.status.printState(), prevCurr, prevCurr->meta.status.printState()  );
 	else
-		printf("   <<< Thread %d for key %d is repeatedly getting (%d times): prev=%p and curr=%p from getChunk, prevPrev = %p (-), prevCurr=%p (%s).\n",
+		printf("   <<< Thread %d for key %f is repeatedly getting (%d times): prev=%p and curr=%p from getChunk, prevPrev = %p (-), prevCurr=%p (%s).\n",
 				t->id, key, iter, prev, curr, prevPrev, prevCurr, prevCurr->meta.status.printState()  );
 
 	Chunk* prevForCheck = NULL;
@@ -120,7 +121,7 @@ inline void ChunkedPriorityQueue::debugPrintLoopInInsert(
 #ifdef SKIP_LIST
 	skipListContains(sl, key, (intptr_t*)&curSkipL);    // try to get the chunk through the skip-list
 	Chunk* csl = getChunk(&curSkipL, &prevForSlCheck);
-	printf("   <<< Thread %d: chunk %p (%s) with max %d and index %d was found in the skip list according to the key %d, "
+	printf("   <<< Thread %d: chunk %p (%s) with max %f and index %d was found in the skip list according to the key %f, "
 			"its next: %p and in list:%p.\n",
 			t->id, curSkipL, curSkipL->meta.status.printState(),
 			curSkipL->meta.max, curSkipL->meta.status.bword.idx,
@@ -128,13 +129,13 @@ inline void ChunkedPriorityQueue::debugPrintLoopInInsert(
 #endif
 
 	if (c)
-		printf("   <<< Thread %d: chunk %p (%s) with max %d and index %d was found in the linked list after %p.\n"
+		printf("   <<< Thread %d: chunk %p (%s) with max %f and index %d was found in the linked list after %p.\n"
 				"   <<< Results from walking on the list for key, cur:%p and prev:%p, skip-list result:%d, is current frozen:%d\n"
 				"   <<< Results from Skip-List:%p",
 				t->id, curr, curr->meta.status.printState(), curr->meta.max, curr->meta.status.bword.idx, prevForCheck,
 				curD, prevD, r, curr->meta.status.isFrozen(), curSkipL);
 	else
-		printf("   <<< Thread %d: chunk %p (%s) with max %d and index %d was not found in the linked list. \n"
+		printf("   <<< Thread %d: chunk %p (%s) with max %f and index %d was not found in the linked list. \n"
 				"   <<< Results from walking on the list for key, cur:%p and prev:%p, skip-list result:%d, is current frozen:%d\n"
 				"   <<< Results from Skip-List:%p",
 				t->id, curr, curr->meta.status.printState(), curr->meta.max, curr->meta.status.bword.idx,
@@ -149,7 +150,7 @@ inline void ChunkedPriorityQueue::debugPrintLoopInInsert(
 /******************************************************************************************************/
 // ChunkedPriorityQueue::insert(int key) 	
 //		- insert the key into PQ, the key must be positive and require less than 32 bits
-dev void ChunkedPriorityQueue::insert(int key, ThrInf* t){
+void ChunkedPriorityQueue::insert(cb_key_t key, ThrInf* t){
 
 	Chunk* curr = NULL, *prev = NULL;
 	int iter = 0; 
@@ -215,7 +216,8 @@ dev void ChunkedPriorityQueue::insert(int key, ThrInf* t){
 		// Till here we are opportunistic (fast path), from here we start with SLOW PATH - help in freeze.
 		// NOTE: For the late freeze no need to freeze the entire chunk, just help to freeze the relevant 
 		// part and then check if the new key was seen in freeze. Here freezing full chunk for simplicity.
-		int svals[CHUNK_SIZE], len;					 	// local variables for chunk freeze
+		int len;					 	// local variables for chunk freeze
+		cb_key_t svals[CHUNK_SIZE];
 		t->key = key;
 		freezeChunk(curr, svals, &len, INSERT_FULL, t); // freeze just reads the values from frozen chunk
 
@@ -243,7 +245,7 @@ dev void ChunkedPriorityQueue::insert(int key, ThrInf* t){
 // 		successful. If buffer pointer is already not NULL, because freeze has started or someone else 
 // 		attached another buffer, returns false. In case freeze has started "curbuf" is going to be marked
 // 		as deleted (DELETED_PTR).
-bool ChunkedPriorityQueue::create_insert_buffer(int key, Chunk *currhead, Chunk **curbuf){
+bool ChunkedPriorityQueue::create_insert_buffer(cb_key_t key, Chunk *currhead, Chunk **curbuf){
 
 	Chunk *buf = alloc();
 
@@ -266,7 +268,7 @@ bool ChunkedPriorityQueue::create_insert_buffer(int key, Chunk *currhead, Chunk 
 // ChunkedPriorityQueue::insert_to_first_chunk(int key, Chunk *currhead) 	
 // 		- inserts the key into the first chunk (currhead is needed for possible later update due to freeze).
 // 		As it is impossible to insert to the first chunk, instead the key is inserted into the buffer
-bool ChunkedPriorityQueue::insert_to_first_chunk(ThrInf* t, int key, Chunk *currhead){
+bool ChunkedPriorityQueue::insert_to_first_chunk(ThrInf* t, cb_key_t key, Chunk *currhead){
 
 	Chunk *curbuf = currhead->meta.buffer;		// PHASE I: insertion into the buffer
 	t->insInFirstCnt++;
@@ -297,7 +299,8 @@ bool ChunkedPriorityQueue::insert_to_first_chunk(ThrInf* t, int key, Chunk *curr
 			membarrier();
 			if( curbuf->meta.status.isInFreeze()==false ) 
 				break;							// there was no concurrent freeze, go to PHASE II
-			int svals[CHUNK_SIZE], len;			// local variables for chunk freeze, here chunk is in freeze
+			int len;					 	// local variables for chunk freeze
+			cb_key_t svals[CHUNK_SIZE];
 			freezeChunk(currhead,svals,&len		// if the chunk is frozen, freezeChunk just reads the values
 					,INSERT_FIRST_HEAD_HELP, t);	// for same flow first chunk is the start point of the freeze
 			freezeChunk(curbuf,svals,&len,		// after first chunk is frozen freeze the buffer	
@@ -327,7 +330,8 @@ bool ChunkedPriorityQueue::insert_to_first_chunk(ThrInf* t, int key, Chunk *curr
 			return true;
 		}
 #endif //ELIMINATION
-		int svals[CHUNK_SIZE], len;			// local variables for chunk freeze
+		int len;					 	// local variables for chunk freeze
+		cb_key_t svals[CHUNK_SIZE];
 		// the insert need first chunk to be merged with buffer, therefore initiate freeze of the first chunk
 		freezeChunk(currhead, svals, &len, INSERT_FIRST_HEAD, t);			
 		freezeRecovery(t, currhead, NULL, svals, len, INSERT_FIRST_HEAD);
@@ -340,7 +344,7 @@ bool ChunkedPriorityQueue::insert_to_first_chunk(ThrInf* t, int key, Chunk *curr
 /***************************************************************************************/
 // ChunkedPriorityQueue::delmin() - main interface that deletes the minimal value from the PQ
 // 		What does it return when the PQ is empty?
-int ChunkedPriorityQueue::delmin(ThrInf* t){
+cb_key_t ChunkedPriorityQueue::delmin(ThrInf* t){
 	DEB(int iter=0;)
 
 #ifdef FLAG_RELEASE
@@ -428,7 +432,8 @@ int ChunkedPriorityQueue::delmin(ThrInf* t){
 				return -1;
 			}
 
-		int svals[CHUNK_SIZE], len;                         // local variables for chunk freeze
+		int len;					 	// local variables for chunk freeze
+		cb_key_t svals[CHUNK_SIZE];
 		freezeChunk(curr, svals, &len, DELETE_MIN, t);      // freeze just reads the values from frozen chunk
 		freezeRecovery(t, curr, NULL, svals, len, DELETE_MIN);	// the recovery
 	}
@@ -440,7 +445,7 @@ int ChunkedPriorityQueue::delmin(ThrInf* t){
 // ChunkedPriorityQueue::readAndFreezeValues(Chunk *curr, int *sortedval, int *len, bool isFirstChunk)
 // 		Freezes the values inside the Chunk curr, return locally.
 
-void ChunkedPriorityQueue::readAndFreezeValues(Chunk *curr, int frozenIdx, int *sortedval, int *len, bool isFirstChunk){
+void ChunkedPriorityQueue::readAndFreezeValues(Chunk *curr, int frozenIdx, cb_key_t *sortedval, int *len, bool isFirstChunk){
 
 	if( frozenIdx < CHUNK_SIZE ){                       // frozen index should always be less then a chunk size
 
@@ -454,7 +459,7 @@ void ChunkedPriorityQueue::readAndFreezeValues(Chunk *curr, int frozenIdx, int *
 
 			for(int i=frozenIdx; i<VALS_PER_EXIST; ++i, mask<<=1){
 				// prepare a mask for one exist-entry, but what if frozenIdx is initially much higher than VALS_PER_EXIST?
-				int val = curr->vals[i+k*VALS_PER_EXIST];
+				cb_key_t val = curr->vals[i+k*VALS_PER_EXIST];
 #ifdef ELIMINATION
 				if ((curr->meta.status.getState()==BUFFER) && (val & ELM_TAKEN)) continue;   // in the first chunk the value  taken
 				if ((curr->meta.status.getState()==BUFFER) && (i%SKIP_ENTRIES_IN_BUFFER==0)) continue;
@@ -512,7 +517,7 @@ void ChunkedPriorityQueue::readAndFreezeValues(Chunk *curr, int frozenIdx, int *
 // ChunkedPriorityQueue::freezeChunk(Chunk *curr, int *sortedval, int *len) 
 // 		- Freezes the chunk pointed by curr and creates an sorted array (sortedval) out of frozen values.
 // 		The length of array is - len
-void ChunkedPriorityQueue::freezeChunk(Chunk *curr, int *sortedval, int *len, FreezeTrigger ft, ThrInf* t){
+void ChunkedPriorityQueue::freezeChunk(Chunk *curr, cb_key_t *sortedval, int *len, FreezeTrigger ft, ThrInf* t){
 
 	int idx;
 	Atomicable ns, status;                          // new status, current status
@@ -596,7 +601,7 @@ void ChunkedPriorityQueue::freezeChunk(Chunk *curr, int *sortedval, int *len, Fr
 /***************************************************************************************/
 // ChunkedPriorityQueue::readFrozenChunk(Chunk *curr, int sortedval[], int *len) 
 // 		Creates an array of sorted values while the chunk (and all its entries) are already frozen.
-void ChunkedPriorityQueue::readFrozenChunk(Chunk *curr, int sortedval[], int *len){
+void ChunkedPriorityQueue::readFrozenChunk(Chunk *curr, cb_key_t sortedval[], int *len){
 
 	_assert(curr->meta.status.isInFreeze());
 
@@ -655,7 +660,7 @@ void ChunkedPriorityQueue::readFrozenChunk(Chunk *curr, int sortedval[], int *le
 // ChunkedPriorityQueue::merge(Chunk *next, int svals[], int len)
 //		
 // - takes two frozen chunks (their sorted values) and creates the first chunk, and an the second chunk
-Chunk* ChunkedPriorityQueue::merge(Chunk *next, int svals[], int len, Chunk** nextCreated){
+Chunk* ChunkedPriorityQueue::merge(Chunk *next, cb_key_t svals[], int len, Chunk** nextCreated){
 
 	Chunk *second = alloc(), *first=alloc();			// local pointers to first and second chunks
 	int i = 0, o = 0;
@@ -692,14 +697,14 @@ Chunk* ChunkedPriorityQueue::merge(Chunk *next, int svals[], int len, Chunk** ne
 // @param curr : the current chunk to freeze
 // @param prev : previous chunk, or NULL if curr is the first chunk
 // @param svals, len: the array of the sorted values inside curr, and its length
-void ChunkedPriorityQueue::freezeRecovery(	ThrInf* t, Chunk *curr, Chunk *prev, int svals[], int len,
+void ChunkedPriorityQueue::freezeRecovery(	ThrInf* t, Chunk *curr, Chunk *prev, cb_key_t svals[], int len,
 		FreezeTrigger ft){
 
 	bool toSplit = true; 				// true if toSplit was decided or false if merge-first was decided
 	Chunk* local = NULL;				// to hold the pointer to the locally created recovery structure
 	bool success = false;
 	Chunk *nextFrozen = NULL, *nextNextFrozen = NULL, *nextCreated = NULL;
-	int i = 0;
+	DEB(int i = 0;)
 
 	PRINT2("   <<< freezeRecovery: Thread %d starts freeze recovery with prev:%p and curr:%p (curr idx:%d); trigger: %d\n", 
 			t->id, prev, curr, curr->meta.status.bword.idx, ft);
@@ -812,13 +817,13 @@ void ChunkedPriorityQueue::freezeRecovery(	ThrInf* t, Chunk *curr, Chunk *prev, 
 /***************************************************************************************/
 // ChunkedPriorityQueue::split(Chunk *curr, Chunk *prev, int svals[], int len)
 // 	- create as much as needed new linked chunks from the given values
-Chunk * ChunkedPriorityQueue::split(Chunk *curr, Chunk *prev, int svals[], int len, Chunk** nextCreated){
+Chunk * ChunkedPriorityQueue::split(Chunk *curr, Chunk *prev, cb_key_t svals[], int len, Chunk** nextCreated){
 
 	_assert( len >= 2 );
 	Chunk *pc = alloc(), *nc = NULL, *res = pc;		// allocate prev & next chunks of the local linked list
 
 	for (int i=1; i<SPLIT_CHUNKS_NUM; ++i){
-		int piv = svals[(len/SPLIT_CHUNKS_NUM)*i-1];// pick pivot, svals is ordered
+		cb_key_t piv = svals[(len/SPLIT_CHUNKS_NUM)*i-1];// pick pivot, svals is ordered
 		_assert(piv>0);
 		nc = alloc();								// allocate next chunk
 		if (i == 1) *nextCreated = nc;
@@ -862,7 +867,7 @@ Chunk * ChunkedPriorityQueue::split(Chunk *curr, Chunk *prev, int svals[], int l
 /***************************************************************************************/
 // ChunkedPriorityQueue::fill_chunk(int *svals, int len, int start, int pivotIdx, Chunk *c)
 // 	- fills the values of chunk c from index "start" till index "pivotIdx" from array svals
-void ChunkedPriorityQueue::fill_chunk(int *svals, int len, int start, int pivotIdx, Chunk *c){
+void ChunkedPriorityQueue::fill_chunk(cb_key_t *svals, int len, int start, int pivotIdx, Chunk *c){
 
 	if( pivotIdx>len ) pivotIdx = len;
 	int j=0;
@@ -878,10 +883,11 @@ void ChunkedPriorityQueue::fill_chunk(int *svals, int len, int start, int pivotI
 // ChunkedPriorityQueue::recoverFirstChunk(Chunk *curr, int svals[], int len) - recovers 
 // 	the situation where first chunk is frozen
 Chunk* ChunkedPriorityQueue::recoverFirstChunk(	Chunk *curr,        // can be the head or next to head
-		int svals[], int len, Chunk** nextFrozen,
+		cb_key_t svals[], int len, Chunk** nextFrozen,
 		Chunk** nextNextFrozen, Chunk** nextCreated, ThrInf* t){
 
-	int svals1[CHUNK_SIZE], svals2[CHUNK_SIZE], len1 = 0, len2 = 0;
+	cb_key_t svals1[CHUNK_SIZE], svals2[CHUNK_SIZE];
+	int len1 = 0, len2 = 0;
 	Chunk* next = NULL;                                             // first not frozen chunk after the recovery
 	*nextFrozen = NULL; *nextNextFrozen=NULL; *nextCreated=NULL;	// initialize the input-output parameters
 
@@ -927,12 +933,12 @@ Chunk* ChunkedPriorityQueue::recoverFirstChunk(	Chunk *curr,        // can be th
 	// now combine all frozen values together
 	int alllen = len+len1+len2;
 #ifndef DEBUG
-	int allvals[alllen];
+	cb_key_t allvals[alllen];
 #else
-	int allvals[CHUNK_SIZE*3];
+	cb_key_t allvals[CHUNK_SIZE*3];
 #endif
 
-	int intvals[len+len1];
+	cb_key_t intvals[len+len1];
 	std::merge(svals, svals+len, svals1, svals1+len1, intvals);
 	std::merge(svals2, svals2+len2, intvals, intvals+len+len1, allvals);
 

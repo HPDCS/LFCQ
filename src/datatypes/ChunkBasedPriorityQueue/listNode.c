@@ -10,11 +10,11 @@
 #include <stdlib.h>
 #include <assert.h>
 
-ListNode makeSentinelNode(int key) {
+ListNode makeSentinelNode(cb_key_t key) {
 	return makeNormalNode(key, MAX_LEVEL, 0);
 }
 
-ListNode makeNormalNode(int key, int height, intptr_t value) {
+ListNode makeNormalNode(cb_key_t key, int height, intptr_t value) {
 	int i;
 	ListNode newNode = (ListNode)malloc(sizeof (struct listNode_t) + (sizeof(markable_ref) * (height+1)));
 	assert(newNode != NULL);

@@ -1,9 +1,7 @@
 #ifndef GLOBALS_H
 #define GLOBALS_H
 
-typedef unsigned long long u64;
-
-typedef int cb_key_t;
+#include "cb_types.h"
 
 #define volatile						//use explicit atomic instructions instead of volatile!
 /*******************************************************************************************************/

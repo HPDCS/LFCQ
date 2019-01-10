@@ -26,7 +26,7 @@ typedef struct privateThreadInfo{
 	int             eleminCnt;
 
 	bool			throughput;
-	int 			key;
+	cb_key_t 			key;
 } ThrInf;
 
 #endif /* defined(__ChunkedSkipList__test__) */
