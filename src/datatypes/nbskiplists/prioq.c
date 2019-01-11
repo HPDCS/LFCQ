@@ -61,14 +61,15 @@
  * not have the delete bit set. 
  */
 pkey_t
-pq_dequeue(pq_t *pq, void **result)
-{
+pq_dequeue(void *p, void **result)
+{    
+    pq_t *pq = (pq_t*)p;
     pval_t   v = NULL;
     node_t *x, *nxt, *obs_head = NULL, *newhead, *cur;
-    int offset, lvl;
+    int offset;
     
     newhead = NULL;
-    offset = lvl = 0;
+    offset = 0;
 	critical_enter();
     x = pq->head;
     obs_head = x->next[0];
@@ -90,7 +91,7 @@ pq_dequeue(pq_t *pq, void **result)
          * inserted. This makes the lock-freedom quite a theoretic
          * matter. */
         if (newhead == NULL && x->inserting) newhead = x;
-
+ 
         /* optimization */
         if (is_marked_ref(nxt)) continue;
         /* the marker is on the preceding pointer */

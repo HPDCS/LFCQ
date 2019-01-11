@@ -53,7 +53,7 @@
 
 __thread node_t *last_head = NULL;
 __thread node_t *last_min = NULL;
-__thread unsigned long long last_offset = 0;
+__thread unsigned int last_offset = 0;
 
 
 /* deletemin
@@ -65,14 +65,16 @@ __thread unsigned long long last_offset = 0;
  * not have the delete bit set. 
  */
 pkey_t
-pq_dequeue(pq_t *pq, void **result)
-{
+pq_dequeue(void *p, void **result)
+{    
+    pq_t *pq = (pq_t*)p;
     pval_t   v = NULL;
     node_t *x, *nxt, *obs_head = NULL, *newhead, *cur;
-    int offset, lvl;
-    
+    unsigned int offset;
+
     newhead = NULL;
-    offset = lvl = 0;
+    offset =  0;
+    
     critical_enter();
     x = pq->head;
     obs_head = x->next[0];
@@ -141,7 +143,7 @@ pq_dequeue(pq_t *pq, void **result)
     {
         last_offset = 0;
         last_min = NULL;
-        /* Update higher level pointers. */
+        /* Update higher level pointers. */ 
         restructure(pq);
 
         /* We successfully swung the upper head pointer. The nodes
