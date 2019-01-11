@@ -9,7 +9,7 @@ EXECUTABLES :=
 USER_OBJS :=
 LIBS := -lpthread -lm -lnuma -lrt
 SRC_DIR := src
-TARGETS := NBCQ V2CQ V3CQ LIND MARO NOHO NOH2 LMCQ CBCQ #NUMA #WORK
+TARGETS := NBCQ LIND MARO #V2CQ V3CQ NOHO NOH2 LMCQ #CBCQ #NUMA #WORK
 
 UTIL_value := src/utils/common.o src/utils/hpdcs_math.o 
 GACO_value := src/gc/gc.o src/gc/ptst.o

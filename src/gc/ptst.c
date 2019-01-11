@@ -47,8 +47,11 @@
 #include "ptst.h"
 
 ptst_t *ptst_list = NULL;
-extern __thread ptst_t *ptst;
 static unsigned int next_id = 0;
+
+
+__thread ptst_t *ptst;
+__thread unsigned long long malloc_count;
 
 void
 critical_enter()
