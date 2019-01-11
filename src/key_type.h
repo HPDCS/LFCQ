@@ -21,7 +21,7 @@
 
 	#include <limits.h>
 	#define INFTY INT_MAX
-	#define MIN 	0U
+	#define MIN 	0
 	typedef int pkey_t;
 
 	#define MEAN  100.0;			// Maximum distance from the current event owned by the thread
@@ -29,7 +29,7 @@
 #endif
 
 
-extern void   pq_enqueue(void *queue, pkey_t timestamp, void* payload);
+extern int   pq_enqueue(void *queue, pkey_t timestamp, void* payload);
 extern pkey_t pq_dequeue(void *queue, void **payload);
 extern void*  pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket);
 extern void pq_report(int tid);

@@ -33,25 +33,18 @@
 #include <stdarg.h>
 #include <sched.h>
 #include <sys/time.h>
+#include <limits.h>
 
+#include "key_type.h"
 #include "utils/hpdcs_utils.h"
 #include "utils/hpdcs_math.h"
 #include "utils/common.h"
 #include "gc/gc.h"
 
-#define INFTY DBL_MAX
 
 #define NID nid
 #define TID tid
 
-
-extern void   pq_enqueue(void *queue, double timestamp, void* payload);
-extern double pq_dequeue(void *queue, void **payload);
-extern void*  pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket);
-extern void pq_report(unsigned int threshold);
-extern void pq_prune();
-extern void pq_reset_statistics();
-extern unsigned int pq_num_malloc();
 
 
 
@@ -84,7 +77,7 @@ unsigned int TOTAL_OPS3;	// = 800000;
 double PROB_DEQUEUE3;		// Probability to dequeue
 char   PROB_DISTRIBUTION3;
 
-double MEAN_INTERARRIVAL_TIME = 1.00;			// Maximum distance from the current event owned by the thread
+double MEAN_INTERARRIVAL_TIME = MEAN;			// Maximum distance from the current event owned by the thread
 unsigned int EMPTY_QUEUE;
 double PERC_USED_BUCKET; 	
 unsigned int ELEM_PER_BUCKET;
@@ -101,11 +94,11 @@ pthread_t *p_tid;
 volatile unsigned int BARRIER = 0;
 volatile unsigned int lock = 1;
 
-__thread unsigned int TID;
-__thread unsigned int NID;
+__thread int TID;
+__thread int NID;
 __thread unsigned int num_op=0;
 
-unsigned int NUMA_NODES;
+int NUMA_NODES;
 
 unsigned int *id;
 volatile long long *ops;
@@ -119,10 +112,10 @@ volatile unsigned int end_test = 0;
 volatile long long final_ops = 0;
 
 
-double dequeue(void)
+pkey_t dequeue(void)
 {
 
-	double timestamp = INFTY;
+	pkey_t timestamp = INFTY;
 	void* free_pointer = NULL;
 	
 	timestamp = pq_dequeue(nbcqueue, &free_pointer);
@@ -130,15 +123,15 @@ double dequeue(void)
 	return timestamp;
 }
 
-double enqueue(unsigned int my_id, struct drand48_data* seed, double local_min, double (*current_prob) (struct drand48_data*, double))
+pkey_t enqueue(int my_id, struct drand48_data* seed, pkey_t local_min, double (*current_prob) (struct drand48_data*, double))
 {
-	double timestamp = 0.0;
-	double update = 0.0;
+	pkey_t timestamp = 0.0;
+	pkey_t update = 0.0;
 
 	do{
-	update = current_prob(seed, MEAN_INTERARRIVAL_TIME);
-	timestamp = local_min + update;
-}while(timestamp == INFTY);
+		update = (pkey_t)  current_prob(seed, MEAN_INTERARRIVAL_TIME);
+		timestamp = local_min + update;
+	}while(timestamp == INFTY);
 	
 	if(timestamp < 0.0)
 		timestamp = 0.0;
@@ -155,26 +148,26 @@ __thread unsigned int stopforcheck = 0;
 
 void* process(void *arg)
 {
-	unsigned int my_id;
+	int my_id;
 	long long n_dequeue = 0;
 	long long n_enqueue = 0;
 	struct drand48_data seed;
 	struct drand48_data seed2    ;
 	cpu_set_t cpuset;
-	double timestamp, local_min = 0.0;
+	pkey_t timestamp, local_min = 0.0;
 
 	double (*current_dist) (struct drand48_data*, double) ;
 
-	my_id =  *((unsigned int*)(arg));
+	my_id =  *((int*)(arg));
 	(TID) = my_id;
 	(NID) 		= numa_node_of_cpu(tid);
 	srand48_r(my_id+157, &seed2);
     srand48_r(my_id+359, &seed);
     srand48_r(my_id+254, &seedT);
     
-    
+     
 	CPU_ZERO(&cpuset);
-	CPU_SET(my_id, &cpuset);
+	CPU_SET((unsigned int )my_id, &cpuset);
 	pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
 
 
@@ -240,12 +233,12 @@ int main(int argc, char **argv)
 	unsigned int i = 0;
 	unsigned long numa_mask = 1;
 	unsigned long long sum = 0;
-	unsigned long long min = -1;
+	unsigned long long min = ULONG_MAX;
 	unsigned long long max = 0;
 	unsigned long long mal = 0;
 	unsigned long long avg = 0;
 	unsigned long long tmp = 0;
-	unsigned long long qsi = 0;
+	long long qsi = 0;
 
 	if(argc != num_par)
 	{
