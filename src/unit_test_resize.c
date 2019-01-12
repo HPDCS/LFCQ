@@ -36,6 +36,7 @@
 #include <limits.h>
 
 #include "key_type.h"
+#include "common_test.h"
 #include "utils/hpdcs_utils.h"
 #include "utils/hpdcs_math.h"
 #include "utils/common.h"
@@ -77,7 +78,6 @@ unsigned int TOTAL_OPS3;	// = 800000;
 double PROB_DEQUEUE3;		// Probability to dequeue
 char   PROB_DISTRIBUTION3;
 
-double MEAN_INTERARRIVAL_TIME = MEAN;			// Maximum distance from the current event owned by the thread
 unsigned int EMPTY_QUEUE;
 double PERC_USED_BUCKET; 	
 unsigned int ELEM_PER_BUCKET;
@@ -110,37 +110,6 @@ volatile unsigned int end_phase_2 = 0;
 volatile unsigned int end_phase_3 = 0;
 volatile unsigned int end_test = 0;
 volatile long long final_ops = 0;
-
-
-pkey_t dequeue(void)
-{
-
-	pkey_t timestamp = INFTY;
-	void* free_pointer = NULL;
-	
-	timestamp = pq_dequeue(nbcqueue, &free_pointer);
-	
-	return timestamp;
-}
-
-pkey_t enqueue(int my_id, struct drand48_data* seed, pkey_t local_min, double (*current_prob) (struct drand48_data*, double))
-{
-	pkey_t timestamp = 0.0;
-	pkey_t update = 0.0;
-
-	do{
-		update = (pkey_t)  current_prob(seed, MEAN_INTERARRIVAL_TIME);
-		timestamp = local_min + update;
-	}while(timestamp == INFTY);
-	
-	if(timestamp < 0.0)
-		timestamp = 0.0;
-
-	pq_enqueue(nbcqueue, timestamp, UNION_CAST(1, void*));
-	
-	return timestamp;
-
-}
 
 
 
@@ -199,15 +168,16 @@ void* process(void *arg)
 			exit(1);
 	}
 		
-	while(n_enqueue < 25/THREADS)
+	while(n_enqueue < 25000/THREADS)
 	{
-		enqueue(my_id, &seed, local_min, current_dist);
-		n_enqueue++;
+		n_enqueue += enqueue(my_id, &seed, local_min, current_dist);
 	}
 
 
 	__sync_fetch_and_add(&BARRIER, 1);
 	while(BARRIER != THREADS);
+
+	printf("END\n");
 
 	while(1)
 	{

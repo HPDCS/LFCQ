@@ -37,6 +37,7 @@
 
 
 #include "key_type.h"
+#include "common_test.h"
 #include "utils/hpdcs_utils.h"
 #include "utils/hpdcs_math.h"
 #include "utils/common.h"
@@ -49,9 +50,6 @@
 
 #define NID nid
 #define TID tid
-
-
-
 
 
 
@@ -84,7 +82,6 @@ unsigned int TOTAL_OPS3;	// = 800000;
 double PROB_DEQUEUE3;		// Probability to dequeue
 char   PROB_DISTRIBUTION3;
 
-double MEAN_INTERARRIVAL_TIME = MEAN;			// Maximum distance from the current event owned by the thread
 unsigned int EMPTY_QUEUE;
 double PERC_USED_BUCKET; 	
 unsigned int ELEM_PER_BUCKET;
@@ -94,8 +91,6 @@ unsigned int TIME;
 
 __thread struct drand48_data seedT;
  
-void* nbcqueue;
-
 pthread_t *p_tid;
 
 volatile unsigned int BARRIER = 0;
@@ -119,38 +114,7 @@ volatile unsigned int end_test = 0;
 volatile long long final_ops = 0;
 
 
-pkey_t dequeue(void)
-{
 
-	pkey_t timestamp = INFTY;
-	void* free_pointer = NULL;
-	
-	timestamp = pq_dequeue(nbcqueue, &free_pointer);
-	
-	return timestamp;
-}
-
-pkey_t enqueue(int my_id, struct drand48_data* seed, pkey_t local_min, double (*current_prob) (struct drand48_data*, double))
-{
-	pkey_t timestamp = 0.0;
-	pkey_t update = 0.0;
-
-	//do{
-		do{
-			update = (pkey_t)  current_prob(seed, MEAN_INTERARRIVAL_TIME);
-			timestamp = local_min + update;
-		}while(timestamp == INFTY);
-		
-		if(timestamp < 0.0)
-			timestamp = 0.0;
-
-	//}while(
-		pq_enqueue(nbcqueue, timestamp, UNION_CAST(1, void*));
-		//);
-	
-	return timestamp;
-
-}
 
 
 
@@ -212,7 +176,12 @@ void classic_hold(
 				exit(1);
 		}
 		
-		
+		DEBUG(
+			if(my_id == 0){
+				printf("Populating queue...%s", "");
+				fflush(NULL);
+			}
+		)
 		while(tot_count < end_operations1)
 		{
 			
@@ -247,11 +216,24 @@ void classic_hold(
 					tot_count += ops_count[j];
 			}
 		}
-		printf("END\n");
+
+		ops[my_id] = local_enqueue - local_dequeue;
 		__sync_fetch_and_add(&end_phase_1, 1);
 
 		
 		while(TEST_MODE == 'T' && end_phase_1 != THREADS+1);
+
+		DEBUG(
+			if(my_id == 0){
+				long long tmp = 0;
+				int i= 0;
+			 	for(i=0;i<THREADS;i++)
+			            tmp += ops[i];
+			  
+				printf("%lld Items...Done\n", tmp);
+		
+		}
+		)
 		
 		if(TEST_MODE == 'T'){
 			par_count = 0;
@@ -363,7 +345,7 @@ void* process(void *arg)
 {
 	int my_id;
 	long long n_dequeue = 0;
-	long long n_enqueue = 0;
+	long long n_enqueue = 0; 
 	struct drand48_data seed;
 	struct drand48_data seed2    ;
 	cpu_set_t cpuset;
@@ -496,8 +478,18 @@ int main(int argc, char **argv)
 	NUMA_NODES  = numa_num_configured_nodes();
 	
 	//set_mempolicy(MPOL_BIND, &numa_mask, 2);
-		
+	
+
+	LOG("\nBuilding the queue...%s", "");
+	fflush(NULL);
+
 	nbcqueue = pq_init(THREADS, PERC_USED_BUCKET, ELEM_PER_BUCKET);
+
+	LOG("Done\n%s", "");
+
+	#ifdef TRACE_LEN
+		generate_trace(PROB_DISTRIBUTION2);
+	#endif
 	
 	for(i=0;i<THREADS;i++)
 	{

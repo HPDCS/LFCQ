@@ -44,6 +44,14 @@
 #define LOG(STRING,  ...) do{}while(0)
 #endif
 
+
+
+#ifndef NDEBUG
+#define DEBUG(x)     x
+#else
+#define DEBUG(x)     {}
+#endif
+
 /**
  * This function blocks the execution of the process.
  * Used for debug purposes.
