@@ -47,8 +47,9 @@ __thread unsigned long long cached_curr = 0ULL;
  * @return a pointer to a node that contains the dequeued value
  *
  */
-double pq_dequeue(nb_calqueue *queue, void** result)
+pkey_t pq_dequeue(void *q, void** result)
 {
+	nb_calqueue *queue = (nb_calqueue*)q;
 	nbc_bucket_node *min, *min_next, 
 					*left_node, *left_node_next, 
 					*tail, *array;
@@ -60,13 +61,14 @@ double pq_dequeue(nb_calqueue *queue, void** result)
 	
 	unsigned int size, attempts = 0;
 	unsigned int counter;
-	double bucket_width, left_ts, right_limit;
-	
+	pkey_t left_ts;
+	double bucket_width, right_limit;
+
 	double pub = queue->perc_used_bucket;
 	unsigned int epb = queue->elem_per_bucket;
 	unsigned int th = queue->threshold;
 	unsigned int ep = 0;
-	unsigned int con_de = 0;
+	int con_de = 0;
 	bool prob_overflow = false;
 	tail = queue->tail;
 	performed_dequeue++;
@@ -103,7 +105,7 @@ begin:
 		min = array + (index++ % (size));
 		
 		left_node = min_next = min->next;
-		right_limit = index*bucket_width;
+		right_limit = ((double)index)*bucket_width;
 		ep = 0;
 		
 		if(is_marked(min_next, MOV))
@@ -136,7 +138,7 @@ begin:
 				
 			scan_list_length += counter;
 
-			concurrent_dequeue += __sync_fetch_and_add(&h->d_counter.count, 1) - con_de;
+			concurrent_dequeue += (unsigned long long) (__sync_fetch_and_add(&h->d_counter.count, 1) - con_de);
 
 			*result = left_node->payload;
 				
@@ -157,11 +159,13 @@ begin:
 		{
 			new_current = h->current;
 			if(new_current == last_curr){
-				unsigned int dist = (size*DISTANCE_FROM_CURRENT);
+				unsigned int dist = (unsigned int) (size*DISTANCE_FROM_CURRENT);
 				if(prob_overflow && h->e_counter.count == 0)
 					goto begin;
-				assertf(prob_overflow, "\nOVERFLOW INDEX:%llu  BW:%.10f SIZE:%u TAIL:%p TABLE:%p\n", index, bucket_width, size, tail, h);
-
+				assertf(prob_overflow, "\nOVERFLOW INDEX:%llu"  
+					"BW:%.10f"
+					 "SIZE:%u TAIL:%p TABLE:%p\n", index, bucket_width, size, tail, h);
+				
 				
 				//assertf((index - (last_curr >> 32) -1) <= dist, "%s\n", "PROVA");
 				if(  //1 || 

@@ -1,6 +1,9 @@
 #include <stdlib.h>
+#include <limits.h>
 
 #include "common_nb_calqueue.h"
+
+
 
 
 /*************************************
@@ -16,19 +19,10 @@ __thread unsigned long long scan_list_length;
 __thread unsigned long long scan_list_length_en ;
 
 
-__thread ptst_t *ptst;
 int gc_aid[1];
 int gc_hid[1];
 
 
-
-
-
-/*************************************
- * VARIABLES FOR GARBAGE COLLECTION  *
- *************************************/
-
-__thread unsigned long long malloc_count;
 
 
 /*************************************
@@ -46,14 +40,14 @@ __thread unsigned int flush_eq = 0;
  * VARIABLES FOR DEQUEUE	  		 *
  *************************************/
   
-__thread unsigned int local_monitor = -1;
+//__thread unsigned int local_monitor = ULONG_MAX;
 __thread unsigned int flush_de = 0;
 
 
 
 
 
-__thread unsigned long long read_table_count	 = 0;
+__thread unsigned int read_table_count	 = 0;
   
 
 
@@ -80,7 +74,7 @@ unsigned int * volatile prune_array;
 void flush_current(table* h, unsigned long long newIndex, unsigned int size, nbc_bucket_node* node)
 {
 	unsigned long long oldCur, oldIndex, oldEpoch;
-	unsigned long long newCur, tmpCur = -1;
+	unsigned long long newCur, tmpCur = ULONG_MAX;
 	signed long long distance = 0;
 	bool mark = false;	// <----------------------------------------
 		
@@ -91,8 +85,8 @@ void flush_current(table* h, unsigned long long newIndex, unsigned int size, nbc
 	oldIndex = oldCur >> 32;
 
 	newCur =  newIndex << 32;
-	distance = newIndex - oldIndex;
-	dist = size*DISTANCE_FROM_CURRENT;
+	distance = (signed long long)(newIndex - oldIndex);
+	dist = (unsigned long long) (size*DISTANCE_FROM_CURRENT);
 
 	if(distance > 0 && distance < dist){
 		newIndex = oldIndex;
@@ -175,8 +169,7 @@ void search(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
 		left_next = tmp_next = tmp->next;
 		tail = tmp->tail;
 		assertf(head == NULL, "PANIC %s\n", "");
-		assertf(tmp_next == NULL, "PANIC1 %s\n", "");
-		assertf(flag == REMOVE_DEL_INV && is_marked_for_search(left_next, flag), "PANIC2 %s\n", "");
+		//assertf(flag == REMOVE_DEL_INV && is_marked_for_search(left_next, flag), "PANIC2 %s\n", "");
 		counter = 0;
 		marked = is_marked_for_search(tmp_next, flag);
 		
@@ -289,7 +282,7 @@ void search(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
  *
  */   
  
-unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
+int search_and_insert(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
 						 int flag, nbc_bucket_node *new_node_pointer, nbc_bucket_node **new_node)
 {
 	nbc_bucket_node *left, *left_next, *tmp, *tmp_next, *tail;
@@ -385,8 +378,8 @@ unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, unsigned
 		// 1+T1 		IF K1 == timestamp AND flag == REMOVE_DEL_INV 
 		// 1			IF K1 != timestamp AND flag == REMOVE_DEL_INV
 		// UNCHANGED 	IF flag != REMOVE_DEL_INV
-		new_node_pointer->counter =  ( (-(is_new_key)) & (1 + ( -D_EQUAL(timestamp, left_timestamp ) & left_tie_breaker ))) +
-									 (~(-(is_new_key)) & tie_breaker);
+		new_node_pointer->counter =  ( ((unsigned int)(-(is_new_key))) & (1 + ( ((unsigned int)-D_EQUAL(timestamp, left_timestamp )) & left_tie_breaker ))) +
+									 (~((unsigned int)(-(is_new_key))) & tie_breaker);
 
 		// node already exists
 		if(!is_new_key && D_EQUAL(timestamp, left_timestamp ) && left_tie_breaker == tie_breaker)
@@ -396,6 +389,16 @@ unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, unsigned
 			return OK;
 		}
 		
+		#if KEY_TYPE != DOUBLE
+		if(is_new_key && D_EQUAL(timestamp, left_timestamp ))
+		{
+			node_free(new_node_pointer);
+			*new_node = left;
+			return PRESENT;
+		}
+		#endif
+		
+
 		// copy left node mark			
 		if (BOOL_CAS(&(left->next), left_next, get_marked(new_node_pointer,get_mark(left_next))))
 		{
@@ -422,7 +425,7 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 	unsigned int size = h->size;
 	unsigned int thp2;//, size_thp2;
 	unsigned int new_size = 0;
-	unsigned int res = 0;
+	int res = 0;
 	double pub_per_epb = pub*epb;
 	table *new_h = NULL;
 	nbc_bucket_node *array;
@@ -443,15 +446,17 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 	//else if (size == thp2 && counter < threshold)
 	//	new_size = 1;
 	
-	new_size += (-(size >= thp2 && counter > 2   * pub_per_epb * (size)) )	&(size <<1 );
-	new_size += (-(size >  thp2 && counter < 0.5 * pub_per_epb * (size)) )	&(size >>1);
-	new_size += (-(size == 1    && counter > thp2) 					   )	& thp2;
-	new_size += (-(size == thp2 && counter < threshold)				   )	& 1;
+	new_size += ((unsigned int)(-(size >= thp2 && counter > 2   * pub_per_epb * (size))  ))	&(size <<1 );
+	new_size += ((unsigned int)(-(size >  thp2 && counter < 0.5 * pub_per_epb * (size))  ))	&(size >>1);
+	new_size += ((unsigned int)(-(size == 1    && counter > thp2) 					     ))	& thp2;
+	new_size += ((unsigned int)(-(size == thp2 && counter < threshold)				     ))	& 1;
 	
 	
 	// is time for periodic resize?
 	if(new_size == 0 && (h->e_counter.count + h->d_counter.count) > RESIZE_PERIOD)
 		new_size = h->size;
+	//if(counter==0)
+	//	new_size = h->size;
 	
 	if(new_size == 0 && h->last_resize_count != 0 && (counter >  h->last_resize_count*2 || counter < h->last_resize_count/2 ) )
 		new_size = h->size;
@@ -549,6 +554,9 @@ void block_table(table* h)
 	}
 }
 
+__thread unsigned int acc = 0;
+__thread unsigned int acc_counter = 0;
+
 double compute_mean_separation_time(table* h,
 		unsigned int new_size, unsigned int threashold, unsigned int elem_per_bucket)
 {
@@ -565,11 +573,12 @@ double compute_mean_separation_time(table* h,
 	unsigned int sample_size;
 	double average = 0.0;
 	double newaverage = 0.0;
-	double tmp_timestamp;
+	pkey_t tmp_timestamp;
+	acc_counter  = 0;
 	unsigned int counter = 0;
 	
-	double min_next_round = INFTY;
-	double lower_bound, upper_bound;
+	pkey_t min_next_round = INFTY;
+	pkey_t lower_bound, upper_bound;
     
     nbc_bucket_node *tmp, *tmp_next;
 	
@@ -578,24 +587,26 @@ double compute_mean_separation_time(table* h,
 	if(new_bw >= 0)
 		return new_bw;
 	
-	if(new_size < threashold*2)
-		return 1.0;
+	//if(new_size < threashold*2)
+	//	return 1.0;
 	
 	sample_size = (new_size <= 5) ? (new_size/2) : (5 + (unsigned int)((double)new_size / 10));
 	sample_size = (sample_size > SAMPLE_SIZE) ? SAMPLE_SIZE : sample_size;
     
-	double sample_array[SAMPLE_SIZE+1]; //<--TODO: DOES NOT FOLLOW STANDARD C90
+	pkey_t sample_array[SAMPLE_SIZE+1]; //<--TODO: DOES NOT FOLLOW STANDARD C90
     
     //read nodes until the total samples is reached or until someone else do it
+		acc = 0;
 	while(counter != sample_size && new_h->bucket_width == -1.0)
 	{   
+
 		for (i = 0; i < size; i++)
 		{
 			tmp = array + (index + i) % size; 	//get the head of the bucket
 			tmp = get_unmarked(tmp->next);		//pointer to first node
 			
-			lower_bound = (index + i) * old_bw;
-			upper_bound = (index + i + 1) * old_bw;
+			lower_bound = (pkey_t)((index + i) * old_bw);
+			upper_bound = (pkey_t)((index + i + 1) * old_bw);
 		
 			while( tmp != tail && counter < sample_size )
 			{
@@ -604,6 +615,13 @@ double compute_mean_separation_time(table* h,
 				//I will consider ognly valid nodes (VAL or MOV) In realtà se becco nodi MOV posso uscire!
 				if(!is_marked(tmp_next, DEL) && !is_marked(tmp_next, INV))
 				{
+					if( //belong to the current bucket
+						LESS(tmp_timestamp, upper_bound) &&	GEQ(tmp_timestamp, lower_bound) &&
+						D_EQUAL(tmp_timestamp, sample_array[counter])
+					)
+					{
+						acc++;
+					}
 					if( //belong to the current bucket
 						LESS(tmp_timestamp, upper_bound) &&	GEQ(tmp_timestamp, lower_bound) &&
 						!D_EQUAL(tmp_timestamp, sample_array[counter])
@@ -660,7 +678,7 @@ double compute_mean_separation_time(table* h,
 	if(isnan(newaverage))
 		newaverage = 1.0;	
     
-	//  LOG("%d- my new bucket %.10f for %p\n", TID, newaverage, h);	
+	//  LOG("%d- my new bucket %.10f for %p AVG REPEAT:%u\n", TID, newaverage, h, acc/counter);	
 	return newaverage;
 }
 
@@ -674,7 +692,7 @@ void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 	unsigned int index;
 
 	unsigned int new_node_counter 	;
-	double 		 new_node_timestamp ;
+	pkey_t 		 new_node_timestamp ;
 
 	
 	int res = 0;
@@ -752,7 +770,8 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 	int sample_a;
 	int sample_b;
 	
-	read_table_count = ((-(read_table_count == -1)) & TID) + ((-(read_table_count != -1)) & read_table_count);
+	read_table_count = (   ((unsigned int)( -(read_table_count == UINT_MAX) ))   &   TID   ) + (  ((unsigned int)( -(read_table_count != UINT_MAX) )) & read_table_count);
+
 	if(read_table_count++ % h->read_table_period == 0)
 	{
 		for(i=0;i<2;i++)
@@ -762,8 +781,8 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 			samples[i] = a-b;
 		}
 		
-		sample_a = abs(samples[0] - size*perc_used_bucket);
-		sample_b = abs(samples[1] - size*perc_used_bucket);
+		sample_a = abs(samples[0] - ((int)(size*perc_used_bucket)));
+		sample_b = abs(samples[1] - ((int)(size*perc_used_bucket)));
 		
 		signed_counter =  (sample_a < sample_b) ? samples[0] : samples[1];
 		
@@ -793,7 +812,7 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 						UNION_CAST(newaverage, unsigned long long)
 					)
 			)
-				LOG("COMPUTE BW -  OLD:%.20f NEW:%.20f %u\n", new_bw, newaverage, new_h->size);
+				LOG("COMPUTE BW -  OLD:%.20f NEW:%.20f %u SAME TS:%u\n", new_bw, newaverage, new_h->size, acc_counter != 0 ? acc/acc_counter : 0);
 		}
 
 		//First try: try to migrate the nodes, if a marked node is found, continue to the next bucket
@@ -899,19 +918,19 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 }
 
 
-void pq_report(unsigned int TID)
+void pq_report(int TID)
 {
 	
 	printf("%d- "
 	"Enqueue: %.10f LEN: %.10f ### "
 	"Dequeue: %.10f LEN: %.10f NUMCAS: %llu : %llu ### "
 	"NEAR: %llu dist: %llu ### "
-	"RTC:%llu,M:%lld\n",
+	"RTC:%d,M:%lld\n",
 			TID,
-			((float)concurrent_enqueue)/performed_enqueue,
-			((float)scan_list_length_en)/performed_enqueue,
-			((float)concurrent_dequeue)/performed_dequeue,
-			((float)scan_list_length)/performed_dequeue,
+			((float)concurrent_enqueue) /((float)performed_enqueue),
+			((float)scan_list_length_en)/((float)performed_enqueue),
+			((float)concurrent_dequeue) /((float)performed_dequeue),
+			((float)scan_list_length)   /((float)performed_dequeue),
 			num_cas, num_cas_useful,
 			near,
 			dist,
@@ -927,7 +946,7 @@ void pq_reset_statistics(){
 }
 
 unsigned int pq_num_malloc(){
-		return malloc_count;
+		return (unsigned int) malloc_count;
 }
 
 
@@ -943,11 +962,11 @@ void my_hook(ptst_t *p, void *ptr){	free(ptr); }
  *
  * @return a pointer a new queue
  */
-nb_calqueue* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket)
+void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket)
 {
 	unsigned int i = 0;
 	//unsigned int new_threshold = 1;
-	unsigned int res_mem_posix = 0;
+	int res_mem_posix = 0;
 	_init_gc_subsystem();
 
 	threads = threshold;
@@ -1010,7 +1029,7 @@ nb_calqueue* pq_init(unsigned int threshold, double perc_used_bucket, unsigned i
 	{
 		res->hashtable->array[i].next = res->tail;
 		res->hashtable->array[i].tail = res->tail;
-		res->hashtable->array[i].timestamp = i * 1.0;
+		//res->hashtable->array[i].timestamp = (pkey_t)i;
 		res->hashtable->array[i].counter = 0;
 	}
 
@@ -1030,13 +1049,15 @@ nb_calqueue* pq_init(unsigned int threshold, double perc_used_bucket, unsigned i
  *
  * @return true if the event is inserted in the hashtable, else false
  */
-void pq_enqueue(nb_calqueue* queue, double timestamp, void* payload)
+int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 {
-	
+	assertf(timestamp < MIN || timestamp >= INFTY, "Key out of range %s\n", "");
+
+	nb_calqueue* queue = (nb_calqueue*) q; 	
 	critical_enter();
 	nbc_bucket_node *bucket, *new_node = node_malloc(payload, timestamp, 0);
 	table * h = NULL;		
-	unsigned int index, res, size;
+	unsigned int index, size;
 	unsigned long long newIndex = 0;
 	
 	
@@ -1045,7 +1066,7 @@ void pq_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 	unsigned int epb = queue->elem_per_bucket;
 	unsigned int th = queue->threshold;
 	
-	unsigned int con_en = 0;
+	int res, con_en = 0;
 	
 
 	//init the result
@@ -1065,35 +1086,49 @@ void pq_enqueue(nb_calqueue* queue, double timestamp, void* payload)
 			// compute the index of the virtual bucket
 			newIndex = hash(timestamp, h->bucket_width);
 			// compute the index of the physical bucket
-			index = newIndex % size;
+			index = ((unsigned int) newIndex) % size;
 			// get the bucket
 			bucket = h->array + index;
 			// read the number of executed enqueues for statistics purposes
 			con_en = h->e_counter.count;
 		}
+
+
+		#if KEY_TYPE != DOUBLE
+		if(res == PRESENT){
+			goto out;
+		}
+		#endif
+
 		// search the two adjacent nodes that surround the new key and try to insert with a CAS 
 	    res = search_and_insert(bucket, timestamp, 0, REMOVE_DEL_INV, new_node, &new_node);
 	}
 
+
 	// the CAS succeeds, thus we want to ensure that the insertion becomes visible
 	flush_current(h, newIndex, size, new_node);
+	performed_enqueue++;
 	
 	// updates for statistics
 	
-	concurrent_enqueue += __sync_fetch_and_add(&h->e_counter.count, 1) - con_en;
-	performed_enqueue++;
+	concurrent_enqueue += (unsigned long long) (__sync_fetch_and_add(&h->e_counter.count, 1) - con_en);
 	
 	#if COMPACT_RANDOM_ENQUEUE == 1
 	// clean a random bucket
 	unsigned long long oldCur = h->current;
 	unsigned long long oldIndex = oldCur >> 32;
-	dist = size*DISTANCE_FROM_CURRENT+1;
+	dist = (unsigned long long) (size*DISTANCE_FROM_CURRENT);
+	dist +=1;
 	double rand;
 	nbc_bucket_node *left_node, *right_node;
 	drand48_r(&seedT, &rand);
-	search(h->array+((oldIndex + dist + (unsigned int)((size-dist)*rand))%size), -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
+	search(h->array+((oldIndex + dist + (unsigned int)( ( (double)(size-dist) )*rand )) % size), -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
 	#endif
-	
+
+#if KEY_TYPE != DOUBLE
+out:
+#endif
 	critical_exit();
+	return res;
 
 }
