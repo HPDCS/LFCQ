@@ -26,7 +26,9 @@ typedef struct privateThreadInfo ThrInf;
 
 
 /*************************************** CONSTANT DEFINITIONS **********************************************/
-#define ALLOCCACHE 		10000000             // static allocation of 3,000,000 chunks
+#define MILLION			1000000
+#define THOUSAND		1000
+#define ALLOCCACHE 		2*MILLION             // static allocation of 5,000,000 chunks
 
 #ifdef FREEZE_64
 #define DIRTY_EXIST 	0x8000000000000000ull
@@ -220,9 +222,9 @@ public:
 		skipListDestroy(sl);
 	}
 
-	dev void insert(int key, ThrInf* t);				// the interface for inserting a key
-	dev int  delmin(ThrInf* t);							// the interface for deleting the min value
-	dev void print();
+	void insert(int key, ThrInf* t);				// the interface for inserting a key
+	int  delmin(ThrInf* t);							// the interface for deleting the min value
+	void print();
 
 	void assertStructure(){
 		DEB(

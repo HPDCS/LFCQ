@@ -1,0 +1,17 @@
+Change LOG
+
+/**************** C FILES ************************/
+1. Changed extension from "c" to "cpp"
+
+/********** ChunkedPriorityQueue.h ***************/
+
+1. reduced value of ALLOCCACHE for avoiding bad_alloc exception
+2. removed "dev" token from declaration of "insert" "delmin" "print"
+
+/********** ChunkedPriorityQueue.cpp ***************/
+
+1. removed "dev" token from definition of "insert" 
+
+/********** Chunk.h ***************/
+
+1. #define dev inline 

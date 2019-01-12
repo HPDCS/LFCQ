@@ -149,7 +149,7 @@ inline void ChunkedPriorityQueue::debugPrintLoopInInsert(
 /******************************************************************************************************/
 // ChunkedPriorityQueue::insert(int key) 	
 //		- insert the key into PQ, the key must be positive and require less than 32 bits
-dev void ChunkedPriorityQueue::insert(int key, ThrInf* t){
+void ChunkedPriorityQueue::insert(int key, ThrInf* t){
 
 	Chunk* curr = NULL, *prev = NULL;
 	int iter = 0; 

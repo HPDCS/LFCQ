@@ -9,7 +9,7 @@ EXECUTABLES :=
 USER_OBJS :=
 LIBS := -lpthread -lm -lnuma -lrt
 SRC_DIR := src
-TARGETS := NBCQ LIND MARO #V2CQ V3CQ NOHO NOH2 LMCQ #CBCQ #NUMA #WORK
+TARGETS := NBCQ LIND MARO CBCQ #V2CQ V3CQ NOHO NOH2 LMCQ #CBCQ #NUMA #WORK
 
 UTIL_value := src/utils/common.o src/utils/hpdcs_math.o 
 GACO_value := src/gc/gc.o src/gc/ptst.o
@@ -27,9 +27,9 @@ NOH2_value := src/datatypes/nohotspot2/background.o  src/datatypes/nohotspot2/no
 NUMA_value := src/datatypes/numa_queue.o  src/datatypes/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
 WORK_value := src/datatypes/worker_queue.o  src/datatypes/common_nb_calqueue.o  $(UTIL_value) $(GACO_value) $(ARCH_value)
 CBCQ_value := src/datatypes/ChunkBasedPriorityQueue/cbpq.opp src/datatypes/ChunkBasedPriorityQueue/Atomicable.opp\
-  src/datatypes/ChunkBasedPriorityQueue/listNode.o\
-			  src/datatypes/ChunkBasedPriorityQueue/skipListCommon.o\
-			   src/datatypes/ChunkBasedPriorityQueue/skipList.o\
+  src/datatypes/ChunkBasedPriorityQueue/listNode.opp\
+			  src/datatypes/ChunkBasedPriorityQueue/skipListCommon.opp\
+			   src/datatypes/ChunkBasedPriorityQueue/skipList.opp\
 			  src/datatypes/ChunkBasedPriorityQueue/ChunkedPriorityQueue.opp $(UTIL_value) 
 
 
@@ -81,8 +81,8 @@ else ifeq ($(OBJS_DIR), GProf)
 endif
 
 
-SUBDIRS 		:= $(shell find src -type d)
-SUBDIRS 		:= $(filter-out src/datatypes, $(SUBDIRS))
+ORIGINAL_SUBDIRS 		:= $(shell find src -type d)
+SUBDIRS 		:= $(filter-out src/datatypes src/datatypes/ChunkBasedPriorityQueue, $(ORIGINAL_SUBDIRS))
 
 C_SRCS			:= $(shell ls   $(patsubst %, %/*.c, $(SUBDIRS)) )
 C_SRCS 			:= $(filter-out $(FILTER_OUT_C_SRC), $(C_SRCS))
@@ -93,7 +93,7 @@ C_DEPS			:= $(patsubst %, $(OBJS_DIR)/%, $(subst .o,.d, $(C_OBJS)))
 SUBDIRS 		:= $(filter-out src/datatypes src src/utils src/gc src/arch\
                                 src/datatypes/nbcalendars src/datatypes/nblastmin src/datatypes/nbcachecq\
                                 src/datatypes/nbskiplists src/datatypes/nohotspot\
-                                src/datatypes/nohotspot2 src/datatypes/rotating, $(SUBDIRS))
+                                src/datatypes/nohotspot2 src/datatypes/rotating, $(ORIGINAL_SUBDIRS))
 
 CPP_SRCS		:= $(shell ls   $(patsubst %, %/*.cpp, $(SUBDIRS)) )
 CPP_SRCS 		:= $(filter-out $(FILTER_OUT_CPP_SRC), $(CPP_SRCS))
@@ -124,8 +124,8 @@ $(OBJS_DIR)/%-test:
 	@echo 'Building target: $@'
 	@echo 'Invoking: Cross GCC Linker'
 	@echo 'Specific OBJS for $(strip $(subst -test,, $(@F))): $($(strip $(subst -test,, $(@F)))_value)'
-	$($(strip $(subst -test,, $(@F)))_link)  -o "$(OBJS_DIR)/$(@F)" $(OBJS_DIR)/$(SRC_DIR)/main_faster.o $(patsubst %, $(OBJS_DIR)/%, $($(strip $(subst -test,, $(@F)))_value)) $(USER_OBJS) $(LIBS) $(DEBUG)
-	echo $(OBJS_DIR)/$(@F): $(OBJS_DIR)/$(SRC_DIR)/main_faster.o $(patsubst %, $(OBJS_DIR)/%, $($(strip $(subst -test,, $(@F)))_value)) > $(OBJS_DIR)/$(@F).d
+	echo $(OBJS_DIR)/$(@F): $(OBJS_DIR)/$(SRC_DIR)/main_faster.o $(OBJS_DIR)/$(SRC_DIR)/common_test.o $(patsubst %, $(OBJS_DIR)/%, $($(strip $(subst -test,, $(@F)))_value)) > $(OBJS_DIR)/$(@F).d
+	$($(strip $(subst -test,, $(@F)))_link)  -o "$(OBJS_DIR)/$(@F)" $(OBJS_DIR)/$(SRC_DIR)/main_faster.o $(OBJS_DIR)/$(SRC_DIR)/common_test.o $(patsubst %, $(OBJS_DIR)/%, $($(strip $(subst -test,, $(@F)))_value)) $(USER_OBJS) $(LIBS) $(DEBUG)
 	@echo 'Finished building target: $@'
 	@echo ' '
 
@@ -135,8 +135,8 @@ $(OBJS_DIR)/%-resize-unit-test:
 	@echo 'Building target: $@'
 	@echo 'Invoking: Cross GCC Linker'
 	@echo 'Specific OBJS for $(strip $(subst -resize-unit-test,, $(@F))): $($(strip $(subst -resize-unit-test,, $(@F)))_value)'
-	$($(strip $(subst -resize-unit-test,, $(@F)))_link)  -o "$(OBJS_DIR)/$(@F)" $(OBJS_DIR)/$(SRC_DIR)/unit_test_resize.o $(patsubst %, $(OBJS_DIR)/%, $($(strip $(subst -resize-unit-test,, $(@F)))_value)) $(USER_OBJS) $(LIBS) $(DEBUG)
-	echo $(OBJS_DIR)/$(@F): $(OBJS_DIR)/$(SRC_DIR)/unit_test_resize.o $(patsubst %, $(OBJS_DIR)/%, $($(strip $(subst -resize-unit-test,, $(@F)))_value)) > $(OBJS_DIR)/$(@F).d
+	echo $(OBJS_DIR)/$(@F): $(OBJS_DIR)/$(SRC_DIR)/unit_test_resize.o $(OBJS_DIR)/$(SRC_DIR)/common_test.o $(patsubst %, $(OBJS_DIR)/%, $($(strip $(subst -resize-unit-test,, $(@F)))_value)) > $(OBJS_DIR)/$(@F).d
+	$($(strip $(subst -resize-unit-test,, $(@F)))_link)  -o "$(OBJS_DIR)/$(@F)" $(OBJS_DIR)/$(SRC_DIR)/unit_test_resize.o $(OBJS_DIR)/$(SRC_DIR)/common_test.o $(patsubst %, $(OBJS_DIR)/%, $($(strip $(subst -resize-unit-test,, $(@F)))_value)) $(USER_OBJS) $(LIBS) $(DEBUG)
 	@echo 'Finished building target: $@'
 	@echo ' '
 
