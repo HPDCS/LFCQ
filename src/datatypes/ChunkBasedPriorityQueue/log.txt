@@ -11,6 +11,7 @@ Change LOG
 /********** ChunkedPriorityQueue.cpp ***************/
 
 1. removed "dev" token from definition of "insert" 
+2. ChunkedPriorityQueue::freezeRecovery fixed an unused variable warning
 
 /********** Chunk.h ***************/
 

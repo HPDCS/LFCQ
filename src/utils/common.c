@@ -47,8 +47,7 @@ gettime(struct timespec *ts)
 
 
 
-struct timespec
-timediff (struct timespec begin, struct timespec end)
+struct timespec timediff (struct timespec begin, struct timespec end)
 {
     struct timespec tmp;
     if ((end.tv_nsec - begin.tv_nsec) < 0) {

@@ -201,12 +201,7 @@ int main(int argc, char **argv)
 	int par = 1;
 	int num_par = 17;
 	unsigned int i = 0;
-	unsigned long numa_mask = 1;
 	unsigned long long sum = 0;
-	unsigned long long min = ULONG_MAX;
-	unsigned long long max = 0;
-	unsigned long long mal = 0;
-	unsigned long long avg = 0;
 	unsigned long long tmp = 0;
 	long long qsi = 0;
 
@@ -285,8 +280,6 @@ int main(int argc, char **argv)
 		qsi += ops[i];
 		sum += tmp;
 	}
-	
-	avg = sum/THREADS;
 	
 	printf("MISSING ITEMS:%lld\n" , qsi);
 	return 0;

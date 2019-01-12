@@ -67,7 +67,7 @@ typedef struct thread_args_s
     do {					\
 	int _c = (c);				\
 	if (_c != 0) {				\
-	    fprintf(stderr, strerror(_c));	\
+	    fprintf(stderr, "%s\n", strerror(_c));	\
 	}					\
     } while (0)
 

@@ -404,7 +404,7 @@ int main(int argc, char **argv)
 	int par = 1;
 	int num_par = 17;
 	unsigned int i = 0;
-	unsigned long numa_mask = 1;
+	//unsigned long numa_mask = 1;
 	long long sum = 0;
 	long long min = LONG_MAX;
 	long long max = 0;
