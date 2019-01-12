@@ -31,6 +31,7 @@
 
 #endif
 
+#ifndef __cplusplus
 
 extern int   pq_enqueue(void *queue, pkey_t timestamp, void* payload);
 extern pkey_t pq_dequeue(void *queue, void **payload);
@@ -40,7 +41,7 @@ extern void pq_prune();
 extern void pq_reset_statistics();
 extern unsigned int pq_num_malloc();
 
-
+#endif
 
 #endif
 

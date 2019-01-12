@@ -5,6 +5,7 @@
 #include "ChunkedPriorityQueue.h"
 #include "test.h"
 #include "rand.h"
+#include "../../key_type.h"
 
 
 __thread unsigned long nextr = 1;
@@ -19,25 +20,6 @@ extern __thread unsigned int TID;
 
 using namespace std;
 
-extern "C" {
-
-void*
-pq_init(unsigned int threads, double none, unsigned long long max_offset)
-;
-
-/* Cleanup, mark all the nodes for recycling. */
-void pq_destroy(void *pq){}
-void pq_report(){}
-void pq_reset_statistics(){ }
-unsigned int pq_num_malloc(){  return 0;}
-
-
-void 
-pq_enqueue(void *p, cb_key_t k, void *v);
-
-cb_key_t
-pq_dequeue(void *p, void **result);
-}
 	
 
 static inline void local_init(void* p, int my_id){
@@ -48,10 +30,24 @@ static inline void local_init(void* p, int my_id){
 	}
 }
 
+extern "C" {
+int   pq_enqueue(void *queue, pkey_t timestamp, void* payload);
+pkey_t pq_dequeue(void *queue, void **payload);
+void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket);
+void pq_report(int tid);
+void pq_prune();
+void pq_reset_statistics();
+unsigned int pq_num_malloc();
+}
+
+/* Cleanup, mark all the nodes for recycling. */
+void pq_destroy(void *pq){}
+void pq_report(int tid){}
+void pq_reset_statistics(){ }
+unsigned int pq_num_malloc(){  return 0;}
 
 
-void*
-pq_init(unsigned int threads, double none, unsigned long long max_offset)
+void* pq_init(unsigned int threads, double none, unsigned int max_offset)
 {
 	ChunkedPriorityQueue *pq = new ChunkedPriorityQueue();
 	simSRandom(1000);
@@ -59,15 +55,16 @@ pq_init(unsigned int threads, double none, unsigned long long max_offset)
 }
 
 
-void 
-pq_enqueue(void *p, cb_key_t k, void *v){
+int 
+pq_enqueue(void *p, pkey_t k, void *v){
 	local_init(p, TID);
 	ChunkedPriorityQueue *pq = static_cast<ChunkedPriorityQueue *>(p);
 	pq->insert(k, &tinfo);
+	return 1;
 }
 
 
-cb_key_t
+pkey_t
 pq_dequeue(void *p, void **result){
 	local_init(p, TID);
 	ChunkedPriorityQueue *pq = static_cast<ChunkedPriorityQueue *>(p);

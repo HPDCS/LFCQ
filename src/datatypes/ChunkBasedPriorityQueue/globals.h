@@ -3,7 +3,7 @@
 
 typedef unsigned long long u64;
 
-typedef int cb_key_t;
+#define dev inline
 
 #define volatile						//use explicit atomic instructions instead of volatile!
 /*******************************************************************************************************/
