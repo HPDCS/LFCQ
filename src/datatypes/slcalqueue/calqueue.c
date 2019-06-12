@@ -11,7 +11,6 @@
 #include "calqueue.h"
 #include "../../key_type.h"
 
-#define INFTY DBL_MAX
 
 #define LOCK pthread_spin_lock
 #define UNLOCK pthread_spin_unlock
