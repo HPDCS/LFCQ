@@ -51,65 +51,73 @@ set style line 11 dt 10 lc rgb "#000000"
 set style line 12 dt 11 lc rgb "#000000"
 
 	
-set yrange [500:5500]
+set yrange [500:8000]
 set xrange [0:50]
 set offset 2,2,1,1
 
 maxitems=56
 
-start=5
-outfile=out.'/Real-'.queue.start.'.eps'
-
-set output outfile
-
-
-plot for [col=start:maxitems:5] file using 1:col with lines ls col t columnheader
-system(sprintf("epstopdf %s", outfile)) 
-
 start=2
-outfile=out.'/Real-'.queue.start.'.eps'
+end=12
+outfile=out.'/Real-'.queue.'.eps'
 
 set output outfile
 
 
-plot for [col=start:maxitems:5] file using 1:col with lines ls col t columnheader
-system(sprintf("epstopdf %s", outfile)) 
-
-start=3
-outfile=out.'/Real-'.queue.start.'.eps'
-
-set output outfile
+#plot for [col=start:end] file using 1:col with lines ls col t columnheader
 
 
-plot for [col=start:maxitems:5] file using 1:col with lines ls col t columnheader
-system(sprintf("epstopdf %s", outfile)) 
-
-start=4
-outfile=out.'/Real-'.queue.start.'.eps'
-
-set output outfile
-
-
-plot for [col=start:maxitems:5] file using 1:col with lines ls col t columnheader
-system(sprintf("epstopdf %s", outfile)) 
-
-start=5
-outfile=out.'/Real-'.queue.start.'.eps'
-
-set output outfile
-
-plot for [col=start:maxitems:5] file using 1:col with lines ls col t columnheader
+plot file using 1:12 with lines ls 2 t columnheader(12),\
+file using 1:13 with lines ls 3 t columnheader(13),\
+file using 1:14 with lines ls 4 t columnheader(14),\
+file using 1:6 with lines ls 6 t columnheader(6)
 
 system(sprintf("epstopdf %s", outfile)) 
 
-start=6
-outfile=out.'/Real-'.queue.start.'.eps'
-
-set output outfile
-
-plot for [col=start:maxitems:5] file using 1:col with lines ls (col/5) t columnheader
-
-system(sprintf("epstopdf %s", outfile)) 
+#start=2
+#outfile=out.'/Real-'.queue.start.'.eps'
+#
+#set output outfile
+#
+#
+#plot for [col=start:maxitems:5] file using 1:col with lines ls col t columnheader
+#system(sprintf("epstopdf %s", outfile)) 
+#
+#start=3
+#outfile=out.'/Real-'.queue.start.'.eps'
+#
+#set output outfile
+#
+#
+#plot for [col=start:maxitems:5] file using 1:col with lines ls col t columnheader
+#system(sprintf("epstopdf %s", outfile)) 
+#
+#start=4
+#outfile=out.'/Real-'.queue.start.'.eps'
+#
+#set output outfile
+#
+#
+#plot for [col=start:maxitems:5] file using 1:col with lines ls col t columnheader
+#system(sprintf("epstopdf %s", outfile)) 
+#
+#start=5
+#outfile=out.'/Real-'.queue.start.'.eps'
+#
+#set output outfile
+#
+#plot for [col=start:maxitems:5] file using 1:col with lines ls col t columnheader
+#
+#system(sprintf("epstopdf %s", outfile)) 
+#
+#start=6
+#outfile=out.'/Real-'.queue.start.'.eps'
+#
+#set output outfile
+#
+#plot for [col=start:maxitems:5] file using 1:col with lines ls (col/5) t columnheader
+#
+#system(sprintf("epstopdf %s", outfile)) 
 
 
 
