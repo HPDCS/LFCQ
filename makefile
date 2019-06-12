@@ -9,11 +9,13 @@ EXECUTABLES :=
 USER_OBJS :=
 LIBS := -lpthread -lm -lnuma -lrt
 SRC_DIR := src
-TARGETS := NBCQ LIND MARO CBCQ #V2CQ V3CQ NOHO NOH2 LMCQ #CBCQ #NUMA #WORK
+TARGETS := NBCQ LIND MARO CBCQ SLCQ #V2CQ V3CQ NOHO NOH2 LMCQ #CBCQ #NUMA #WORK
 
 UTIL_value := src/utils/common.o src/utils/hpdcs_math.o 
 GACO_value := src/gc/gc.o src/gc/ptst.o
 ARCH_value := src/arch/x86.o
+
+SLCQ_value := src/datatypes/slcalqueue/calqueue.o  $(UTIL_value)
 
 NBCQ_value := src/datatypes/nbcalendars/nb_calqueue.o   src/datatypes/nbcalendars/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
 V2CQ_value := src/datatypes/nbcalendars/nb_calqueue_last_min.o   src/datatypes/nbcalendars/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
@@ -35,7 +37,7 @@ CBCQ_value := src/datatypes/ChunkBasedPriorityQueue/cbpq.opp src/datatypes/Chunk
 
 # src/datatypes/ChunkBasedPriorityQueue/LinkedList.opp\
 
-
+SLCQ_link := gcc
 NBCQ_link := gcc 
 V2CQ_link := gcc 
 LMCQ_link := gcc 
