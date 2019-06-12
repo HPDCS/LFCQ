@@ -9,6 +9,7 @@
 
 #include "listNode.h"
 #include "skipListCommon.h"
+#include "cb_types.h"
 
 /* creates a new skipList*/
 SkipList skipListInit();
@@ -17,20 +18,20 @@ SkipList skipListInit();
  * adds the key and value pair to the skiplist
  * returns 1 on success or 0 if the key was already in the skiplist.
  */
-int skipListAdd(SkipList skipList, int key, intptr_t value);
+int skipListAdd(SkipList skipList, cb_key_t key, intptr_t value);
 
 /*
  * removes a key from the skiplist
  * returns 1 on success or 0 if the key wasn't in the skiplist.
  */
-int skipListRemove(SkipList skipList, int key);
+int skipListRemove(SkipList skipList, cb_key_t key);
 
 /*
  * finds a key and relevant value in the skiplist.
  * returns 1 if the key was in the skiplist or 0 if it wasn't.
  * in any case pValue is holding this or previous key value or NULL
  */
-int skipListContains(SkipList skipList, int key, intptr_t* pValue);
+int skipListContains(SkipList skipList, cb_key_t key, intptr_t* pValue);
 
 /*Destroy the skiplist*/
 void skipListDestroy(SkipList sl);

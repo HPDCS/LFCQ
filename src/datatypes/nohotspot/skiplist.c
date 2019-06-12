@@ -104,6 +104,11 @@ void node_delete(node_t *node, ptst_t *ptst)
         gc_free(ptst, (void*)node, gc_id[NODE_LEVEL]);
 }
 
+void node_unsafe_delete(node_t *node, ptst_t *ptst)
+{
+        gc_unsafe_free(ptst, (void*)node, gc_id[NODE_LEVEL]);
+}
+
 /**
  * inode_delete - delete an index node
  * @inode: the index node to delete
@@ -145,10 +150,11 @@ set_t* set_new(int start)
         set->top->node  = set->head;
 
         set->raises = 0;
-
+        set->epoch = 0;
+        
         bg_init(set);
         if (start)
-                bg_start(0);
+                bg_start(1000);
 
         return set;
 }
@@ -236,25 +242,24 @@ void set_subsystem_init(void)
         gc_id[INODE_LEVEL] = gc_add_allocator(sizeof(inode_t));
 }
 
-
-
-
-
-
 void   pq_enqueue(void *queue, double timestamp, void* payload){
      sl_insert(queue, (sl_key_t)  timestamp, (val_t) payload);
 }
+
 double pq_dequeue(void *queue, void **payload){
     return sl_dequeue(queue, payload);
-
 }
+
 void*  pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket){
  /* create the skip list set and do inits */
+    
+    _init_gc_subsystem();
         critical_enter();
         critical_exit();
         set_subsystem_init();
         return set_new(1);
 }
+
 void pq_report(unsigned int threshold){}
 void pq_prune() {}
 void pq_reset_statistics() {}

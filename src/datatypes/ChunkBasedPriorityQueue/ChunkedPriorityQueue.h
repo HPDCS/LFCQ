@@ -17,7 +17,14 @@
 #include <limits.h>
 
 #include "Chunk.h"
+
+#if defined (__cplusplus)
+extern "C" {
+#endif
 #include "skipList.h"
+#if defined (__cplusplus)
+} 
+#endif
 
 using namespace std;
 
@@ -26,7 +33,7 @@ typedef struct privateThreadInfo ThrInf;
 
 
 /*************************************** CONSTANT DEFINITIONS **********************************************/
-#define ALLOCCACHE 		10000000             // static allocation of 3,000,000 chunks
+#define ALLOCCACHE 		1000000             // static allocation of 3,000,000 chunks
 
 #ifdef FREEZE_64
 #define DIRTY_EXIST 	0x8000000000000000ull
@@ -92,37 +99,37 @@ public:
 	/************************************************************************************************/
 
 	//------- ChunkedPriorityQueue object methods -------
-	void freezeChunk(Chunk *curr, int *sortedval, int *len,		// freezes chunk, returns the sorted values of
+	void freezeChunk(Chunk *curr, cb_key_t *sortedval, int *len,		// freezes chunk, returns the sorted values of
 			FreezeTrigger ft, ThrInf* t);              // the chunk
-	void readFrozenChunk(Chunk *curr, int *sortedval,			// creates a local sorted array of the frozen
+	void readFrozenChunk(Chunk *curr, cb_key_t *sortedval,			// creates a local sorted array of the frozen
 			int *len);                             // entries from already frozen chunk
 	void readAndFreezeValues(Chunk *curr, int frozenIdx,        // freeze the values of the chunk, and return them
-			int *sortedval, int *len,          // sorted in a local array
+			cb_key_t *sortedval, int *len,          // sorted in a local array
 			bool isFirstChunk);
-	Chunk* split(Chunk *curr, Chunk *prev, int *svals, int len,	// splits a chunk into SPLIT_CHUNKS_NUM, gets the
+	Chunk* split(Chunk *curr, Chunk *prev, cb_key_t *svals, int len,	// splits a chunk into SPLIT_CHUNKS_NUM, gets the
 			Chunk** nextCreated);                          // list of sorted value in the chunk
 	void freezeRecovery(ThrInf* t, Chunk *curr, Chunk *prev,    // recovers any frozen chunk from its existence
-			int *svals, int len,                    // in the PQ list
+			cb_key_t *svals, int len,                    // in the PQ list
 			FreezeTrigger ft);
-	Chunk* merge(Chunk *next, int svals[], int len,             // takes merged values of the frozen chunks and
+	Chunk* merge(Chunk *next, cb_key_t svals[], int len,             // takes merged values of the frozen chunks and
 			Chunk** nextCreated);                          // creates a first chunk, and an internal chunk
-	Chunk* recoverFirstChunk(Chunk *curr, int svals[], int len,	// merges frozen first chunk with buffer and
+	Chunk* recoverFirstChunk(Chunk *curr, cb_key_t svals[], int len,	// merges frozen first chunk with buffer and
 			Chunk** nextFrozen,                // second chunk if needed
 			Chunk** nextNextFrozen,
 			Chunk** nextCreated, ThrInf* t);
-	bool insert_to_first_chunk( ThrInf* t, int key,             // inserts a key into the buffer instead of first
+	bool insert_to_first_chunk( ThrInf* t, cb_key_t key,             // inserts a key into the buffer instead of first
 			Chunk *currhead);
-	bool create_insert_buffer(int key, Chunk *currhead,         // buffer creation and attachment
+	bool create_insert_buffer(cb_key_t key, Chunk *currhead,         // buffer creation and attachment
 			Chunk **curbuf);
-	void fill_chunk(int *svals, int len, int start,             // updates chunks values from the given array
+	void fill_chunk(cb_key_t *svals, int len, int start,             // updates chunks values from the given array
 			int pivotIdx, Chunk *c);                    // on split
 
 	bool recursiveRecovery(ThrInf* t, Chunk** prev, Chunk* curr);
 	void debugPrintLoopInInsert( ThrInf* t, Chunk* prevPrev, Chunk* prevCurr,
-			int key, Chunk* prev, Chunk* curr, int iter, int r);
+			cb_key_t key, Chunk* prev, Chunk* curr, int iter, int r);
 
 	/*******************************************************************************************************/
-	int getChunk (Chunk** cur, Chunk** prev, int key){         // search the needed (according to the key) chunk
+	int getChunk (Chunk** cur, Chunk** prev, cb_key_t key){         // search the needed (according to the key) chunk
 		//Chunk* frozen   = NULL;
 		*cur = head; *prev = NULL;
 
@@ -179,7 +186,7 @@ public:
 		return c;
 	}
 	/*******************************************************************************************************/
-	void getChunkDebug (Chunk** cur, Chunk** prev, int key){         // search the needed (according to the key) chunk
+	void getChunkDebug (Chunk** cur, Chunk** prev, cb_key_t key){         // search the needed (according to the key) chunk
 		int iter = 0;
 		*cur = head; *prev = NULL;
 
@@ -220,8 +227,8 @@ public:
 		skipListDestroy(sl);
 	}
 
-	dev void insert(int key, ThrInf* t);				// the interface for inserting a key
-	dev int  delmin(ThrInf* t);							// the interface for deleting the min value
+	void insert(cb_key_t key, ThrInf* t);				// the interface for inserting a key
+	cb_key_t  delmin(ThrInf* t);							// the interface for deleting the min value
 	dev void print();
 
 	void assertStructure(){

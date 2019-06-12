@@ -223,6 +223,7 @@ static void bg_trav_nodes(ptst_t *ptst)
         node_t *prev, *node;
 
         assert(NULL != set && NULL != set->head);
+//        printf("CLEANING\n");
 
         prev = set->head;
         node = prev->next;
@@ -516,7 +517,7 @@ void bg_remove(node_t *prev, node_t *node, ptst_t *ptst)
 {
         assert(NULL != node);
 
-        if (0 == node->level) {
+        if (0 == node->level || prev->key == node->key) {
                 /* only remove short nodes */
                 CAS(&node->val, NULL, node);
                 if (node->val == node)

@@ -68,13 +68,14 @@ finished.
 __thread unsigned long long malloc_count;
 extern __thread ptst_t *ptst;
 
+
 /* - Private Functions - */
 
 static int sl_finish_contains(sl_key_t key, node_t *node, val_t node_val,
                               ptst_t *ptst);
 static int sl_finish_delete(sl_key_t key, node_t *node, val_t node_val,
                             ptst_t *ptst);
-static int sl_finish_insert(sl_key_t key, val_t val, node_t *node,
+static int sl_finish_insert(set_t* set, sl_key_t key, val_t val, node_t *node,
                             val_t node_val, node_t *next, ptst_t *ptst);
 
 /**
@@ -161,32 +162,35 @@ static int sl_finish_delete(sl_key_t key, node_t *node, val_t node_val,
  * > -1 if @key is not present in the set and insertion operation
  *   fails due to concurrency.
  */
-static int sl_finish_insert(sl_key_t key, val_t val, node_t *node,
+__thread int same_ts = 0;
+__thread int enqueue_c= 0;
+static int sl_finish_insert(set_t *set, sl_key_t key, val_t val, node_t *node,
                             val_t node_val, node_t *next, ptst_t *ptst)
 {
         int result = -1;
-        node_t *new;
+        enqueue_c++;
+        same_ts += node->key == key;
+        if(node->key == key)
+            printf("SAME TS %d\n", same_ts);
 
-        if (node->key == key) {
-                if (NULL == node_val) {
-                        if (CAS(&node->val, node_val, val))
-                                result = 1;
-                } else {
-                        result = 0;
+        node_t *new = node_new(key, val, node, next, 0, ptst);
+
+        
+        if (CAS(&node->next, next, new)) {
+                assert (node->next != node);
+
+                if (NULL != next)
+                        next->prev = new; /* safe */
+                result = 1;
+                node_val = node->val;
+                if(node_val == NULL){
+                 //   printf("%p %f %f AZZ\n", node_val, node->key, key);
+                    __sync_fetch_and_add(&set->epoch, 1);
                 }
         } else {
-                new = node_new(key, val, node, next, 0, ptst);
-                if (CAS(&node->next, next, new)) {
-
-                        assert (node->next != node);
-
-                        if (NULL != next)
-                                next->prev = new; /* safe */
-                        result = 1;
-                } else {
-                        node_delete(new, ptst);
-                }
+                node_unsafe_delete(new, ptst);
         }
+
 
         return result;
 }
@@ -203,6 +207,14 @@ static int sl_finish_insert(sl_key_t key, val_t val, node_t *node,
  * Returns the result of the operation.
  * Note: @val can be NULL. 
  */
+__thread int esteps_a = 0;
+__thread int esteps_b = 0;
+__thread int esteps_c = 0;
+__thread int ecount = 0;
+__thread int eops = 0;
+
+#define PERIOD 100000
+
 int sl_do_operation(set_t *set, sl_optype_t optype, sl_key_t key, val_t val)
 {
         inode_t *item = NULL, *next_item = NULL;
@@ -213,10 +225,19 @@ int sl_do_operation(set_t *set, sl_optype_t optype, sl_key_t key, val_t val)
         assert(NULL != set);
 
         critical_enter();
+ecount++;
+        if(ecount%PERIOD == 0){
+            eops += ecount;
+            printf("Enqueus: %d %d %d %d\n", esteps_a/ecount, esteps_b/ecount, esteps_c/ecount, eops);
+            ecount= 0;
+            esteps_a=esteps_b=esteps_c=0;
+        }
+
 
         /* find an entry-point to the node-level */
         item = set->top;
         while (1) {
+                esteps_a++;
                 next_item = item->right;
                 if (NULL == next_item || next_item->node->key > key) {
                         next_item = item->down;
@@ -232,7 +253,9 @@ int sl_do_operation(set_t *set, sl_optype_t optype, sl_key_t key, val_t val)
         }
         /* find the correct node and next */
         while (1) {
+                esteps_b++;
                 while (node == (node_val = node->val)) {
+                esteps_c++;
                         node = node->prev;
                 }
                 next = node->next;
@@ -251,7 +274,7 @@ int sl_do_operation(set_t *set, sl_optype_t optype, sl_key_t key, val_t val)
                                 result = sl_finish_delete(key, node, node_val,
                                                           ptst);
                         else if (INSERT == optype)
-                                result = sl_finish_insert(key, val, node,
+                                result = sl_finish_insert(set, key, val, node,
                                                           node_val, next, ptst);
                         if (-1 != result)
                                 break;
@@ -279,38 +302,58 @@ int sl_do_operation(set_t *set, sl_optype_t optype, sl_key_t key, val_t val)
  * Returns the result of the operation.
  * Note: @val can be NULL. 
  */
+__thread int last_epoch = -1;
+__thread node_t *last_node = NULL;
+__thread int dequeue_count = 0;
+__thread int dequeues = 0;
+__thread int steps = 0;
 sl_key_t sl_dequeue(set_t *set, val_t *val)
 {
-        node_t *node = NULL, *min_next = NULL, *head = NULL;
+        node_t *node = NULL;
         val_t node_val = NULL;
-        sl_key_t key = -1.0;
-        unsigned int offset = 0;
-
+        sl_key_t key = INFTY;
+        int epoch;
+        dequeue_count++;
+        if(dequeue_count % PERIOD == 0){
+            dequeues += dequeue_count;
+            printf("AVG STEPS %d %d\n", steps/dequeue_count, dequeues);
+            dequeue_count = steps = 0;
+        }
         assert(NULL != set);
 
         critical_enter();
 
         /* find an entry-point to the node-level */
-        head = node = set->head;
-        min_next = node->next;
+    begin:
 
-        *val = NULL;
-        key = INFTY;
-
+        node = set->head;
+        epoch = set->epoch;
+        if(epoch == last_epoch && last_node != NULL)
+            node = last_node;
+        //if(epoch%1000000)
+        //    printf("EPOCH: %d\n", epoch);
+        
         while ( (node = node->next) ) {
+                steps++;
                 node_val = node->val;
-                
-                if (NULL != node_val && node != node_val && set->head->next == min_next && CAS(&node->val, node_val, NULL)) {
-                        *val = node_val;
-                        key = node->key;
-                        break;
-                }
-                if(++offset > 64)
-                    bg_help_remove(head, node, ptst);
-                
+
+                if (node == node_val || NULL == node_val) continue;
+
+                if(set->epoch != epoch) 
+                    goto begin;
+
+                //1. Step one extract the node
+                if (CAS(&node->val, node_val, NULL)){                    
+                    *val = node_val;
+                    key = node->key;
+                    break;
+               }              
         }
 
         critical_exit();
+
+        last_node = node;
+        last_epoch = epoch;
 
         return key;
 }

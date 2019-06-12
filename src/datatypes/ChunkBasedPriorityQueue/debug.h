@@ -14,7 +14,9 @@
 
 #define SKIP_LIST		// enable this macro to measure with the skip-list
 //#define FLAG_RELEASE		// enable smart schedulin
-#define ELIMINATION     // enable for elimination from buffer
+
+//#define ELIMINATION     // enable for elimination from buffer
+
 //#define FIRST_CHUNK_EXPLICIT_FREEZE
 
 //#define DEBUG

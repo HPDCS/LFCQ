@@ -13,7 +13,7 @@ MODE=T
 
 
 cmd=test
-version=Release
+version=Debug
 
 if [ "$6" = "G" ]
 then
