@@ -10,3 +10,6 @@ NBCQ
 *.data
 *.data.old
 *tar.gz
+**.tar.gz
+perf.*
+

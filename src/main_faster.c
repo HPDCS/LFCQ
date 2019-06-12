@@ -27,496 +27,402 @@
 #include <unistd.h>
 
 #include <pthread.h>
+#include <numa.h>
+#include <float.h>
+#include <numaif.h>
 #include <stdarg.h>
 #include <sched.h>
 #include <sys/time.h>
 
-#include "datatypes/list.h"
-#include "datatypes/calqueue.h"
-#include "datatypes/nb_calqueue.h"
-
 #include "utils/hpdcs_utils.h"
 #include "utils/hpdcs_math.h"
+#include "utils/common.h"
+#include "gc/gc.h"
 
-#define PAYLOAD_SIZE 128
+#define INFTY DBL_MAX
 
-__thread struct drand48_data seedT;
+#define NID nid
+#define TID tid
+
+
+extern void   pq_enqueue(void *queue, double timestamp, void* payload);
+extern double pq_dequeue(void *queue, void **payload);
+extern void*  pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket);
+extern void pq_report(unsigned int threshold);
+extern void pq_prune();
+extern void pq_reset_statistics();
+extern unsigned int pq_num_malloc();
+
+
+
+
+
 
 struct payload
 {
 	double timestamp;
-	unsigned long long id;
-	char   data[PAYLOAD_SIZE];
 };
 
 typedef struct payload payload;
 
-nb_calqueue* nbcqueue;
-list(payload) lqueue;
-
-//int payload = 0;
-struct timeval startTV;
-volatile double GVT = 0.0;
-
-char		DATASTRUCT;
 
 unsigned int THREADS;		// Number of threads
 unsigned int OPERATIONS; 	// Number of operations per thread
-unsigned int ITERATIONS;		// = 800000;
+unsigned int ITERATIONS;	// = 800000;
 
 unsigned int TOTAL_OPS;		// = 800000;
 
-unsigned int TOTAL_OPS1;		// = 800000;
+unsigned int TOTAL_OPS1;	// = 800000;
 double PROB_DEQUEUE1;		// Probability to dequeue
 char   PROB_DISTRIBUTION1;
 
-unsigned int TOTAL_OPS2;		// = 800000;
+unsigned int TOTAL_OPS2;	// = 800000;
 double PROB_DEQUEUE2;		// Probability to dequeue
 char   PROB_DISTRIBUTION2;
 
-unsigned int TOTAL_OPS3;		// = 800000;
+unsigned int TOTAL_OPS3;	// = 800000;
 double PROB_DEQUEUE3;		// Probability to dequeue
 char   PROB_DISTRIBUTION3;
 
-unsigned int PRUNE_PERIOD;	// Number of ops before calling prune
-double MEAN_INTERARRIVAL_TIME = 10.00;			// Maximum distance from the current event owned by the thread
-unsigned int LOG_PERIOD;	// Number of ops before printing a log
-unsigned int VERBOSE;		// if 1 prints a full log on STDOUT and on individual files
-unsigned int ENABLE_LOG;			// = 0;
-double PRUNE_TRESHOLD;		// = 0.35;
-unsigned int SAFETY_CHECK;
+double MEAN_INTERARRIVAL_TIME = 1.00;			// Maximum distance from the current event owned by the thread
 unsigned int EMPTY_QUEUE;
 double PERC_USED_BUCKET; 	
 unsigned int ELEM_PER_BUCKET;
+char   TEST_MODE;
+unsigned int TIME;
 
-unsigned int BARRIER = 0;
-unsigned int lock = 1;
+
+__thread struct drand48_data seedT;
+ 
+void* nbcqueue;
+
+pthread_t *p_tid;
+
+volatile unsigned int BARRIER = 0;
+volatile unsigned int lock = 1;
 
 __thread unsigned int TID;
+__thread unsigned int NID;
 __thread unsigned int num_op=0;
+
+unsigned int NUMA_NODES;
 
 unsigned int *id;
 volatile long long *ops;
 volatile long long *ops_count;
-struct timeval *malloc_time;
-struct timeval *free_time;
+volatile long long *malloc_op;
 
-__thread struct timespec e_time;
-__thread struct timespec d_time;
+volatile unsigned int end_phase_1 = 0;
+volatile unsigned int end_phase_2 = 0;
+volatile unsigned int end_phase_3 = 0;
+volatile unsigned int end_test = 0;
+volatile long long final_ops = 0;
 
-unsigned int *malloc_count;
-unsigned int *free_count;
-volatile double* volatile array;
-FILE **log_files;
 
-void test_log(unsigned int my_id, const char *msg, ...) {
-	char buffer[1024];
-	va_list args;
-
-	va_start(args, msg);
-	vsnprintf(buffer, 1024, msg, args);
-	va_end(args);
-
-	printf("%s",buffer);
-	fwrite(buffer,1,  strlen(buffer), log_files[my_id]);
-}
-
-double dequeue(unsigned int my_id)
+double dequeue(void)
 {
 
-	struct timespec startTV2,endTV2;
 	double timestamp = INFTY;
-	unsigned int counter = 1;
 	void* free_pointer = NULL;
-	payload *new_nbc_node;
-	calqueue_node *new_cal_node;
-
-	//if(VERBOSE)
-	//	clock_gettime(CLOCK_MONOTONIC, &startTV2);
 	
-	switch(DATASTRUCT)
-	{
-		case 'L':
-			free_pointer = list_pop(lqueue);
-			new_nbc_node =  node_payload(lqueue,free_pointer);
-			if(free_pointer != NULL)
-			{
-				timestamp = new_nbc_node->timestamp;
-				//counter = new_nbc_node->counter;
-			}
-			break;
-		case 'C':
-			new_cal_node = calqueue_get();
-			free_pointer = new_cal_node;
-			if(free_pointer != NULL)
-			{
-				timestamp = new_cal_node->timestamp;
-				counter = 1;
-			}
-			break;
-		case 'F':
-			new_nbc_node = nbc_dequeue(nbcqueue);
-			free_pointer = new_nbc_node;
-			if(new_nbc_node != NULL)
-			{
-				timestamp = new_nbc_node->timestamp;
-			}
-		default:
-			break;
-	}	
-
-
-	//if( VERBOSE )
-	//{
-	//	clock_gettime(CLOCK_MONOTONIC,&endTV2);
-	//	d_time.tv_sec += endTV2.tv_sec - startTV2.tv_sec  - (endTV2.tv_nsec > startTV2.tv_nsec ? 0 : 1);
-	//	d_time.tv_nsec += endTV2.tv_nsec > startTV2.tv_nsec ? ( endTV2.tv_nsec - startTV2.tv_nsec) : (1000000000+ endTV2.tv_nsec - startTV2.tv_nsec);
-	//}
-	//assertf(
-	//	counter == 0,
-	//	"%u-%d:%d\tDEQUEUE should never return a HEAD node %.10f - %d\n",
-	//	my_id, (int)d_time.tv_sec, (int)d_time.tv_nsec, timestamp, counter
-	//	);
-    //
-	if(free_pointer != NULL)
-	{
-		free(free_pointer);
-	}
-	//if( VERBOSE )
-	//{
-	//	if(timestamp == INFTY )
-	//		test_log(my_id, "%u-%d:%d\tDEQUEUE EMPTY\n", my_id, d_time.tv_sec, d_time.tv_nsec);
-	//	else
-	//		test_log(my_id, "%u-%d:%d\tDEQUEUE %.15f - %d\n", my_id, d_time.tv_sec, d_time.tv_nsec, timestamp, counter);
-	//}
+	timestamp = pq_dequeue(nbcqueue, &free_pointer);
 	
 	return timestamp;
 }
 
-
-double enqueue(unsigned int my_id, struct drand48_data* seed, double local_min, char distribution)
+double enqueue(unsigned int my_id, struct drand48_data* seed, double local_min, double (*current_prob) (struct drand48_data*, double))
 {
-	struct timespec startTV2,endTV2;
-	struct timeval diff;
 	double timestamp = 0.0;
-	int counter = 0;
 	double update = 0.0;
-	payload data;
-	payload *nbc_data;
 
-	switch(distribution)
-	{
-		case 'U':
-			update = uniform_rand(seed, MEAN_INTERARRIVAL_TIME);
-			break;
-		case 'T':
-			update = triangular_rand(seed, MEAN_INTERARRIVAL_TIME);
-			break;
-		case 'N':
-			update = neg_triangular_rand(seed, MEAN_INTERARRIVAL_TIME);
-			break;
-		case 'E':
-			update = exponential_rand(seed, MEAN_INTERARRIVAL_TIME);
-			break;
-		case 'C':
-			update = camel_rand(seed, MEAN_INTERARRIVAL_TIME, 0.999, 2, 0.0005);
-			break;
-		default:
-			printf("#ERROR: Unknown distribution\n");
-			exit(1);
-	}
-	timestamp = local_min;
-
-	timestamp += update;
+	update = current_prob(seed, MEAN_INTERARRIVAL_TIME);
+	timestamp = local_min + update;
 	
 	if(timestamp < 0.0)
-	{
-		timestamp = 0;
-	}	
+		timestamp = 0.0;
 
-	//clock_gettime(CLOCK_MONOTONIC, &startTV2);
-
-	switch(DATASTRUCT)
-	{
-		case 'L':
-			data.timestamp = timestamp;
-			list_insert(lqueue, timestamp, &data);
-			break;
-		case 'C':
-			calqueue_put(timestamp, NULL);
-			break;
-		case 'F':
-			nbc_data = malloc(sizeof(payload));
-			nbc_data->timestamp = timestamp;
-			nbc_data->id = TID;
-			nbc_data->id = nbc_data->id << 32;
-			nbc_data->id |= num_op++;
-			nbc_enqueue(nbcqueue, timestamp, nbc_data);
-			break;
-		default:
-			printf("#ERROR: Unknown data structure\n");
-			exit(1);
-	}
+	pq_enqueue(nbcqueue, timestamp, UNION_CAST(1, void*));
 	
-	//clock_gettime(CLOCK_MONOTONIC, &endTV2);
-	//e_time.tv_sec += endTV2.tv_sec - startTV2.tv_sec - (endTV2.tv_nsec > startTV2.tv_nsec ? 0 : 1);
-	//e_time.tv_nsec +=  endTV2.tv_nsec > startTV2.tv_nsec ? ( endTV2.tv_nsec - startTV2.tv_nsec) : (1000000000+ endTV2.tv_nsec - startTV2.tv_nsec);
-    //
-	////local_min = timestamp;
-    //
-	//if( VERBOSE )
-	//	test_log(my_id, "%u-%d:%d\tENQUEUE %.15f - %u\n", my_id, (int)diff.tv_sec, (int)diff.tv_usec, timestamp, counter);
-
 	return timestamp;
 
 }
 
-double computeGVT()
-{
-	unsigned int j = 0;
-	double min = INFTY;
-	double tmp;
-	for(;j<THREADS;j++)
-			{
-				tmp = array[j];
-				if(tmp < min)
-					min = tmp;
-			}
-	return min;
-}
+
+
 
 void classic_hold(
 		unsigned int my_id,
 		struct drand48_data* seed,
 		struct drand48_data* seed2,
 		long long *n_dequeue,
-		long long *n_enqueue,
-		double		*max
+		long long *n_enqueue
 		)
 {
-	struct timeval startTV, endTV, diff;
 
 	double timestamp = 0.0;
 	double local_min = 0.0;
 	double random_num = 0.0;
 	long long tot_count = 0;
 	long long par_count = 0;
-	double min;
-	double tmp;
-
+	long long end_operations 	;
+	long long end_operations1 	;
+	long long end_operations2 	;
+	long long local_enqueue = 0;
+	long long local_dequeue = 0;
+	
 	unsigned int iterations = ITERATIONS;
+	unsigned int iter		= 0;
 	unsigned int j;
-	double current_prob = PROB_DEQUEUE1;
-	char current_dist = PROB_DISTRIBUTION1;
-
-
+	double (*current_dist) (struct drand48_data*, double) ;
 	
-    __sync_fetch_and_add(&BARRIER, 1);
 	
-	while(!__sync_bool_compare_and_swap(&lock, 0, 0));
 	
-	gettimeofday(&startTV, NULL);
-
-	
-
-	while(tot_count < TOTAL_OPS*iterations)
+	while(iter < iterations)
 	{
-		drand48_r(seed2, &random_num);
-
-		if( random_num < (current_prob))
+		tot_count = 0;
+		par_count = 0;
+		end_operations 		= TOTAL_OPS*(iter+1);
+		end_operations1 	= TOTAL_OPS1+TOTAL_OPS*(iter);
+		end_operations2 	= TOTAL_OPS2+TOTAL_OPS*(iter++);
+		
+		switch(PROB_DISTRIBUTION1)
 		{
-			timestamp = dequeue(my_id);
-			if(timestamp != INFTY)
+			case 'U':
+				current_dist = uniform_rand;
+				break;
+			case 'T':
+				current_dist = triangular_rand;
+				break;
+			case 'N':
+				current_dist = neg_triangular_rand;
+				break;
+			case 'E':
+				current_dist = exponential_rand;
+				break;
+			case 'C':
+				current_dist = camel_compile_time_rand;
+				break;
+			default:
+				printf("#ERROR: Unknown distribution\n");
+				exit(1);
+		}
+		
+		
+		while(tot_count < end_operations1)
+		{
+			
+			drand48_r(seed2, &random_num);
+
+			if( random_num < PROB_DEQUEUE1)
 			{
-				array[my_id] = timestamp;
-				(*n_dequeue)++;
-
-				*max = *max > timestamp ? *max:timestamp;
-
-				if ( SAFETY_CHECK )
+				timestamp = dequeue();
+				if(timestamp != INFTY)
 				{
-					if(timestamp < GVT)
-					{
-						gettimeofday(&endTV, NULL);
-						timersub(&endTV, &startTV, &diff);
-						printf("%u - %d:%d ERRORE timestamp:%f > GVT:%f\n",
-								my_id, (int)diff.tv_sec, (int)diff.tv_usec, timestamp, GVT);
-						exit(1);
-					}
-					j =0;
-					for(;j<THREADS;j++)
-					{
-						do
-							tmp = array[j];
-						while( tmp < timestamp || ( D_EQUAL(timestamp, tmp) && j < my_id) );
-					}
-					GVT = timestamp;
+					local_dequeue++;
+					local_min = timestamp;
 				}
-				local_min = timestamp;
 			}
-		}
-		else
-		{
-			timestamp = enqueue(my_id, seed, local_min, current_dist);
-			*max = *max > timestamp ? *max:timestamp;
-			(*n_enqueue)++;
-		}
-
-
-		if( DATASTRUCT == 'F' && PRUNE_PERIOD != 0 &&  ops_count[my_id]%(PRUNE_PERIOD) == 0)
-		{
-			min = INFTY;
-			j =0;
-			for(;j<THREADS;j++)
+			else
 			{
-				tmp = array[j];
-				if(tmp < min)
-					min = tmp;
+				enqueue(my_id, seed, local_min, current_dist);
+				local_enqueue++;
 			}
-			nbc_prune(nbcqueue, min*PRUNE_TRESHOLD);
-
-			if( VERBOSE )
+			
+			
+			//enqueue(my_id, seed, local_min, current_dist);
+			//local_enqueue++;
+			++par_count;
+						
+			if(par_count == THREADS)
 			{	
-				gettimeofday(&endTV, NULL);
-				timersub(&endTV, &startTV, &diff);
-				test_log(my_id, "%u-%d:%d\tPRUNE %.10f\n", my_id, (int)diff.tv_sec, (int)diff.tv_usec, min*PRUNE_TRESHOLD);
+				ops_count[my_id]+=par_count;
+				par_count = 0;
+				tot_count = 0;
+				for(j=0;j<THREADS;j++)
+					tot_count += ops_count[j];
 			}
-
 		}
-
-		if(ENABLE_LOG && my_id == 0 && ops_count[my_id]%(LOG_PERIOD) == 0)
-		{
-			min = computeGVT();
-			gettimeofday(&endTV, NULL);
-			timersub(&endTV, &startTV, &diff);
-			printf("%u - LOG %.10f  %.2f/100.00 SEC:%d:%d\n", my_id, min, ((double)ops_count[my_id])*100/OPERATIONS, (int)diff.tv_sec, (int)diff.tv_usec);
-		}
-
-		ops_count[my_id]++;
-		j=0;
-		par_count++;
-		if(par_count == THREADS)
-		{	
+		__sync_fetch_and_add(&end_phase_1, 1);
+		
+		while(TEST_MODE == 'T' && end_phase_1 != THREADS+1);
+		
+		if(TEST_MODE == 'T'){
 			par_count = 0;
-			tot_count = 0;
+			ops_count[my_id] = 0;
+		}
+		
+		switch(PROB_DISTRIBUTION2)
+		{
+			case 'U':
+				current_dist = uniform_rand;
+				break;
+			case 'T':
+				current_dist = triangular_rand;
+				break;
+			case 'N':
+				current_dist = neg_triangular_rand;
+				break;
+			case 'E':
+				current_dist = exponential_rand;
+				break;
+			case 'C':
+				current_dist = camel_compile_time_rand;
+				break;
+			default:
+				printf("#ERROR: Unknown distribution\n");
+				exit(1);
+		}
+		
+		pq_reset_statistics();
+		par_count = 0;
+		ops_count[my_id] = 0;
+				
+		while((TEST_MODE != 'T' && tot_count < end_operations2) || (TEST_MODE == 'T' && !end_test))
+		{
+			par_count++;
+			timestamp = dequeue();
+			if(timestamp != INFTY)
+				local_min = timestamp;
+			//pthread_yield();
+
+			enqueue(my_id, seed, local_min, current_dist);
+						
+			if(par_count == THREADS && TEST_MODE != 'T')
+			{	
+				ops_count[my_id]+=par_count;
+				par_count = 0;
+				tot_count = 0;
+				for(j=0;j<THREADS;j++)
+					tot_count += ops_count[j];
+
+			}
+			//pthread_yield();
+		}
+		
+		if(end_test)
+		{
+			if(TEST_MODE == 'T')
+			{	
+				ops_count[my_id]+=par_count;
+				par_count = 0;
+				tot_count = 0;
+				for(j=0;j<THREADS;j++)
+					tot_count += ops_count[j];
+
+			}
 			for(j=0;j<THREADS;j++)
 				tot_count += ops_count[j];
-
-			if( tot_count%(TOTAL_OPS) < TOTAL_OPS1)
-			{
-				current_dist = PROB_DISTRIBUTION1;
-				current_prob = PROB_DEQUEUE1;
-			}
-
-			if( tot_count%(TOTAL_OPS) > TOTAL_OPS1 && tot_count%(TOTAL_OPS) < TOTAL_OPS2 )
-			{
-				current_dist = PROB_DISTRIBUTION2;
-				current_prob = PROB_DEQUEUE2;
-			}
-
-			if( tot_count%(TOTAL_OPS) > TOTAL_OPS2)
-			{
-				current_dist = PROB_DISTRIBUTION3;
-				current_prob = PROB_DEQUEUE3;
-			}
+			
+			__sync_val_compare_and_swap(&final_ops, 0, tot_count);
+			(*n_dequeue) = local_dequeue;
+			(*n_enqueue) = local_enqueue;
+			return;
 		}
+		
+		__sync_fetch_and_add(&end_phase_2, 1);
+		
+		while(tot_count < end_operations)
+		{
+			par_count++;
+			timestamp = dequeue();
 
+			if(timestamp != INFTY)
+			{
+				local_dequeue++;
+				local_min = timestamp;
+			}
+			
+			if(par_count == THREADS)
+			{	
+				ops_count[my_id]+=par_count;
+				par_count = 0;
+				tot_count = 0;
+				for(j=0;j<THREADS;j++)
+					tot_count += ops_count[j];
+			}
+
+		}
+		(*n_dequeue) = local_dequeue;
+		(*n_enqueue) = local_enqueue;
 	}
+	
+	__sync_fetch_and_add(&end_phase_3, 1);
+	
+	
 }
 
 
 void* process(void *arg)
 {
-	struct timeval endTV, diff;
-	char name_file[128];
 	unsigned int my_id;
 	long long n_dequeue = 0;
 	long long n_enqueue = 0;
 	struct drand48_data seed;
 	struct drand48_data seed2    ;
-	FILE  *f = NULL;
-	double max = 0.0;
+	cpu_set_t cpuset;
 	double timestamp;
 
 	my_id =  *((unsigned int*)(arg));
 	(TID) = my_id;
-	sprintf(name_file, "%u.txt", my_id);
+	(NID) 		= numa_node_of_cpu(tid);
 	srand48_r(my_id+157, &seed2);
     srand48_r(my_id+359, &seed);
     srand48_r(my_id+254, &seedT);
+    
+    
+	CPU_ZERO(&cpuset);
+	CPU_SET(my_id, &cpuset);
+	pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
 
 
-	if(VERBOSE)
+    __sync_fetch_and_add(&BARRIER, 1);
+    
+    
+	
+	while(lock);
+	
+	classic_hold(my_id, &seed, &seed2, &n_dequeue, &n_enqueue);
+	
+	while(EMPTY_QUEUE)
 	{
-		f = fopen(name_file, "w+");
-		log_files[my_id] = f;
-		test_log(my_id,  "HI! I'M ALIVE %u\n", my_id);
-	}
-
-
-	classic_hold(my_id, &seed, &seed2, &n_dequeue, &n_enqueue, &max);
-
-	do
-	{
-		timestamp = dequeue(my_id);
+		timestamp = dequeue();
 		if(timestamp == INFTY)
 			break;
 		else
-		{
 			n_dequeue++;
-			array[my_id] = timestamp;
-		}
-	}while(EMPTY_QUEUE);
-
-
-	gettimeofday(&endTV, NULL);
-	timersub(&endTV, &startTV, &diff);
-
-
-	if(ENABLE_LOG)
-		printf("%u- DONE + %d:%d "
-				"%lld, "
-				"%lld, "
-				"%lld, "
-				"%lld"
-			" - MAX + %.10f"
-		//	" - MALLOC + %d:%d, %d"
-		//	" - FREE + %d:%d, %d"
-			" - E + %lu:%lu, %lld"
-                        " - D + %lu:%lu, %llu\n" ,
-			my_id, (int)diff.tv_sec, (int)diff.tv_usec, n_dequeue, n_enqueue, n_dequeue - n_enqueue, ops_count[my_id],
-		//	(int)malloc_time[my_id].tv_sec, (int)malloc_time[my_id].tv_usec, malloc_count[my_id],
-		//	(int)free_time[my_id].tv_sec, (int)free_time[my_id].tv_usec, free_count[my_id]),
-			max,                        
-			e_time.tv_sec + e_time.tv_nsec/1000000000,
-			e_time.tv_nsec%1000000000, n_enqueue,
-            d_time.tv_sec + d_time.tv_nsec/1000000000,
-			d_time.tv_nsec%1000000000,
-			ops_count[my_id]-n_enqueue);
-
+	}
 
 	ops[my_id] = n_enqueue - n_dequeue;
-//	array[my_id] = INFTY;
-
-	if( VERBOSE )
-	{
-		fclose(f);
-		test_log(my_id,"%u- DONE + %d, %u, %u, %u\n", my_id, (int)diff.tv_sec, n_dequeue, n_enqueue, ops_count[my_id]);
-	}
+	malloc_op[my_id] =  pq_num_malloc();
 	
-	//printf("%u %u\n", removed_nodes_count, to_remove_nodes_count);
-	pthread_exit(NULL);
+	__sync_fetch_and_add(&BARRIER, 1);
+
+	while(BARRIER != THREADS);
+	
+	while(lock != TID);
+	
+	#ifndef NDEBUG
+	pq_report(TID);
+	#endif
+	
+	__sync_fetch_and_add(&lock, 1);
+	pthread_exit(NULL);    
 }
 
 
 int main(int argc, char **argv)
 {
 	int par = 1;
-	int num_par = 21;//19;
+	int num_par = 17;
 	unsigned int i = 0;
-	pthread_t *tid;
-	long long tmp = 0;
-	struct timeval mal,fre;
+	unsigned long numa_mask = 1;
+	unsigned long long sum = 0;
+	unsigned long long min = -1;
+	unsigned long long max = 0;
+	unsigned long long mal = 0;
+	unsigned long long avg = 0;
+	unsigned long long tmp = 0;
+	unsigned long long qsi = 0;
 
 	if(argc != num_par)
 	{
@@ -524,7 +430,6 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
-	DATASTRUCT = argv[par++][0];
 	THREADS  = (unsigned int) strtol(argv[par++], (char **)NULL, 10);
 	ITERATIONS  = (unsigned int) strtol(argv[par++], (char **)NULL, 10);
 
@@ -544,39 +449,25 @@ int main(int argc, char **argv)
 	
 	PERC_USED_BUCKET 			= strtod(argv[par++], (char **)NULL);
 	ELEM_PER_BUCKET 			= (unsigned int) strtol(argv[par++], (char **)NULL, 10);
-
+	
 	OPERATIONS 					= (TOTAL_OPS/THREADS);
-	PRUNE_PERIOD 				= (unsigned int) strtol(argv[par++], (char **)NULL, 10);
-	PRUNE_TRESHOLD 				= strtod(argv[par++], (char **)NULL);
 	//PROB_ROLL 					= strtod(argv[par++], (char **)NULL);
 	//MEAN_INTERARRIVAL_TIME	 	= strtod(argv[par++], (char **)NULL);
-	LOG_PERIOD 					= (OPERATIONS/10);
-	VERBOSE 					= (unsigned int) strtol(argv[par++], (char **)NULL, 10);
-	ENABLE_LOG 					= (unsigned int) strtol(argv[par++], (char **)NULL, 10);
-	//BUCKET_WIDTH 					= strtod(argv[par++], (char **)NULL);
-	//COLLABORATIVE_TODO_LIST 		= (unsigned int) strtol(argv[par++], (char **)NULL, 10);
-	SAFETY_CHECK 				= (unsigned int) strtol(argv[par++], (char **)NULL, 10);
 	EMPTY_QUEUE 				= (unsigned int) strtol(argv[par++], (char **)NULL, 10);
+	TEST_MODE = argv[par++][0];
+	TIME 			= (unsigned int) strtol(argv[par++], (char **)NULL, 10);
 	
 
 	id = (unsigned int*) malloc(THREADS*sizeof(unsigned int));
 	ops = (long long*) malloc(THREADS*sizeof(long long));
+	malloc_op = (long long*) malloc(THREADS*sizeof(long long));
 	ops_count = (long long*) malloc(THREADS*sizeof(long long));
-	malloc_time = (struct timeval*) malloc(THREADS*sizeof(struct timeval));
-	free_time = (struct timeval*) malloc(THREADS*sizeof(struct timeval));
-	malloc_count = (unsigned int*) malloc(THREADS*sizeof(unsigned int));
-	free_count = (unsigned int*) malloc(THREADS*sizeof(unsigned int));
-	array = (double*) malloc(THREADS*sizeof(double));
-	log_files = (FILE**) malloc(THREADS*sizeof(FILE*));
-	tid = malloc(THREADS*sizeof(pthread_t));
+	p_tid = malloc(THREADS*sizeof(pthread_t));
+	
 
-
-	printf("D:%c,", DATASTRUCT);
 	printf("T:%u,", THREADS);
 	printf("ITERATIONS:%u,", ITERATIONS);
 	printf("OPS:%u,", TOTAL_OPS);
-	printf("PRUNE_PER:%u,", PRUNE_PERIOD);
-	printf("PRUNE_T:%f,", PRUNE_TRESHOLD);
 	printf("OPS1:%u,", TOTAL_OPS1);
 	printf("PROB_DIST1:%c,",PROB_DISTRIBUTION1);
 	printf("P_DEQUEUE1:%f,", PROB_DEQUEUE1);
@@ -589,90 +480,79 @@ int main(int argc, char **argv)
 	printf("MEAN_INTERARRIVAL_TIME:%f,", MEAN_INTERARRIVAL_TIME);
 	printf("PERC_USED_BUCKET:%f,", PERC_USED_BUCKET);
 	printf("ELEM_PER_BUCKET:%u,", ELEM_PER_BUCKET);
-	printf("SAFETY_CHECK:%u,", SAFETY_CHECK);
 	printf("EMPTY_QUEUE:%u,", EMPTY_QUEUE);
+	
 
 	TOTAL_OPS2 += TOTAL_OPS1;
 	
-	//if(DATASTRUCT == 'L')
-	//{
-	//	lqueue = new_list(nbc_bucket_node);
-	//	pthread_spin_init(&(((struct rootsim_list*)lqueue)->spinlock), 0);
-	//}
-	//else if(DATASTRUCT == 'C')
-	//	calqueue_init();
-	//else if(DATASTRUCT == 'F')
-	//	nbcqueue = nb_calqueue_init(THREADS);
-
-	switch(DATASTRUCT)
-	{
-		case 'L':
-			lqueue = new_list(payload);
-			pthread_spin_init(&(((struct rootsim_list*)lqueue)->spinlock), 0);
-			break;
-		case 'C':
-			calqueue_init();
-			break;
-		case 'F':
-			nbcqueue = nb_calqueue_init(THREADS, PERC_USED_BUCKET, ELEM_PER_BUCKET);
-			break;
-		default:
-			printf("#ERROR: Unknown data structure\n");
-			exit(1);
-	}
 	
-	gettimeofday(&startTV, NULL);
-
+	NUMA_NODES  = numa_num_configured_nodes();
+	
+	//set_mempolicy(MPOL_BIND, &numa_mask, 2);
+		
+	nbcqueue = pq_init(THREADS, PERC_USED_BUCKET, ELEM_PER_BUCKET);
+	
 	for(i=0;i<THREADS;i++)
 	{
 		id[i] = i;
 		ops_count[i] = 0;
-		pthread_create(tid +i, NULL, process, id+i);
-		
-		//cpu_set_t cpuset;
-		//CPU_ZERO(&cpuset);
-		//CPU_SET(i, &cpuset);
-		//sched_setaffinity(tid[i], sizeof(cpu_set_t), &cpuset);
+		ops[i] = 0;
+		malloc_op[i] = 0;
+		pthread_create(p_tid +i, NULL, process, id+i);
 	}
+	
 	
 	while(!__sync_bool_compare_and_swap(&BARRIER, THREADS, 0));
 	
-	printf("VIA\n");
 	
     __sync_lock_test_and_set(&lock, 0);
-
+    
+    struct timespec start, end;
+    if(TEST_MODE == 'T'){
+		while(end_phase_1 != THREADS);
+		while(!__sync_bool_compare_and_swap(&end_phase_1, THREADS, THREADS+1));
+		gettime(&start);
+		sleep(TIME);
+		__sync_bool_compare_and_swap(&end_test, 0, 1);
+	}
+	gettime(&end);
 	for(i=0;i<THREADS;i++)
-		pthread_join(tid[i], (void*)&id);
+		pthread_join(p_tid[i], (void*)&id);
 
-	timerclear(&mal);
-	timerclear(&fre);
 
+	struct timespec elapsed = timediff(start, end);
+    double dt = elapsed.tv_sec + (double)elapsed.tv_nsec / 1000000000.0;
+	
+    for(i=0;i<THREADS;i++)
+    {
+            qsi += ops[i];
+            tmp = ops_count[i];
+            mal += malloc_op[i];
+            sum += tmp;
+            min = min < tmp ? min : tmp;
+            max = max > tmp ? max : tmp;
+    }
+
+	avg = sum/THREADS;
+	
+
+	printf("CHECK:%lld," , qsi);
+	printf("SUM OP:%lld,", sum);
+	if(TEST_MODE == 'T'){
+		printf("TIME:%.8f,", dt);
+		printf("THROUGHPUT:%.3f,", sum*2.0/dt/1000.0);
+	}
+	printf("MIN OP:%lld,", min);
+	printf("MAX OP:%lld,", max);
+	printf("AVG OP:%lld,", avg);
+	printf("MAL OP:%lld,", mal);
+	
 	for(i=0;i<THREADS;i++)
 	{
-		tmp += ops[i];
-
-		mal.tv_sec+=malloc_time[i].tv_sec;
-		if( (mal.tv_usec + malloc_time[i].tv_usec )%1000000 != mal.tv_usec + malloc_time[i].tv_usec )
-			mal.tv_sec++;
-		mal.tv_usec = (mal.tv_usec + malloc_time[i].tv_usec )%1000000;
-
-		fre.tv_sec+=free_time[i].tv_sec;
-		if( (fre.tv_usec + free_time[i].tv_usec )%1000000 != fre.tv_usec + free_time[i].tv_usec )
-			fre.tv_sec++;
-		fre.tv_usec = (fre.tv_usec + free_time[i].tv_usec )%1000000;
+        tmp = ops_count[i];
+		printf("OPS-%d:%lld ", i, tmp);
 	}
+	
 
-
-	printf("CHECK:%lld,", tmp);
-	printf("MALLOC_T:%d.%d,", (int)mal.tv_sec, (int)mal.tv_usec);
-	printf("FREE_T:%d.%d,", (int)fre.tv_sec, (int)fre.tv_usec);
-
-	for(i=0;i<THREADS;i++)
-{
-		if(array[i] != INFTY)
-			printf("%d:%lld,%f,", i,ops_count[i], array[i]);
-		else
-			printf("%d:%lld,INF,", i,ops_count[i]);
-}
 	return 0;
 }

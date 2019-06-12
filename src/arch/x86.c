@@ -118,6 +118,21 @@ inline int atomic_test_and_set_x86(int *b) {
 }
 
 
+inline int atomic_test_and_set_x64(unsigned long long *b) {
+    int result = 0;
+
+	__asm__  __volatile__ (
+		LOCK "bts $0, %1;\n\t"
+		"adc %0, %0"
+		: "=r" (result)
+		: "m" (*b), "0" (result)
+		: "memory"
+	);
+
+	return !result;
+}
+
+
 
 /**
 * This function implements the atomic_test_and_reset on an integer value, for x86-64 archs
@@ -298,8 +313,8 @@ inline void spin_lock_x86(spinlock_t *s) {
 * @param s the spinlock to try to acquire
 */
 inline bool spin_trylock_x86(spinlock_t *s) {
-	unsigned int out = 0;
-	unsigned int in = 1;
+//	unsigned int out = 0;
+//	unsigned int in = 1;
 
 //	__asm__ __volatile__(
 //		"movl $1,%%eax\n\t"
