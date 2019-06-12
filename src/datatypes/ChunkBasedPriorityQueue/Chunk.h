@@ -16,7 +16,6 @@
 
 using namespace std;
 
-#define dev  inline
 
 /************************************************************************************************/
 /* ------------------------ CONSTANTS DEFINITIONS  ------------------------ */
@@ -44,7 +43,7 @@ public:
 		exist[CACHE_LINES_IN_CHUNK-1];
 	} meta __attribute__ ((aligned (128)));
 
-	cb_key_t vals[CHUNK_SIZE];			// the array of values
+	int vals[CHUNK_SIZE];			// the array of values
 
 	//---------- Chunk object methods ----------
 	dev void print(bool verbose){

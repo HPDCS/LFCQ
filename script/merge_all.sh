@@ -13,7 +13,6 @@ output=$results/processed
 
 mkdir -p $output
 
-
 job(){
 SIZE=$1
 for u in $usage_factor; do
@@ -26,7 +25,7 @@ for u in $usage_factor; do
 			line="$line $p-$e"
 		done
 	done
-	#echo $line > $out
+	echo $line > $out
 	prev=0
 
 	for t in $threads; do
@@ -75,8 +74,8 @@ for u in $usage_factor; do
 			cat tmp2$SIZE >> $out2
 			echo -e "" >> $out2
 		done
-		#echo -e $line >> $out
-		prev=$a
+		prev=$a	
+		echo -e $line >> $out
 	done
 done
 rm tmp1$SIZE

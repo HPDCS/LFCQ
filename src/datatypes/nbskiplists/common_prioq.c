@@ -50,10 +50,8 @@
 
 
 
-__thread unsigned long long malloc_count = 0;
 
 /* thread state. */
-__thread ptst_t *ptst;
 __thread unsigned long long s_compact = 0;
 __thread unsigned long long s_tried = 0;
 __thread unsigned long long s_changed = 0;
@@ -163,16 +161,18 @@ locate_preds(pq_t * restrict pq, pkey_t k, node_t ** restrict preds, node_t ** r
  * top. Conditioned on that succs[i] is still the successor of
  * preds[i], n will be spliced in on level i.
  */
-void 
-pq_enqueue(pq_t *pq, pkey_t k, pval_t v)
+int 
+pq_enqueue(void *p, pkey_t k, pval_t v)
 {
+    pq_t *pq = (pq_t*)p;
     node_t *preds[NUM_LEVELS], *succs[NUM_LEVELS];
     node_t *new = NULL, *del = NULL;
+    int res=0;
     
     critical_enter();
 
     assert(SENTINEL_KEYMIN < k && k < SENTINEL_KEYMAX);
-    
+
     /* Initialise a new node for insertion. */
     new    = alloc_node();
     new->k = k;
@@ -187,6 +187,7 @@ pq_enqueue(pq_t *pq, pkey_t k, pval_t v)
     if (succs[0]->k == k && !is_marked_ref(preds[0]->next[0]) && preds[0]->next[0] == succs[0]) {
         new->inserting = 0;
         free_node(new);
+        res=1;
         goto out;
     }
     new->next[0] = succs[0];
@@ -236,6 +237,7 @@ pq_enqueue(pq_t *pq, pkey_t k, pval_t v)
     
 out:    
       critical_exit();
+      return res;
 }
 
 
@@ -294,12 +296,13 @@ restructure(pq_t *pq)
 /*
  * Init structure, setup sentinel head and tail nodes.
  */
-pq_t *
-pq_init(unsigned int threads, double none, unsigned long long max_offset)
+void*
+pq_init(unsigned int threads, double none, unsigned int max_offset)
 {
     pq_t *pq;
     node_t *t, *h;
     int i;
+
 	
     _init_gc_subsystem();
     /* head and tail nodes */
@@ -342,10 +345,10 @@ pq_destroy(pq_t *pq)
     free(pq);
 }
 
-void pq_report(){
-	printf("\n%d- NEAR %llu %llu %llu %llu", TID, s_compact, s_tried, s_changed, malloc_count);
+void pq_report(int tid){
+	printf("\n%d- NEAR %llu %llu %llu %d", TID, s_compact, s_tried, s_changed, 0);
 }
 
 void pq_reset_statistics(){ }
 
-unsigned int pq_num_malloc(){  return malloc_count;}
+unsigned int pq_num_malloc(){  return 0;}

@@ -33,25 +33,23 @@
 #include <stdarg.h>
 #include <sched.h>
 #include <sys/time.h>
+#include <limits.h>
 
+
+#include "key_type.h"
+#include "common_test.h"
 #include "utils/hpdcs_utils.h"
 #include "utils/hpdcs_math.h"
 #include "utils/common.h"
 #include "gc/gc.h"
 
-#define INFTY DBL_MAX
+
+
+  
+
 
 #define NID nid
 #define TID tid
-
-
-extern void   pq_enqueue(void *queue, double timestamp, void* payload);
-extern double pq_dequeue(void *queue, void **payload);
-extern void*  pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket);
-extern void pq_report(unsigned int threshold);
-extern void pq_prune();
-extern void pq_reset_statistics();
-extern unsigned int pq_num_malloc();
 
 
 
@@ -84,7 +82,6 @@ unsigned int TOTAL_OPS3;	// = 800000;
 double PROB_DEQUEUE3;		// Probability to dequeue
 char   PROB_DISTRIBUTION3;
 
-double MEAN_INTERARRIVAL_TIME = 1.00;			// Maximum distance from the current event owned by the thread
 unsigned int EMPTY_QUEUE;
 double PERC_USED_BUCKET; 	
 unsigned int ELEM_PER_BUCKET;
@@ -94,18 +91,16 @@ unsigned int TIME;
 
 __thread struct drand48_data seedT;
  
-void* nbcqueue;
-
 pthread_t *p_tid;
 
 volatile unsigned int BARRIER = 0;
 volatile unsigned int lock = 1;
 
-__thread unsigned int TID;
-__thread unsigned int NID;
+__thread int TID;
+__thread int NID;
 __thread unsigned int num_op=0;
 
-unsigned int NUMA_NODES;
+int NUMA_NODES;
 
 unsigned int *id;
 volatile long long *ops;
@@ -119,39 +114,13 @@ volatile unsigned int end_test = 0;
 volatile long long final_ops = 0;
 
 
-double dequeue(void)
-{
 
-	double timestamp = INFTY;
-	void* free_pointer = NULL;
-	
-	timestamp = pq_dequeue(nbcqueue, &free_pointer);
-	
-	return timestamp;
-}
-
-double enqueue(unsigned int my_id, struct drand48_data* seed, double local_min, double (*current_prob) (struct drand48_data*, double))
-{
-	double timestamp = 0.0;
-	double update = 0.0;
-
-	update = current_prob(seed, MEAN_INTERARRIVAL_TIME);
-	timestamp = local_min + update;
-	
-	if(timestamp < 0.0)
-		timestamp = 0.0;
-
-	pq_enqueue(nbcqueue, timestamp, UNION_CAST(1, void*));
-	
-	return timestamp;
-
-}
 
 
 
 
 void classic_hold(
-		unsigned int my_id,
+		int my_id,
 		struct drand48_data* seed,
 		struct drand48_data* seed2,
 		long long *n_dequeue,
@@ -159,8 +128,8 @@ void classic_hold(
 		)
 {
 
-	double timestamp = 0.0;
-	double local_min = 0.0;
+	pkey_t timestamp = 0.0;
+	pkey_t local_min = 0.0;
 	double random_num = 0.0;
 	long long tot_count = 0;
 	long long par_count = 0;
@@ -207,7 +176,12 @@ void classic_hold(
 				exit(1);
 		}
 		
-		
+		DEBUG(
+			if(my_id == 0){
+				printf("Populating queue...%s", "");
+				fflush(NULL);
+			}
+		)
 		while(tot_count < end_operations1)
 		{
 			
@@ -242,9 +216,24 @@ void classic_hold(
 					tot_count += ops_count[j];
 			}
 		}
+
+		ops[my_id] = local_enqueue - local_dequeue;
 		__sync_fetch_and_add(&end_phase_1, 1);
+
 		
 		while(TEST_MODE == 'T' && end_phase_1 != THREADS+1);
+
+		DEBUG(
+			if(my_id == 0){
+				long long tmp = 0;
+				int i= 0;
+			 	for(i=0;i<THREADS;i++)
+			            tmp += ops[i];
+			  
+				printf("%lld Items...Done\n", tmp);
+		
+		}
+		)
 		
 		if(TEST_MODE == 'T'){
 			par_count = 0;
@@ -354,15 +343,15 @@ void classic_hold(
 
 void* process(void *arg)
 {
-	unsigned int my_id;
+	int my_id;
 	long long n_dequeue = 0;
-	long long n_enqueue = 0;
+	long long n_enqueue = 0; 
 	struct drand48_data seed;
 	struct drand48_data seed2    ;
 	cpu_set_t cpuset;
 	double timestamp;
 
-	my_id =  *((unsigned int*)(arg));
+	my_id =  *((int*)(arg));
 	(TID) = my_id;
 	(NID) 		= numa_node_of_cpu(tid);
 	srand48_r(my_id+157, &seed2);
@@ -371,7 +360,7 @@ void* process(void *arg)
     
     
 	CPU_ZERO(&cpuset);
-	CPU_SET(my_id, &cpuset);
+	CPU_SET((unsigned int)my_id, &cpuset);
 	pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
 
 
@@ -415,14 +404,14 @@ int main(int argc, char **argv)
 	int par = 1;
 	int num_par = 17;
 	unsigned int i = 0;
-	unsigned long numa_mask = 1;
-	unsigned long long sum = 0;
-	unsigned long long min = -1;
-	unsigned long long max = 0;
-	unsigned long long mal = 0;
-	unsigned long long avg = 0;
-	unsigned long long tmp = 0;
-	unsigned long long qsi = 0;
+	//unsigned long numa_mask = 1;
+	long long sum = 0;
+	long long min = LONG_MAX;
+	long long max = 0;
+	long long mal = 0;
+	long long avg = 0;
+	long long tmp = 0;
+	long long qsi = 0;
 
 	if(argc != num_par)
 	{
@@ -489,8 +478,18 @@ int main(int argc, char **argv)
 	NUMA_NODES  = numa_num_configured_nodes();
 	
 	//set_mempolicy(MPOL_BIND, &numa_mask, 2);
-		
+	
+
+	LOG("\nBuilding the queue...%s", "");
+	fflush(NULL);
+
 	nbcqueue = pq_init(THREADS, PERC_USED_BUCKET, ELEM_PER_BUCKET);
+
+	LOG("Done\n%s", "");
+
+	#ifdef TRACE_LEN
+		generate_trace(PROB_DISTRIBUTION2);
+	#endif
 	
 	for(i=0;i<THREADS;i++)
 	{
@@ -521,7 +520,7 @@ int main(int argc, char **argv)
 
 
 	struct timespec elapsed = timediff(start, end);
-    double dt = elapsed.tv_sec + (double)elapsed.tv_nsec / 1000000000.0;
+    double dt = (double)elapsed.tv_sec + (double)elapsed.tv_nsec / 1000000000.0;
 	
     for(i=0;i<THREADS;i++)
     {
@@ -540,7 +539,7 @@ int main(int argc, char **argv)
 	printf("SUM OP:%lld,", sum);
 	if(TEST_MODE == 'T'){
 		printf("TIME:%.8f,", dt);
-		printf("THROUGHPUT:%.3f,", sum*2.0/dt/1000.0);
+		printf("THROUGHPUT:%.3f,", (double)sum*2.0/dt/1000.0);
 	}
 	printf("MIN OP:%lld,", min);
 	printf("MAX OP:%lld,", max);

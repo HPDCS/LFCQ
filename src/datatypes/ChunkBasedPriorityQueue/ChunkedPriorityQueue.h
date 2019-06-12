@@ -220,9 +220,9 @@ public:
 		skipListDestroy(sl);
 	}
 
-	dev void insert(int key, ThrInf* t);				// the interface for inserting a key
-	dev int  delmin(ThrInf* t);							// the interface for deleting the min value
-	dev void print();
+	void insert(int key, ThrInf* t);				// the interface for inserting a key
+	int  delmin(ThrInf* t);							// the interface for deleting the min value
+	void print();
 
 	void assertStructure(){
 		DEB(

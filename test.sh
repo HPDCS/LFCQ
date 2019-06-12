@@ -11,9 +11,13 @@ PRUNE=500
 TIME=20
 MODE=T
 
+PROB_DEQUEUE_1=0.3
+PROB_DEQUEUE_2=0.5
 
+
+#cmd=resize-unit-test
 cmd=test
-version=Release
+version=Debug
 
 if [ "$6" = "G" ]
 then
@@ -32,7 +36,7 @@ else
     PRE=""
 fi
 
-cmd_line="$PRE1$PRE2 ./$version/$1-$cmd $2 1 $DIST 0.3 $SIZE $DIST  0.5 $OPS $DIST 0 0 $4 $3 0 $MODE $TIME"
+cmd_line="$PRE1$PRE2 ./$version/$1-$cmd $2 1 $DIST ${PROB_DEQUEUE_1} $SIZE $DIST  ${PROB_DEQUEUE_2} $OPS $DIST 0 0 $4 $3 0 $MODE $TIME"
 
 echo ${cmd_line}
 time ${cmd_line}

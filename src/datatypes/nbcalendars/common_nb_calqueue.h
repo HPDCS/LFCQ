@@ -30,6 +30,8 @@
 
 #include <float.h>
 #include <math.h>
+
+#include "../../key_type.h"
 #include "../../arch/atomic.h"
 #include "../../utils/hpdcs_utils.h"
 #include "../../gc/ptst.h"
@@ -60,14 +62,14 @@ extern int gc_hid[];
 #endif
 #define RESIZE_PERIOD RESIZE_PERIOD_FACTOR*BASE
 
+ 
+
+#define OK			0
+#define ABORT		1
+#define MOV_FOUND 	2
+#define PRESENT		4
 
 
-#define MOV_FOUND 	3
-#define OK			1
-#define ABORT		0
-
-
-#define INFTY DBL_MAX
 #define LESS(a,b) 		( (a) <  (b) )
 #define LEQ(a,b)		( (a) <= (b) )
 #define D_EQUAL(a,b) 	( (a) == (b) )
@@ -115,16 +117,16 @@ extern int gc_hid[];
 #define INV (2ULL)
 #define MOV (3ULL)
 
-#define MASK_PTR 	(-4LL)
+#define MASK_PTR 	((unsigned long long) (-4LL))
 #define MASK_MRK 	(3ULL)
-#define MASK_DEL 	(-3LL)
+#define MASK_DEL 	((unsigned long long) (-3LL))
 
 #define MAX_UINT 			  (0xffffffffU)
 #define MASK_EPOCH	(0x00000000ffffffffULL)
 #define MASK_CURR	(0xffffffff00000000ULL)
 
 
-#define REMOVE_DEL	 0
+#define REMOVE_DEL	 	 0
 #define REMOVE_DEL_INV	 1
 
 #define is_marked(...) macro_dispatcher(is_marked, __VA_ARGS__)(__VA_ARGS__)
@@ -136,9 +138,7 @@ extern int gc_hid[];
 #define get_marked(pointer, mark)	(UNION_CAST((UNION_CAST(pointer, unsigned long long)|(mark)), void *))
 #define get_mark(pointer)			(UNION_CAST((UNION_CAST(pointer, unsigned long long) & MASK_MRK), unsigned long long))
 
-#define MOV_FOUND 	3
-#define OK			1
-#define ABORT		0
+
 
 
 
@@ -152,7 +152,8 @@ struct __bucket_node
 	void *payload;  				// general payload
 	unsigned long long epoch;		//enqueue's epoch
 	//16
-	double timestamp;  				// key
+	pkey_t timestamp;  				// key
+	char pad[8-sizeof(pkey_t)];
 	unsigned int counter; 			// used to resolve the conflict with same timestamp using a FIFO policy
 	unsigned int nid; 				// used to resolve the conflict with same timestamp using a FIFO policy
 	//32
@@ -224,7 +225,7 @@ extern __thread unsigned long long attempt_enqueue ;
 extern __thread unsigned long long flush_current_attempt       ;
 extern __thread unsigned long long flush_current_success       ;
 extern __thread unsigned long long flush_current_fail  ;
-extern __thread unsigned long long read_table_count    ;
+extern __thread unsigned int read_table_count    ;
 
 
 extern unsigned int * volatile prune_array;
@@ -249,10 +250,10 @@ extern void search(nbc_bucket_node *head, double timestamp, unsigned int tie_bre
 extern void flush_current(table* h, unsigned long long newIndex, unsigned int size, nbc_bucket_node* node);
 extern double nbc_prune();
 extern void nbc_report(unsigned int);
-extern unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
+extern int search_and_insert(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
 						 int flag, nbc_bucket_node *new_node_pointer, nbc_bucket_node **new_node);
 
-
+ 
 
 /**
  *  This function is an helper to allocate a node and filling its fields.
@@ -265,7 +266,7 @@ extern unsigned int search_and_insert(nbc_bucket_node *head, double timestamp, u
  *  @return the pointer to the allocated node
  *
  */
-static inline nbc_bucket_node* node_malloc(void *payload, double timestamp, unsigned int tie_breaker)
+static inline nbc_bucket_node* node_malloc(void *payload, pkey_t timestamp, unsigned int tie_breaker)
 {
 	nbc_bucket_node* res;
 	
@@ -327,7 +328,7 @@ static inline void connect_to_be_freed_table_list(table *h)
 	gc_add_ptr_to_hook_list(ptst, h->array,  gc_hid[0]);
 }
 
-static inline bool is_marked_for_search(void *pointer, unsigned int research_flag)
+static inline bool is_marked_for_search(void *pointer, int research_flag)
 {
 	unsigned long long mask_value = (UNION_CAST(pointer, unsigned long long) & MASK_MRK);
 	
@@ -336,7 +337,7 @@ static inline bool is_marked_for_search(void *pointer, unsigned int research_fla
 		|| (research_flag == REMOVE_DEL_INV && (mask_value == INV) );
 }
 
-
+ 
 /**
  * This function computes the index of the destination bucket in the hashtable
  *
@@ -347,12 +348,10 @@ static inline bool is_marked_for_search(void *pointer, unsigned int research_fla
  *
  * @return the linear index of a given timestamp
  */
-static inline unsigned long long hash(double timestamp, double bucket_width)
+static inline unsigned int hash(pkey_t timestamp, double bucket_width)
 {
-	double tmp1;
-	double tmp2;
-	double res_d = (timestamp / bucket_width);
-	unsigned long long res =  (unsigned long long) res_d;
+	double tmp1, tmp2, res_d = (timestamp / bucket_width);
+	long long res =  (long long) res_d;
 	int upA = 0;
 	int upB = 0;
 
@@ -366,13 +365,13 @@ static inline unsigned long long hash(double timestamp, double bucket_width)
 				timestamp, bucket_width, res_d,  pow(2, 32));
 	}
 
-	tmp1 = res * bucket_width;
-	tmp2 = (res+1) * bucket_width;
+	tmp1 = ((double) (res)	 ) * bucket_width;
+	tmp2 = ((double) (res+1) )* bucket_width;
 	
 	upA = - LESS(timestamp, tmp1);
 	upB = GEQ(timestamp, tmp2 );
 		
-	return res+ upA + upB;
+	return (unsigned int) (res+ upA + upB);
 
 }
 

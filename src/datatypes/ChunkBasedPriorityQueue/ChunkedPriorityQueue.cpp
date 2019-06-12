@@ -149,7 +149,7 @@ inline void ChunkedPriorityQueue::debugPrintLoopInInsert(
 /******************************************************************************************************/
 // ChunkedPriorityQueue::insert(int key) 	
 //		- insert the key into PQ, the key must be positive and require less than 32 bits
-dev void ChunkedPriorityQueue::insert(int key, ThrInf* t){
+void ChunkedPriorityQueue::insert(int key, ThrInf* t){
 
 	Chunk* curr = NULL, *prev = NULL;
 	int iter = 0; 
@@ -700,7 +700,7 @@ void ChunkedPriorityQueue::freezeRecovery(	ThrInf* t, Chunk *curr, Chunk *prev, 
 	bool success = false;
 	Chunk *nextFrozen = NULL, *nextNextFrozen = NULL, *nextCreated = NULL;
 	int i = 0;
-
+	(void)i;
 	PRINT2("   <<< freezeRecovery: Thread %d starts freeze recovery with prev:%p and curr:%p (curr idx:%d); trigger: %d\n", 
 			t->id, prev, curr, curr->meta.status.bword.idx, ft);
 
