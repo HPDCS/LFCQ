@@ -108,34 +108,40 @@ begin:
 		right_limit = ((double)index)*bucket_width;
 		ep = 0;
 		
-		if(is_marked(min_next, MOV))
-			goto begin;
+		// a reshuffle has been detected => restart
+		if(is_marked(min_next, MOV)) goto begin;
 		
 		do
 		{
 				
 			left_node_next = left_node->next;
 			left_ts = left_node->timestamp;
+			counter++;
 
-			ep += left_node->epoch > epoch;
-			
+			// Skip marked and invalid nodes
 			if(is_marked(left_node_next, DEL) || is_marked(left_node_next, INV)) continue;
 			
-			if(is_marked(left_node_next, MOV)) goto begin;
+			// Abort the operation since there is a resize or a possible insert in the past
+			if(is_marked(left_node_next, MOV) || left_node->epoch > epoch) goto begin;
 			
+			// The virtual bucket is empty
 			if(left_ts >= right_limit) break;
 			
-			if(left_node->epoch > epoch) continue;
-			
+			// the node is a good candidate for extraction! lets try for it
 			int res = atomic_test_and_set_x64(UNION_CAST(&left_node->next, unsigned long long*));
+
+			// the extraction is failed
 			if(!res) left_node_next = left_node->next;
 
 			//left_node_next = FETCH_AND_OR(&left_node->next, DEL);
-				
+			
+			// the node cannot be extracted && is marked as MOV	=> restart
 			if(is_marked(left_node_next, MOV))	goto begin;
 
+			// the node cannot be extracted && is marked as DEL => skip
 			if(is_marked(left_node_next, DEL))	continue;
-				
+			
+			// the node has been extracted
 			scan_list_length += counter;
 
 			concurrent_dequeue += (unsigned long long) (__sync_fetch_and_add(&h->d_counter.count, 1) - con_de);
@@ -146,12 +152,14 @@ begin:
 
 			return left_ts;
 										
-		}while( (left_node = get_unmarked(left_node_next)) && ++counter);
+		}while( (left_node = get_unmarked(left_node_next)) && counter);
 		
+
+		// if i'm here it means that the virtual bucket was empty. Check for queue emptyness
 		if(left_node == tail && size == 1 && !is_marked(min->next, MOV))
 		{
+			critical_exit();
 			*result = NULL;
-				critical_exit();
 			return INFTY;
 		}
 				

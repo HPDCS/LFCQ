@@ -56,6 +56,10 @@ __thread unsigned long long num_cas = 0ULL;
 __thread unsigned long long num_cas_useful = 0ULL;
 __thread unsigned long long near = 0;
 
+__thread unsigned int acc = 0;
+__thread unsigned int acc_counter = 0;
+
+
 unsigned int threads;
 unsigned int * volatile prune_array;
 
@@ -554,8 +558,6 @@ void block_table(table* h)
 	}
 }
 
-__thread unsigned int acc = 0;
-__thread unsigned int acc_counter = 0;
 
 double compute_mean_separation_time(table* h,
 		unsigned int new_size, unsigned int threashold, unsigned int elem_per_bucket)
@@ -751,9 +753,9 @@ void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsigned int elem_per_bucket, double perc_used_bucket)
 {
 	table *h = *curr_table_ptr		;
-#if ENABLE_EXPANSION == 0
-	return h;
-#endif
+  #if ENABLE_EXPANSION == 0
+  	return h;
+  #endif
 	nbc_bucket_node *tail;
 	unsigned int i, size = h->size	;
 
@@ -1125,9 +1127,9 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	search(h->array+((oldIndex + dist + (unsigned int)( ( (double)(size-dist) )*rand )) % size), -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
 	#endif
 
-#if KEY_TYPE != DOUBLE
-out:
-#endif
+  #if KEY_TYPE != DOUBLE
+  out:
+  #endif
 	critical_exit();
 	return res;
 
