@@ -700,7 +700,7 @@ void ChunkedPriorityQueue::freezeRecovery(	ThrInf* t, Chunk *curr, Chunk *prev, 
 	bool success = false;
 	Chunk *nextFrozen = NULL, *nextNextFrozen = NULL, *nextCreated = NULL;
 	int i = 0;
-
+	(void)i;
 	PRINT2("   <<< freezeRecovery: Thread %d starts freeze recovery with prev:%p and curr:%p (curr idx:%d); trigger: %d\n", 
 			t->id, prev, curr, curr->meta.status.bword.idx, ft);
 
