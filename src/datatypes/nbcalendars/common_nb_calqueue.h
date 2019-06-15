@@ -2,7 +2,7 @@
 *
 *	This file is part of NBQueue, a lock-free O(1) priority queue.
 *
-*   Copyright (C) 2015, Romolo Marotta
+*   Copyright (C) 2019, Romolo Marotta
 *
 *   This program is free software: you can redistribute it and/or modify
 *   it under the terms of the GNU General Public License as published by
@@ -19,9 +19,8 @@
 *
 ******************************************************************************/
 /*
- * nonblockingqueue.h
+ * common_nb_calqueue.h
  *
- *  Created on: Jul 13, 2015
  *  Author: Romolo Marotta
  */
 
