@@ -9,7 +9,7 @@ EXECUTABLES :=
 USER_OBJS :=
 LIBS := -lpthread -lm -lnuma -lrt
 SRC_DIR := src
-TARGETS := NBCQ LIND MARO CBCQ SLCQ #V2CQ V3CQ NOHO NOH2 LMCQ #CBCQ #NUMA #WORK
+TARGETS := NBCQ LIND MARO CBCQ SLCQ #V2CQ NUMA WORK
 
 UTIL_value := src/utils/common.o src/utils/hpdcs_math.o 
 GACO_value := src/gc/gc.o src/gc/ptst.o
@@ -17,40 +17,38 @@ ARCH_value := src/arch/x86.o
 
 SLCQ_value := src/datatypes/slcalqueue/calqueue.o  $(UTIL_value)
 
-NBCQ_value := src/datatypes/nbcalendars/nb_calqueue.o   src/datatypes/nbcalendars/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
-V2CQ_value := src/datatypes/nbcalendars/nb_calqueue_last_min.o   src/datatypes/nbcalendars/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
-LMCQ_value := src/datatypes/nblastmin/nb_calqueue_last_min_v2.o   src/datatypes/nblastmin/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
-V3CQ_value := src/datatypes/nbcachecq/nb_calqueue_last_min.o   src/datatypes/nbcachecq/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
-LIND_value := src/datatypes/nbskiplists/prioq.o  src/datatypes/nbskiplists/common_prioq.o $(UTIL_value) $(GACO_value) $(ARCH_value)
+NBCQ_value := src/datatypes/nbcalendars/nb_calqueue.o   		src/datatypes/nbcalendars/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
+#V2CQ_value := src/datatypes/nbcalendars/nb_calqueue_last_min.o  src/datatypes/nbcalendars/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
+
+LIND_value := src/datatypes/nbskiplists/prioq.o    src/datatypes/nbskiplists/common_prioq.o $(UTIL_value) $(GACO_value) $(ARCH_value)
 MARO_value := src/datatypes/nbskiplists/prioq_v2.o src/datatypes/nbskiplists/common_prioq.o $(UTIL_value) $(GACO_value) $(ARCH_value)
-NOHO_value := src/datatypes/nohotspot/background.o  src/datatypes/nohotspot/nohotspot_ops.o src/datatypes/nohotspot/skiplist.o $(UTIL_value) $(GACO_value) $(ARCH_value)
-NOH2_value := src/datatypes/nohotspot2/background.o  src/datatypes/nohotspot2/nohotspot_ops.o src/datatypes/nohotspot2/skiplist.o\
-              src/datatypes/nohotspot2/garbagecoll.o src/datatypes/nohotspot2/ptst.o  $(UTIL_value) 
-NUMA_value := src/datatypes/numa_queue.o  src/datatypes/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
-WORK_value := src/datatypes/worker_queue.o  src/datatypes/common_nb_calqueue.o  $(UTIL_value) $(GACO_value) $(ARCH_value)
-CBCQ_value := src/datatypes/ChunkBasedPriorityQueue/cbpq.opp src/datatypes/ChunkBasedPriorityQueue/Atomicable.opp\
-  src/datatypes/ChunkBasedPriorityQueue/listNode.opp\
+
+CBCQ_value := src/datatypes/ChunkBasedPriorityQueue/cbpq.opp\
+			  src/datatypes/ChunkBasedPriorityQueue/Atomicable.opp\
+  			  src/datatypes/ChunkBasedPriorityQueue/listNode.opp\
 			  src/datatypes/ChunkBasedPriorityQueue/skipListCommon.opp\
-			   src/datatypes/ChunkBasedPriorityQueue/skipList.opp\
+			  src/datatypes/ChunkBasedPriorityQueue/skipList.opp\
 			  src/datatypes/ChunkBasedPriorityQueue/ChunkedPriorityQueue.opp $(UTIL_value) 
 
 
-# src/datatypes/ChunkBasedPriorityQueue/LinkedList.opp\
+
 
 SLCQ_link := gcc
+
 NBCQ_link := gcc 
 V2CQ_link := gcc 
-LMCQ_link := gcc 
-V3CQ_link := gcc 
+
 LIND_link := gcc 
 MARO_link := gcc 
-NOHO_link := gcc 
-NOH2_link := gcc
+
+CBCQ_link := g++
+
 
 NUMA_link := gcc 
 WORK_link := gcc 
-CBCQ_link := g++
-	 
+NUMA_value := src/datatypes/numa_queue.o  src/datatypes/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
+WORK_value := src/datatypes/worker_queue.o  src/datatypes/common_nb_calqueue.o  $(UTIL_value) $(GACO_value) $(ARCH_value)
+
 
 L1_CACHE_LINE_SIZE := $(shell getconf LEVEL1_DCACHE_LINESIZE)
 MACRO := -DARCH_X86_64  -DCACHE_LINE_SIZE=$(L1_CACHE_LINE_SIZE) -DINTEL
@@ -84,7 +82,7 @@ endif
 
 
 ORIGINAL_SUBDIRS 		:= $(shell find src -type d)
-SUBDIRS 		:= $(filter-out src/datatypes src/datatypes/ChunkBasedPriorityQueue, $(ORIGINAL_SUBDIRS))
+SUBDIRS 		:= $(filter-out src/datatypes src/datatypes/nbcalendars_bck src/datatypes/ChunkBasedPriorityQueue, $(ORIGINAL_SUBDIRS))
 
 C_SRCS			:= $(shell ls   $(patsubst %, %/*.c, $(SUBDIRS)) )
 C_SRCS 			:= $(filter-out $(FILTER_OUT_C_SRC), $(C_SRCS))
