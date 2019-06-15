@@ -10,6 +10,14 @@
  * GLOBAL VARIABLES					 *
  ************************************/
 
+int gc_aid[1];
+int gc_hid[1];
+
+
+/*************************************
+ * THREAD LOCAL VARIABLES					 *
+ ************************************/
+
 
 __thread unsigned long long concurrent_enqueue;
 __thread unsigned long long performed_enqueue ;
@@ -17,51 +25,21 @@ __thread unsigned long long concurrent_dequeue;
 __thread unsigned long long performed_dequeue ;
 __thread unsigned long long scan_list_length;
 __thread unsigned long long scan_list_length_en ;
-
-
-int gc_aid[1];
-int gc_hid[1];
-
-
-
-
-/*************************************
- * VARIABLES FOR ENQUEUE  *
- *************************************/
-
-// number of enqueue invokations
-__thread unsigned int flush_eq = 0;
-
-/*************************************
- * VARIABLES FOR READ TABLE  *
- *************************************/
-
-/*************************************
- * VARIABLES FOR DEQUEUE	  		 *
- *************************************/
-  
-//__thread unsigned int local_monitor = ULONG_MAX;
-__thread unsigned int flush_de = 0;
-
-
-
-
-
 __thread unsigned int read_table_count	 = 0;
-  
-
-
-__thread unsigned long long dist = 0;
 __thread unsigned long long num_cas = 0ULL;
 __thread unsigned long long num_cas_useful = 0ULL;
 __thread unsigned long long near = 0;
-
 __thread unsigned int acc = 0;
 __thread unsigned int acc_counter = 0;
 
 
-unsigned int threads;
-unsigned int * volatile prune_array;
+
+//__thread unsigned long long dist = 0;
+//__thread unsigned int flush_eq = 0;
+//__thread unsigned int flush_de = 0;
+//__thread unsigned int local_monitor = ULONG_MAX;
+//unsigned int threads;
+//unsigned int * volatile prune_array;
 
 
 
@@ -69,17 +47,14 @@ unsigned int * volatile prune_array;
  * This function commits a value in the current field of a queue. It retries until the timestamp
  * associated with current is strictly less than the value that has to be committed
  *
- * @author Romolo Marotta
- *
- * @param queue the interested queue
- * @param left_node the candidate node for being next current
- *
+ * @param h: the interested set table
+ * @param newIndex: index of the bucket where the new node belongs
+ * @param node: pointer to the new item
  */
-void flush_current(table* h, unsigned long long newIndex, unsigned int size, nbc_bucket_node* node)
+void flush_current(table* h, unsigned long long newIndex, nbc_bucket_node* node)
 {
 	unsigned long long oldCur, oldIndex, oldEpoch;
 	unsigned long long newCur, tmpCur = ULONG_MAX;
-	signed long long distance = 0;
 	bool mark = false;	// <----------------------------------------
 		
 	
@@ -89,19 +64,14 @@ void flush_current(table* h, unsigned long long newIndex, unsigned int size, nbc
 	oldIndex = oldCur >> 32;
 
 	newCur =  newIndex << 32;
-	distance = (signed long long)(newIndex - oldIndex);
-	dist = (unsigned long long) (size*DISTANCE_FROM_CURRENT);
-
-	if(distance > 0 && distance < dist){
-		newIndex = oldIndex;
-		newCur =  newIndex << 32;
-		near+= distance!=0;
-	}
 	
 	// Try to update the current if it need	
 	if(
+		// if the new item falls into a subsequent bucket of current we can return
 		newIndex >	oldIndex 
+		// if the new item has been marked as MOV or DEL we can complete (INV cannot be reached here)
 		|| is_marked(node->next)
+		// if we do not fall in the previous cases we try to update current and return if we succeed
 		|| oldCur 	== 	(tmpCur =  VAL_CAS(
 										&(h->current), 
 										oldCur, 
@@ -110,25 +80,32 @@ void flush_current(table* h, unsigned long long newIndex, unsigned int size, nbc
 						)
 		)
 	{
-		if(tmpCur != -1)
+		// collect statistics
+		if(tmpCur != ULONG_MAX)
 			near++;
 		return;
 	}
 						 
-	//At this point someone else has update the current from the begin of this function
+	//At this point someone else has updated the current from the begin of this function (Failed CAS)
 	do
 	{
-		
+		// get old data from the previous failed CAS
 		oldCur = tmpCur;
 		oldEpoch = oldCur & MASK_EPOCH;
 		oldIndex = oldCur >> 32;
+
+		// keep statistics
+		near+=mark;
 		mark = false;
-		near++;
 	}
 	while (
+		// retry 
+		// if the item is in a previous bucket of current and
 		newIndex <	oldIndex 
+		// if the item is still valid and
 		&& is_marked(node->next, VAL)
 		&& (mark = true)
+		// if the cas has failed
 		&& oldCur 	!= 	(tmpCur = 	VAL_CAS(
 										&(h->current), 
 										oldCur, 
@@ -598,7 +575,7 @@ double compute_mean_separation_time(table* h,
 	pkey_t sample_array[SAMPLE_SIZE+1]; //<--TODO: DOES NOT FOLLOW STANDARD C90
     
     //read nodes until the total samples is reached or until someone else do it
-		acc = 0;
+	acc = 0;
 	while(counter != sample_size && new_h->bucket_width == -1.0)
 	{   
 
@@ -744,7 +721,7 @@ void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 		);
 
 	
-	flush_current(new_h, ( unsigned long long ) hash(right_replica_field->timestamp, new_h->bucket_width), new_h->size, right_replica_field);
+	flush_current(new_h, ( unsigned long long ) hash(right_replica_field->timestamp, new_h->bucket_width), right_replica_field);
 	
 	
 	right_node_next = FETCH_AND_AND(&(right_node->next), MASK_DEL);
@@ -926,7 +903,7 @@ void pq_report(int TID)
 	printf("%d- "
 	"Enqueue: %.10f LEN: %.10f ### "
 	"Dequeue: %.10f LEN: %.10f NUMCAS: %llu : %llu ### "
-	"NEAR: %llu dist: %llu ### "
+	"NEAR: %llu "
 	"RTC:%d,M:%lld\n",
 			TID,
 			((float)concurrent_enqueue) /((float)performed_enqueue),
@@ -935,7 +912,6 @@ void pq_report(int TID)
 			((float)scan_list_length)   /((float)performed_dequeue),
 			num_cas, num_cas_useful,
 			near,
-			dist,
 			read_table_count	  ,
 			malloc_count);
 }
@@ -967,14 +943,11 @@ void my_hook(ptst_t *p, void *ptr){	free(ptr); }
 void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket)
 {
 	unsigned int i = 0;
-	//unsigned int new_threshold = 1;
+	unsigned int new_threshold = 1;
+	
 	int res_mem_posix = 0;
 	_init_gc_subsystem();
 
-	threads = threshold;
-	prune_array = calloc(threshold*threshold, sizeof(unsigned int));
-
-	//nb_calqueue* res = calloc(1, sizeof(nb_calqueue));
 	nb_calqueue* res = NULL; 
 	res_mem_posix = posix_memalign((void**)(&res), CACHE_LINE_SIZE, sizeof(nb_calqueue));
 	if(res_mem_posix != 0)
@@ -984,16 +957,15 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	//if(res == NULL)
 	//	error("No enough memory to allocate queue\n");
 
-	//while(new_threshold <= threshold)
-	//	new_threshold <<=1;
+	while(new_threshold <= threshold)
+		new_threshold <<=1;
 
-	res->threshold = threads;
+	res->threshold = new_threshold;
 	res->perc_used_bucket = perc_used_bucket;
 	res->elem_per_bucket = elem_per_bucket;
 	res->pub_per_epb = perc_used_bucket * elem_per_bucket;
 	res->read_table_period = READTABLE_PERIOD;
 
-	//res->hashtable = malloc(sizeof(table));
 	res_mem_posix = posix_memalign((void**)(&res->hashtable), CACHE_LINE_SIZE, sizeof(table));
 	
 	if(res_mem_posix != 0)
@@ -1108,7 +1080,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 
 
 	// the CAS succeeds, thus we want to ensure that the insertion becomes visible
-	flush_current(h, newIndex, size, new_node);
+	flush_current(h, newIndex, new_node);
 	performed_enqueue++;
 	
 	// updates for statistics
@@ -1119,8 +1091,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	// clean a random bucket
 	unsigned long long oldCur = h->current;
 	unsigned long long oldIndex = oldCur >> 32;
-	dist = (unsigned long long) (size*DISTANCE_FROM_CURRENT);
-	dist +=1;
+	unsigned long long dist = 1;
 	double rand;
 	nbc_bucket_node *left_node, *right_node;
 	drand48_r(&seedT, &rand);

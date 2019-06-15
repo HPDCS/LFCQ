@@ -17,7 +17,7 @@ ARCH_value := src/arch/x86.o
 
 SLCQ_value := src/datatypes/slcalqueue/calqueue.o  $(UTIL_value)
 
-NBCQ_value := src/datatypes/nbcalendars/nb_calqueue.o   		src/datatypes/nbcalendars/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
+NBCQ_value := src/datatypes/nbcalendars/nb_calqueue.o src/datatypes/nbcalendars/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
 #V2CQ_value := src/datatypes/nbcalendars/nb_calqueue_last_min.o  src/datatypes/nbcalendars/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
 
 LIND_value := src/datatypes/nbskiplists/prioq.o    src/datatypes/nbskiplists/common_prioq.o $(UTIL_value) $(GACO_value) $(ARCH_value)
@@ -91,7 +91,7 @@ C_ASM				:= $(strip $(subst .c,.S, $(C_SRCS)))
 C_DEPS			:= $(patsubst %, $(OBJS_DIR)/%, $(subst .o,.d, $(C_OBJS)))
 
 SUBDIRS 		:= $(filter-out src/datatypes src src/utils src/gc src/arch\
-                                src/datatypes/nbcalendars src/datatypes/nblastmin src/datatypes/nbcachecq\
+                                src/datatypes/nbcalendars src/datatypes/nbcalendars_bck src/datatypes/slcalqueue src/datatypes/nblastmin src/datatypes/nbcachecq\
                                 src/datatypes/nbskiplists src/datatypes/nohotspot\
                                 src/datatypes/nohotspot2 src/datatypes/rotating, $(ORIGINAL_SUBDIRS))
 

@@ -1,8 +1,8 @@
 /*****************************************************************************
 *
-*	This file is part of NBQueue, a lock-free O(1) priority queue.
+*	This file is part of NBCQ, a lock-free O(1) priority queue.
 *
-*   Copyright (C) 2015, Romolo Marotta
+*   Copyright (C) 2019, Romolo Marotta
 *
 *   This program is free software: you can redistribute it and/or modify
 *   it under the terms of the GNU General Public License as published by
@@ -19,9 +19,8 @@
 *
 ******************************************************************************/
 /*
- * nonblocking_queue.c
+ *  nb_calqueue.c
  *
- *  Created on: July 13, 2015
  *  Author: Romolo Marotta
  */
 
@@ -34,17 +33,14 @@
 
 #include "common_nb_calqueue.h"
 
-__thread unsigned long long last_curr = 0ULL;
-__thread unsigned long long cached_curr = 0ULL;
-
 /**
- * This function dequeue from the nonblocking queue. The cost of this operation when succeeds should be O(1)
+ * This function extract the minimum item from the NBCQ. 
+ * The cost of this operation when succeeds should be O(1)
  *
  * @author Romolo Marotta
- *
- * @param queue the interested queue
- *
- * @return a pointer to a node that contains the dequeued value
+ * @param  q: pointer to the interested queue
+ * @param  result: location to save payload address
+ * @return the highest priority 
  *
  */
 pkey_t pq_dequeue(void *q, void** result)
@@ -62,7 +58,7 @@ pkey_t pq_dequeue(void *q, void** result)
 	unsigned int size, attempts = 0;
 	unsigned int counter;
 	pkey_t left_ts;
-	double bucket_width, right_limit;
+	double bucket_width, left_limit, right_limit;
 
 	double pub = queue->perc_used_bucket;
 	unsigned int epb = queue->elem_per_bucket;
@@ -76,7 +72,10 @@ pkey_t pq_dequeue(void *q, void** result)
 	critical_enter();
 
 begin:
+	// Get the current set table
 	h = read_table(&queue->hashtable, th, epb, pub);
+
+	// Get data from the table
 	size = h->size;
 	array = h->array;
 	bucket_width = h->bucket_width;
@@ -84,42 +83,51 @@ begin:
 	con_de = h->d_counter.count;
 	attempts = 0;
 
-	if(last_curr != current){
-		cached_curr = last_curr = current;
-	}
-	else
-		current = cached_curr;
-	
 	do
-	{
+	{	
+		// To many attempts: there is some problem? recheck the table
 		if( h->read_table_period == attempts){
 			goto begin;
 		}
 		attempts++;
 
-		counter = 0;
+		// get fields from current
 		index = current >> 32;
 		epoch = current & MASK_EPOCH;
 
-		prob_overflow = (index+1 > MASK_EPOCH);
-		min = array + (index++ % (size));
-		
+
+		// get the physical bucket
+		min = array + (index % (size));
 		left_node = min_next = min->next;
+		
+		// get the left limit
+		left_limit = ((double)index)*bucket_width;
+
+		index++;
+
+		// get the right limit
 		right_limit = ((double)index)*bucket_width;
-		ep = 0;
+		// check for a possible overflow
+		prob_overflow = (index > MASK_EPOCH);
+		
+		// reset variables for a new scan
+		counter = ep = 0;
 		
 		// a reshuffle has been detected => restart
 		if(is_marked(min_next, MOV)) goto begin;
 		
 		do
 		{
-				
+			
+			// get data from the current node	
 			left_node_next = left_node->next;
 			left_ts = left_node->timestamp;
+
+			// increase count of traversed deleted items
 			counter++;
 
-			// Skip marked and invalid nodes
-			if(is_marked(left_node_next, DEL) || is_marked(left_node_next, INV)) continue;
+			// Skip marked nodes, invalid nodes and nodes with timestamp out of range
+			if(is_marked(left_node_next, DEL) || is_marked(left_node_next, INV) || left_ts < left_limit) continue;
 			
 			// Abort the operation since there is a resize or a possible insert in the past
 			if(is_marked(left_node_next, MOV) || left_node->epoch > epoch) goto begin;
@@ -142,8 +150,10 @@ begin:
 			if(is_marked(left_node_next, DEL))	continue;
 			
 			// the node has been extracted
-			scan_list_length += counter;
 
+			// use it for count the average number of traversed node per dequeue
+			scan_list_length += counter;
+			// use it for count the average of completed extractions
 			concurrent_dequeue += (unsigned long long) (__sync_fetch_and_add(&h->d_counter.count, 1) - con_de);
 
 			*result = left_node->payload;
@@ -152,7 +162,7 @@ begin:
 
 			return left_ts;
 										
-		}while( (left_node = get_unmarked(left_node_next)) && counter);
+		}while( (left_node = get_unmarked(left_node_next)));
 		
 
 		// if i'm here it means that the virtual bucket was empty. Check for queue emptyness
@@ -163,41 +173,26 @@ begin:
 			return INFTY;
 		}
 				
-		if(ep == 0)
-		{
-			new_current = h->current;
-			if(new_current == last_curr){
-				unsigned int dist = (unsigned int) (size*DISTANCE_FROM_CURRENT);
-				if(prob_overflow && h->e_counter.count == 0)
-					goto begin;
-				assertf(prob_overflow, "\nOVERFLOW INDEX:%llu"  
-					"BW:%.10f"
-					 "SIZE:%u TAIL:%p TABLE:%p\n", index, bucket_width, size, tail, h);
-				
-				
-				//assertf((index - (last_curr >> 32) -1) <= dist, "%s\n", "PROVA");
-				if(  //1 || 
-				 (index - (last_curr >> 32) -1) == dist 
-				 )
-				{
-					num_cas++;
-					old_current = VAL_CAS(&(h->current), last_curr, ((index << 32) | epoch) );
-					if(old_current == last_curr){
-						current = ((index << 32) | epoch);
-						num_cas_useful++;
-					}
-					else
-						current = old_current;
-					cached_curr = last_curr = current;
-				}
-				else
-					cached_curr = current = ((index << 32) | epoch);
+		new_current = h->current;
+		if(new_current == current){
+
+			if(prob_overflow && h->e_counter.count == 0)
+				goto begin;
+
+			assertf(prob_overflow, "\nOVERFLOW INDEX:%llu" "BW:%.10f"  "SIZE:%u TAIL:%p TABLE:%p\n", index, bucket_width, size, tail, h);
+			//assertf((index - (last_curr >> 32) -1) <= dist, "%s\n", "PROVA");
+
+			num_cas++;
+			old_current = VAL_CAS( &(h->current), current, ((index << 32) | epoch) );
+			if(old_current == current){
+				current = ((index << 32) | epoch);
+				num_cas_useful++;
 			}
 			else
-				cached_curr = last_curr = current = new_current;
+				current = old_current;
 		}
 		else
-			goto begin;
+			current = new_current;
 		
 	}while(1);
 	

@@ -19,7 +19,7 @@
 *
 ******************************************************************************/
 /*
- * common_nb_calqueue.h
+ *  common_nb_calqueue.h
  *
  *  Author: Romolo Marotta
  */
@@ -53,7 +53,6 @@ extern int gc_hid[];
 
 #define READTABLE_PERIOD 63
 #define COMPACT_RANDOM_ENQUEUE 1
-#define DISTANCE_FROM_CURRENT 0.0 
 
 #define BASE 1000000ULL 
 #ifndef RESIZE_PERIOD_FACTOR 
@@ -208,31 +207,12 @@ struct nb_calqueue
 extern __thread unsigned int TID;
 extern __thread struct drand48_data seedT;
 
-extern __thread nbc_bucket_node *to_free_tables_old;
-extern __thread nbc_bucket_node *to_free_tables_new;
-   
 extern __thread unsigned long long concurrent_dequeue;
 extern __thread unsigned long long performed_dequeue ;
-extern __thread unsigned long long attempt_dequeue ;
 extern __thread unsigned long long scan_list_length ;
-extern __thread unsigned long long scan_list_length_en ;
 
-
-extern __thread unsigned long long concurrent_enqueue;
-extern __thread unsigned long long performed_enqueue ;
-extern __thread unsigned long long attempt_enqueue ;
-extern __thread unsigned long long flush_current_attempt       ;
-extern __thread unsigned long long flush_current_success       ;
-extern __thread unsigned long long flush_current_fail  ;
-extern __thread unsigned int read_table_count    ;
-
-
-extern unsigned int * volatile prune_array;
-extern unsigned int threads;
-
-extern nbc_bucket_node *g_tail;
 extern __thread unsigned long long malloc_count;
-
+extern __thread unsigned int read_table_count    ;
 extern __thread unsigned long long near;
 extern __thread unsigned long long num_cas;
 extern __thread unsigned long long num_cas_useful;
@@ -246,7 +226,7 @@ extern void block_table(table* h);
 extern double compute_mean_separation_time(table* h, unsigned int new_size, unsigned int threashold, unsigned int elem_per_bucket);
 extern void migrate_node(nbc_bucket_node *right_node,	table *new_h);
 extern void search(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker, nbc_bucket_node **left_node, nbc_bucket_node **right_node, int flag);
-extern void flush_current(table* h, unsigned long long newIndex, unsigned int size, nbc_bucket_node* node);
+extern void flush_current(table* h, unsigned long long newIndex, nbc_bucket_node* node);
 extern double nbc_prune();
 extern void nbc_report(unsigned int);
 extern int search_and_insert(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
