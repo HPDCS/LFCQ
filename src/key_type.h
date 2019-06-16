@@ -27,7 +27,7 @@
 	#define MILLION 1000000
 	#define TRACE_LEN (100*MILLION)
 
-	#define MEAN  10.0;			// Maximum distance from the current event owned by the thread
+	#define MEAN  2;			// Maximum distance from the current event owned by the thread
 
 #endif
 
