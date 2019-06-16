@@ -127,13 +127,13 @@ begin:
 			counter++;
 
 			// Skip marked nodes, invalid nodes and nodes with timestamp out of range
-			if(is_marked(left_node_next, DEL) || is_marked(left_node_next, INV) || left_ts < left_limit) continue;
+			if(is_marked(left_node_next, DEL) || is_marked(left_node_next, INV) || (left_ts < left_limit && left_node != tail)) continue;
 			
 			// Abort the operation since there is a resize or a possible insert in the past
 			if(is_marked(left_node_next, MOV) || left_node->epoch > epoch) goto begin;
 			
 			// The virtual bucket is empty
-			if(left_ts >= right_limit) break;
+			if(left_ts >= right_limit || left_node == tail) break;
 			
 			// the node is a good candidate for extraction! lets try for it
 			int res = atomic_test_and_set_x64(UNION_CAST(&left_node->next, unsigned long long*));
@@ -176,8 +176,9 @@ begin:
 		new_current = h->current;
 		if(new_current == current){
 
-			if(prob_overflow && h->e_counter.count == 0)
-				goto begin;
+			if(prob_overflow && h->e_counter.count == 0) goto begin;
+			
+
 
 			assertf(prob_overflow, "\nOVERFLOW INDEX:%llu" "BW:%.10f"  "SIZE:%u TAIL:%p TABLE:%p\n", index, bucket_width, size, tail, h);
 			//assertf((index - (last_curr >> 32) -1) <= dist, "%s\n", "PROVA");
