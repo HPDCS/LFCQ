@@ -66,7 +66,7 @@ inline static void error(const char *msg, ...) {
 
 	printf("%s", buf);
 	buf[1025] = 'a';
-	//exit(1);
+	exit(1);
 }
 
 
