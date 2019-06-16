@@ -22,8 +22,7 @@ int tr_id = 0;
 #endif
 
 static char distribution = 'A';
-
-extern pthread_t *p_tid;
+static pthread_t p_tid[NUM_CORES];
 
 void* local_trace(void *arg){
 	int id = __sync_fetch_and_add(&tr_id, 1);
@@ -82,11 +81,12 @@ void generate_trace(char d)
 
 	for(i=0;i<NUM_CORES;i++)
 		pthread_join(p_tid[i], NULL);
-	
-	for(i = 1; i< TRACE_LEN-1;i++){
-		trace[i] = trace[i-1]+trace[i];
+
+	trace[0] = 1;
+	for(i = 1; i< TRACE_LEN;i++){
+		trace[i] += trace[i-1];
 	}
-	LOG("Done\n%s", "");
+	LOG("%s\n", "Done");
 
 
 }
@@ -108,7 +108,7 @@ pkey_t dequeue(void)
 	return timestamp;
 }
 
-pkey_t enqueue(int my_id, struct drand48_data* seed, pkey_t local_min, double (*current_prob) (struct drand48_data*, double))
+int enqueue(int my_id, struct drand48_data* seed, pkey_t local_min, double (*current_prob) (struct drand48_data*, double))
 {
 	pkey_t timestamp = 0.0;
 	
@@ -127,8 +127,7 @@ pkey_t enqueue(int my_id, struct drand48_data* seed, pkey_t local_min, double (*
 	timestamp = trace[index];
 #endif
 
-	pq_enqueue(nbcqueue, timestamp, UNION_CAST(1, void*));
-	
-	return timestamp;
+	int res = pq_enqueue(nbcqueue, timestamp, UNION_CAST(1, void*));
 
+	return res;
 }
