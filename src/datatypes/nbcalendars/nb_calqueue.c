@@ -37,7 +37,6 @@
  * This function extract the minimum item from the NBCQ. 
  * The cost of this operation when succeeds should be O(1)
  *
- * @author Romolo Marotta
  * @param  q: pointer to the interested queue
  * @param  result: location to save payload address
  * @return the highest priority 
