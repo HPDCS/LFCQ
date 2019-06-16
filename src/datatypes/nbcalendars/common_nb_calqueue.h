@@ -1,6 +1,6 @@
 /*****************************************************************************
 *
-*	This file is part of NBQueue, a lock-free O(1) priority queue.
+*	This file is part of NBCQ, a lock-free O(1) priority queue.
 *
 *   Copyright (C) 2019, Romolo Marotta
 *
@@ -48,7 +48,6 @@ extern int gc_hid[];
 
 #define FLUSH_SMART 1
 #define ENABLE_EXPANSION 1
-#define ENABLE_PRUNE 0
 #define ENABLE_HIGH_STATITISTICS 1
 
 #define READTABLE_PERIOD 63
