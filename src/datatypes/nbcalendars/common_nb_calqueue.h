@@ -42,24 +42,20 @@ extern int gc_hid[];
 
 #define SAMPLE_SIZE 25
 #define HEAD_ID 0
-#define MAXIMUM_SIZE 1048576 //524288 //262144 //131072 //65536 //32768
+//#define MAXIMUM_SIZE 1048576 //524288 //262144 //131072 //65536 //32768
 #define MINIMUM_SIZE 1
 #define MAX_NUMA_NODES 16
 
-#define FLUSH_SMART 1
 #define ENABLE_EXPANSION 1
-#define ENABLE_HIGH_STATITISTICS 1
-
 #define READTABLE_PERIOD 63
 #define COMPACT_RANDOM_ENQUEUE 1
 
 #define BASE 1000000ULL 
 #ifndef RESIZE_PERIOD_FACTOR 
-#define RESIZE_PERIOD_FACTOR 2000ULL
+#define RESIZE_PERIOD_FACTOR 4ULL //2000ULL
 #endif
 #define RESIZE_PERIOD RESIZE_PERIOD_FACTOR*BASE
 
- 
 
 #define OK			0
 #define ABORT		1
@@ -175,7 +171,8 @@ struct table
 	nbc_bucket_node* array;			//32
 	unsigned int read_table_period; 
 	unsigned int last_resize_count; //40
-	char zpad4[24];
+	unsigned int resize_count; 		//44
+	char zpad4[20];
 	atomic_t e_counter;
 	char zpad3[60];
 	atomic_t d_counter;
@@ -298,12 +295,6 @@ static inline void connect_to_be_freed_node_list(nbc_bucket_node *start, unsigne
 		gc_free(ptst, (void *)start, gc_aid[0]);
 		start =  get_unmarked(tmp_next);                  //<-----NEW
 	}                                                   //<-----NEW
-}
-
-static inline void connect_to_be_freed_table_list(table *h)
-{
-	gc_add_ptr_to_hook_list(ptst, h, 		 gc_hid[0]);
-	gc_add_ptr_to_hook_list(ptst, h->array,  gc_hid[0]);
 }
 
 static inline bool is_marked_for_search(void *pointer, int research_flag)

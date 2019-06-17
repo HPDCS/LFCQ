@@ -30,8 +30,6 @@
 #include "common_nb_calqueue.h"
 
 
-
-
 /*************************************
  * GLOBAL VARIABLES					 *
  ************************************/
@@ -39,11 +37,9 @@
 int gc_aid[1];
 int gc_hid[1];
 
-
 /*************************************
  * THREAD LOCAL VARIABLES			 *
  ************************************/
-
 
 __thread unsigned long long concurrent_enqueue;
 __thread unsigned long long performed_enqueue ;
@@ -51,21 +47,12 @@ __thread unsigned long long concurrent_dequeue;
 __thread unsigned long long performed_dequeue ;
 __thread unsigned long long scan_list_length;
 __thread unsigned long long scan_list_length_en ;
-__thread unsigned int read_table_count	 = 0;
+__thread unsigned int 		read_table_count	 = UINT_MAX;
 __thread unsigned long long num_cas = 0ULL;
 __thread unsigned long long num_cas_useful = 0ULL;
 __thread unsigned long long near = 0;
-__thread unsigned int acc = 0;
-__thread unsigned int acc_counter = 0;
-
-
-
-//__thread unsigned long long dist = 0;
-//__thread unsigned int flush_eq = 0;
-//__thread unsigned int flush_de = 0;
-//__thread unsigned int local_monitor = ULONG_MAX;
-//unsigned int threads;
-//unsigned int * volatile prune_array;
+__thread unsigned int 		acc = 0;
+__thread unsigned int 		acc_counter = 0;
 
 
 
@@ -107,8 +94,7 @@ void flush_current(table* h, unsigned long long newIndex, nbc_bucket_node* node)
 		)
 	{
 		// collect statistics
-		if(tmpCur != ULONG_MAX)
-			near++;
+		if(tmpCur != ULONG_MAX) near++;
 		return;
 	}
 						 
@@ -159,7 +145,6 @@ void flush_current(table* h, unsigned long long newIndex, nbc_bucket_node* node)
  * @param left_node_next: a pointer to a pointer used to return the next field of the left node 
  *
  */   
-
 void search(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
 						nbc_bucket_node **left_node, nbc_bucket_node **right_node, int flag)
 {
@@ -242,15 +227,6 @@ void search(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
 }
 
 
-
-
-
-
-
-
-
-
-
 /**
  * This function implements the search of a node needed for inserting a new item.
  * 
@@ -288,7 +264,6 @@ void search(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
  * @param left_node_next a pointer to a pointer used to return the next field of the left node 
  *
  */   
- 
 int search_and_insert(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
 						 int flag, nbc_bucket_node *new_node_pointer, nbc_bucket_node **new_node)
 {
@@ -427,52 +402,54 @@ int search_and_insert(nbc_bucket_node *head, double timestamp, unsigned int tie_
 
 void set_new_table(table* h, unsigned int threshold, double pub, unsigned int epb, unsigned int counter)
 {
+	//double pub_per_epb = pub*epb;
+	//new_size += ((unsigned int)(-(size >= thp2 && counter > 2   * pub_per_epb * (size))  ))	&(size <<1 );
+	//new_size += ((unsigned int)(-(size >  thp2 && counter < 0.5 * pub_per_epb * (size))  ))	&(size >>1);
+	//new_size += ((unsigned int)(-(size == 1    && counter > thp2) 					     ))	& thp2;
+	//new_size += ((unsigned int)(-(size == thp2 && counter < threshold)				     ))	& 1;
+
 	nbc_bucket_node *tail;
+	table *new_h = NULL;
+	double current_num_items = pub*epb*h->size;
+	int res = 0;
 	unsigned int i = 0;
 	unsigned int size = h->size;
-	unsigned int thp2;//, size_thp2;
 	unsigned int new_size = 0;
-	int res = 0;
-	double pub_per_epb = pub*epb;
-	table *new_h = NULL;
-	nbc_bucket_node *array;
-	unsigned int thp2_tmp = 1;
-	thp2 = threshold *2;
+	unsigned int thp2	  = 1;
+	double log_size = 1.0; 
+
+	i=size;
+	while(i != 0){ log_size+=1.0;i>>=1; }
+	while(thp2 < threshold *2)
+		thp2 <<= 1;
 	
-	while(thp2_tmp < thp2)
-		thp2_tmp <<= 1;
-	
-	thp2 = thp2_tmp;
-	
-	//if 	(size >= thp2 && counter > 2   * (pub_per_epb*size))
-	//	new_size = 2   * size;
-	//else if (size >  thp2 && counter < 0.5 * (pub_per_epb*size))
-	//	new_size = 0.5 * size;
-	//else if	(size == 1    && counter > thp2)
-	//	new_size = thp2;
-	//else if (size == thp2 && counter < threshold)
-	//	new_size = 1;
-	
-	new_size += ((unsigned int)(-(size >= thp2 && counter > 2   * pub_per_epb * (size))  ))	&(size <<1 );
-	new_size += ((unsigned int)(-(size >  thp2 && counter < 0.5 * pub_per_epb * (size))  ))	&(size >>1);
-	new_size += ((unsigned int)(-(size == 1    && counter > thp2) 					     ))	& thp2;
-	new_size += ((unsigned int)(-(size == thp2 && counter < threshold)				     ))	& 1;
+
+	// check if resize is needed due to num of items 
+	if(		size >= thp2 && counter > 2   * current_num_items)
+		new_size = size << 1;
+	else if(size >  thp2 && counter < 0.5 * current_num_items)
+		new_size = size >> 1;
+	else if(size == 1    && counter > thp2)
+		new_size = thp2;
+	else if(size == thp2 && counter < threshold)
+		new_size = 1;
 	
 	
 	// is time for periodic resize?
-	if(new_size == 0 && (h->e_counter.count + h->d_counter.count) > RESIZE_PERIOD)
+	if(new_size == 0 && (h->e_counter.count + h->d_counter.count) > RESIZE_PERIOD && h->resize_count/log_size < 0.75)
 		new_size = h->size;
-	//if(counter==0)
+	// the num of items is doubled/halved but it is not enough for change size
+	//if(new_size == 0 && h->last_resize_count != 0 && (counter >  h->last_resize_count*2 || counter < h->last_resize_count/2 ) )
 	//	new_size = h->size;
-	
-	if(new_size == 0 && h->last_resize_count != 0 && (counter >  h->last_resize_count*2 || counter < h->last_resize_count/2 ) )
-		new_size = h->size;
 
-	if(new_size != 0 && new_size <= MAXIMUM_SIZE)
+	if(new_size != 0) 
 	{
+		// allocate new table
 		res = posix_memalign((void**)&new_h, CACHE_LINE_SIZE, sizeof(table));
-		if(res != 0)
-			error("No enough memory to new table structure\n");
+		if(res != 0) {printf("No enough memory to new table structure\n"); return;}
+
+		res = posix_memalign((void**)&new_h->array, CACHE_LINE_SIZE, new_size*sizeof(nbc_bucket_node));
+		if(res != 0) {free(new_h); printf("No enough memory to new table structure\n"); return;}
 		
 		tail = h->array->tail;
 		new_h->bucket_width  = -1.0;
@@ -481,30 +458,22 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 		new_h->d_counter.count = 0;
 		new_h->e_counter.count = 0;
 		new_h->last_resize_count = counter;
+		new_h->resize_count = h->resize_count+1;
 		new_h->current 		 = ((unsigned long long)-1) << 32;
 		new_h->read_table_period = h->read_table_period;
 
-		//array =  alloc_array_nodes(&malloc_status, new_size);
-		array =  malloc(new_size*sizeof(nbc_bucket_node));
-		if(array == NULL)
-		{
-			free(new_h);
-			error("No enough memory to allocate new table array %u\n", new_size);
-		}
-		
-
 		for (i = 0; i < new_size; i++)
 		{
-			array[i].next = tail;
-			array[i].tail = tail;
-			array[i].counter = 0;
-			array[i].epoch = 0;
+			new_h->array[i].next = tail;
+			new_h->array[i].tail = tail;
+			new_h->array[i].counter = 0;
+			new_h->array[i].epoch = 0;
 		}
-		new_h->array = array;
 
+		// try to publish the table
 		if(!BOOL_CAS(&(h->new_table), NULL,	new_h))
 		{
-			//free_array_nodes(&malloc_status, new_h->array);
+			// attempt failed, thus release memory
 			free(new_h->array);
 			free(new_h);
 		}
@@ -534,13 +503,11 @@ void block_table(table* h)
 		bucket = array + ((i + start) % size);	
 		
 		//Try to mark the head as MOV
-		do
-		{
-			bucket_next = bucket->next;
-		}
+		do{ bucket_next = bucket->next;}
 		while( !is_marked(bucket_next, MOV) &&
 				!BOOL_CAS(&(bucket->next), bucket_next,	get_marked(bucket_next, MOV)) 
 		);
+
 		//Try to mark the first VALid node as MOV
 		do
 		{
@@ -702,7 +669,7 @@ void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 	
 	int res = 0;
 	
-	//Create a new node inserted in the new table as as INValid
+	//Create a new node to be inserted in the new table as as INValid
 	replica = node_malloc(right_node->payload, right_node->timestamp,  right_node->counter);
 	
 	new_node 			= &replica;
@@ -710,20 +677,19 @@ void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 	new_node_counter 	= new_node_pointer->counter;
 	new_node_timestamp 	= new_node_pointer->timestamp;
 	
-	index = hash(new_node_timestamp, new_h->bucket_width) % new_h->size;
+	index = hash(new_node_timestamp, new_h->bucket_width);
 
 	// node to be added in the hashtable
-	bucket = new_h->array + index;
+	bucket = new_h->array + (index % new_h->size);
 	         
-    do
-	{ 
-		right_replica_field = right_node->replica;
-	}        
+    do{	right_replica_field = right_node->replica; } 
+    // try to insert the replica in the new table       
 	while(right_replica_field == NULL && (res = 
 	search_and_insert(bucket, new_node_timestamp, new_node_counter, REMOVE_DEL, new_node_pointer, new_node)
 	) == ABORT);
-			
-	
+	// at this point we have at least one replica into the new table
+
+	// try to decide which is the right replica and if I won the challenge increase the counter of enqueued items into the new set table
 	if( right_replica_field == NULL && 
 			BOOL_CAS(
 				&(right_node->replica),
@@ -734,11 +700,10 @@ void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 		ATOMIC_INC(&(new_h->e_counter));
              
 	right_replica_field = right_node->replica;
-            
-	do
-	{
-		right_node_next = right_replica_field->next;
-	}while( 
+
+	// make the replica being valid
+	do{	right_node_next = right_replica_field->next;}
+	while( 
 		is_marked(right_node_next, INV) && 
 		!BOOL_CAS(	&(right_replica_field->next),
 					right_node_next,
@@ -746,39 +711,45 @@ void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 				)
 		);
 
+	// now the insertion is completed so flush the current of the new table
+	flush_current(new_h, index, right_replica_field);
 	
-	flush_current(new_h, ( unsigned long long ) hash(right_replica_field->timestamp, new_h->bucket_width), right_replica_field);
-	
-	
+	// invalidate the node MOV to DEL (11->01)
 	right_node_next = FETCH_AND_AND(&(right_node->next), MASK_DEL);
 }
 
 table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsigned int elem_per_bucket, double perc_used_bucket)
 {
-	table *h = *curr_table_ptr		;
   #if ENABLE_EXPANSION == 0
-  	return h;
+  	return *curr_table_ptr;
   #endif
-	nbc_bucket_node *tail;
-	unsigned int i, size = h->size	;
 
-	table 			*new_h 			;
-	double 			 new_bw 		;
-	double 			 newaverage		;
-	//double 			 pub_per_epb	;
+	nbc_bucket_node *tail;
 	nbc_bucket_node *bucket, *array	;
-	int a,b,signed_counter;
-	unsigned int counter;
 	nbc_bucket_node *right_node, *left_node, *right_node_next, *node;
-	
+	table 			*new_h 			;
+	table 			*h = *curr_table_ptr		;
+  	double 			 new_bw 		;
+	double 			 newaverage		;
+	double rand;			
+	int a,b,signed_counter;
 	int samples[2];
 	int sample_a;
 	int sample_b;
+	unsigned int counter;
+	unsigned int start;		
+	unsigned int i, size = h->size	;
 	
-	read_table_count = (   ((unsigned int)( -(read_table_count == UINT_MAX) ))   &   TID   ) + (  ((unsigned int)( -(read_table_count != UINT_MAX) )) & read_table_count);
+	// this is used to break synchrony while invoking readtable
+	read_table_count = 	( ((unsigned int)( -(read_table_count == UINT_MAX) ))   & TID				) 
+						+ 
+						( ((unsigned int)( -(read_table_count != UINT_MAX) )) 	& read_table_count	);
 
+
+	// after READTABLE_PERIOD iterations check if a new set table is required 
 	if(read_table_count++ % h->read_table_period == 0)
 	{
+		// make two reads of op. counters in order to reduce probability of a descheduling between each read
 		for(i=0;i<2;i++)
 		{
 			b = ATOMIC_READ( &h->d_counter );
@@ -786,18 +757,22 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 			samples[i] = a-b;
 		}
 		
+		// compute two samples
 		sample_a = abs(samples[0] - ((int)(size*perc_used_bucket)));
 		sample_b = abs(samples[1] - ((int)(size*perc_used_bucket)));
 		
+		// take the minimum of the samples		
 		signed_counter =  (sample_a < sample_b) ? samples[0] : samples[1];
 		
+		// take the maximum between the signed_counter and ZERO
 		counter = (unsigned int) ( (-(signed_counter >= 0)) & signed_counter);
 		
-		
+		// call the set_new_table
 		if( h->new_table == NULL )
 			set_new_table(h, threshold, perc_used_bucket, elem_per_bucket, counter);
 	}
 	
+	// if a reshuffle is started execute the protocol
 	if(h->new_table != NULL)
 	{
 		new_h 			= h->new_table;
@@ -807,9 +782,9 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 
 		if(new_bw < 0)
 		{
-			block_table(h);
-			newaverage = compute_mean_separation_time(h, new_h->size, threshold, elem_per_bucket);
-			if
+			block_table(h); 																		// avoid that extraction can succeed after its completition
+			newaverage = compute_mean_separation_time(h, new_h->size, threshold, elem_per_bucket);	// get the new bucket width
+			if 																						// commit the new bucket width
 			(
 				BOOL_CAS(
 						UNION_CAST(&(new_h->bucket_width), unsigned long long *),
@@ -820,31 +795,26 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 				LOG("COMPUTE BW -  OLD:%.20f NEW:%.20f %u SAME TS:%u\n", new_bw, newaverage, new_h->size, acc_counter != 0 ? acc/acc_counter : 0);
 		}
 
-		//First try: try to migrate the nodes, if a marked node is found, continue to the next bucket
-		double rand;			
-		unsigned int start;		
-		
-		drand48_r(&seedT, &rand); 
-		start = (unsigned int) rand * size;	
+		//First speculative try: try to migrate the nodes, if a conflict occurs, continue to the next bucket
+		drand48_r(&seedT, &rand); 			
+		start = (unsigned int) rand * size;	// start to migrate from a random bucket
 		
 		for(i = 0; i < size; i++)
 		{
-			bucket = array + ((i + start) % size);	
-			node = get_unmarked(bucket->next);		
+			bucket = array + ((i + start) % size);	// get the head 
+			node = get_unmarked(bucket->next);		// get the successor of the head (unmarked because heads are MOV)
 			do
 			{
-				if(node == tail)
-					break;
-					
-				//Try to mark the top node
-				search(node, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
+				if(node == tail) 	break;			// the bucket is empty				
 				
+				search(node, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV); // compact and get the successor of node
 				right_node = get_unmarked(right_node);
-				right_node_next = right_node->next;
+				right_node_next = right_node->next;				
         
-				if( right_node == tail ||
-					is_marked(right_node_next) || 
-						!BOOL_CAS(
+        		// Skip the current bucket if
+				if( right_node == tail ||							// the successor of node is a tail ??? WTF??? 					
+					is_marked(right_node_next) || 					// the successor of node is already MOV
+						!BOOL_CAS(									// the successor of node has been concurrently set as MOV
 								&(right_node->next),
 								right_node_next,
 								get_marked(right_node_next, MOV)
@@ -852,54 +822,47 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 				)
 					break;
 				
-				migrate_node(node, new_h);
-				node = right_node;
+				migrate_node(node, new_h);				// migrate node
+				node = right_node;						// go to the next node
 				
 			}while(true);
 		}
 	
-		//Second try: try to migrate the nodes and continue until each bucket is empty
+		//Second conservative try: migrate the nodes and continue until each bucket is empty
 		drand48_r(&seedT, &rand); 
 		
 		start = (unsigned int) rand + size;	
 		for(i = 0; i < size; i++)
 		{
-			bucket = array + ((i + start) % size);	// <---------------------
-		
-			node = get_unmarked(bucket->next);		//node = left_node??
+			bucket = array + ((i + start) % size);	// get the head 
+			node = get_unmarked(bucket->next);		// get the successor of the head (unmarked because heads are MOV)
 			do
 			{
-				if(node == tail)
-					break;
-				//Try to mark the top node
+				if(node == tail) 	break;			// the bucket is empty
 					
 				do
 				{
-					search(node, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
-				
+					search(node, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV); // compact and get the successor of node
 					right_node = get_unmarked(right_node);
 					right_node_next = right_node->next;
 				}
-				while(
-						right_node != tail &&
+				while(	// repeat because
+						right_node != tail &&						// the successor of node is not a tail
 						(
-							is_marked(right_node_next, DEL) ||
+							is_marked(right_node_next, DEL) ||		// the successor of node is DEL (we need to check the next one)
 							(
-								is_marked(right_node_next, VAL) 
+								is_marked(right_node_next, VAL) 	// the successor of node is VAL and the cas to mark it as MOV is failed
 								&& !BOOL_CAS(&(right_node->next), right_node_next, get_marked(right_node_next, MOV))
 							)
 						)
 				);
 			
-				if(is_marked(node->next, MOV))
-				{
-					migrate_node(node, new_h);
-				}
-				node = right_node;
+				if(is_marked(node->next, MOV)) migrate_node(node, new_h); // if node is marked as MOV we can migrate it 
+				node = right_node;	// proceed to the next node (which is also MOV)
 				
 			}while(true);
 	
-			search(bucket, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
+			search(bucket, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);  // perform a compact to remove all DEL nodes (make head and tail adjacents again)
 			assertf(get_unmarked(right_node) != tail, "Fail in line 972 %p %p %p %p %p %p\n",
 			 bucket,
 			  left_node,
@@ -910,126 +873,81 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 	
 		}
 		
-		// TODO scan new table for find out what is the minimum bucket 
+		
+		if( BOOL_CAS(curr_table_ptr, h, new_h) ){ //Try to replace the old table with the new one
+		 	// I won the challenge thus I collect memory
+		 	gc_add_ptr_to_hook_list(ptst, h, 		 gc_hid[0]);
+			gc_add_ptr_to_hook_list(ptst, h->array,  gc_hid[0]);
+		 }
 
-		//Try to replace the old table with the new one
-		if( BOOL_CAS(curr_table_ptr, h, new_h) )
-			connect_to_be_freed_table_list(h);
 		
 		h = new_h;
 	}
 	
+	// return the current set table
 	return h;
 }
 
 
-void pq_report(int TID)
-{
-	
-	printf("%d- "
-	"Enqueue: %.10f LEN: %.10f ### "
-	"Dequeue: %.10f LEN: %.10f NUMCAS: %llu : %llu ### "
-	"NEAR: %llu "
-	"RTC:%d,M:%lld\n",
-			TID,
-			((float)concurrent_enqueue) /((float)performed_enqueue),
-			((float)scan_list_length_en)/((float)performed_enqueue),
-			((float)concurrent_dequeue) /((float)performed_dequeue),
-			((float)scan_list_length)   /((float)performed_dequeue),
-			num_cas, num_cas_useful,
-			near,
-			read_table_count	  ,
-			malloc_count);
-}
-
-void pq_reset_statistics(){
-		near = 0;
-		num_cas = 0;
-		num_cas_useful = 0;
-	
-}
-
-unsigned int pq_num_malloc(){
-		return (unsigned int) malloc_count;
-}
-
-
-void my_hook(ptst_t *p, void *ptr){	free(ptr); }
+void std_free_hook(ptst_t *p, void *ptr){	free(ptr); }
 
 
 /**
- * This function create an instance of a non-blocking calendar queue.
+ * This function create an instance of a NBCQ.
  *
- * @author Romolo Marotta
- *
- * @param queue_size is the inital size of the new queue
- *
+ * @param threshold: ----------------
+ * @param perc_used_bucket: set the percentage of occupied physical buckets 
+ * @param elem_per_bucket: set the expected number of items for each virtual bucket
  * @return a pointer a new queue
  */
 void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket)
 {
 	unsigned int i = 0;
-	unsigned int new_threshold = 1;
-	
 	int res_mem_posix = 0;
+	nb_calqueue* res = NULL;
+
+	// init fraser garbage collector/allocator 
 	_init_gc_subsystem();
+	// add allocator of nbc_bucket_node
+	gc_aid[0] = gc_add_allocator(sizeof(nbc_bucket_node));
+	// add callback for set tables and array of nodes whene a grace period has been identified
+	gc_hid[0] = gc_add_hook(std_free_hook);
+	critical_enter();
+	critical_exit();
 
-	nb_calqueue* res = NULL; 
+	// allocate memory
 	res_mem_posix = posix_memalign((void**)(&res), CACHE_LINE_SIZE, sizeof(nb_calqueue));
-	if(res_mem_posix != 0)
-	{
-		error("No enough memory to allocate queue\n");
-	}
-	//if(res == NULL)
-	//	error("No enough memory to allocate queue\n");
+	if(res_mem_posix != 0) 	error("No enough memory to allocate queue\n");
+	res_mem_posix = posix_memalign((void**)(&res->hashtable), CACHE_LINE_SIZE, sizeof(table));
+	if(res_mem_posix != 0)	error("No enough memory to allocate set table\n");
+	res_mem_posix = posix_memalign((void**)(&res->hashtable->array), CACHE_LINE_SIZE, MINIMUM_SIZE*sizeof(nbc_bucket_node));
+	if(res_mem_posix != 0)	error("No enough memory to allocate array of heads\n");
+	
 
-	while(new_threshold <= threshold)
-		new_threshold <<=1;
-
-	res->threshold = new_threshold;
+	
+	res->threshold = threshold;
 	res->perc_used_bucket = perc_used_bucket;
 	res->elem_per_bucket = elem_per_bucket;
 	res->pub_per_epb = perc_used_bucket * elem_per_bucket;
 	res->read_table_period = READTABLE_PERIOD;
+	res->tail = node_malloc(NULL, INFTY, 0);
+	res->tail->next = NULL;
 
-	res_mem_posix = posix_memalign((void**)(&res->hashtable), CACHE_LINE_SIZE, sizeof(table));
-	
-	if(res_mem_posix != 0)
-	{
-		free(res);
-		error("No enough memory to allocate queue\n");
-	}
 	res->hashtable->bucket_width = 1.0;
 	res->hashtable->new_table = NULL;
 	res->hashtable->size = MINIMUM_SIZE;
 	res->hashtable->current = 0;
 	res->hashtable->last_resize_count = 0;
+	res->hashtable->resize_count = 0;
 	res->hashtable->e_counter.count = 0;
 	res->hashtable->d_counter.count = 0;
     res->hashtable->read_table_period = res->read_table_period;	
-	//res->hashtable->array =  alloc_array_nodes(&malloc_status, MINIMUM_SIZE);
-	res->hashtable->array =  malloc(MINIMUM_SIZE*sizeof(nbc_bucket_node));
 	
-	if(res->hashtable->array == NULL)
-	{
-		error("No enough memory to allocate queue\n");
-		free(res->hashtable);
-		free(res);
-	}
-
-	gc_aid[0] = gc_add_allocator(sizeof(nbc_bucket_node));
-	gc_hid[0] = gc_add_hook(my_hook);
-	critical_enter();
-	critical_exit();
-	
-	res->tail = node_malloc(NULL, INFTY, 0);
-	res->tail->next = NULL;
-
 	for (i = 0; i < MINIMUM_SIZE; i++)
 	{
 		res->hashtable->array[i].next = res->tail;
 		res->hashtable->array[i].tail = res->tail;
-		//res->hashtable->array[i].timestamp = (pkey_t)i;
+		res->hashtable->array[i].timestamp = (pkey_t)i;
 		res->hashtable->array[i].counter = 0;
 	}
 
@@ -1038,16 +956,13 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 
 
 /**
- * This function implements the enqueue interface of the non-blocking calendar queue.
+ * This function implements the enqueue interface of the NBCQ.
  * Cost O(1) when succeeds
  *
- * @author Romolo Marotta
- *
- * @param queue
- * @param timestamp the key associated with the value
- * @param payload the event to be enqueued
- *
- * @return true if the event is inserted in the hashtable, else false
+ * @param q: pointer to the queueu
+ * @param timestamp: the key associated with the value
+ * @param payload: the value to be enqueued
+ * @return true if the event is inserted in the set table else false
  */
 int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 {
@@ -1133,3 +1048,34 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	return res;
 
 }
+
+
+
+
+
+void pq_report(int TID)
+{
+	
+	printf("%d- "
+	"Enqueue: %.10f LEN: %.10f ### "
+	"Dequeue: %.10f LEN: %.10f NUMCAS: %llu : %llu ### "
+	"NEAR: %llu "
+	"RTC:%d,M:%lld\n",
+			TID,
+			((float)concurrent_enqueue) /((float)performed_enqueue),
+			((float)scan_list_length_en)/((float)performed_enqueue),
+			((float)concurrent_dequeue) /((float)performed_dequeue),
+			((float)scan_list_length)   /((float)performed_dequeue),
+			num_cas, num_cas_useful,
+			near,
+			read_table_count	  ,
+			malloc_count);
+}
+
+void pq_reset_statistics(){
+		near = 0;
+		num_cas = 0;
+		num_cas_useful = 0;	
+}
+
+unsigned int pq_num_malloc(){ return (unsigned int) malloc_count; }
