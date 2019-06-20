@@ -32,7 +32,9 @@ for i in $iterations; do
 							N=0 
 							while [[ $(grep -c "THROUGHPUT" $file) -eq 0 ]]
 							do
-								/usr/bin/time -f R:%e,U:%U,S:%S $cmd_line &> $file
+								#/usr/bin/time -f R:%e,U:%U,S:%S $cmd_line &> $file
+								{ timeout $((TIME * 2)) /usr/bin/time -f R:%e,U:%U,S:%S $cmd_line; } &> $file
+
 								if test $N -ge $MAX_RETRY ; then echo break; break; fi
 								N=$(( N+1 ))
 							done  
