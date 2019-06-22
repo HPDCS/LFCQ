@@ -9,7 +9,8 @@ EXECUTABLES :=
 USER_OBJS :=
 LIBS := -lpthread -lm -lnuma -lrt
 SRC_DIR := src
-TARGETS := NBCQ LIND MARO CBCQ SLCQ #V2CQ NUMA WORK
+TARGETS := NBCQ LIND MARO CBCQ SLCQ NBVB #V2CQ NUMA WORK
+
 
 UTIL_value := src/utils/common.o src/utils/hpdcs_math.o 
 GACO_value := src/gc/gc.o src/gc/ptst.o
@@ -18,6 +19,7 @@ ARCH_value := src/arch/x86.o
 SLCQ_value := src/datatypes/slcalqueue/calqueue.o  $(UTIL_value)
 
 NBCQ_value := src/datatypes/nbcalendars/nb_calqueue.o src/datatypes/nbcalendars/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
+NBVB_value := src/datatypes/nbcalendars_with_vb/nb_calqueue.o src/datatypes/nbcalendars_with_vb/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
 #V2CQ_value := src/datatypes/nbcalendars/nb_calqueue_last_min.o  src/datatypes/nbcalendars/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
 
 LIND_value := src/datatypes/nbskiplists/prioq.o    src/datatypes/nbskiplists/common_prioq.o $(UTIL_value) $(GACO_value) $(ARCH_value)
@@ -36,6 +38,7 @@ CBCQ_value := src/datatypes/ChunkBasedPriorityQueue/cbpq.opp\
 SLCQ_link := gcc
 
 NBCQ_link := gcc 
+NBVB_link := gcc 
 V2CQ_link := gcc 
 
 LIND_link := gcc 
@@ -54,10 +57,9 @@ L1_CACHE_LINE_SIZE := $(shell getconf LEVEL1_DCACHE_LINESIZE)
 MACRO := -DARCH_X86_64  -DCACHE_LINE_SIZE=$(L1_CACHE_LINE_SIZE) -DINTEL
 DEBUG := -g3
 
-FILTER_OUT_C_SRC := src/main.c src/main_2.c src/mm/mm.c src/datatypes/nbcalendars/numa_queue.c\
-                  src/datatypes/nbcalendars/worker_calqueue.c src/datatypes/nohotspot/test.c src/datatypes/nohotspot2/test.c\
-                  src/datatypes/rotating/test.c src/datatypes/numask/test.c src/datatypes/ChunkBasedPriorityQueue/test.c
-FILTER_OUT_CPP_SRC := src/datatypes/numask/test.cpp src/datatypes/ChunkBasedPriorityQueue/test.cpp
+FILTER_OUT_C_SRC := src/main.c src/main_2.c
+                  
+
 
 OBJS_DIR 	:= $(strip $(MAKECMDGOALS))
 
@@ -80,22 +82,15 @@ else ifeq ($(OBJS_DIR), GProf)
 	DEBUG+=-pg
 endif
 
-
-ORIGINAL_SUBDIRS 		:= $(shell find src -type d)
-SUBDIRS 		:= $(filter-out src/datatypes src/datatypes/nbcalendars_bck src/datatypes/ChunkBasedPriorityQueue, $(ORIGINAL_SUBDIRS))
-
-C_SRCS			:= $(shell ls   $(patsubst %, %/*.c, $(SUBDIRS)) )
+C_SUBDIRS 		:= src src/datatypes/nbcalendars src/datatypes/nbcalendars_with_vb  src/datatypes/nbskiplists src/datatypes/slcalqueue  src/arch src/gc src/utils
+C_SRCS			:= $(shell ls   $(patsubst %, %/*.c, $(C_SUBDIRS)) )
 C_SRCS 			:= $(filter-out $(FILTER_OUT_C_SRC), $(C_SRCS))
 C_OBJS			:= $(strip $(subst .c,.o, $(C_SRCS)))
-C_ASM				:= $(strip $(subst .c,.S, $(C_SRCS)))
 C_DEPS			:= $(patsubst %, $(OBJS_DIR)/%, $(subst .o,.d, $(C_OBJS)))
 
-SUBDIRS 		:= $(filter-out src/datatypes src src/utils src/gc src/arch\
-                                src/datatypes/nbcalendars src/datatypes/nbcalendars_bck src/datatypes/slcalqueue src/datatypes/nblastmin src/datatypes/nbcachecq\
-                                src/datatypes/nbskiplists src/datatypes/nohotspot\
-                                src/datatypes/nohotspot2 src/datatypes/rotating, $(ORIGINAL_SUBDIRS))
 
-CPP_SRCS		:= $(shell ls   $(patsubst %, %/*.cpp, $(SUBDIRS)) )
+CPP_SUBDIRS 	:= src/datatypes/ChunkBasedPriorityQueue
+CPP_SRCS		:= $(shell ls   $(patsubst %, %/*.cpp, $(CPP_SUBDIRS)) )
 CPP_SRCS 		:= $(filter-out $(FILTER_OUT_CPP_SRC), $(CPP_SRCS))
 CPP_OBJS		:= $(strip $(subst .cpp,.opp, $(CPP_SRCS)))
 CPP_ASM			:= $(strip $(subst .cpp,.S, $(CPP_SRCS)))
