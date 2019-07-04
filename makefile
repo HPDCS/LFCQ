@@ -9,7 +9,7 @@ EXECUTABLES :=
 USER_OBJS :=
 LIBS := -lpthread -lm -lnuma -lrt
 SRC_DIR := src
-TARGETS := NBCQ LIND MARO CBCQ SLCQ NBVB #V2CQ NUMA WORK
+TARGETS := NBCQ LIND MARO CBCQ SLCQ NBVB 2CAS #V2CQ NUMA WORK
 
 
 UTIL_value := src/utils/common.o src/utils/hpdcs_math.o 
@@ -20,7 +20,7 @@ SLCQ_value := src/datatypes/slcalqueue/calqueue.o  $(UTIL_value)
 
 NBCQ_value := src/datatypes/nbcalendars/nb_calqueue.o src/datatypes/nbcalendars/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
 NBVB_value := src/datatypes/nbcalendars_with_vb/nb_calqueue.o src/datatypes/nbcalendars_with_vb/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
-#V2CQ_value := src/datatypes/nbcalendars/nb_calqueue_last_min.o  src/datatypes/nbcalendars/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
+2CAS_value := src/datatypes/nbcalendars_with_vb_2CAS/nb_calqueue.o src/datatypes/nbcalendars_with_vb_2CAS/common_nb_calqueue.o src/datatypes/nbcalendars_with_vb_2CAS/bucket.o $(UTIL_value) $(GACO_value) $(ARCH_value)
 
 LIND_value := src/datatypes/nbskiplists/prioq.o    src/datatypes/nbskiplists/common_prioq.o $(UTIL_value) $(GACO_value) $(ARCH_value)
 MARO_value := src/datatypes/nbskiplists/prioq_v2.o src/datatypes/nbskiplists/common_prioq.o $(UTIL_value) $(GACO_value) $(ARCH_value)
@@ -39,7 +39,7 @@ SLCQ_link := gcc
 
 NBCQ_link := gcc 
 NBVB_link := gcc 
-V2CQ_link := gcc 
+2CAS_link := gcc 
 
 LIND_link := gcc 
 MARO_link := gcc 
@@ -82,7 +82,7 @@ else ifeq ($(OBJS_DIR), GProf)
 	DEBUG+=-pg
 endif
 
-C_SUBDIRS 		:= src src/datatypes/nbcalendars src/datatypes/nbcalendars_with_vb  src/datatypes/nbskiplists src/datatypes/slcalqueue  src/arch src/gc src/utils
+C_SUBDIRS 		:= src src/datatypes/nbcalendars src/datatypes/nbcalendars_with_vb src/datatypes/nbcalendars_with_vb_2CAS  src/datatypes/nbskiplists src/datatypes/slcalqueue  src/arch src/gc src/utils
 C_SRCS			:= $(shell ls   $(patsubst %, %/*.c, $(C_SUBDIRS)) )
 C_SRCS 			:= $(filter-out $(FILTER_OUT_C_SRC), $(C_SRCS))
 C_OBJS			:= $(strip $(subst .c,.o, $(C_SRCS)))
@@ -99,7 +99,7 @@ CPP_DEPS		:= $(patsubst %, $(OBJS_DIR)/%, $(subst .opp,.d, $(CPP_OBJS)))
 REAL_TARGETS := $(patsubst %, $(OBJS_DIR)/%-test, $(TARGETS))
 UNIT_TARGETS := $(patsubst %, $(OBJS_DIR)/%-resize-unit-test, $(TARGETS))
 
-FLAGS=
+FLAGS=-mcx16
 
 RM := rm -rf
 
