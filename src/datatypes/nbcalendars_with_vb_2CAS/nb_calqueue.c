@@ -146,8 +146,12 @@ begin:
 					extraction -= UNROLLED_FACTOR;
 					ex_node = ex_node->next;
 				}
-				*result  = ex_node->array[extraction].payload;
-				left_ts  = ex_node->array[extraction].timestamp; 
+				if(ex_node->array[extraction].valid){
+					*result  = ex_node->array[extraction].payload;
+					left_ts  = ex_node->array[extraction].timestamp; 
+				}
+				else
+					continue;
 			}
 			extraction = extraction2;
 			
