@@ -145,13 +145,13 @@ void flush_current(table* h, unsigned long long newIndex, nbc_bucket_node* node)
  * @param left_node_next: a pointer to a pointer used to return the next field of the left node 
  *
  */   
-void search(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
+void search(nbc_bucket_node *head, pkey_t timestamp, unsigned int tie_breaker,
 						nbc_bucket_node **left_node, nbc_bucket_node **right_node, int flag)
 {
 	nbc_bucket_node *left, *right, *left_next, *tmp, *tmp_next, *tail;
 	unsigned int counter;
 	unsigned int tmp_tie_breaker;
-	double tmp_timestamp;
+	pkey_t tmp_timestamp;
 	bool marked, ts_equal, tie_lower, go_to_next;
 
 	do
@@ -264,14 +264,15 @@ void search(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
  * @param left_node_next a pointer to a pointer used to return the next field of the left node 
  *
  */   
-int search_and_insert(nbc_bucket_node *head, double timestamp, unsigned int tie_breaker,
+int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, unsigned int tie_breaker,
 						 int flag, nbc_bucket_node *new_node_pointer, nbc_bucket_node **new_node)
 {
 	nbc_bucket_node *left, *left_next, *tmp, *tmp_next, *tail;
 	unsigned int counter;
 	unsigned int left_tie_breaker, tmp_tie_breaker;
 	unsigned int len;
-	double left_timestamp, tmp_timestamp, rand;
+	pkey_t left_timestamp, tmp_timestamp;
+	double rand;
 	bool marked, ts_equal, tie_lower, go_to_next;
 	bool is_new_key = flag == REMOVE_DEL_INV;
 	drand48_r(&seedT, &rand);
