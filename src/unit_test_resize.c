@@ -106,7 +106,7 @@ volatile unsigned int end_phase_3 = 0;
 volatile unsigned int end_test = 0;
 volatile long long final_ops = 0;
 
-
+#define QSIZE 250
 
 __thread unsigned int stopforcheck = 0;
 
@@ -164,7 +164,7 @@ void* process(void *arg)
 			exit(1);
 	}
 		
-	while(n_enqueue < 25000/THREADS)
+	while(n_enqueue < QSIZE/THREADS)
 	{
 		n_enqueue += enqueue(my_id, &seed, local_min, current_dist);
 	}
