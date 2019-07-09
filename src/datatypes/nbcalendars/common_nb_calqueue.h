@@ -63,12 +63,6 @@ extern int gc_hid[];
 #define PRESENT		4
 
 
-#define LESS(a,b) 		( (a) <  (b) )
-#define LEQ(a,b)		( (a) <= (b) )
-#define D_EQUAL(a,b) 	( (a) == (b) )
-#define GEQ(a,b) 		( (a) >= (b) )
-#define GREATER(a,b) 	( (a) >  (b) )
-
 #define TID tid
 
 
