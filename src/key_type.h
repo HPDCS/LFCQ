@@ -8,6 +8,13 @@
 
 #define KEY_TYPE INT
 
+
+#define LESS(a,b) 		( (a) <  (b) )
+#define LEQ(a,b)		( (a) <= (b) )
+#define D_EQUAL(a,b) 	( (a) == (b) )
+#define GEQ(a,b) 		( (a) >= (b) )
+#define GREATER(a,b) 	( (a) >  (b) )
+
 #if KEY_TYPE == DOUBLE
 
 	#include <float.h>
