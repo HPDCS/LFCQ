@@ -286,7 +286,7 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
   	new->next = curr;
 
   	// atomic
-
+do{
 	BEGIN_ATOMIC();
 		{
 			if(extracted != bckt->extractions || left->next != curr) TM_ABORT();
@@ -297,7 +297,7 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
 			goto begin;
 		}
 	END_ATOMIC();
-
+}while(0);
 	return OK;
 }
 
