@@ -655,7 +655,7 @@ void migrate_node(bucket_t *bckt, table_t *new_h)
 					continue;
 				}
 			END_ATOMIC();
-			
+			// __sync_fetch_and_add(&new_h->e_counter.count, 1);
 			flush_current(new_h, new_index);
 			curr = head->next;
 	}
@@ -666,7 +666,7 @@ void migrate_node(bucket_t *bckt, table_t *new_h)
 
 static inline table_t* read_table(table_t * volatile *curr_table_ptr){
   #if ENABLE_EXPANSION == 0
-  	return h;
+  	return *curr_table_ptr;
   #else
 
 	bucket_t *bucket, *array	;
