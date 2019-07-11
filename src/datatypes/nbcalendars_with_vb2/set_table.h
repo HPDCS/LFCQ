@@ -21,7 +21,7 @@ extern __thread unsigned int read_table_count;
 #define MINIMUM_SIZE 1
 #define SAMPLE_SIZE 25
 
-#define ENABLE_EXPANSION 0
+#define ENABLE_EXPANSION 1
 #define READTABLE_PERIOD 64
 
 
@@ -639,9 +639,16 @@ void migrate_node(bucket_t *bckt, table_t *new_h)
 
 			}
 
+/*
+					if(head->next != curr		) continue; //abort
+					if(ln->next   != rn  		) continue; //abort
+					if(curr->next != curr_next  ) continue; //abort
+*/
+
+
 			//atomic
-			BEGIN_ATOMIC();
-				{
+			insertions++;
+			ATOMIC{
 					if(head->next != curr		) TM_ABORT(); //abort
 					if(ln->next   != rn  		) TM_ABORT(); //abort
 					if(curr->next != curr_next  ) TM_ABORT(); //abort
@@ -652,9 +659,13 @@ void migrate_node(bucket_t *bckt, table_t *new_h)
 					__sync_fetch_and_add(&new_h->e_counter.count, 1);
 				}
 				FALLBACK(){
-					continue;
+                                        head->next = curr_next;
+                                        ln->next   = curr;
+                                        curr->next = rn;
+                                        __sync_fetch_and_add(&new_h->e_counter.count, 1);
 				}
 			END_ATOMIC();
+
 			// __sync_fetch_and_add(&new_h->e_counter.count, 1);
 			flush_current(new_h, new_index);
 			curr = head->next;
