@@ -112,7 +112,7 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 {
 	assertf(timestamp < MIN || timestamp >= INFTY, "Key out of range %s\n", "");
-
+insertions++;
 	vbpq* queue = (vbpq*) q; 	
 	bucket_t *bucket;
 	table_t *h = NULL;		
@@ -321,7 +321,7 @@ begin:
 
 void pq_report(int TID)
 {
-	
+printf("Transactions %u, %u, %u\n", prova, failed, insertions);	
 	printf("%d- "
 	"Enqueue: %.10f LEN: %.10f ### "
 	"Dequeue: %.10f LEN: %.10f NUMCAS: %llu : %llu ### "
