@@ -75,15 +75,13 @@ typedef struct __bucket_t bucket_t;
 struct __bucket_t
 {
 	volatile unsigned long long extractions;	// 8
-	char pad2[16];
-//	volatile unsigned int epoch;				// 12 //enqueue's epoch
+	volatile unsigned int epoch;				// 12 //enqueue's epoch
 	unsigned int index;							// 16
 	unsigned int type; 							// 20 // used to resolve the conflict with same timestamp using a FIFO policy
 	unsigned int pad;							// 24
 	node_t tail;								// 56
 	node_t head;								// 80 + 88
 	bucket_t * volatile next;					// 96
-	volatile unsigned int epoch;
 };
 
 
@@ -220,19 +218,13 @@ static inline void connect_to_be_freed_node_list(bucket_t *start, unsigned int c
 	}while(is_marked(old_next, MOV) && is_freezed_for_del(old_extractions) && !__sync_bool_compare_and_swap(&bckt->next, old_next, get_marked(get_unmarked(old_next), DEL)));\
 }while(0)
 
-__thread unsigned int prova=0, failed=0, insertions=0;
 
 static inline int check_increase_bucket_epoch(bucket_t *bckt, unsigned int epoch){
 	unsigned long long extracted;
-	unsigned long att=0;
-/*	return OK;
 
-	printf("START %u %u\n", bckt->epoch, _xtest());
-begin:
-*/
 	while(bckt->epoch < epoch){
-//		unsigned int __status=0;	
-//		if ((__status = _xbegin ()) == _XBEGIN_STARTED){
+		extracted = bckt->extractions;
+		if(is_freezed(extracted)) return ABORT;
 		ATOMIC{
 			extracted = bckt->extractions;
 			if(is_freezed(extracted)) TM_ABORT();
@@ -240,57 +232,16 @@ begin:
 			TM_COMMIT();
 		}
 		FALLBACK(){
-			bckt->epoch = epoch;
+			return ABORT;
 		}
 		END_ATOMIC();
 	}
 	return OK;
-/*		
-		_xend();
-			goto end;
-		}
-		else{
-			att++;
-			if(att>10000)
-				goto next;
-			continue;
-		}
-	}
 
-
-next:
-att=0;
-        while(bckt->epoch < epoch){
-	        unsigned int __status=0;       
-			 if ((__status = _xbegin ()) == _XBEGIN_STARTED){
-				prova++;
-                        	_xend();
-                        	goto end;
-                	}
-	else{att++;if(att>12345)goto begin; continue;}
-
-
-		BEGIN_ATOMIC();
-			{
-//				extracted = bckt->extractions;
-//				if(is_freezed(extracted)) TM_ABORT();
-				//bckt->epoch = epoch;
-				TM_COMMIT();
-			}
-			FALLBACK(){
-				continue;
-				//return ABORT;
-			}
-		END_ATOMIC();
-		
-	}
-end:
-	printf("END\n");
-	return OK;
-*/
 }
 
-
+__thread pkey_t last_key = 0;
+__thread unsigned long long counter_last_key = 0ULL;
 
 static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, void* payload){
 	node_t *tail  = &bckt->tail;
@@ -304,6 +255,12 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
 	complete_freeze(bckt);
 
   begin:
+	curr = left = &bckt->head;
+	if(last_key != timestamp){
+		last_key = timestamp;
+		counter_last_key =0 ;
+	}
+	counter_last_key++;
 	new->tie_breaker = 1;
   	extracted 	= bckt->extractions;
 
@@ -325,6 +282,8 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
   	}
 
   	while(curr->timestamp <= timestamp){
+		if(counter_last_key > 1000000)
+			printf("L: %p-%u C: %p-%u\n", left, left->timestamp, curr, curr->timestamp);
   		left = curr;
   		curr = curr->next;
   		scan_list_length_en++;
@@ -336,20 +295,22 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
 
   	// atomic
 
-//do{
+		if(extracted != bckt->extractions || left->next != curr)
+			goto begin;
+			
 	ATOMIC{
 
-		if(extracted != bckt->extractions || left->next != curr) TM_ABORT();
+		if(extracted != bckt->extractions || left->next != curr) {
+	assertf(counter_last_key > 1000000, "AZZ%s\n", ""); TM_ABORT();}
 		left->next = new; 
 		TM_COMMIT();
 	}
 	FALLBACK(){
-		left->next = new;
-//		goto begin;
+//		left->next = new;
+		goto begin;
 	}
 	END_ATOMIC();
-//}while(0);
-
+	rtm_insertions++;
 	return OK;
 }
 
@@ -358,11 +319,18 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
 	node_t *curr  = &bckt->head;
 	node_t *tail  = &bckt->tail;
 	unsigned long long extracted = 0;
+	
+	assertf(bckt->type != ITEM, "trying to extract from a head bucket%s\n", "");
 
 	if(bckt->epoch > epoch) return ABORT;
 
+  #ifdef RTM
   	extracted 	= __sync_add_and_fetch(&bckt->extractions, 1ULL);
-
+  #else
+  pthread_mutex_lock(&glock);
+  	extracted 	= __sync_add_and_fetch(&bckt->extractions, 1ULL);
+  	pthread_mutex_unlock(&glock);
+  #endif
   	if(is_freezed_for_mov(extracted)) return MOV_FOUND;
   	if(is_freezed_for_del(extracted)) return EMPTY;
   	
