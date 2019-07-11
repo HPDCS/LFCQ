@@ -75,13 +75,15 @@ typedef struct __bucket_t bucket_t;
 struct __bucket_t
 {
 	volatile unsigned long long extractions;	// 8
-	volatile unsigned int epoch;				// 12 //enqueue's epoch
+	char pad2[16];
+//	volatile unsigned int epoch;				// 12 //enqueue's epoch
 	unsigned int index;							// 16
 	unsigned int type; 							// 20 // used to resolve the conflict with same timestamp using a FIFO policy
 	unsigned int pad;							// 24
 	node_t tail;								// 56
 	node_t head;								// 80 + 88
 	bucket_t * volatile next;					// 96
+	volatile unsigned int epoch;
 };
 
 
@@ -218,27 +220,74 @@ static inline void connect_to_be_freed_node_list(bucket_t *start, unsigned int c
 	}while(is_marked(old_next, MOV) && is_freezed_for_del(old_extractions) && !__sync_bool_compare_and_swap(&bckt->next, old_next, get_marked(get_unmarked(old_next), DEL)));\
 }while(0)
 
-
+__thread unsigned int prova=0, failed=0, insertions=0;
 
 static inline int check_increase_bucket_epoch(bucket_t *bckt, unsigned int epoch){
 	unsigned long long extracted;
+	unsigned long att=0;
+/*	return OK;
 
+	printf("START %u %u\n", bckt->epoch, _xtest());
+begin:
+*/
 	while(bckt->epoch < epoch){
-		
+//		unsigned int __status=0;	
+//		if ((__status = _xbegin ()) == _XBEGIN_STARTED){
+		ATOMIC{
+			extracted = bckt->extractions;
+			if(is_freezed(extracted)) TM_ABORT();
+			bckt->epoch = epoch;
+			TM_COMMIT();
+		}
+		FALLBACK(){
+			bckt->epoch = epoch;
+		}
+		END_ATOMIC();
+	}
+	return OK;
+/*		
+		_xend();
+			goto end;
+		}
+		else{
+			att++;
+			if(att>10000)
+				goto next;
+			continue;
+		}
+	}
+
+
+next:
+att=0;
+        while(bckt->epoch < epoch){
+	        unsigned int __status=0;       
+			 if ((__status = _xbegin ()) == _XBEGIN_STARTED){
+				prova++;
+                        	_xend();
+                        	goto end;
+                	}
+	else{att++;if(att>12345)goto begin; continue;}
+
+
 		BEGIN_ATOMIC();
 			{
-				extracted = bckt->extractions;
-				if(is_freezed(extracted)) TM_ABORT();
-				bckt->epoch = epoch;
+//				extracted = bckt->extractions;
+//				if(is_freezed(extracted)) TM_ABORT();
+				//bckt->epoch = epoch;
 				TM_COMMIT();
 			}
 			FALLBACK(){
-				return ABORT;
+				continue;
+				//return ABORT;
 			}
 		END_ATOMIC();
 		
 	}
+end:
+	printf("END\n");
 	return OK;
+*/
 }
 
 
@@ -286,18 +335,21 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
   	new->next = curr;
 
   	// atomic
-do{
-	BEGIN_ATOMIC();
-		{
-			if(extracted != bckt->extractions || left->next != curr) TM_ABORT();
-	  		left->next = new; 
-			TM_COMMIT();
-		}
-		FALLBACK(){
-			goto begin;
-		}
+
+//do{
+	ATOMIC{
+
+		if(extracted != bckt->extractions || left->next != curr) TM_ABORT();
+		left->next = new; 
+		TM_COMMIT();
+	}
+	FALLBACK(){
+		left->next = new;
+//		goto begin;
+	}
 	END_ATOMIC();
-}while(0);
+//}while(0);
+
 	return OK;
 }
 
