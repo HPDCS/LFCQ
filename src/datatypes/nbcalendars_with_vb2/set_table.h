@@ -378,7 +378,6 @@ static void set_new_table(table_t *h, unsigned int counter)
 		if(!BOOL_CAS(&(h->new_table), NULL,	new_h))
 		{
 			// attempt failed, thus release memory
-			free(new_h->array);
 			free(new_h);
 		}
 		else
@@ -566,8 +565,11 @@ void migrate_node(bucket_t *bckt, table_t *new_h)
 	node_t *ln, *rn, *tn;
 
 	extractions = bckt->extractions;
-	if(!is_freezed_for_mov(extractions)) return;
-	
+	assertf(!is_freezed(extractions), "Migrating bucket not freezed%s\n", "");
+	if(!is_freezed_for_mov(extractions)){
+		assertf(!is_freezed_for_del(extractions), "Migrating bucket not del%s\n", "");
+		return;
+	}
 	toskip = extractions & (~(3ULL<<62));
 	toskip >>=32;	
 
@@ -575,12 +577,12 @@ void migrate_node(bucket_t *bckt, table_t *new_h)
 		head = head->next;
 		toskip--;
 	}
+	
+	assertf(head == tail, "While migrating detected extracted tail%s\n", "");
 
-	curr = head->next;
 	//printf("Try to migrate\n");
-	while(curr != tail){
+	while( (curr = head->next) != tail){
 	//		printf("Moving first\n");
-			curr = head->next;
 			curr_next = curr->next; 
 
 			new_index = hash(curr->timestamp, new_h->bucket_width);
@@ -598,7 +600,8 @@ void migrate_node(bucket_t *bckt, table_t *new_h)
 				//printf("C left: %p right:%p\n", left, right);
 				if(toskip) return;
 				//printf("D left: %p right:%p\n", left, right);
-
+				
+					assertf(left->tail.timestamp != INFTY && left->type != HEAD, "HUGE Problems....%s\n", "");
 				// the virtual bucket is missing thus create a new one with the item
 				if(left->index != new_index || left->type == HEAD){
 					bucket_t *new 			= bucket_alloc();
@@ -613,13 +616,17 @@ void migrate_node(bucket_t *bckt, table_t *new_h)
 					new->tail.next 			= NULL;
 					new->tail.timestamp  	= INFTY;	
 					
+					
+					tn = &new->tail;
+					ln = &new->head;
+					assertf(ln->next != tn, "Problems....%s\n", "");
 
-					if(!BOOL_CAS(&left->next, left_next, new)){
-						bucket_unsafe_free(new);
+					if(BOOL_CAS(&left->next, left_next, new)){
+						connect_to_be_freed_node_list(left_next, distance);
+						left = new;
 						break;
 					}
-					else
-						connect_to_be_freed_node_list(left_next, distance);
+					bucket_unsafe_free(new);
 					continue;
 				}
 				else
@@ -639,15 +646,12 @@ void migrate_node(bucket_t *bckt, table_t *new_h)
 
 			}
 
-/*
-					if(head->next != curr		) continue; //abort
-					if(ln->next   != rn  		) continue; //abort
-					if(curr->next != curr_next  ) continue; //abort
-*/
-
-
+			if(head->next != curr		) continue; //abort
+			if(ln->next   != rn  		) continue; //abort
+			if(curr->next != curr_next  ) continue; //abort
+			
 			//atomic
-			insertions++;
+			rtm_insertions++;
 			ATOMIC{
 					if(head->next != curr		) TM_ABORT(); //abort
 					if(ln->next   != rn  		) TM_ABORT(); //abort
@@ -659,10 +663,11 @@ void migrate_node(bucket_t *bckt, table_t *new_h)
 					__sync_fetch_and_add(&new_h->e_counter.count, 1);
 				}
 				FALLBACK(){
-                                        head->next = curr_next;
-                                        ln->next   = curr;
-                                        curr->next = rn;
-                                        __sync_fetch_and_add(&new_h->e_counter.count, 1);
+                      //                 head->next = curr_next;
+                      //                 ln->next   = curr;
+                      //                 curr->next = rn;
+                      //                 __sync_fetch_and_add(&new_h->e_counter.count, 1);
+					continue;
 				}
 			END_ATOMIC();
 
@@ -761,17 +766,19 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 			bucket = array + ((i + start) % size);	// get the head 
 			// get the successor of the head (unmarked because heads are MOV)
 			do{
-				left_node = get_next_valid(bucket);
+				bucket_t *left_node2 = get_next_valid(bucket);
+				unsigned long long ext=0;
+				if(left_node2->type == TAIL) 	break;			// the bucket is empty	
 
-				if(left_node->type == TAIL) 	break;			// the bucket is empty	
-
-				freeze(left_node, FREEZE_FOR_MOV);
-
-				left_node = search(bucket, &left_node_next, &right_node, &distance, left_node->index);
+				freeze(left_node2, FREEZE_FOR_MOV);
+				ext = left_node2->extractions;
+				left_node = search(bucket, &left_node_next, &right_node, &distance, left_node2->index);
 
 				if(distance && BOOL_CAS(&left_node->next, left_node_next, get_marked(right_node, MOV)))
 					connect_to_be_freed_node_list(left_node_next, distance);
-
+				
+				if(left_node2 != left_node) continue;
+				assertf(!is_freezed(left_node->extractions), "%s\n", "NODE not FREEZED");
 				if(right_node->type != TAIL) 	freeze(right_node, FREEZE_FOR_MOV);
 				if(left_node->type != HEAD) 	migrate_node(left_node, new_h);
 			}while(1);
