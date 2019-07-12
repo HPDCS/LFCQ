@@ -85,6 +85,13 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	res->hashtable->tail.index = UINT_MAX;
 	res->hashtable->tail.type = TAIL;
 	res->hashtable->tail.next = NULL; 
+	
+	node_t *tail = node_alloc();
+	tail->next = NULL;
+	tail->payload = NULL;
+	tail->timestamp = INFTY;
+	tail->tie_breaker = 0;
+	
 
 	for (i = 0; i < MINIMUM_SIZE; i++)
 	{
@@ -93,6 +100,7 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 		res->hashtable->array[i].epoch = 0U;
 		res->hashtable->array[i].index = 0U;
 		res->hashtable->array[i].extractions = 0ULL;
+		res->hashtable->array[i].tail = tail;
 	}
 
 	return res;

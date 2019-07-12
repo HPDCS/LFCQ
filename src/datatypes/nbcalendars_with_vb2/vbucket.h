@@ -51,6 +51,7 @@ extern __thread unsigned long long scan_list_length;
 
 #define FREEZE_FOR_MOV (1ULL << 63)
 #define FREEZE_FOR_DEL (1ULL << 62)
+#define FREEZE_FOR_EPO (1ULL << 61)
 
 
 #define GC_BUCKETS   0
@@ -78,8 +79,12 @@ struct __bucket_t
 	volatile unsigned int epoch;				// 12 //enqueue's epoch
 	unsigned int index;							// 16
 	unsigned int type; 							// 20 // used to resolve the conflict with same timestamp using a FIFO policy
-	unsigned int pad;							// 24
-	node_t tail;								// 56
+	unsigned int new_epoch;							// 24
+	#ifndef RTM
+	pthread_spinlock_t lock;
+	#endif
+	//node_t tail;								// 56
+	node_t *tail;
 	node_t head;								// 80 + 88
 	bucket_t * volatile next;					// 96
 };
@@ -119,16 +124,22 @@ static inline bucket_t* bucket_alloc(){
     res 					= gc_alloc(ptst, gc_aid[GC_BUCKETS]);
     res->extractions 		= 0ULL;
     res->epoch				= 0U;
+    res->new_epoch			= 0U;
+
+	res->tail = node_alloc();
+    res->tail->payload		= NULL;
+    res->tail->timestamp		= INFTY;
+    res->tail->tie_breaker	= 0U;
+    res->tail->next			= NULL;
 
     res->head.payload		= NULL;
     res->head.timestamp		= MIN;
     res->head.tie_breaker	= 0U;
-    res->head.next			= &res->tail;
-
-    res->tail.payload		= NULL;
-    res->tail.timestamp		= INFTY;
-    res->tail.tie_breaker	= 0U;
-    res->tail.next			= NULL;
+    res->head.next			= res->tail;
+    
+    #ifndef RTM
+    pthread_spin_init(&res->lock, 0);
+    #endif
 
 	return res;
 }
@@ -136,22 +147,26 @@ static inline bucket_t* bucket_alloc(){
 
 static inline void bucket_safe_free(bucket_t *ptr){
 	node_t *tmp, *current = ptr->head.next;
-	gc_free(ptst, ptr, gc_aid[GC_BUCKETS]);
-	while(current != &ptr->tail){
+	while(current != ptr->tail && ptr->new_epoch != 0U){
 		tmp = current;
 		current = tmp->next;
 		node_safe_free(tmp);
 	}
+	gc_free(ptst, ptr, gc_aid[GC_BUCKETS]);
+	if(ptr->new_epoch != 0U) return;
+	//node_safe_free(ptr->tail);
 }
 
 static inline void bucket_unsafe_free(bucket_t *ptr){
 	node_t *tmp, *current = ptr->head.next;
-	gc_free(ptst, ptr, gc_aid[GC_BUCKETS]);
-	while(current != &ptr->tail){
+	while(current != ptr->tail && ptr->new_epoch != 0U){
 		tmp = current;
 		current = tmp->next;
 		node_unsafe_free(tmp);
 	}
+	gc_free(ptst, ptr, gc_aid[GC_BUCKETS]);
+	if(ptr->new_epoch != 0) return;
+	//	node_safe_free(ptr->tail);
 
 }
 
@@ -171,17 +186,54 @@ static inline void connect_to_be_freed_node_list(bucket_t *start, unsigned int c
 #define is_freezed(extractions)  ((extractions >> 32) != 0ULL)
 #define is_freezed_for_mov(extractions) (is_freezed(extractions) && (extractions & FREEZE_FOR_MOV))
 #define is_freezed_for_del(extractions) (is_freezed(extractions) && (extractions & FREEZE_FOR_DEL))
+#define is_freezed_for_epo(extractions) (is_freezed(extractions) && (extractions & FREEZE_FOR_EPO))
 #define get_freezed(extractions, flag)  ((extractions << 32) | extractions | flag)
 
 #define complete_freeze(bckt) do{\
 	unsigned long long old_extractions = 0ULL;\
 	void *old_next = NULL;\
 	old_extractions = (bckt)->extractions;\
+	complete_freeze_for_epo(bckt, old_extractions);\
 	do{ old_next = (bckt)->next;\
 	}while(is_marked(old_next, VAL) && is_freezed_for_del(old_extractions) && !__sync_bool_compare_and_swap(&(bckt)->next, old_next, get_marked(old_next, DEL)));\
 	do{ old_next = (bckt)->next;\
 	}while(is_marked(old_next, VAL) && is_freezed_for_mov(old_extractions) && !__sync_bool_compare_and_swap(&(bckt)->next, old_next, get_marked(old_next, MOV)));\
 }while(0)
+
+
+static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long old_extractions){
+	if(!is_freezed_for_epo(old_extractions)) return;
+	
+	void *old_next = bckt->next;
+	bucket_t *res = bucket_alloc();
+	bool suc = false;
+	
+	
+	
+    res->extractions 		= bckt->extractions ;
+    res->extractions 		= (res->extractions & ( ~(FREEZE_FOR_DEL | FREEZE_FOR_MOV | FREEZE_FOR_EPO) ) ) >> 32 ;
+    res->epoch				= bckt->new_epoch;
+    res->new_epoch			= 0U;
+    res->index				= bckt->index;
+    res->type				= bckt->type;
+
+    res->head.payload		= NULL;
+    res->head.timestamp		= MIN;
+    res->head.tie_breaker	= 0U;
+    res->head.next			= bckt->head.next;
+
+    node_safe_free(res->tail);
+    res->tail = bckt->tail;
+        
+    do{
+		old_next = bckt->next;
+		res->next = old_next;
+		suc=false;
+	}while(is_marked(old_next, VAL) && !(suc = __sync_bool_compare_and_swap(&(bckt)->next, old_next, get_marked(res, DEL))));
+	
+	if(suc) return;
+	bucket_unsafe_free(res);
+}
 
 
 //static inline void freeze(bucket_t *bckt, unsigned long long flag) {
@@ -196,7 +248,7 @@ static inline void connect_to_be_freed_node_list(bucket_t *start, unsigned int c
 		old_extractions = (bckt)->extractions;\
 	}\
 	complete_freeze((bckt));\
-}while(0);}\
+}while(0);}
 //}
 
 
@@ -220,36 +272,46 @@ static inline void connect_to_be_freed_node_list(bucket_t *start, unsigned int c
 
 
 static inline int check_increase_bucket_epoch(bucket_t *bckt, unsigned int epoch){
-	unsigned long long extracted;
-
+	
+	if(bckt->epoch >= epoch && bckt->new_epoch == 0) return OK;
+	
+	__sync_bool_compare_and_swap(&bckt->new_epoch, 0, epoch);
+	
+	freeze(bckt, FREEZE_FOR_EPO);
+	
+	return ABORT;
+	
+	/*
 	while(bckt->epoch < epoch){
 		extracted = bckt->extractions;
 		if(is_freezed(extracted)) return ABORT;
-		ATOMIC{
+		ATOMIC(&bckt->lock){
 			extracted = bckt->extractions;
 			if(is_freezed(extracted)) TM_ABORT();
 			bckt->epoch = epoch;
 			TM_COMMIT();
 		}
-		FALLBACK(){
+		FALLBACK(&bckt->lock){
 			return ABORT;
 		}
-		END_ATOMIC();
+		END_ATOMIC(&bckt->lock);
 	}
 	return OK;
-
+	*/
 }
 
 __thread pkey_t last_key = 0;
 __thread unsigned long long counter_last_key = 0ULL;
 
 static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, void* payload){
-	node_t *tail  = &bckt->tail;
+	
+	node_t *tail  = bckt->tail;
 	node_t *left  = &bckt->head;
 	node_t *curr  = left;
 	unsigned long long extracted = 0;
 	unsigned long long toskip = 0;
 	node_t *new   = node_alloc();
+	
 	new->timestamp = timestamp;
 	new->payload	= payload;
 	complete_freeze(bckt);
@@ -294,22 +356,21 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
   	new->next = curr;
 
   	// atomic
-
 		if(extracted != bckt->extractions || left->next != curr)
 			goto begin;
 			
-	ATOMIC{
+	ATOMIC(&bckt->lock){
 
 		if(extracted != bckt->extractions || left->next != curr) {
 	assertf(counter_last_key > 1000000, "AZZ%s\n", ""); TM_ABORT();}
 		left->next = new; 
 		TM_COMMIT();
 	}
-	FALLBACK(){
+	FALLBACK(&bckt->lock){
 //		left->next = new;
 		goto begin;
 	}
-	END_ATOMIC();
+	END_ATOMIC(&bckt->lock);
 	rtm_insertions++;
 	return OK;
 }
@@ -317,7 +378,7 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
 
 static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts, unsigned int epoch){
 	node_t *curr  = &bckt->head;
-	node_t *tail  = &bckt->tail;
+	node_t *tail  = bckt->tail;
 	unsigned long long extracted = 0;
 	
 	assertf(bckt->type != ITEM, "trying to extract from a head bucket%s\n", "");
@@ -327,9 +388,9 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
   #ifdef RTM
   	extracted 	= __sync_add_and_fetch(&bckt->extractions, 1ULL);
   #else
-  pthread_mutex_lock(&glock);
-  	extracted 	= __sync_add_and_fetch(&bckt->extractions, 1ULL);
-  	pthread_mutex_unlock(&glock);
+	pthread_spin_lock(&bckt->lock);
+		extracted 	= __sync_add_and_fetch(&bckt->extractions, 1ULL);
+  	pthread_spin_unlock(&bckt->lock);
   #endif
   	if(is_freezed_for_mov(extracted)) return MOV_FOUND;
   	if(is_freezed_for_del(extracted)) return EMPTY;

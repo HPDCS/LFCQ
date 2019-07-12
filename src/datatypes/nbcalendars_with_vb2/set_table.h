@@ -59,7 +59,7 @@ struct __table
 	char zpad4[56];     
 	
 	bucket_t tail;
-	char zpad5[128-sizeof(bucket_t)];
+	char zpad5[256-sizeof(bucket_t)];
 
 	bucket_t array[1];			//32
 
@@ -275,10 +275,8 @@ static int search_and_insert(bucket_t *head, unsigned int index, pkey_t timestam
 
 			newb->head.next			= node_alloc();
 			newb->head.tie_breaker 	= 0;
-			newb->tail.next 		= NULL;
-			newb->tail.timestamp  	= INFTY;	
 			
-			newb->head.next->next 				= &newb->tail;
+			newb->head.next->next 				= newb->tail;
 			newb->head.next->payload			= payload;
 			newb->head.next->tie_breaker 		= 1;
 			newb->head.next->timestamp	  		= timestamp;	
@@ -364,6 +362,11 @@ static void set_new_table(table_t *h, unsigned int counter)
 		new_h->tail.index 			= UINT_MAX;
 		new_h->tail.type 			= TAIL;
 		new_h->tail.next 			= NULL; 
+		node_t *tail 				= node_alloc();
+		tail->payload		= NULL;
+		tail->timestamp		= INFTY;
+		tail->tie_breaker	= 0U;
+		tail->next			= NULL;
 
 		for (i = 0; i < new_size; i++)
 		{
@@ -372,6 +375,7 @@ static void set_new_table(table_t *h, unsigned int counter)
 			new_h->array[i].epoch = 0U;
 			new_h->array[i].index = i;
 			new_h->array[i].extractions = 0ULL;
+			new_h->array[i].tail  = tail;
 		}
 
 		// try to publish the table
@@ -496,7 +500,7 @@ double compute_mean_separation_time(table_t *h,
 			// the bucket is not empty
 			if(left->index == index && left->type != HEAD){
 				node_t *curr = left->head.next;
-				while(curr != &left->tail){
+				while(curr != left->tail){
 					sample_array[++counter] = curr->timestamp; 
 					curr = curr->next;
 					if(counter == sample_size) break;
@@ -559,7 +563,7 @@ void migrate_node(bucket_t *bckt, table_t *new_h)
 	unsigned long long extractions;
 	unsigned long long toskip;
 	node_t *head = &bckt->head;
-	node_t *tail = &bckt->tail;
+	node_t *tail = bckt->tail;
 	node_t *curr = head->next;
 	node_t *curr_next;
 	node_t *ln, *rn, *tn;
@@ -601,7 +605,7 @@ void migrate_node(bucket_t *bckt, table_t *new_h)
 				if(toskip) return;
 				//printf("D left: %p right:%p\n", left, right);
 				
-					assertf(left->tail.timestamp != INFTY && left->type != HEAD, "HUGE Problems....%s\n", "");
+				assertf(left->tail->timestamp != INFTY && left->type != HEAD, "HUGE Problems....%s\n", "");
 				// the virtual bucket is missing thus create a new one with the item
 				if(left->index != new_index || left->type == HEAD){
 					bucket_t *new 			= bucket_alloc();
@@ -611,13 +615,10 @@ void migrate_node(bucket_t *bckt, table_t *new_h)
 					new->epoch 				= 0;
 					new->next 				= right;
 
-					new->head.next			= &new->tail;
-					new->head.tie_breaker 	= 0;
-					new->tail.next 			= NULL;
-					new->tail.timestamp  	= INFTY;	
+					new->head.next			= new->tail;
 					
 					
-					tn = &new->tail;
+					tn = new->tail;
 					ln = &new->head;
 					assertf(ln->next != tn, "Problems....%s\n", "");
 
@@ -633,7 +634,7 @@ void migrate_node(bucket_t *bckt, table_t *new_h)
 					break;
 			}while(1);
 
-			tn = &left->tail;
+			tn = left->tail;
 			ln = &left->head;
 			rn = ln->next;
 			while(rn != tn){
@@ -652,7 +653,7 @@ void migrate_node(bucket_t *bckt, table_t *new_h)
 			
 			//atomic
 			rtm_insertions++;
-			ATOMIC{
+			ATOMIC2(&bckt->lock, &left->lock){
 					if(head->next != curr		) TM_ABORT(); //abort
 					if(ln->next   != rn  		) TM_ABORT(); //abort
 					if(curr->next != curr_next  ) TM_ABORT(); //abort
@@ -662,14 +663,14 @@ void migrate_node(bucket_t *bckt, table_t *new_h)
 					TM_COMMIT();
 					__sync_fetch_and_add(&new_h->e_counter.count, 1);
 				}
-				FALLBACK(){
+				FALLBACK2(&bckt->lock, &left->lock){
                       //                 head->next = curr_next;
                       //                 ln->next   = curr;
                       //                 curr->next = rn;
                       //                 __sync_fetch_and_add(&new_h->e_counter.count, 1);
 					continue;
 				}
-			END_ATOMIC();
+			END_ATOMIC2(&bckt->lock, &left->lock);
 
 			// __sync_fetch_and_add(&new_h->e_counter.count, 1);
 			flush_current(new_h, new_index);
