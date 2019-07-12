@@ -3,7 +3,7 @@
 
 #include "common.h"
 
-#define RTM
+//#define RTM
 
 extern __thread unsigned long long rtm_prova, rtm_failed, rtm_insertions, insertions;
 #ifdef RTM
@@ -14,7 +14,7 @@ extern __thread unsigned long long rtm_prova, rtm_failed, rtm_insertions, insert
 #define TM_COMMIT() _xend()
 #define TM_ABORT()  _xabort(0xff)
 
-#define ATOMIC  CMB();\
+#define ATOMIC(...)  CMB();\
 {	++rtm_prova;/*printf("Transactions %u, %u, %u\n", prova, failed, insertions);*/\
 	unsigned int __status = 0;\
 	/*retry_tm:*/\
@@ -22,7 +22,7 @@ extern __thread unsigned long long rtm_prova, rtm_failed, rtm_insertions, insert
 	//{
 	//}
 
-#define FALLBACK() \
+#define FALLBACK(...) \
 	else{\
 	\
 		/*  Transaction retry is possible. */\
@@ -41,41 +41,71 @@ extern __thread unsigned long long rtm_prova, rtm_failed, rtm_insertions, insert
 			//{
 			//}
 
-#define END_ATOMIC() 	\
+#define END_ATOMIC(...) 	\
 		\
 		/*else{DEB("Other\n");failed++;}*/\
 	}\
-}CMB()\
+}CMB()
+
+	
+#define ATOMIC2(...) ATOMIC(...)
+#define FALLBACK2(...) FALLBACK(...)
+#define END_ATOMIC2(...) 	END_ATOMIC(...)
 
 #else
 
 #include <pthread.h>
-pthread_mutex_t glock = PTHREAD_MUTEX_INITIALIZER; 
 
 #define TM_COMMIT() /* */
 #define TM_ABORT()  {aborted=1;break;}
 
-#define ATOMIC   \
+#define ATOMIC(lock)   \
 {	++rtm_prova;\
 	unsigned int aborted=0;\
 	do{\
-		pthread_mutex_lock(&glock);
+		pthread_spin_lock(lock);
 		//{
 		//}
 	
-#define FALLBACK() \
+#define FALLBACK(lock) \
 	}while(0);\
 	if(aborted){\
 		rtm_failed++;\
-		pthread_mutex_unlock(&glock); \
+		pthread_spin_unlock(lock); \
 		/*printf("EXPLICIT\n");*/
 		//{
 		//}
 
-#define END_ATOMIC() \
+#define END_ATOMIC(lock) \
 	}\
-	pthread_mutex_unlock(&glock);\
+	pthread_spin_unlock(lock);\
 }
+
+#define ATOMIC2(locka, lockb)   \
+{	++rtm_prova;\
+	unsigned int aborted=0;\
+	do{\
+		pthread_spin_lock(locka);\
+		pthread_spin_lock(lockb);
+		//{
+		//}
+	
+#define FALLBACK2(locka, lockb) \
+	}while(0);\
+	if(aborted){\
+		rtm_failed++;\
+		pthread_spin_unlock(locka); \
+		pthread_spin_unlock(lockb); \
+		/*printf("EXPLICIT\n");*/
+		//{
+		//}
+
+#define END_ATOMIC2(locka, lockb) \
+	}\
+	pthread_spin_unlock(locka);\
+	pthread_spin_unlock(lockb);\
+}
+
 
 #endif
 
