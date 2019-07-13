@@ -322,8 +322,29 @@ __thread unsigned long long rtm_prova=0ULL, rtm_failed=0ULL, rtm_retry=0ULL, rtm
 
 void pq_report(int TID)
 {
-printf("ABORTRATE:%f, TSX:%llu, RTM_ABORTED:%f, RETRY:%f, CONFLICT:%f, CAPACITY %f, DEBUG %f, EXPLICIT %f, NESTED %f, RTM_INSERTIONS %llu, NO_RTM INSERTIONS %llu \n", (rtm_failed+rtm_retry+rtm_conflict+rtm_capacity+rtm_debug+rtm_explicit+rtm_nested)/((double)rtm_prova),
-					rtm_prova, rtm_failed/((double)rtm_prova), 	rtm_retry/((double)rtm_prova), rtm_conflict/((double)rtm_prova), rtm_capacity/((double)rtm_prova),  rtm_debug/((double)rtm_prova),  rtm_explicit/((double)rtm_prova),  rtm_nested/((double)rtm_prova), rtm_insertions, insertions-rtm_insertions);	
+printf(
+"ABORTRATE:%f, "
+"TSX:%llu, "
+"RTM_ABORTED:%f, "
+"RETRY:%f, "
+"CONFLICT:%f, "
+"CAPACITY %f, "
+"DEBUG %f, "
+"EXPLICIT %f, "
+"NESTED %f, "
+"RTM_INSERTIONS %llu, "
+"NO_RTM INSERTIONS %llu \n", 
+(rtm_failed+rtm_retry+rtm_conflict+rtm_capacity+rtm_debug+rtm_explicit+rtm_nested)/((double)rtm_prova),
+rtm_prova, 
+((double)rtm_failed)	/((double)rtm_prova), 	
+((double)rtm_retry)		/((double)rtm_prova), 
+((double)rtm_conflict)	/((double)rtm_prova), 
+((double)rtm_capacity)	/((double)rtm_prova),  
+((double)rtm_debug)		/((double)rtm_prova),
+((double)rtm_explicit)	/((double)rtm_prova),  
+((double)rtm_nested)	/((double)rtm_prova), 
+rtm_insertions, 
+insertions-rtm_insertions);	
 	printf("%d- "
 	"Enqueue: %.10f LEN: %.10f ### "
 	"Dequeue: %.10f LEN: %.10f NUMCAS: %llu : %llu ### "

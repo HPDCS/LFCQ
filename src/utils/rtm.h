@@ -46,7 +46,7 @@ extern __thread unsigned long long rtm_prova, rtm_failed, rtm_retry, rtm_conflic
 		\
 		/*else{DEB("Other\n");failed++;}*/\
 	}\
-}CMB()
+}
 
 	
 #define ATOMIC2(...) ATOMIC(...)
