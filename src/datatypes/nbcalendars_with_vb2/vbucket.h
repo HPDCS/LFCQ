@@ -113,10 +113,17 @@ static inline node_t* node_alloc(){
 }
 
 
-#define node_safe_free(ptr) 		gc_free(ptst, ptr, gc_aid[GC_INTERNALS])
-#define node_unsafe_free(ptr) 		gc_free(ptst, ptr, gc_aid[GC_INTERNALS])
+#define node_safe_free(ptr) 			gc_free(ptst, ptr, gc_aid[GC_INTERNALS])
+#define node_unsafe_free(ptr) 			gc_free(ptst, ptr, gc_aid[GC_INTERNALS])
+#define only_bucket_unsafe_free(ptr)	gc_free(ptst, ptr, gc_aid[GC_BUCKETS])
 
 
+
+#define is_freezed(extractions)  ((extractions >> 32) != 0ULL)
+#define is_freezed_for_mov(extractions) (is_freezed(extractions) && (extractions & FREEZE_FOR_MOV))
+#define is_freezed_for_del(extractions) (is_freezed(extractions) && (extractions & FREEZE_FOR_DEL))
+#define is_freezed_for_epo(extractions) (is_freezed(extractions) && (extractions & FREEZE_FOR_EPO))
+#define get_freezed(extractions, flag)  ((extractions << 32) | extractions | flag)
 
 /* allocate a bucket */
 static inline bucket_t* bucket_alloc(){
@@ -147,26 +154,29 @@ static inline bucket_t* bucket_alloc(){
 
 static inline void bucket_safe_free(bucket_t *ptr){
 	node_t *tmp, *current = ptr->head.next;
-	while(current != ptr->tail && ptr->new_epoch != 0U){
+	unsigned long long old_extractions = ptr->extractions;
+	while(current != ptr->tail && !is_freezed_for_epo(old_extractions)){
 		tmp = current;
 		current = tmp->next;
 		node_safe_free(tmp);
 	}
+	if(!is_freezed_for_epo(old_extractions))
+		node_safe_free(ptr->tail);
 	gc_free(ptst, ptr, gc_aid[GC_BUCKETS]);
-	if(ptr->new_epoch != 0U) return;
-	//node_safe_free(ptr->tail);
+	
 }
 
 static inline void bucket_unsafe_free(bucket_t *ptr){
 	node_t *tmp, *current = ptr->head.next;
-	while(current != ptr->tail && ptr->new_epoch != 0U){
+	unsigned long long old_extractions = ptr->extractions;
+	while(current != ptr->tail && !is_freezed_for_epo(old_extractions)){
 		tmp = current;
 		current = tmp->next;
 		node_unsafe_free(tmp);
 	}
+	if(!is_freezed_for_epo(old_extractions))
+		node_safe_free(ptr->tail);
 	gc_free(ptst, ptr, gc_aid[GC_BUCKETS]);
-	if(ptr->new_epoch != 0) return;
-	//	node_safe_free(ptr->tail);
 
 }
 
@@ -183,11 +193,6 @@ static inline void connect_to_be_freed_node_list(bucket_t *start, unsigned int c
 	}                                                 
 }
 
-#define is_freezed(extractions)  ((extractions >> 32) != 0ULL)
-#define is_freezed_for_mov(extractions) (is_freezed(extractions) && (extractions & FREEZE_FOR_MOV))
-#define is_freezed_for_del(extractions) (is_freezed(extractions) && (extractions & FREEZE_FOR_DEL))
-#define is_freezed_for_epo(extractions) (is_freezed(extractions) && (extractions & FREEZE_FOR_EPO))
-#define get_freezed(extractions, flag)  ((extractions << 32) | extractions | flag)
 
 #define complete_freeze(bckt) do{\
 	unsigned long long old_extractions = 0ULL;\
@@ -232,7 +237,7 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 	}while(is_marked(old_next, VAL) && !(suc = __sync_bool_compare_and_swap(&(bckt)->next, old_next, get_marked(res, DEL))));
 	
 	if(suc) return;
-	bucket_unsafe_free(res);
+	only_bucket_unsafe_free(res);
 }
 
 

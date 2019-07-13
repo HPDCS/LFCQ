@@ -271,8 +271,10 @@ static int search_and_insert(bucket_t *head, unsigned int index, pkey_t timestam
 			newb->type 			= ITEM;
 			newb->extractions 	= 0ULL;
 			newb->epoch 		= epoch;
+			newb->new_epoch 	= 0U;
 			newb->next 			= right;
 
+		
 			newb->head.next			= node_alloc();
 			newb->head.tie_breaker 	= 0;
 			
@@ -362,11 +364,6 @@ static void set_new_table(table_t *h, unsigned int counter)
 		new_h->tail.index 			= UINT_MAX;
 		new_h->tail.type 			= TAIL;
 		new_h->tail.next 			= NULL; 
-		node_t *tail 				= node_alloc();
-		tail->payload		= NULL;
-		tail->timestamp		= INFTY;
-		tail->tie_breaker	= 0U;
-		tail->next			= NULL;
 
 		for (i = 0; i < new_size; i++)
 		{
@@ -375,7 +372,6 @@ static void set_new_table(table_t *h, unsigned int counter)
 			new_h->array[i].epoch = 0U;
 			new_h->array[i].index = i;
 			new_h->array[i].extractions = 0ULL;
-			new_h->array[i].tail  = tail;
 		}
 
 		// try to publish the table
@@ -605,7 +601,7 @@ void migrate_node(bucket_t *bckt, table_t *new_h)
 				if(toskip) return;
 				//printf("D left: %p right:%p\n", left, right);
 				
-				assertf(left->tail->timestamp != INFTY && left->type != HEAD, "HUGE Problems....%s\n", "");
+				assertf(left->type != HEAD && left->tail->timestamp != INFTY, "HUGE Problems....%s\n", "");
 				// the virtual bucket is missing thus create a new one with the item
 				if(left->index != new_index || left->type == HEAD){
 					bucket_t *new 			= bucket_alloc();
@@ -614,9 +610,6 @@ void migrate_node(bucket_t *bckt, table_t *new_h)
 					new->extractions 		= 0ULL;
 					new->epoch 				= 0;
 					new->next 				= right;
-
-					new->head.next			= new->tail;
-					
 					
 					tn = new->tail;
 					ln = &new->head;
