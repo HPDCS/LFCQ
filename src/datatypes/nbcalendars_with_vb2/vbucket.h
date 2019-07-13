@@ -403,6 +403,7 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
   	while(extracted > 0 && curr != tail){
   		curr = curr->next;
   		extracted--;
+  		scan_list_length++;
   	}
 
   	if(curr == tail){
