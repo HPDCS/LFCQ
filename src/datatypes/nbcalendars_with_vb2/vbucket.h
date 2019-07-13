@@ -367,7 +367,8 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
 	ATOMIC(&bckt->lock){
 
 		if(extracted != bckt->extractions || left->next != curr) {
-	assertf(counter_last_key > 1000000, "AZZ%s\n", ""); TM_ABORT();}
+	//assertf(counter_last_key > 1000000, "AZZ%s\n", ""); 
+		TM_ABORT();}
 		left->next = new; 
 		TM_COMMIT();
 	}
@@ -403,6 +404,7 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
   	while(extracted > 0 && curr != tail){
   		curr = curr->next;
   		extracted--;
+		scan_list_length++;
   	}
 
   	if(curr == tail){

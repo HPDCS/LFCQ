@@ -18,6 +18,7 @@ extern __thread unsigned long long rtm_prova, rtm_failed, rtm_retry, rtm_conflic
 { retry_tm:\
 	++rtm_prova;/*printf("Transactions %u, %u, %u\n", prova, failed, insertions);*/\
 	unsigned int __status = 0;\
+	unsigned int fallback = 50;\
 	/*retry_tm:*/\
 	if ((__status = _xbegin ()) == _XBEGIN_STARTED)
 	//{
@@ -27,7 +28,7 @@ extern __thread unsigned long long rtm_prova, rtm_failed, rtm_retry, rtm_conflic
 	else{\
 	\
 		/*  Transaction retry is possible. */\
-		if(__status & _XABORT_RETRY) {DEB("RETRY\n");rtm_retry++;goto retry_tm;}\
+		if(__status & _XABORT_RETRY) {DEB("RETRY\n");rtm_retry++;while(fallback--!=0)_mm_pause();goto retry_tm;}\
 		/*  Transaction abort due to a memory conflict with another thread */\
 		else if(__status & _XABORT_CONFLICT) {DEB("CONFLICT\n");rtm_conflict++;}\
 		/*  Transaction abort due to the transaction using too much memory */\
