@@ -3,7 +3,7 @@
 
 #include "common.h"
 
-//#define RTM
+#define RTM
 
 extern __thread unsigned long long rtm_prova, rtm_failed, rtm_retry, rtm_conflict, rtm_capacity, rtm_debug,  rtm_explicit,  rtm_nested, rtm_insertions, insertions;
 #ifdef RTM
@@ -15,7 +15,7 @@ extern __thread unsigned long long rtm_prova, rtm_failed, rtm_retry, rtm_conflic
 #define TM_ABORT()  _xabort(0xff)
 
 #define ATOMIC(...)  \
-{ retry_tm:
+{ retry_tm:\
 	++rtm_prova;/*printf("Transactions %u, %u, %u\n", prova, failed, insertions);*/\
 	unsigned int __status = 0;\
 	/*retry_tm:*/\
