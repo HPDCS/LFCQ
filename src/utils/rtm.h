@@ -39,7 +39,7 @@ extern __thread unsigned long long rtm_prova, rtm_failed, rtm_retry, rtm_conflic
 		else if(__status & _XABORT_NESTED) {DEB("NESTES\n");rtm_nested++;}\
 		/*  Transaction explicitely aborted with _xabort. */\
 		else if(__status & _XABORT_EXPLICIT){DEB("EXPLICIT\n");rtm_explicit++;}\
-		else{DEB("Other\n");rtm_failed++;}\
+		else{DEB("Other\n");rtm_failed++;}
 			//{
 			//}
 
@@ -49,10 +49,37 @@ extern __thread unsigned long long rtm_prova, rtm_failed, rtm_retry, rtm_conflic
 	}\
 }
 
-	
-#define ATOMIC2(...) ATOMIC(...)
-#define FALLBACK2(...) FALLBACK(...)
-#define END_ATOMIC2(...) 	END_ATOMIC(...)
+#define ATOMIC2(...)  \
+{ retry_tm:\
+	;\
+	unsigned int __status = 0;\
+	if ((__status = _xbegin ()) == _XBEGIN_STARTED)
+	//{
+	//}
+
+#define FALLBACK2(...) \
+	else{\
+	\
+		/*  Transaction retry is possible. */\
+		if(__status & _XABORT_RETRY) {DEB("RETRY\n");goto retry_tm;}\
+		/*  Transaction abort due to a memory conflict with another thread */\
+		else if(__status & _XABORT_CONFLICT) {DEB("CONFLICT\n");}\
+		/*  Transaction abort due to the transaction using too much memory */\
+		else if(__status & _XABORT_CAPACITY) {DEB("CAPACITY\n");}\
+		/*  Transaction abort due to a debug trap */\
+		else if(__status & _XABORT_DEBUG) {DEB("DEBUG\n");}\
+		/*  Transaction abort in a inner nested transaction */\
+		else if(__status & _XABORT_NESTED) {DEB("NESTES\n");}\
+		/*  Transaction explicitely aborted with _xabort. */\
+		else if(__status & _XABORT_EXPLICIT){DEB("EXPLICIT\n");}\
+		else{DEB("Other\n");}
+			//{
+			//}
+
+#define END_ATOMIC2(...) 	\
+	}\
+}
+
 
 #else
 
