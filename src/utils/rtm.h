@@ -14,8 +14,9 @@ extern __thread unsigned long long rtm_prova, rtm_failed, rtm_retry, rtm_conflic
 #define TM_COMMIT() _xend()
 #define TM_ABORT()  _xabort(0xff)
 
-#define ATOMIC(...)  CMB();\
-{	++rtm_prova;/*printf("Transactions %u, %u, %u\n", prova, failed, insertions);*/\
+#define ATOMIC(...)  \
+{ retry_tm:
+	++rtm_prova;/*printf("Transactions %u, %u, %u\n", prova, failed, insertions);*/\
 	unsigned int __status = 0;\
 	/*retry_tm:*/\
 	if ((__status = _xbegin ()) == _XBEGIN_STARTED)
@@ -26,7 +27,7 @@ extern __thread unsigned long long rtm_prova, rtm_failed, rtm_retry, rtm_conflic
 	else{\
 	\
 		/*  Transaction retry is possible. */\
-		if(__status & _XABORT_RETRY) {DEB("RETRY\n");rtm_retry++;}\
+		if(__status & _XABORT_RETRY) {DEB("RETRY\n");rtm_retry++;goto retry_tm;}\
 		/*  Transaction abort due to a memory conflict with another thread */\
 		else if(__status & _XABORT_CONFLICT) {DEB("CONFLICT\n");rtm_conflict++;}\
 		/*  Transaction abort due to the transaction using too much memory */\
