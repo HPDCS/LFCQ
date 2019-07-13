@@ -317,12 +317,13 @@ begin:
 
 
 
-__thread unsigned long long rtm_prova=0ULL, rtm_failed=0ULL, rtm_insertions=0ULL, insertions=0ULL;;
+__thread unsigned long long rtm_prova=0ULL, rtm_failed=0ULL, rtm_retry=0ULL, rtm_conflict=0ULL, rtm_capacity=0ULL, rtm_debug=0ULL,  rtm_explicit=0ULL,  rtm_nested=0ULL, rtm_insertions=0ULL, insertions=0ULL;
 
 
 void pq_report(int TID)
 {
-printf("TSX:%llu, RTM_ABORTED:%llu, RTM_INSERTIONS:%llu, NO_RTM_INSERTIONS %llu\n", rtm_prova, rtm_failed, rtm_insertions, insertions-rtm_insertions);	
+printf("ABORTRATE:%f, TSX:%llu, RTM_ABORTED:%llu, RETRY:%llu, CONFLICT:%llu, CAPACITY %llu, DEBUG %llu, EXPLICIT %llu, NESTED %llu, RTM_INSERTIONS %llu, NO_RTM INSERTIONS %llu \n", (rtm_failed+rtm_retry+rtm_conflict+rtm_capacity+rtm_debug+rtm_explicit+rtm_nested)/((double)rtm_prova),
+					rtm_prova, rtm_failed, 	rtm_retry, rtm_conflict, rtm_capacity,		 rtm_debug,  rtm_explicit,  rtm_nested, rtm_insertions, insertions-rtm_insertions);	
 	printf("%d- "
 	"Enqueue: %.10f LEN: %.10f ### "
 	"Dequeue: %.10f LEN: %.10f NUMCAS: %llu : %llu ### "

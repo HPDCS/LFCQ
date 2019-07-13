@@ -5,7 +5,7 @@
 
 //#define RTM
 
-extern __thread unsigned long long rtm_prova, rtm_failed, rtm_insertions, insertions;
+extern __thread unsigned long long rtm_prova, rtm_failed, rtm_retry, rtm_conflict, rtm_capacity, rtm_debug,  rtm_explicit,  rtm_nested, rtm_insertions, insertions;
 #ifdef RTM
 
 #define DEB(x) {}
@@ -26,17 +26,17 @@ extern __thread unsigned long long rtm_prova, rtm_failed, rtm_insertions, insert
 	else{\
 	\
 		/*  Transaction retry is possible. */\
-		if(__status & _XABORT_RETRY) {DEB("RETRY\n");}\
+		if(__status & _XABORT_RETRY) {DEB("RETRY\n");rtm_retry++;}\
 		/*  Transaction abort due to a memory conflict with another thread */\
-		else if(__status & _XABORT_CONFLICT) {DEB("CONFLICT\n");}\
+		else if(__status & _XABORT_CONFLICT) {DEB("CONFLICT\n");rtm_conflict++;}\
 		/*  Transaction abort due to the transaction using too much memory */\
-		else if(__status & _XABORT_CAPACITY) {DEB("CAPACITY\n");}\
+		else if(__status & _XABORT_CAPACITY) {DEB("CAPACITY\n");rtm_capacity++;}\
 		/*  Transaction abort due to a debug trap */\
-		else if(__status & _XABORT_DEBUG) {DEB("DEBUG\n");}\
+		else if(__status & _XABORT_DEBUG) {DEB("DEBUG\n");rtm_debug++;}\
 		/*  Transaction abort in a inner nested transaction */\
-		else if(__status & _XABORT_NESTED) {DEB("NESTES\n");}\
+		else if(__status & _XABORT_NESTED) {DEB("NESTES\n");rtm_nested++;}\
 		/*  Transaction explicitely aborted with _xabort. */\
-		else if(__status & _XABORT_EXPLICIT){DEB("EXPLICIT\n");}\
+		else if(__status & _XABORT_EXPLICIT){DEB("EXPLICIT\n");rtm_explicit++;}\
 		else{DEB("Other\n");rtm_failed++;}\
 			//{
 			//}
