@@ -317,7 +317,7 @@ begin:
 
 
 
-__thread unsigned long long rtm_prova=0ULL, rtm_failed=0ULL, rtm_retry=0ULL, rtm_conflict=0ULL, rtm_capacity=0ULL, rtm_debug=0ULL,  rtm_explicit=0ULL,  rtm_nested=0ULL, rtm_insertions=0ULL, insertions=0ULL;
+__thread unsigned long long rtm_other=0ULL, rtm_prova=0ULL, rtm_failed=0ULL, rtm_retry=0ULL, rtm_conflict=0ULL, rtm_capacity=0ULL, rtm_debug=0ULL,  rtm_explicit=0ULL,  rtm_nested=0ULL, rtm_insertions=0ULL, insertions=0ULL, rtm_a=0ULL, rtm_b=0ULL;
 
 
 void pq_report(int TID)
@@ -325,24 +325,29 @@ void pq_report(int TID)
 printf(
 "ABORTRATE:%f, "
 "TSX:%llu, "
-"RTM_ABORTED:%f, "
+"RTM_OTHER:%f, "
+//"RTM_ABORTED:%f, "
 "RETRY:%f, "
 "CONFLICT:%f, "
 "CAPACITY %f, "
 "DEBUG %f, "
 "EXPLICIT %f, "
 "NESTED %f, "
+"A %f, "
+"B %f, "
 "RTM_INSERTIONS %llu, "
 "NO_RTM INSERTIONS %llu \n", 
-(rtm_failed+rtm_retry+rtm_conflict+rtm_capacity+rtm_debug+rtm_explicit+rtm_nested)/((double)rtm_prova),
+((double)rtm_failed)/((double)rtm_prova),
 rtm_prova, 
-((double)rtm_failed)	/((double)rtm_prova), 	
+((double)rtm_other)	/((double)rtm_prova), 	
 ((double)rtm_retry)		/((double)rtm_prova), 
 ((double)rtm_conflict)	/((double)rtm_prova), 
 ((double)rtm_capacity)	/((double)rtm_prova),  
 ((double)rtm_debug)		/((double)rtm_prova),
 ((double)rtm_explicit)	/((double)rtm_prova),  
 ((double)rtm_nested)	/((double)rtm_prova), 
+((double)rtm_a)    /((double)rtm_prova),
+((double)rtm_b)    /((double)rtm_prova),
 rtm_insertions, 
 insertions-rtm_insertions);	
 	printf("%d- "
