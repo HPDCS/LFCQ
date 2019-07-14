@@ -76,17 +76,21 @@ typedef struct __bucket_t bucket_t;
 struct __bucket_t
 {
 	volatile unsigned long long extractions;	// 8
+	char pad1[54];
 	volatile unsigned int epoch;				// 12 //enqueue's epoch
 	unsigned int index;							// 16
 	unsigned int type; 							// 20 // used to resolve the conflict with same timestamp using a FIFO policy
 	unsigned int new_epoch;							// 24
-	#ifndef RTM
+	node_t *tail;
+	bucket_t * volatile next;	
+	char pad2[32];
+#ifndef RTM
 	pthread_spinlock_t lock;
 	#endif
 	//node_t tail;								// 56
-	node_t *tail;
+	//node_t *tail;
 	node_t head;								// 80 + 88
-	bucket_t * volatile next;					// 96
+	//bucket_t * volatile next;					// 96
 };
 
 
@@ -365,7 +369,7 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
 			goto begin;
 			
 	ATOMIC(&bckt->lock){
-		if(extracted != bckt->extractions){ TM_ABORT(0xf0);}
+		if(extracted != bckt->extractions){ TM_ABORT(0xf2);}
 		if(left->next != curr){ TM_ABORT(0xf1);}
 //{
 	//assertf(counter_last_key > 1000000, "AZZ%s\n", ""); 

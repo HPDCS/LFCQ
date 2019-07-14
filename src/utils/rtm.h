@@ -26,6 +26,7 @@ retry_tm:\
 	unsigned int __status = 0;\
 	unsigned int fallback = rand_r(&lo_tm_seed)%512;\
 while(0 && fallback--!=0)_mm_pause();\
+fallback=50;\
 	/*retry_tm:*/\
 	if ((__status = _xbegin ()) == _XBEGIN_STARTED)
 	//{
@@ -35,7 +36,7 @@ while(0 && fallback--!=0)_mm_pause();\
 	else{\
 	rtm_failed++;\
 		/*  Transaction retry is possible. */\
-		if(__status & _XABORT_RETRY) {DEB("RETRY\n");rtm_retry++;/*fallback=rand_r(&lo_tm_seed)%512;while(fallback--!=0)_mm_pause();*/goto retry_tm;}\
+		if(__status & _XABORT_RETRY) {DEB("RETRY\n");rtm_retry++;/*fallback=rand_r(&lo_tm_seed)%512;*/while(fallback--!=0)_mm_pause();goto retry_tm;}\
 		/*  Transaction abort due to a memory conflict with another thread */\
 		if(__status & _XABORT_CONFLICT) {DEB("CONFLICT\n");rtm_conflict++;}\
 		/*  Transaction abort due to the transaction using too much memory */\
@@ -47,7 +48,7 @@ while(0 && fallback--!=0)_mm_pause();\
 		/*  Transaction explicitely aborted with _xabort. */\
 		if(__status & _XABORT_EXPLICIT){DEB("EXPLICIT\n");rtm_explicit++;}\
 		if(__status == 0){DEB("Other\n");rtm_other++;}\
-		if(_XABORT_CODE(__status) == 0xf0) {rtm_a++;}\
+		if(_XABORT_CODE(__status) == 0xf2) {rtm_a++;}\
 		if(_XABORT_CODE(__status) == 0xf1) {rtm_b++;}
 			//{
 			//}
