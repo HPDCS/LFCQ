@@ -13,13 +13,14 @@ extern __thread unsigned long long rtm_prova, rtm_other, rtm_failed, rtm_retry, 
 
 #define TM_COMMIT() _xend()
 #define TM_ABORT(x)  _xabort(x)
-
+#define TRY_THRESHOLD 20
 
 unsigned int gl_tm_seed = 0;
 __thread unsigned int lo_tm_seed = 0;
 __thread unsigned int tm_init=0;
 #define ATOMIC(...)  \
 {\
+unsigned int __local_try=0;
 if(!tm_init) {tm_init=1;lo_tm_seed = __sync_add_and_fetch(&gl_tm_seed, 1); srand(&lo_tm_seed);}\
 retry_tm:\
 	++rtm_prova;/*printf("Transactions %u, %u, %u\n", prova, failed, insertions);*/\
@@ -36,7 +37,7 @@ fallback=50;\
 	else{\
 	rtm_failed++;\
 		/*  Transaction retry is possible. */\
-		if(__status & _XABORT_RETRY) {DEB("RETRY\n");rtm_retry++;/*fallback=rand_r(&lo_tm_seed)%512;*/while(fallback--!=0)_mm_pause();goto retry_tm;}\
+		if(__status & _XABORT_RETRY) {DEB("RETRY\n");rtm_retry++;/*fallback=rand_r(&lo_tm_seed)%512;*/while(fallback--!=0)_mm_pause();if(__local_try < TRY_THRESHOLD && rand_r(&lo_tm_seed)%2)goto retry_tm;}\
 		/*  Transaction abort due to a memory conflict with another thread */\
 		if(__status & _XABORT_CONFLICT) {DEB("CONFLICT\n");rtm_conflict++;}\
 		/*  Transaction abort due to the transaction using too much memory */\
