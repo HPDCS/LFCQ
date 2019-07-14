@@ -18,20 +18,23 @@ extern __thread unsigned long long rtm_prova, rtm_other, rtm_failed, rtm_retry, 
 unsigned int gl_tm_seed = 0;
 __thread unsigned int lo_tm_seed = 0;
 __thread unsigned int tm_init=0;
+
+/*
 #define ATOMIC(...)  \
 {\
 unsigned int __local_try=0;\
 if(!tm_init) {tm_init=1;lo_tm_seed = __sync_add_and_fetch(&gl_tm_seed, 1); srand(&lo_tm_seed);}\
 retry_tm:\
-	++rtm_prova;/*printf("Transactions %u, %u, %u\n", prova, failed, insertions);*/\
+	++rtm_prova;\
 	unsigned int __status = 0;\
 	unsigned int fallback = rand_r(&lo_tm_seed)%512;\
 while(0 && fallback--!=0)_mm_pause();\
 fallback=50;\
-	/*retry_tm:*/\
 	if ((__status = _xbegin ()) == _XBEGIN_STARTED)
 	//{
 	//}
+*/
+
 
 #define FALLBACK(...) \
 	else{\

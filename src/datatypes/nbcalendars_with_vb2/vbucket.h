@@ -42,6 +42,7 @@ extern int gc_aid[];
 extern int gc_hid[];
 extern __thread unsigned long long scan_list_length_en;
 extern __thread unsigned long long scan_list_length;
+extern __thread struct drand48_data seedT;
 
 
 
@@ -319,6 +320,7 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
 	node_t *curr  = left;
 	unsigned long long extracted = 0;
 	unsigned long long toskip = 0;
+	unsigned long long position = 0;
 	node_t *new   = node_alloc();
 	
 	new->timestamp = timestamp;
@@ -344,6 +346,7 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
   		curr = curr->next;
   		toskip--;
   		scan_list_length_en++;
+  		position++;
   	}
 
   	if(curr == tail && toskip > 0ULL) {
@@ -358,30 +361,62 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
   		left = curr;
   		curr = curr->next;
   		scan_list_length_en++;
+  		position++;
   	}
 
   	if(left->timestamp == timestamp)
   		new->tie_breaker+= left->tie_breaker;
   	new->next = curr;
 
-  	// atomic
-		if(extracted != bckt->extractions || left->next != curr)
-			goto begin;
-			
-	ATOMIC(&bckt->lock){
-		if(extracted != bckt->extractions){ TM_ABORT(0xf2);}
-		if(left->next != curr){ TM_ABORT(0xf1);}
-//{
-	//assertf(counter_last_key > 1000000, "AZZ%s\n", ""); 
-//		TM_ABORT();}
-		left->next = new; 
-		TM_COMMIT();
+	{
+		unsigned int __local_try=0;
+		long  rand;
+		unsigned int __status;
+		unsigned int fallback;
+
+	  retry_tm:
+		if(position < bckt->extractions || left->next != curr)	goto begin;
+
+		++rtm_prova;
+		__status = 0;
+
+		if ((__status = _xbegin ()) == _XBEGIN_STARTED)
+		{
+			if(position < bckt->extractions){ TM_ABORT(0xf2);}
+			if(left->next != curr){ TM_ABORT(0xf1);}
+			left->next = new; 
+			TM_COMMIT();
+		}
+		else
+		{
+			rtm_failed++;
+			/*  Transaction retry is possible. */
+			if(__status & _XABORT_RETRY) {DEB("RETRY\n");rtm_retry++;}
+			/*  Transaction abort due to a memory conflict with another thread */
+			if(__status & _XABORT_CONFLICT) {DEB("CONFLICT\n");rtm_conflict++;}
+			/*  Transaction abort due to the transaction using too much memory */
+			if(__status & _XABORT_CAPACITY) {DEB("CAPACITY\n");rtm_capacity++;}
+			/*  Transaction abort due to a debug trap */
+			if(__status & _XABORT_DEBUG) {DEB("DEBUG\n");rtm_debug++;}
+			/*  Transaction abort in a inner nested transaction */
+			if(__status & _XABORT_NESTED) {DEB("NESTES\n");rtm_nested++;}
+			/*  Transaction explicitely aborted with _xabort. */
+			if(__status & _XABORT_EXPLICIT){DEB("EXPLICIT\n");rtm_explicit++;}
+			if(__status == 0){DEB("Other\n");rtm_other++;}
+			if(_XABORT_CODE(__status) == 0xf2) {rtm_a++;}
+			if(_XABORT_CODE(__status) == 0xf1) {rtm_b++;}
+			if(__status & _XABORT_RETRY) {
+				lrand48_r(&seedT, &rand);
+				fallback = rand & 511L;
+				if(__local_try++ < TRY_THRESHOLD && fallback & 1L)
+					goto retry_tm;
+				while(fallback--!=0)_mm_pause();
+			}
+				goto begin;
+		}
 	}
-	FALLBACK(&bckt->lock){
-//		left->next = new;
-		goto begin;
-	}
-	END_ATOMIC(&bckt->lock);
+
+
 	rtm_insertions++;
 	return OK;
 }
