@@ -336,7 +336,7 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
   	extracted 	= bckt->extractions;
 
   	if(is_freezed_for_mov(extracted)) {node_unsafe_free(new); return MOV_FOUND;	}
-  	if(is_freezed_for_del(extracted)) {node_unsafe_free(new); return ABORT; 	}
+  	if(is_freezed(extracted)) {node_unsafe_free(new); return ABORT; 	}
   	
   	toskip		= extracted;
 
@@ -404,7 +404,7 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
   	pthread_spin_unlock(&bckt->lock);
   #endif
   	if(is_freezed_for_mov(extracted)) return MOV_FOUND;
-  	if(is_freezed_for_del(extracted)) return EMPTY;
+  	if(is_freezed(extracted)) return EMPTY;
   	
   	while(extracted > 0 && curr != tail){
   		curr = curr->next;
