@@ -647,9 +647,9 @@ void migrate_node(bucket_t *bckt, table_t *new_h)
 			//atomic
 			rtm_insertions++;
 			ATOMIC2(&bckt->lock, &left->lock){
-					if(head->next != curr		) TM_ABORT(); //abort
-					if(ln->next   != rn  		) TM_ABORT(); //abort
-					if(curr->next != curr_next  ) TM_ABORT(); //abort
+					if(head->next != curr		) TM_ABORT(0xf2); //abort
+					if(ln->next   != rn  		) TM_ABORT(0xf3); //abort
+					if(curr->next != curr_next 	) TM_ABORT(0xf4); //abort
 					head->next = curr_next;
 					ln->next   = curr;
 					curr->next = rn;

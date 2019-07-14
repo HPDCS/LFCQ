@@ -365,10 +365,11 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
 			goto begin;
 			
 	ATOMIC(&bckt->lock){
-
-		if(extracted != bckt->extractions || left->next != curr) {
+		if(extracted != bckt->extractions){ TM_ABORT(0xf0);}
+		if(left->next != curr){ TM_ABORT(0xf1);}
+//{
 	//assertf(counter_last_key > 1000000, "AZZ%s\n", ""); 
-		TM_ABORT();}
+//		TM_ABORT();}
 		left->next = new; 
 		TM_COMMIT();
 	}

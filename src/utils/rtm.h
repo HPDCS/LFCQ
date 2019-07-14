@@ -5,20 +5,27 @@
 
 #define RTM
 
-extern __thread unsigned long long rtm_prova, rtm_failed, rtm_retry, rtm_conflict, rtm_capacity, rtm_debug,  rtm_explicit,  rtm_nested, rtm_insertions, insertions;
+extern __thread unsigned long long rtm_prova, rtm_other, rtm_failed, rtm_retry, rtm_conflict, rtm_capacity, rtm_debug,  rtm_explicit,  rtm_nested, rtm_a, rtm_b, rtm_insertions, insertions;
 #ifdef RTM
 
 #define DEB(x) {}
 //#define DEB(x) printf(x)
 
 #define TM_COMMIT() _xend()
-#define TM_ABORT()  _xabort(0xff)
+#define TM_ABORT(x)  _xabort(x)
 
+
+unsigned int gl_tm_seed = 0;
+__thread unsigned int lo_tm_seed = 0;
+__thread unsigned int tm_init=0;
 #define ATOMIC(...)  \
-{ retry_tm:\
+{\
+if(!tm_init) {tm_init=1;lo_tm_seed = __sync_add_and_fetch(&gl_tm_seed, 1); srand(&lo_tm_seed);}\
+retry_tm:\
 	++rtm_prova;/*printf("Transactions %u, %u, %u\n", prova, failed, insertions);*/\
 	unsigned int __status = 0;\
-	unsigned int fallback = 50;\
+	unsigned int fallback = rand_r(&lo_tm_seed)%512;\
+while(0 && fallback--!=0)_mm_pause();\
 	/*retry_tm:*/\
 	if ((__status = _xbegin ()) == _XBEGIN_STARTED)
 	//{
@@ -26,20 +33,22 @@ extern __thread unsigned long long rtm_prova, rtm_failed, rtm_retry, rtm_conflic
 
 #define FALLBACK(...) \
 	else{\
-	\
+	rtm_failed++;\
 		/*  Transaction retry is possible. */\
-		if(__status & _XABORT_RETRY) {DEB("RETRY\n");rtm_retry++;while(fallback--!=0)_mm_pause();goto retry_tm;}\
+		if(__status & _XABORT_RETRY) {DEB("RETRY\n");rtm_retry++;/*fallback=rand_r(&lo_tm_seed)%512;while(fallback--!=0)_mm_pause();*/goto retry_tm;}\
 		/*  Transaction abort due to a memory conflict with another thread */\
-		else if(__status & _XABORT_CONFLICT) {DEB("CONFLICT\n");rtm_conflict++;}\
+		if(__status & _XABORT_CONFLICT) {DEB("CONFLICT\n");rtm_conflict++;}\
 		/*  Transaction abort due to the transaction using too much memory */\
-		else if(__status & _XABORT_CAPACITY) {DEB("CAPACITY\n");rtm_capacity++;}\
+		if(__status & _XABORT_CAPACITY) {DEB("CAPACITY\n");rtm_capacity++;}\
 		/*  Transaction abort due to a debug trap */\
-		else if(__status & _XABORT_DEBUG) {DEB("DEBUG\n");rtm_debug++;}\
+		if(__status & _XABORT_DEBUG) {DEB("DEBUG\n");rtm_debug++;}\
 		/*  Transaction abort in a inner nested transaction */\
-		else if(__status & _XABORT_NESTED) {DEB("NESTES\n");rtm_nested++;}\
+		if(__status & _XABORT_NESTED) {DEB("NESTES\n");rtm_nested++;}\
 		/*  Transaction explicitely aborted with _xabort. */\
-		else if(__status & _XABORT_EXPLICIT){DEB("EXPLICIT\n");rtm_explicit++;}\
-		else{DEB("Other\n");rtm_failed++;}
+		if(__status & _XABORT_EXPLICIT){DEB("EXPLICIT\n");rtm_explicit++;}\
+		if(__status == 0){DEB("Other\n");rtm_other++;}\
+		if(_XABORT_CODE(__status) == 0xf0) {rtm_a++;}\
+		if(_XABORT_CODE(__status) == 0xf1) {rtm_b++;}
 			//{
 			//}
 
