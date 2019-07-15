@@ -368,18 +368,20 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
   		new->tie_breaker+= left->tie_breaker;
   	new->next = curr;
 
-	{
+//	{
 		unsigned int __local_try=0;
 		long  rand;
 		unsigned int __status;
 		unsigned int fallback;
-
+//CMB();
 	  retry_tm:
-		if(position < bckt->extractions || left->next != curr)	goto begin;
 
+                if(position < bckt->extractions)  {rtm_debug++;goto begin;}
+		if(left->next != curr)	{rtm_nested++;goto begin;}
+//retry_tm:
 		++rtm_prova;
 		__status = 0;
-
+//CMB();
 		if ((__status = _xbegin ()) == _XBEGIN_STARTED)
 		{
 			if(position < bckt->extractions){ TM_ABORT(0xf2);}
@@ -405,17 +407,14 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
 			if(__status == 0){DEB("Other\n");rtm_other++;}
 			if(_XABORT_CODE(__status) == 0xf2) {rtm_a++;}
 			if(_XABORT_CODE(__status) == 0xf1) {rtm_b++;}
-			if(__status & _XABORT_RETRY) {
+			if(__status & _XABORT_RETRY && __local_try++ < 51200) {
 				lrand48_r(&seedT, &rand);
 				fallback = rand & 511L;
-				if(__local_try++ < TRY_THRESHOLD && fallback & 1L)
-					goto retry_tm;
-				while(fallback--!=0)_mm_pause();
+				while(fallback & 1L && fallback--!=0)_mm_pause();
+				goto retry_tm;
 			}
-				goto begin;
+			goto begin;
 		}
-	}
-
 
 	rtm_insertions++;
 	return OK;
@@ -448,7 +447,11 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
   	}
 
   	if(curr == tail){
-  		freeze(bckt, FREEZE_FOR_DEL);
+		unsigned long rand=0;
+                lrand48_r(&seedT, &rand);
+		rand &= 511;
+                if(rand < 128)
+	  		freeze(bckt, FREEZE_FOR_DEL);
 		return EMPTY; // try to compact
   	} 
   	*result = curr->payload;
