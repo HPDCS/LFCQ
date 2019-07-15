@@ -32,7 +32,7 @@ extern __thread unsigned int read_table_count;
 #define RESIZE_PERIOD RESIZE_PERIOD_FACTOR*BASE
 
 
-
+#define PERC_RESIZE_COUNT 0.25
 
 typedef struct __table table_t;
 struct __table
@@ -332,7 +332,7 @@ static void set_new_table(table_t *h, unsigned int counter)
 	
 	
 	// is time for periodic resize?
-	if(new_size == 0 && (h->e_counter.count + h->d_counter.count) > RESIZE_PERIOD && h->resize_count/log_size < 0.75)
+	if(new_size == 0 && (h->e_counter.count + h->d_counter.count) > RESIZE_PERIOD && h->resize_count/log_size < PERC_RESIZE_COUNT)
 		new_size = h->size;
 	// the num of items is doubled/halved but it is not enough for change size
 	//if(new_size == 0 && h->last_resize_count != 0 && (counter >  h->last_resize_count*2 || counter < h->last_resize_count/2 ) )
@@ -754,8 +754,8 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 
 		//First speculative try: try to migrate the nodes, if a conflict occurs, continue to the next bucket
 		drand48_r(&seedT, &rand); 			
-		start = (unsigned int) rand * size;	// start to migrate from a random bucket
-		LOG("Start: %u\n", start);
+		start = (unsigned int) (rand * size);	// start to migrate from a random bucket
+//		LOG("Start: %u\n", start);
 		
 		for(i = 0; i < size; i++)
 		{
@@ -785,19 +785,14 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 			if(left_node_next != right_node && BOOL_CAS(&left_node->next, left_node_next, get_marked(right_node, MOV)))
 				connect_to_be_freed_node_list(left_node_next, distance);
 			
-			assertf(get_unmarked(right_node) != tail, "Fail in line 972 %p %p %p %p\n",
-			 bucket,
-			  left_node,
-			   right_node, 
-			   tail); 
 	
 		}
 
 
 		//First speculative try: try to migrate the nodes, if a conflict occurs, continue to the next bucket
 		drand48_r(&seedT, &rand); 			
-		start = (unsigned int) rand * size;	// start to migrate from a random bucket
-		LOG("Start: %u\n", start);
+		start = (unsigned int) (rand * size);	// start to migrate from a random bucket
+//		LOG("Start: %u\n", start);
 		
 		for(i = 0; i < size; i++)
 		{
