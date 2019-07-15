@@ -552,7 +552,7 @@ double compute_mean_separation_time(table_t *h,
 }
 
 
-void migrate_node(bucket_t *bckt, table_t *new_h)
+int  migrate_node(bucket_t *bckt, table_t *new_h)
 {
 	bucket_t *left, *left_next, *right;
 	unsigned int new_index, distance;
@@ -568,7 +568,7 @@ void migrate_node(bucket_t *bckt, table_t *new_h)
 	assertf(!is_freezed(extractions), "Migrating bucket not freezed%s\n", "");
 	if(!is_freezed_for_mov(extractions)){
 		assertf(!is_freezed_for_del(extractions), "Migrating bucket not del%s\n", "");
-		return;
+		return OK;
 	}
 	toskip = extractions & (~(3ULL<<62));
 	toskip >>=32;	
@@ -594,11 +594,11 @@ void migrate_node(bucket_t *bckt, table_t *new_h)
 				extractions = left->extractions;
 			  	toskip		= extractions & MASK_EPOCH;
 				// if the right or the left node is MOV signal this to the caller
-				if(is_marked(left_next, MOV) ) 	return;
+				if(is_marked(left_next, MOV) ) 	return OK;
 				//printf("B left: %p right:%p\n", left, right);
-				if(is_freezed(extractions)) 	return;
+				if(is_freezed(extractions)) 	return OK;
 				//printf("C left: %p right:%p\n", left, right);
-				if(toskip) return;
+				if(toskip) return OK;
 				//printf("D left: %p right:%p\n", left, right);
 				
 				assertf(left->type != HEAD && left->tail->timestamp != INFTY, "HUGE Problems....%s\n", "");
@@ -621,7 +621,7 @@ void migrate_node(bucket_t *bckt, table_t *new_h)
 						break;
 					}
 					bucket_unsafe_free(new);
-					continue;
+					return ABORT;
 				}
 				else
 					break;
@@ -640,9 +640,9 @@ void migrate_node(bucket_t *bckt, table_t *new_h)
 
 			}
 
-			if(head->next != curr		) continue; //abort
-			if(ln->next   != rn  		) continue; //abort
-			if(curr->next != curr_next  ) continue; //abort
+			if(head->next != curr		) return ABORT; //abort
+			if(ln->next   != rn  		) return ABORT; //abort
+			if(curr->next != curr_next  ) return ABORT; //abort
 			
 			//atomic
 			rtm_insertions++;
@@ -661,7 +661,7 @@ void migrate_node(bucket_t *bckt, table_t *new_h)
                       //                 ln->next   = curr;
                       //                 curr->next = rn;
                       //                 __sync_fetch_and_add(&new_h->e_counter.count, 1);
-					continue;
+					return ABORT;
 				}
 			END_ATOMIC2(&bckt->lock, &left->lock);
 
@@ -671,6 +671,7 @@ void migrate_node(bucket_t *bckt, table_t *new_h)
 	}
 
 	freeze_from_mov_to_del(bckt);
+	return OK;
 }
 
 
@@ -754,6 +755,7 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 		//First speculative try: try to migrate the nodes, if a conflict occurs, continue to the next bucket
 		drand48_r(&seedT, &rand); 			
 		start = (unsigned int) rand * size;	// start to migrate from a random bucket
+		LOG("Start: %u\n", start);
 		
 		for(i = 0; i < size; i++)
 		{
@@ -761,11 +763,51 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 			// get the successor of the head (unmarked because heads are MOV)
 			do{
 				bucket_t *left_node2 = get_next_valid(bucket);
-				unsigned long long ext=0;
 				if(left_node2->type == TAIL) 	break;			// the bucket is empty	
 
 				freeze(left_node2, FREEZE_FOR_MOV);
-				ext = left_node2->extractions;
+				left_node = search(bucket, &left_node_next, &right_node, &distance, left_node2->index);
+
+				if(distance && BOOL_CAS(&left_node->next, left_node_next, get_marked(right_node, MOV)))
+					connect_to_be_freed_node_list(left_node_next, distance);
+				
+				if(left_node2 != left_node) break;
+				assertf(!is_freezed(left_node->extractions), "%s\n", "NODE not FREEZED");
+				if(right_node->type != TAIL) 	freeze(right_node, FREEZE_FOR_MOV);
+				if(left_node->type != HEAD) {	
+					int res = migrate_node(left_node, new_h);
+					if(res == ABORT) break;
+				}
+			}while(1);
+	
+			// perform a compact to remove all DEL nodes (make head and tail adjacents again)
+			left_node = search(bucket, &left_node_next, &right_node, &distance, 0);
+			if(left_node_next != right_node && BOOL_CAS(&left_node->next, left_node_next, get_marked(right_node, MOV)))
+				connect_to_be_freed_node_list(left_node_next, distance);
+			
+			assertf(get_unmarked(right_node) != tail, "Fail in line 972 %p %p %p %p\n",
+			 bucket,
+			  left_node,
+			   right_node, 
+			   tail); 
+	
+		}
+
+
+		//First speculative try: try to migrate the nodes, if a conflict occurs, continue to the next bucket
+		drand48_r(&seedT, &rand); 			
+		start = (unsigned int) rand * size;	// start to migrate from a random bucket
+		LOG("Start: %u\n", start);
+		
+		for(i = 0; i < size; i++)
+		{
+			bucket = array + ((i + start) % size);	// get the head 
+			// get the successor of the head (unmarked because heads are MOV)
+			do{
+				bucket_t *left_node2 = get_next_valid(bucket);
+				if(left_node2->type == TAIL) 	break;			// the bucket is empty	
+
+				freeze(left_node2, FREEZE_FOR_MOV);
 				left_node = search(bucket, &left_node_next, &right_node, &distance, left_node2->index);
 
 				if(distance && BOOL_CAS(&left_node->next, left_node_next, get_marked(right_node, MOV)))
