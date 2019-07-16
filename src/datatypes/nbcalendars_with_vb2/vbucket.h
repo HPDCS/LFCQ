@@ -349,14 +349,14 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
   		position++;
   	}
 
-  	if(curr == tail && toskip > 0ULL) {
+  	if(curr == tail && toskip >= 0ULL) {
   		freeze(bckt, FREEZE_FOR_DEL);
   		node_unsafe_free(new);
   		return ABORT;
   	}
 
   	while(curr->timestamp <= timestamp){
-		if(counter_last_key > 1000000)
+		if(counter_last_key > 1000000ULL)
 			printf("L: %p-%u C: %p-%u\n", left, left->timestamp, curr, curr->timestamp);
   		left = curr;
   		curr = curr->next;
