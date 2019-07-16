@@ -551,6 +551,8 @@ double compute_mean_separation_time(table_t *h,
 	return newaverage;
 }
 
+__thread void *last_bckt = NULL;
+__thread unsigned long long last_bckt_count = 0ULL;
 
 int  migrate_node(bucket_t *bckt, table_t *new_h)
 {
@@ -563,7 +565,17 @@ int  migrate_node(bucket_t *bckt, table_t *new_h)
 	node_t *curr = head->next;
 	node_t *curr_next;
 	node_t *ln, *rn, *tn;
+	unsigned blocked = 0;	
 
+	if(last_bckt == bckt){
+		if(++last_bckt_count == 1000000){
+			blocked = 1;
+			printf("YUSTON abbiamo un problema %p\n", bckt);
+//			while(1);
+		}
+	}
+	else
+		last_bckt = bckt;
 	extractions = bckt->extractions;
 	assertf(!is_freezed(extractions), "Migrating bucket not freezed%s\n", "");
 	if(!is_freezed_for_mov(extractions)){
@@ -573,13 +585,13 @@ int  migrate_node(bucket_t *bckt, table_t *new_h)
 	toskip = extractions & (~(3ULL<<62));
 	toskip >>=32;	
 
-	while(toskip){
+	while(toskip && head != tail){
 		head = head->next;
 		toskip--;
 	}
 	
-	assertf(head == tail, "While migrating detected extracted tail%s\n", "");
-
+	//assertf(head == tail, "While migrating detected extracted tail%s\n", "");
+	if(head != tail)
 	//printf("Try to migrate\n");
 	while( (curr = head->next) != tail){
 	//		printf("Moving first\n");
@@ -751,7 +763,9 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 			)
 				LOG("COMPUTE BW -  OLD:%.20f NEW:%.20f %u SAME TS:%u\n", new_bw, newaverage, new_h->size, acc_counter != 0 ? acc/acc_counter : 0);
 		}
-
+		
+		unsigned int retry_copy_phase = 0;
+		for(retry_copy_phase;retry_copy_phase<10;retry_copy_phase++){
 		//First speculative try: try to migrate the nodes, if a conflict occurs, continue to the next bucket
 		drand48_r(&seedT, &rand); 			
 		start = (unsigned int) (rand * size);	// start to migrate from a random bucket
@@ -787,7 +801,7 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 			
 	
 		}
-
+		}
 
 		//First speculative try: try to migrate the nodes, if a conflict occurs, continue to the next bucket
 		drand48_r(&seedT, &rand); 			
