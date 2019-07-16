@@ -68,7 +68,7 @@ fallback=50;\
 
 #define ATOMIC2(...)  \
 { retry_tm:\
-	;\
+	rtm_prova2++;\
 	unsigned int __status = 0;\
 	if ((__status = _xbegin ()) == _XBEGIN_STARTED)
 	//{
