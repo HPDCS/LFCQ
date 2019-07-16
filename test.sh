@@ -41,6 +41,8 @@ lscpu | grep NUMA | grep CPU > tmp.numa.conf
 lscpu | grep  On-line > tmp.cpu.list
 
 list=`python get_cores.py | cut -d',' -f1-$2`
+#list="0,28,4,32,8,36,12,40,10,38,6,34,2,30,16,44,20,48,24,52,26,54,22,50,18,46,14,42,1,29,5,33,9,37,13,41,11,39,7,35,3,31,17,45,21,49,25,53,27,55,23,51,19,47,15,43"
+list=`echo $list | cut -d',' -f1-$2`
 echo $list
 
 rm tmp.numa.conf tmp.cpu.list
