@@ -370,7 +370,7 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
 
 //	{
 		unsigned int __local_try=0;
-		long  rand;
+		long rand;
 		unsigned int __status;
 		unsigned int fallback;
 //CMB();
@@ -409,8 +409,9 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
 			if(_XABORT_CODE(__status) == 0xf1) {rtm_b++;}
 			if(__status & _XABORT_RETRY && __local_try++ < 51200) {
 				lrand48_r(&seedT, &rand);
-				fallback = rand & 511L;
-				while(fallback & 1L && fallback--!=0)_mm_pause();
+				fallback = rand & 1023L;
+				if(fallback & 1L)
+					while(fallback--!=0)_mm_pause();
 				goto retry_tm;
 			}
 			goto begin;
@@ -447,11 +448,10 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
   	}
 
   	if(curr == tail){
-		unsigned long rand=0;
+		long rand=0;
                 lrand48_r(&seedT, &rand);
-		rand &= 511;
-//                if(rand < 128)
-  		freeze(bckt, FREEZE_FOR_DEL);
+		rand &= 511L;
+                if(rand < 1L)  		freeze(bckt, FREEZE_FOR_DEL);
 		return EMPTY; // try to compact
   	} 
   	*result = curr->payload;
