@@ -40,7 +40,9 @@ fallback=50;\
 	else{\
 	rtm_failed++;\
 		/*  Transaction retry is possible. */\
-		if(__status & _XABORT_RETRY) {DEB("RETRY\n");rtm_retry++;/*fallback=rand_r(&lo_tm_seed)%512;*/while(fallback--!=0)_mm_pause();if(__local_try++ < TRY_THRESHOLD && rand_r(&lo_tm_seed)%2)goto retry_tm;}\
+		if(__status & _XABORT_RETRY) {DEB("RETRY\n");rtm_retry++;\
+		/*fallback=rand_r(&lo_tm_seed)%512;*/\
+		while(fallback--!=0)_mm_pause();if(__local_try++ < TRY_THRESHOLD && rand_r(&lo_tm_seed)%2)goto retry_tm;}\
 		/*  Transaction abort due to a memory conflict with another thread */\
 		if(__status & _XABORT_CONFLICT) {DEB("CONFLICT\n");rtm_conflict++;}\
 		/*  Transaction abort due to the transaction using too much memory */\
@@ -71,9 +73,33 @@ fallback=50;\
 	//{
 	//}
 
+
 #define FALLBACK2(...) \
+        else{\
+	        long rand = 0; rtm_failed++;\
+                if(blocked) printf("ERROR %u\n", __status);\
+		/*  Transaction retry is possible. */\
+                if(__status & _XABORT_RETRY) {DEB("RETRY\n");rtm_retry++;lrand48_r(&seedT, &rand);if(rand & 1) goto retry_tm;}\
+		/*  Transaction abort due to a memory conflict with another thread */\
+                if(__status & _XABORT_CONFLICT) {DEB("CONFLICT\n");rtm_conflict++;}\
+                /*  Transaction abort due to the transaction using too much memory */\
+                if(__status & _XABORT_CAPACITY) {DEB("CAPACITY\n");rtm_capacity++;}\
+                /*  Transaction abort due to a debug trap */\
+                if(__status & _XABORT_DEBUG) {DEB("DEBUG\n");rtm_debug++;}\
+                /*  Transaction abort in a inner nested transaction */\
+                if(__status & _XABORT_NESTED) {DEB("NESTES\n");rtm_nested++;}\
+                /*  Transaction explicitely aborted with _xabort. */\
+                if(__status & _XABORT_EXPLICIT){DEB("EXPLICIT\n");rtm_explicit++;}\
+                if(__status == 0){DEB("Other\n");rtm_other++;}\
+                if(_XABORT_CODE(__status) == 0xf2) {rtm_a++;}\
+                if(_XABORT_CODE(__status) == 0xf1) {rtm_b++;}
+                        //{
+                        //}
+
+
+#define FALLBACK3(...) //\
 	else{\
-	\
+		\
 		/*  Transaction retry is possible. */\
 		if(__status & _XABORT_RETRY) {DEB("RETRY\n");goto retry_tm;}\
 		/*  Transaction abort due to a memory conflict with another thread */\
