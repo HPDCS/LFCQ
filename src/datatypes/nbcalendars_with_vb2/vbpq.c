@@ -317,11 +317,12 @@ begin:
 
 
 __thread unsigned long long rtm_other=0ULL, rtm_prova=0ULL, rtm_failed=0ULL, rtm_retry=0ULL, rtm_conflict=0ULL, rtm_capacity=0ULL, rtm_debug=0ULL,  rtm_explicit=0ULL,  rtm_nested=0ULL, rtm_insertions=0ULL, insertions=0ULL, rtm_a=0ULL, rtm_b=0ULL;
+__thread unsigned long long rtm_other2=0ULL, rtm_prova2=0ULL, rtm_failed2=0ULL, rtm_retry2=0ULL, rtm_conflict2=0ULL, rtm_capacity2=0ULL, rtm_debug2=0ULL,  rtm_explicit2=0ULL,  rtm_nested2=0ULL, rtm_insertions2=0ULL, insertions2=0ULL, rtm_a2=0ULL, rtm_b2=0ULL;
 
 
 void pq_report(int TID)
 {
-printf(
+printf("BCKT CONNECT "
 "ABORTRATE:%f, "
 "TSX:%llu, "
 "RTM_OTHER:%f, "
@@ -349,6 +350,38 @@ rtm_prova,
 ((double)rtm_b)    /((double)rtm_prova),
 rtm_insertions, 
 insertions-rtm_insertions);	
+
+
+printf("MIGRATE "
+"ABORTRATE:%f, "
+"TSX:%llu, "
+"RTM_OTHER:%f, "
+//"RTM_ABORTED:%f, "
+"RETRY:%f, "
+"CONFLICT:%f, "
+"CAPACITY %f, "
+"DEBUG %f, "
+"EXPLICIT %f, "
+"NESTED %f, "
+"A %f, "
+"B %f, "
+"RTM_INSERTIONS %llu, "
+"NO_RTM INSERTIONS %llu \n", 
+((double)rtm_failed2)/((double)rtm_prova2),
+rtm_prova, 
+((double)rtm_other2)	/((double)rtm_prova2), 	
+((double)rtm_retry2)		/((double)rtm_prova2), 
+((double)rtm_conflict2)	/((double)rtm_prova2), 
+((double)rtm_capacity2)	/((double)rtm_prova2),  
+((double)rtm_debug2)		/((double)rtm_prova2),
+((double)rtm_explicit2)	/((double)rtm_prova2),  
+((double)rtm_nested2)	/((double)rtm_prova2), 
+((double)rtm_a2)    /((double)rtm_prova2),
+((double)rtm_b2)    /((double)rtm_prova2),
+rtm_insertions2, 
+insertions2-rtm_insertions2);	
+
+
 	printf("%d- "
 	"Enqueue: %.10f LEN: %.10f ### "
 	"Dequeue: %.10f LEN: %.10f NUMCAS: %llu : %llu ### "

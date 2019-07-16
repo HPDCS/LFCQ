@@ -6,6 +6,7 @@
 #define RTM
 
 extern __thread unsigned long long rtm_prova, rtm_other, rtm_failed, rtm_retry, rtm_conflict, rtm_capacity, rtm_debug,  rtm_explicit,  rtm_nested, rtm_a, rtm_b, rtm_insertions, insertions;
+extern __thread unsigned long long rtm_prova2, rtm_other2, rtm_failed2, rtm_retry2, rtm_conflict2, rtm_capacity2, rtm_debug2,  rtm_explicit2,  rtm_nested2, rtm_a2, rtm_b2, rtm_insertions2, insertions2;
 #ifdef RTM
 
 #define DEB(x) {}
@@ -76,23 +77,23 @@ fallback=50;\
 
 #define FALLBACK2(...) \
         else{\
-	        long rand = 0; rtm_failed++;\
+	        long rand = 0; rtm_failed2++;\
                 if(blocked) printf("ERROR %u\n", __status);\
 		/*  Transaction retry is possible. */\
-                if(__status & _XABORT_RETRY) {DEB("RETRY\n");rtm_retry++;lrand48_r(&seedT, &rand);if(rand & 1) goto retry_tm;}\
+                if(__status & _XABORT_RETRY) {DEB("RETRY\n");rtm_retry2++;lrand48_r(&seedT, &rand);if(rand & 1) goto retry_tm;}\
 		/*  Transaction abort due to a memory conflict with another thread */\
-                if(__status & _XABORT_CONFLICT) {DEB("CONFLICT\n");rtm_conflict++;}\
+                if(__status & _XABORT_CONFLICT) {DEB("CONFLICT\n");rtm_conflict2++;}\
                 /*  Transaction abort due to the transaction using too much memory */\
-                if(__status & _XABORT_CAPACITY) {DEB("CAPACITY\n");rtm_capacity++;}\
+                if(__status & _XABORT_CAPACITY) {DEB("CAPACITY\n");rtm_capacity2++;}\
                 /*  Transaction abort due to a debug trap */\
-                if(__status & _XABORT_DEBUG) {DEB("DEBUG\n");rtm_debug++;}\
+                if(__status & _XABORT_DEBUG) {DEB("DEBUG\n");rtm_debug2++;}\
                 /*  Transaction abort in a inner nested transaction */\
-                if(__status & _XABORT_NESTED) {DEB("NESTES\n");rtm_nested++;}\
+                if(__status & _XABORT_NESTED) {DEB("NESTES\n");rtm_nested2++;}\
                 /*  Transaction explicitely aborted with _xabort. */\
-                if(__status & _XABORT_EXPLICIT){DEB("EXPLICIT\n");rtm_explicit++;}\
-                if(__status == 0){DEB("Other\n");rtm_other++;}\
-                if(_XABORT_CODE(__status) == 0xf2) {rtm_a++;}\
-                if(_XABORT_CODE(__status) == 0xf1) {rtm_b++;}
+                if(__status & _XABORT_EXPLICIT){DEB("EXPLICIT\n");rtm_explicit2++;}\
+                if(__status == 0){DEB("Other\n");rtm_other2++;}\
+                if(_XABORT_CODE(__status) == 0xf2) {rtm_a2++;}\
+                if(_XABORT_CODE(__status) == 0xf1) {rtm_b2++;}
                         //{
                         //}
 
