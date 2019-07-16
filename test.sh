@@ -25,7 +25,7 @@ then
     PRE1="gdb --args"
 elif [ "$6" = "PR" ]
 then
-    PRE1="perf record"
+    PRE1="perf record -g"
     POST="perf report"
 elif [ "$6" = "PS" ]
 then
