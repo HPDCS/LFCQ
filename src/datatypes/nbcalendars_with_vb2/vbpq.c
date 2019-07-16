@@ -368,7 +368,7 @@ printf("MIGRATE "
 "RTM_INSERTIONS %llu, "
 "NO_RTM INSERTIONS %llu \n", 
 ((double)rtm_failed2)/((double)rtm_prova2),
-rtm_prova, 
+rtm_prova2, 
 ((double)rtm_other2)	/((double)rtm_prova2), 	
 ((double)rtm_retry2)		/((double)rtm_prova2), 
 ((double)rtm_conflict2)	/((double)rtm_prova2), 
