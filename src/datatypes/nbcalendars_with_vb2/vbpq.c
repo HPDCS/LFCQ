@@ -294,8 +294,7 @@ begin:
 			num_cas++;
 			index++;
 			// try to mark the bucket as empty
-			if(left_node->type == ITEM)
-				BOOL_CAS( &(left_node->next), left_node_next, get_marked(left_node_next,DEL) );
+			//if(left_node->type == ITEM)	BOOL_CAS( &(left_node->next), left_node_next, get_marked(left_node_next,DEL) );
 
 
 			// increase current
