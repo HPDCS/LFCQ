@@ -341,7 +341,7 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
   	if(is_freezed(extracted)) {node_unsafe_free(new); return ABORT; 	}
   	
   	toskip		= extracted;
-
+	position = 0;
   	while(toskip > 0ULL && curr != tail){
   		curr = curr->next;
   		toskip--;
@@ -450,8 +450,8 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
 		unsigned long rand=0;
                 lrand48_r(&seedT, &rand);
 		rand &= 511;
-                if(rand < 128)
-	  		freeze(bckt, FREEZE_FOR_DEL);
+//                if(rand < 128)
+  		freeze(bckt, FREEZE_FOR_DEL);
 		return EMPTY; // try to compact
   	} 
   	*result = curr->payload;
