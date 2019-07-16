@@ -1,12 +1,15 @@
 #ifndef __KEY_TYPES__
 #define __KEY_TYPES__
 
+
+#include <limits.h>
+
 #define FLOAT 	0
 #define DOUBLE 	1
 #define INT 	2
 #define LONG	3
 
-#define KEY_TYPE INT
+#define KEY_TYPE DOUBLE
 
 
 #define LESS(a,b) 		( (a) <  (b) )
@@ -26,7 +29,6 @@
 
 #elif KEY_TYPE == INT
 
-	#include <limits.h>
 	#define INFTY INT_MAX
 	#define MIN 	0
 	typedef int pkey_t;

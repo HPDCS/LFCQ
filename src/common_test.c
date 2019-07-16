@@ -15,14 +15,13 @@ double MEAN_INTERARRIVAL_TIME = MEAN;			// Maximum distance from the current eve
 #define NUM_CORES 8
 
 
+static char distribution = 'A';
+static pthread_t p_tid[NUM_CORES];
+
 #ifdef TRACE_LEN
 pkey_t *trace = NULL;
 unsigned long long trace_index = 0;
 int tr_id = 0;
-#endif
-
-static char distribution = 'A';
-static pthread_t p_tid[NUM_CORES];
 
 void* local_trace(void *arg){
 	int id = __sync_fetch_and_add(&tr_id, 1);
@@ -91,6 +90,7 @@ void generate_trace(char d)
 
 }
 
+#endif
 
 
 

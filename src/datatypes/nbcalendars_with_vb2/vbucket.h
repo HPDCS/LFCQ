@@ -78,10 +78,10 @@ struct __bucket_t
 {
 	volatile unsigned long long extractions;	// 8
 	char pad1[54];
-	volatile unsigned int epoch;				// 12 //enqueue's epoch
+	unsigned int epoch;				// 12 //enqueue's epoch
 	unsigned int index;							// 16
 	unsigned int type; 							// 20 // used to resolve the conflict with same timestamp using a FIFO policy
-	unsigned int new_epoch;							// 24
+	volatile unsigned int new_epoch;							// 24
 	node_t *tail;
 	bucket_t * volatile next;	
 	char pad2[32];
@@ -376,7 +376,7 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
 //CMB();
 	  retry_tm:
 
-                if(position < bckt->extractions)  {rtm_debug++;goto begin;}
+        if(position < bckt->extractions)  {rtm_debug++;goto begin;}
 		if(left->next != curr)	{rtm_nested++;goto begin;}
 //retry_tm:
 		++rtm_prova;
