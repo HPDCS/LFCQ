@@ -77,7 +77,7 @@ fallback=50;\
 
 #define FALLBACK2(...) \
         else{\
-	        long rand = 0; rtm_failed2++;\
+	        long int rand = 0; rtm_failed2++;\
                 if(blocked) printf("ERROR %u\n", __status);\
 		/*  Transaction retry is possible. */\
                 if(__status & _XABORT_RETRY) {DEB("RETRY\n");rtm_retry2++;lrand48_r(&seedT, &rand);if(rand & 1) goto retry_tm;}\
@@ -98,7 +98,7 @@ fallback=50;\
                         //}
 
 
-#define FALLBACK3(...) //\
+#define FALLBACK3(...) \
 	else{\
 		\
 		/*  Transaction retry is possible. */\
