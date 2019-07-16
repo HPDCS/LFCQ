@@ -37,7 +37,15 @@ else
     PRE=""
 fi
 
-cmd_line="$PRE1$PRE2 ./$version/$1-$cmd $2 1 $DIST ${PROB_DEQUEUE_1} $SIZE $DIST  ${PROB_DEQUEUE_2} $OPS $DIST 0 0 $4 $3 0 $MODE $TIME"
+lscpu | grep NUMA | grep CPU > tmp.numa.conf
+lscpu | grep  On-line > tmp.cpu.list
+
+list=`python get_cores.py | cut -d',' -f1-$2`
+echo $list
+
+rm tmp.numa.conf tmp.cpu.list
+
+cmd_line="$PRE1$PRE2 taskset -c $list ./$version/$1-$cmd $2 1 $DIST ${PROB_DEQUEUE_1} $SIZE $DIST  ${PROB_DEQUEUE_2} $OPS $DIST 0 0 $4 $3 0 $MODE $TIME"
 
 echo ${cmd_line}
 time ${cmd_line}
