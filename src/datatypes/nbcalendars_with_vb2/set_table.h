@@ -693,7 +693,10 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
   #else
 
 	bucket_t *bucket, *array	;
-	bucket_t *right_node, *left_node, *left_node_next, *tail;
+    #ifndef NDEBUG
+	bucket_t *tail;
+    #endif
+	bucket_t *right_node, *left_node, *left_node_next;
 	table_t 			*h = *curr_table_ptr 			;
 	table_t 			*new_h 			;
   	double 			 new_bw 		;
@@ -746,8 +749,9 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 		new_h 			= h->new_table;
 		array 			= h->array;
 		new_bw 			= new_h->bucket_width;
+	    #ifndef NDEBUG 
 		tail 			= &h->tail;	
-
+	    #endif
 		if(new_bw < 0)
 		{
 			block_table(h); 
@@ -764,8 +768,11 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 				LOG("COMPUTE BW -  OLD:%.20f NEW:%.20f %u SAME TS:%u\n", new_bw, newaverage, new_h->size, acc_counter != 0 ? acc/acc_counter : 0);
 		}
 		
-		unsigned int retry_copy_phase = 0;
-		for(retry_copy_phase;retry_copy_phase<10;retry_copy_phase++){
+		unsigned int retry_copy_phase, bucket_done = 0;
+		
+		//for(retry_copy_phase = 0;retry_copy_phase<10;retry_copy_phase++){
+		while(bucket_done != size){
+		bucket_done = 0;
 		//First speculative try: try to migrate the nodes, if a conflict occurs, continue to the next bucket
 		drand48_r(&seedT, &rand); 			
 		start = (unsigned int) (rand * size);	// start to migrate from a random bucket
@@ -799,6 +806,8 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 			if(left_node_next != right_node && BOOL_CAS(&left_node->next, left_node_next, get_marked(right_node, MOV)))
 				connect_to_be_freed_node_list(left_node_next, distance);
 			
+			if(left_node->type == HEAD  && right_node->type == TAIL)
+				bucket_done++;
 	
 		}
 		}
