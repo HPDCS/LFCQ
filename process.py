@@ -30,3 +30,13 @@ for n in sorted(d):
 	for c in sorted(d[n]):
 		print "|-- CORE "+str(c)
 		print "     |-- "+str(d[n][c])
+
+
+res = ""
+for n in sorted(d):
+        #nt "NUMA " +str(n)
+        for c in sorted(d[n]):
+                #print "|-- CORE "+str(c)
+		for f in d[n][c]:
+	                res+=str(f)+","
+print res[:-1]
