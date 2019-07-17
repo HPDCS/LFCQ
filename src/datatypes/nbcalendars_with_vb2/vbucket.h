@@ -84,7 +84,8 @@ struct __bucket_t
 	volatile unsigned int new_epoch;							// 24
 	node_t *tail;
 	bucket_t * volatile next;	
-	char pad2[32];
+	node_t * volatile pending_insert;
+	char pad2[24];
 #ifndef RTM
 	pthread_spinlock_t lock;
 	#endif
@@ -114,6 +115,7 @@ static inline node_t* node_alloc(){
 	res->payload				= NULL;
 	res->tie_breaker			= 0;
 	res->timestamp	 			= INFTY;
+	lrand48_r(&seedT, &res->pad2);			
 	return res;
 }
 
@@ -137,6 +139,7 @@ static inline bucket_t* bucket_alloc(){
     res->extractions 		= 0ULL;
     res->epoch				= 0U;
     res->new_epoch			= 0U;
+    res->pending_insert		= NULL;
 
 	res->tail = node_alloc();
     res->tail->payload		= NULL;
@@ -213,7 +216,59 @@ static inline void connect_to_be_freed_node_list(bucket_t *start, unsigned int c
 
 static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long old_extractions){
 	if(!is_freezed_for_epo(old_extractions)) return;
+	// phase 1: block pushing new ops
+	__sync_bool_compare_and_swap(&bckt->pending_insert, NULL, (void*)1ULL);
+
+	// phase 2: check if there is a pending op
+	if(bckt->pending_insert != ((void*)1ULL) ){
+		unsigned int not_inserted=0;
+		unsigned long long toskip;
+		node_t *tail  = bckt->tail;
+		node_t *left  = &bckt->head;
+		node_t *curr  = left;
+		node_t *new   = node_alloc();
+		new->timestamp  = bckt->pending_insert->timestamp;
+		new->payload	= bckt->pending_insert->payload;
+		new->pad2	= bckt->pending_insert->pad2;
+	  	toskip		= bckt->extractions;
+	  	toskip	   &= ~(FREEZE_FOR_DEL | FREEZE_FOR_EPO | FREEZE_FOR_MOV);
+	  	toskip	  >>= 32;
 	
+		do{
+  	
+		  	while(toskip > 0ULL && curr != tail){
+		  		curr = curr->next;
+		  		toskip--;
+		  	}
+
+		  	if(curr == tail && toskip >= 0ULL) 	printf("BUUUUUUUUUUUUUUUUUUG\n");
+		  	
+
+		  	while(curr->timestamp <= new->timestamp){
+		  		left = curr;
+		  		curr = curr->next;
+
+		  	}
+
+		  	if(left->timestamp == new->timestamp){
+		  		new->tie_breaker+= left->tie_breaker;
+
+		  		if(left->pad2 == new->pad2){
+		  			not_inserted = 1;
+		  			break;
+		  		}
+		  	}
+		  	new->next = curr;
+		}while(!__sync_bool_compare_and_swap(&left->next, curr, new));
+
+		if(not_inserted) node_unsafe_free(new);
+
+
+	}
+
+
+	// phase 3: replace the bucket for new epoch
+
 	void *old_next = bckt->next;
 	bucket_t *res = bucket_alloc();
 	bool suc = false;
@@ -313,6 +368,25 @@ static inline int check_increase_bucket_epoch(bucket_t *bckt, unsigned int epoch
 __thread pkey_t last_key = 0;
 __thread unsigned long long counter_last_key = 0ULL;
 
+
+
+
+
+static inline int bucket_connect_fallback(bucket_t *bckt, node_t *node){
+	// add pending insertion
+	__sync_bool_compare_and_swap(&bckt->pending_insert, NULL, node);
+	// put new epoch
+	__sync_bool_compare_and_swap(&bckt->new_epoch, 0, bckt->epoch);
+	
+	freeze(bckt, FREEZE_FOR_EPO);
+	if(bckt->pending_insert == node)
+		return OK;
+	return ABORT;
+}
+
+
+
+
 static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, void* payload){
 	
 	node_t *tail  = bckt->tail;
@@ -321,6 +395,7 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
 	unsigned long long extracted = 0;
 	unsigned long long toskip = 0;
 	unsigned long long position = 0;
+	unsigned int __global_try = 0;
 	node_t *new   = node_alloc();
 	
 	new->timestamp = timestamp;
@@ -328,6 +403,7 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
 	complete_freeze(bckt);
 
   begin:
+  	__global_try++;
 	curr = left = &bckt->head;
 	if(last_key != timestamp){
 		last_key = timestamp;
@@ -407,14 +483,16 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
 			if(__status == 0){DEB("Other\n");rtm_other++;}
 			if(_XABORT_CODE(__status) == 0xf2) {rtm_a++;}
 			if(_XABORT_CODE(__status) == 0xf1) {rtm_b++;}
-			if(__status & _XABORT_RETRY && __local_try++ < 51200) {
+			if(__status & _XABORT_RETRY && __local_try++ < 128) {
 				lrand48_r(&seedT, &rand);
 				fallback = rand & 1023L;
 				if(fallback & 1L)
 					while(fallback--!=0)_mm_pause();
 				goto retry_tm;
 			}
-			goto begin;
+			if(__global_try < 512) goto begin;
+			return bucket_connect_fallback(bckt, new);
+
 		}
 
 	rtm_insertions++;

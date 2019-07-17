@@ -768,7 +768,7 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 				LOG("COMPUTE BW -  OLD:%.20f NEW:%.20f %u SAME TS:%u\n", new_bw, newaverage, new_h->size, acc_counter != 0 ? acc/acc_counter : 0);
 		}
 		
-		unsigned int retry_copy_phase, bucket_done = 0;
+		unsigned int bucket_done = 0;
 		
 		//for(retry_copy_phase = 0;retry_copy_phase<10;retry_copy_phase++){
 		while(bucket_done != size){
