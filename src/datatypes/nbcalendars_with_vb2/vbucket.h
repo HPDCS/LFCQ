@@ -454,7 +454,8 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
         if(rand < 1L)  		freeze(bckt, FREEZE_FOR_DEL);
         if(extracted == 0)  return ABORT;
         atomic_bts_x64(&bckt->extractions, 62);
-		return EMPTY; // try to compact
+	assert(is_freezed(bckt->extractions));
+	return EMPTY; // try to compact
   	} 
   	*result = curr->payload;
   	*ts		= curr->timestamp;
