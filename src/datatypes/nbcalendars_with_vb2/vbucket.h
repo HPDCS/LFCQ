@@ -451,7 +451,9 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
 		long rand=0;
                 lrand48_r(&seedT, &rand);
 		rand &= 511L;
-                if(rand < 1L)  		freeze(bckt, FREEZE_FOR_DEL);
+        if(rand < 1L)  		freeze(bckt, FREEZE_FOR_DEL);
+        if(extracted == 0)  return ABORT;
+        atomic_bts_x64(&bckt->extractions, 62);
 		return EMPTY; // try to compact
   	} 
   	*result = curr->payload;

@@ -132,7 +132,19 @@ inline int atomic_test_and_set_x64(unsigned long long *b) {
 	return !result;
 }
 
+inline int atomic_bts_x64(unsigned long long *b, int pos) {
+    int result = 0;
 
+	__asm__  __volatile__ (
+		LOCK "bts %2, %1;\n\t"
+		"adc %0, %0"
+		: "=r" (result)
+		: "m" (*b), "ir" (pos), "0" (result)
+		: "memory"
+	);
+
+	return !result;
+}
 
 /**
 * This function implements the atomic_test_and_reset on an integer value, for x86-64 archs
