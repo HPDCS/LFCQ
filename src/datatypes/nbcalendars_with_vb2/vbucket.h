@@ -127,9 +127,10 @@ static inline node_t* node_alloc(){
 
 
 #define is_freezed(extractions)  ((extractions >> 32) != 0ULL)
-#define is_freezed_for_mov(extractions) (is_freezed(extractions) && (extractions & FREEZE_FOR_MOV))
+//#define is_freezed_for_mov(extractions) (is_freezed(extractions) && !is_freezed_for_del(extractions) &&  (extractions & FREEZE_FOR_MOV))
 #define is_freezed_for_del(extractions) (is_freezed(extractions) && (extractions & FREEZE_FOR_DEL))
-#define is_freezed_for_epo(extractions) (is_freezed(extractions) && (extractions & FREEZE_FOR_EPO))
+#define is_freezed_for_mov(extractions) (is_freezed(extractions) && !is_freezed_for_del(extractions) &&  (extractions & FREEZE_FOR_MOV))
+#define is_freezed_for_epo(extractions) (is_freezed(extractions) && !is_freezed_for_del(extractions) &&  (extractions & FREEZE_FOR_EPO))
 #define get_freezed(extractions, flag)  ((extractions << 32) | extractions | flag)
 
 /* allocate a bucket */
@@ -230,26 +231,36 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 		new->timestamp  = bckt->pending_insert->timestamp;
 		new->payload	= bckt->pending_insert->payload;
 		new->pad2	= bckt->pending_insert->pad2;
+		
 	  	toskip		= bckt->extractions;
 	  	toskip	   &= ~(FREEZE_FOR_DEL | FREEZE_FOR_EPO | FREEZE_FOR_MOV);
 	  	toskip	  >>= 32;
 	
 		do{
-  	
+  			new->tie_breaker = 1;
 		  	while(toskip > 0ULL && curr != tail){
 		  		curr = curr->next;
 		  		toskip--;
 		  	}
 
-		  	if(curr == tail && toskip >= 0ULL) 	printf("BUUUUUUUUUUUUUUUUUUG\n");
+		  	if(curr == tail && toskip >= 0ULL) 	printf("BUUUUUUUUUUUUUUUUUUG %p %llu\n", bckt->pending_insert, toskip);
 		  	
 
 		  	while(curr->timestamp <= new->timestamp){
+                        
+			if(curr->timestamp == new->timestamp){
+                                if(left->pad2 == new->pad2){
+                                        not_inserted = 1;
+                                        break;
+                                }
+                        }
+
 		  		left = curr;
 		  		curr = curr->next;
 
-		  	}
 
+		  	}
+			if(not_inserted) break;
 		  	if(left->timestamp == new->timestamp){
 		  		new->tie_breaker+= left->tie_breaker;
 
@@ -368,9 +379,7 @@ static inline int check_increase_bucket_epoch(bucket_t *bckt, unsigned int epoch
 __thread pkey_t last_key = 0;
 __thread unsigned long long counter_last_key = 0ULL;
 
-
-
-
+__thread unsigned long long fallback_insertions = 0ULL;
 
 static inline int bucket_connect_fallback(bucket_t *bckt, node_t *node){
 	// add pending insertion
@@ -379,8 +388,10 @@ static inline int bucket_connect_fallback(bucket_t *bckt, node_t *node){
 	__sync_bool_compare_and_swap(&bckt->new_epoch, 0, bckt->epoch);
 	
 	freeze(bckt, FREEZE_FOR_EPO);
-	if(bckt->pending_insert == node)
+	if(bckt->pending_insert == node){
+		fallback_insertions++;
 		return OK;
+	}
 	return ABORT;
 }
 
@@ -483,14 +494,14 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
 			if(__status == 0){DEB("Other\n");rtm_other++;}
 			if(_XABORT_CODE(__status) == 0xf2) {rtm_a++;}
 			if(_XABORT_CODE(__status) == 0xf1) {rtm_b++;}
-			if(__status & _XABORT_RETRY && __local_try++ < 128) {
+			if(__status & _XABORT_RETRY && __local_try++ < 64) {
 				lrand48_r(&seedT, &rand);
 				fallback = rand & 1023L;
 				if(fallback & 1L)
 					while(fallback--!=0)_mm_pause();
 				goto retry_tm;
 			}
-			if(__global_try < 512) goto begin;
+			if(__global_try < 16) goto begin;
 			return bucket_connect_fallback(bckt, new);
 
 		}

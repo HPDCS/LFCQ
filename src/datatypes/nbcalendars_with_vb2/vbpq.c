@@ -336,6 +336,7 @@ printf("BCKT CONNECT "
 "A %f, "
 "B %f, "
 "RTM_INSERTIONS %llu, "
+"FALL_INSERTIONS %llu, "
 "NO_RTM INSERTIONS %llu \n", 
 ((double)rtm_failed)/((double)rtm_prova),
 rtm_prova, 
@@ -349,6 +350,7 @@ rtm_prova,
 ((double)rtm_a)    /((double)rtm_prova),
 ((double)rtm_b)    /((double)rtm_prova),
 rtm_insertions, 
+fallback_insertions,
 insertions-rtm_insertions);	
 
 

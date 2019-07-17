@@ -15,7 +15,7 @@ PROB_DEQUEUE_1=0.3
 PROB_DEQUEUE_2=0.5
 
 
-#cmd=resize-unit-test
+cmd=resize-unit-test
 cmd=test
 version=Release
 version=Debug
