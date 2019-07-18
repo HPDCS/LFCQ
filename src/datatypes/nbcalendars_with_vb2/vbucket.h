@@ -62,7 +62,9 @@ extern __thread struct drand48_data seedT;
 #define GC_BUCKETS   0
 #define GC_INTERNALS 1
 
-
+#define RTM_RETRY 128
+#define RTM_FALLBACK 4
+#define RTM_BACKOFF 511L
 typedef struct __node_t node_t;
 struct __node_t
 {
@@ -487,13 +489,15 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
 			if(__status == 0){DEB("Other\n");rtm_other++;}
 			if(_XABORT_CODE(__status) == 0xf2) {rtm_a++;}
 			if(_XABORT_CODE(__status) == 0xf1) {rtm_b++;}
-			if(__status & _XABORT_RETRY && __local_try++ < 16) {
+			if(
+//__status & _XABORT_RETRY && 
+__local_try++ < RTM_RETRY) {
 				lrand48_r(&seedT, &rand);
-				fallback = rand & 511L;
+				fallback = rand & RTM_BACKOFF;
 				if(fallback & 1L) while(fallback--!=0)_mm_pause();
 				goto retry_tm;
 			}
-			if(__global_try < 2) goto begin;
+			if(__global_try < RTM_FALLBACK) goto begin;
 			return bucket_connect_fallback(bckt, new);
 
 		}
