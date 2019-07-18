@@ -173,7 +173,7 @@ static inline void bucket_safe_free(bucket_t *ptr){
 
 	node_t *tmp, *current = ptr->head.next;
 	unsigned long long old_extractions = ptr->extractions;
-	while(current != ptr->tail && !is_freezed_for_epo(old_extractions)){
+	while(current != ptr->tail && !ptr->new_epoch){
 		tmp = current;
 		current = tmp->next;
 		node_safe_free(tmp);
@@ -187,7 +187,7 @@ static inline void bucket_unsafe_free(bucket_t *ptr){
 
 	node_t *tmp, *current = ptr->head.next;
 	unsigned long long old_extractions = ptr->extractions;
-	while(current != ptr->tail && !is_freezed_for_epo(old_extractions)){
+	while(current != ptr->tail && !ptr->new_epoch){
 		tmp = current;
 		current = tmp->next;
 		node_unsafe_free(tmp);
@@ -458,6 +458,8 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
   		scan_list_length_en++;
   		position++;
   	}
+	if(curr->timestamp == INFTY)
+		assert(curr == tail);
 
   	if(left->timestamp == timestamp)
   		new->tie_breaker+= left->tie_breaker;
