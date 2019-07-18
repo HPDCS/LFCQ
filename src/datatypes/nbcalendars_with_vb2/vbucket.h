@@ -170,6 +170,7 @@ static inline bucket_t* bucket_alloc(){
 
 
 static inline void bucket_safe_free(bucket_t *ptr){
+
 	node_t *tmp, *current = ptr->head.next;
 	unsigned long long old_extractions = ptr->extractions;
 	while(current != ptr->tail && !is_freezed_for_epo(old_extractions)){
@@ -177,13 +178,13 @@ static inline void bucket_safe_free(bucket_t *ptr){
 		current = tmp->next;
 		node_safe_free(tmp);
 	}
-	if(!is_freezed_for_epo(old_extractions))
-		node_safe_free(ptr->tail);
+	if(!ptr->new_epoch) node_safe_free(ptr->tail);
 	gc_free(ptst, ptr, gc_aid[GC_BUCKETS]);
 	
 }
 
 static inline void bucket_unsafe_free(bucket_t *ptr){
+
 	node_t *tmp, *current = ptr->head.next;
 	unsigned long long old_extractions = ptr->extractions;
 	while(current != ptr->tail && !is_freezed_for_epo(old_extractions)){
@@ -191,8 +192,7 @@ static inline void bucket_unsafe_free(bucket_t *ptr){
 		current = tmp->next;
 		node_unsafe_free(tmp);
 	}
-	if(!is_freezed_for_epo(old_extractions))
-		node_safe_free(ptr->tail);
+	if(!ptr->new_epoch)	node_safe_free(ptr->tail);
 	gc_free(ptst, ptr, gc_aid[GC_BUCKETS]);
 
 }
@@ -225,6 +225,7 @@ static inline void connect_to_be_freed_node_list(bucket_t *start, unsigned int c
 
 static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long old_extractions){
 	if(!is_freezed_for_epo(old_extractions)) return;
+/*
 	unsigned int res_phase_1 = 2;
 	// phase 1: block pushing new ops
 	__sync_bool_compare_and_swap(&bckt->pending_insert, NULL, (void*)1ULL);
@@ -280,7 +281,7 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 
 	}
 	__sync_bool_compare_and_swap(&bckt->pending_insert_res, 0, res_phase_1);
-
+*/
 
 	// phase 3: replace the bucket for new epoch
 
@@ -476,12 +477,13 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
 		++rtm_prova;
 		__status = 0;
 //CMB();
-		if ((__status = _xbegin ()) == _XBEGIN_STARTED)
+		assert(new != NULL && left->next != NULL && curr != NULL);
+		if(1)// ((__status = _xbegin ()) == _XBEGIN_STARTED)
 		{
-			if(position < bckt->extractions){ TM_ABORT(0xf2);}
-			if(left->next != curr){ TM_ABORT(0xf1);}
+		//	if(position < bckt->extractions){ TM_ABORT(0xf2);}
+		//	if(left->next != curr){ TM_ABORT(0xf1);}
 			left->next = new; 
-			TM_COMMIT();
+		//	TM_COMMIT();
 		}
 		else
 		{
@@ -508,8 +510,9 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
 					while(fallback--!=0)_mm_pause();
 				goto retry_tm;
 			}
-			if(__global_try < 16) goto begin;
-			return bucket_connect_fallback(bckt, new);
+//			if(__global_try < 16) 
+			goto begin;
+//			return bucket_connect_fallback(bckt, new);
 
 		}
 
@@ -547,7 +550,7 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
 		long rand=0;
                 lrand48_r(&seedT, &rand);
 		rand &= 511L;
-        //if(extracted == 0)  return ABORT;
+        if(extracted == 0)  return ABORT;
         //if(rand < 1L)  		freeze(bckt, FREEZE_FOR_DEL);
         atomic_bts_x64(&bckt->extractions, DEL_BIT_POS);
 	assert(is_freezed(bckt->extractions));

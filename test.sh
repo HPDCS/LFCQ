@@ -6,7 +6,7 @@
 
 DIST=$5
 OPS=4000000
-SIZE=64000
+SIZE=6400
 PRUNE=500
 TIME=10
 MODE=T
@@ -47,7 +47,8 @@ echo $list
 
 rm tmp.numa.conf tmp.cpu.list
 
-cmd_line="$PRE1$PRE2 taskset -c $list ./$version/$1-$cmd $2 1 $DIST ${PROB_DEQUEUE_1} $SIZE $DIST  ${PROB_DEQUEUE_2} $OPS $DIST 0 0 $4 $3 0 $MODE $TIME"
+#cmd_line="taskset -c $list 
+cmd_line="$PRE1$PRE2 ./$version/$1-$cmd $2 1 $DIST ${PROB_DEQUEUE_1} $SIZE $DIST  ${PROB_DEQUEUE_2} $OPS $DIST 0 0 $4 $3 0 $MODE $TIME"
 
 echo ${cmd_line}
 time ${cmd_line}
