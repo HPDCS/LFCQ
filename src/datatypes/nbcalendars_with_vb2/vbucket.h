@@ -225,7 +225,7 @@ static inline void connect_to_be_freed_node_list(bucket_t *start, unsigned int c
 
 static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long old_extractions){
 	if(!is_freezed_for_epo(old_extractions)) return;
-/*
+
 	unsigned int res_phase_1 = 2;
 	// phase 1: block pushing new ops
 	__sync_bool_compare_and_swap(&bckt->pending_insert, NULL, (void*)1ULL);
@@ -281,7 +281,7 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 
 	}
 	__sync_bool_compare_and_swap(&bckt->pending_insert_res, 0, res_phase_1);
-*/
+
 
 	// phase 3: replace the bucket for new epoch
 
@@ -487,16 +487,14 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
 			if(__status == 0){DEB("Other\n");rtm_other++;}
 			if(_XABORT_CODE(__status) == 0xf2) {rtm_a++;}
 			if(_XABORT_CODE(__status) == 0xf1) {rtm_b++;}
-			if(__status & _XABORT_RETRY && __local_try++ < 64) {
+			if(__status & _XABORT_RETRY && __local_try++ < 16) {
 				lrand48_r(&seedT, &rand);
-				fallback = rand & 1023L;
-				if(fallback & 1L)
-					while(fallback--!=0)_mm_pause();
+				fallback = rand & 511L;
+				if(fallback & 1L) while(fallback--!=0)_mm_pause();
 				goto retry_tm;
 			}
-//			if(__global_try < 16) 
-			goto begin;
-//			return bucket_connect_fallback(bckt, new);
+			if(__global_try < 2) goto begin;
+			return bucket_connect_fallback(bckt, new);
 
 		}
 
