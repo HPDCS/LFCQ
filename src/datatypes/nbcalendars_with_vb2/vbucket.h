@@ -236,6 +236,7 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 		node_t *tail  = bckt->tail;
 		node_t *left  = &bckt->head;
 		node_t *curr  = left;
+		node_t *head  = curr;
 		node_t *new   = node_alloc();
 		
 		toskip			= get_cleaned_extractions(bckt->extractions);
@@ -248,6 +249,7 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 	  		curr = curr->next;
 	  		toskip--;
 	  	}
+		head  = curr;
 
 	  	// there is no space so the whoever has tried a fallback has to retry
 	  	if(curr == tail && toskip >= 0ULL) 	node_unsafe_free(new);
@@ -255,6 +257,7 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 		  	// Connect...
 			do{
 	  			new->tie_breaker = 1;
+	  			curr = head;
 			  	
 			  	while(curr->timestamp <= new->timestamp){
 	            	// keep memory if it was inserted to release memory
