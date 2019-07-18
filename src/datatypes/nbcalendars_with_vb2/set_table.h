@@ -652,35 +652,30 @@ int  migrate_node(bucket_t *bckt, table_t *new_h)
 
 			}
 
+			assert(curr_next != NULL && curr != NULL && rn != NULL);
+
 			if(head->next != curr		) return ABORT; //abort
 			if(ln->next   != rn  		) return ABORT; //abort
 			if(curr->next != curr_next  ) return ABORT; //abort
-			
+
 			//atomic
 			rtm_insertions++;
-//			ATOMIC2(&bckt->lock, &left->lock){
-//					if(head->next != curr		) TM_ABORT(0xf2); //abort
-//					if(ln->next   != rn  		) TM_ABORT(0xf3); //abort
-//					if(curr->next != curr_next 	) TM_ABORT(0xf4); //abort
-assert(curr_next != NULL && curr != NULL && rn != NULL);
-
-//assert(curr_next == NULL || curr == NULL || rn == NULL);
+			ATOMIC2(&bckt->lock, &left->lock){
+					if(head->next != curr		) TM_ABORT(0xf2); //abort
+					if(ln->next   != rn  		) TM_ABORT(0xf3); //abort
+					if(curr->next != curr_next 	) TM_ABORT(0xf4); //abort
+				
 					head->next = curr_next;
 					ln->next   = curr;
 					curr->next = rn;
-//					TM_COMMIT();
+					TM_COMMIT();
 					__sync_fetch_and_add(&new_h->e_counter.count, 1);
-//				}
-//				FALLBACK2(&bckt->lock, &left->lock){
-                      //                 head->next = curr_next;
-                      //                 ln->next   = curr;
-                      //                 curr->next = rn;
-                      //                 __sync_fetch_and_add(&new_h->e_counter.count, 1);
-//					return ABORT;
-//				}
-//			END_ATOMIC2(&bckt->lock, &left->lock);
+				}
+				FALLBACK2(&bckt->lock, &left->lock){
+					return ABORT;
+				}
+			END_ATOMIC2(&bckt->lock, &left->lock);
 
-			// __sync_fetch_and_add(&new_h->e_counter.count, 1);
 			flush_current(new_h, new_index);
 			curr = head->next;
 	}

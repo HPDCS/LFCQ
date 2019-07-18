@@ -294,7 +294,6 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
     res->extractions 		= bckt->extractions ;
     res->extractions 		= (res->extractions & ( ~(FREEZE_FOR_DEL | FREEZE_FOR_MOV | FREEZE_FOR_EPO) ) ) >> 32 ;
     res->epoch				= bckt->new_epoch;
-    res->new_epoch			= 0U;
     res->index				= bckt->index;
     res->type				= bckt->type;
 
@@ -359,24 +358,7 @@ static inline int check_increase_bucket_epoch(bucket_t *bckt, unsigned int epoch
 	freeze(bckt, FREEZE_FOR_EPO);
 	
 	return ABORT;
-	
-	/*
-	while(bckt->epoch < epoch){
-		extracted = bckt->extractions;
-		if(is_freezed(extracted)) return ABORT;
-		ATOMIC(&bckt->lock){
-			extracted = bckt->extractions;
-			if(is_freezed(extracted)) TM_ABORT();
-			bckt->epoch = epoch;
-			TM_COMMIT();
-		}
-		FALLBACK(&bckt->lock){
-			return ABORT;
-		}
-		END_ATOMIC(&bckt->lock);
-	}
-	return OK;
-	*/
+
 }
 
 __thread pkey_t last_key = 0;
@@ -470,22 +452,22 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
 		long rand;
 		unsigned int __status;
 		unsigned int fallback;
-//CMB();
+
 	  retry_tm:
 
         if(position < bckt->extractions)  {rtm_debug++;goto begin;}
 		if(left->next != curr)	{rtm_nested++;goto begin;}
-//retry_tm:
+
 		++rtm_prova;
 		__status = 0;
-//CMB();
+
 		assert(new != NULL && left->next != NULL && curr != NULL);
-		if(1)// ((__status = _xbegin ()) == _XBEGIN_STARTED)
+		if((__status = _xbegin ()) == _XBEGIN_STARTED)
 		{
-		//	if(position < bckt->extractions){ TM_ABORT(0xf2);}
-		//	if(left->next != curr){ TM_ABORT(0xf1);}
+			if(position < bckt->extractions){ TM_ABORT(0xf2);}
+			if(left->next != curr){ TM_ABORT(0xf1);}
 			left->next = new; 
-		//	TM_COMMIT();
+			TM_COMMIT();
 		}
 		else
 		{
@@ -542,7 +524,7 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
   	if(is_freezed_for_mov(extracted)) return MOV_FOUND;
   	if(is_freezed(extracted)) return EMPTY;
   	
-  	while(extracted > 0 && curr != tail){
+  	while(extracted > 0ULL && curr != tail){
   		curr = curr->next;
   		extracted--;
 		scan_list_length++;
@@ -552,7 +534,7 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
 		long rand=0;
                 lrand48_r(&seedT, &rand);
 		rand &= 511L;
-        if(extracted == 0)  return ABORT;
+        //if(extracted == 0)  return ABORT;
         //if(rand < 1L)  		freeze(bckt, FREEZE_FOR_DEL);
         atomic_bts_x64(&bckt->extractions, DEL_BIT_POS);
 	assert(is_freezed(bckt->extractions));
