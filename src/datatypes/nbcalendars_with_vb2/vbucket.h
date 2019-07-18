@@ -258,7 +258,7 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 			  	
 			  	while(curr->timestamp <= new->timestamp){
 	            	// keep memory if it was inserted to release memory
-	                if(curr->timestamp == new->timestamp && left->pad2 == new->pad2) present = 1;
+	                if(curr->timestamp == new->timestamp && curr->pad2 == new->pad2) present = 1;
 
 			  		left = curr;
 			  		curr = curr->next;
@@ -308,6 +308,7 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 		suc=false;
 	}while(is_marked(old_next, VAL) && !(suc = __sync_bool_compare_and_swap(&(bckt)->next, old_next, get_marked(res, DEL))));
 	
+    atomic_bts_x64(&bckt->extractions, DEL_BIT_POS);
 	if(suc) return;
 	only_bucket_unsafe_free(res);
 }
