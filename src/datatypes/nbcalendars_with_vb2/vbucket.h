@@ -50,9 +50,13 @@ extern __thread struct drand48_data seedT;
 #define ITEM 1ULL
 #define TAIL 2ULL
 
-#define FREEZE_FOR_MOV (1ULL << 63)
-#define FREEZE_FOR_DEL (1ULL << 62)
-#define FREEZE_FOR_EPO (1ULL << 61)
+#define MOV_BIT_POS 63
+#define DEL_BIT_POS 62
+#define EPO_BIT_POS 61
+
+#define FREEZE_FOR_MOV (1ULL << MOV_BIT_POS)
+#define FREEZE_FOR_DEL (1ULL << DEL_BIT_POS)
+#define FREEZE_FOR_EPO (1ULL << EPO_BIT_POS)
 
 
 #define GC_BUCKETS   0
@@ -85,7 +89,8 @@ struct __bucket_t
 	node_t *tail;
 	bucket_t * volatile next;	
 	node_t * volatile pending_insert;
-	char pad2[24];
+	unsigned int volatile pending_insert_res ;
+	char pad2[20];
 #ifndef RTM
 	pthread_spinlock_t lock;
 	#endif
@@ -127,11 +132,13 @@ static inline node_t* node_alloc(){
 
 
 #define is_freezed(extractions)  ((extractions >> 32) != 0ULL)
-//#define is_freezed_for_mov(extractions) (is_freezed(extractions) && !is_freezed_for_del(extractions) &&  (extractions & FREEZE_FOR_MOV))
-#define is_freezed_for_del(extractions) (is_freezed(extractions) && (extractions & FREEZE_FOR_DEL))
-#define is_freezed_for_mov(extractions) (is_freezed(extractions) && !is_freezed_for_del(extractions) &&  (extractions & FREEZE_FOR_MOV))
-#define is_freezed_for_epo(extractions) (is_freezed(extractions) && !is_freezed_for_del(extractions) &&  (extractions & FREEZE_FOR_EPO))
+
+#define is_freezed_for_del(extractions) (extractions & FREEZE_FOR_DEL)
+#define is_freezed_for_mov(extractions) (!is_freezed_for_del(extractions) &&  (extractions & FREEZE_FOR_MOV))
+#define is_freezed_for_epo(extractions) (!is_freezed_for_del(extractions) &&  (extractions & FREEZE_FOR_EPO))
+
 #define get_freezed(extractions, flag)  ((extractions << 32) | extractions | flag)
+#define get_cleaned_extractions(extractions) ((extractions & (~(FREEZE_FOR_EPO | FREEZE_FOR_MOV | FREEZE_FOR_DEL))) >> 32)
 
 /* allocate a bucket */
 static inline bucket_t* bucket_alloc(){
@@ -141,6 +148,7 @@ static inline bucket_t* bucket_alloc(){
     res->epoch				= 0U;
     res->new_epoch			= 0U;
     res->pending_insert		= NULL;
+    res->pending_insert_res = 0;
 
 	res->tail = node_alloc();
     res->tail->payload		= NULL;
@@ -217,65 +225,58 @@ static inline void connect_to_be_freed_node_list(bucket_t *start, unsigned int c
 
 static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long old_extractions){
 	if(!is_freezed_for_epo(old_extractions)) return;
+	unsigned int res_phase_1 = 2;
 	// phase 1: block pushing new ops
 	__sync_bool_compare_and_swap(&bckt->pending_insert, NULL, (void*)1ULL);
 
 	// phase 2: check if there is a pending op
 	if(bckt->pending_insert != ((void*)1ULL) ){
-		unsigned int not_inserted=0;
+		unsigned int present=0;
 		unsigned long long toskip;
 		node_t *tail  = bckt->tail;
 		node_t *left  = &bckt->head;
 		node_t *curr  = left;
 		node_t *new   = node_alloc();
+		
+		toskip			= get_cleaned_extractions(bckt->extractions);
 		new->timestamp  = bckt->pending_insert->timestamp;
 		new->payload	= bckt->pending_insert->payload;
-		new->pad2	= bckt->pending_insert->pad2;
+		new->pad2		= bckt->pending_insert->pad2;
 		
-	  	toskip		= bckt->extractions;
-	  	toskip	   &= ~(FREEZE_FOR_DEL | FREEZE_FOR_EPO | FREEZE_FOR_MOV);
-	  	toskip	  >>= 32;
-	
-		do{
-  			new->tie_breaker = 1;
-		  	while(toskip > 0ULL && curr != tail){
-		  		curr = curr->next;
-		  		toskip--;
-		  	}
+		// check if there is space in the bucket
+	  	while(toskip > 0ULL && curr != tail){
+	  		curr = curr->next;
+	  		toskip--;
+	  	}
 
-		  	if(curr == tail && toskip >= 0ULL) 	printf("BUUUUUUUUUUUUUUUUUUG %p %llu\n", bckt->pending_insert, toskip);
-		  	
+	  	// there is no space so the whoever has tried a fallback has to retry
+	  	if(curr == tail && toskip >= 0ULL) 	node_unsafe_free(new);
+	  	else{
+		  	// Connect...
+			do{
+	  			new->tie_breaker = 1;
+			  	
+			  	while(curr->timestamp <= new->timestamp){
+	            	// keep memory if it was inserted to release memory
+	                if(curr->timestamp == new->timestamp && left->pad2 == new->pad2) present = 1;
 
-		  	while(curr->timestamp <= new->timestamp){
-                        
-			if(curr->timestamp == new->timestamp){
-                                if(left->pad2 == new->pad2){
-                                        not_inserted = 1;
-                                        break;
-                                }
-                        }
+			  		left = curr;
+			  		curr = curr->next;
 
-		  		left = curr;
-		  		curr = curr->next;
+			  	}
 
+			  	if(left->timestamp == new->timestamp)	new->tie_breaker+= left->tie_breaker;
 
-		  	}
-			if(not_inserted) break;
-		  	if(left->timestamp == new->timestamp){
-		  		new->tie_breaker+= left->tie_breaker;
+			  	new->next = curr;
+			}while(!present && !__sync_bool_compare_and_swap(&left->next, curr, new));
 
-		  		if(left->pad2 == new->pad2){
-		  			not_inserted = 1;
-		  			break;
-		  		}
-		  	}
-		  	new->next = curr;
-		}while(!__sync_bool_compare_and_swap(&left->next, curr, new));
-
-		if(not_inserted) node_unsafe_free(new);
-
+			if(present) node_unsafe_free(new);
+			// now either it was present or i'm inserted so communicate that the op has compleated
+			res_phase_1 = 1;
+		}
 
 	}
+	__sync_bool_compare_and_swap(&bckt->pending_insert_res, 0, res_phase_1);
 
 
 	// phase 3: replace the bucket for new epoch
@@ -330,20 +331,17 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 
 #define freeze_from_mov_to_del(bckt) do{\
 	unsigned long long old_extractions = 0;\
-	unsigned long long new_extractions = 0;\
-	void *old_next = NULL;\
+	bucket_t *old_next = NULL;\
 	complete_freeze(bckt);\
 	old_extractions = bckt->extractions;\
 	while(is_freezed_for_mov(old_extractions)){\
-		new_extractions = (old_extractions  & (~FREEZE_FOR_MOV)) | FREEZE_FOR_DEL;\
-		if(__sync_bool_compare_and_swap(&bckt->extractions, old_extractions, new_extractions))\
-			break;\
+        atomic_bts_x64(&bckt->extractions, DEL_BIT_POS);\
 		old_extractions = bckt->extractions;\
-	}\
-	old_extractions = bckt->extractions;\
-	do{\
-		old_next = bckt->next;\
-	}while(is_marked(old_next, MOV) && is_freezed_for_del(old_extractions) && !__sync_bool_compare_and_swap(&bckt->next, old_next, get_marked(get_unmarked(old_next), DEL)));\
+    }\
+       old_extractions = bckt->extractions;\
+       do{\
+               old_next = bckt->next;\
+       }while(is_marked(old_next, MOV) && is_freezed_for_del(old_extractions) && !__sync_bool_compare_and_swap(&bckt->next, old_next, get_marked(get_unmarked(old_next), DEL)));\
 }while(0)
 
 
@@ -382,17 +380,22 @@ __thread unsigned long long counter_last_key = 0ULL;
 __thread unsigned long long fallback_insertions = 0ULL;
 
 static inline int bucket_connect_fallback(bucket_t *bckt, node_t *node){
+	unsigned long long extractions;
+	extractions = bckt->extractions;
+	if(is_freezed(extractions)) return ABORT;
+
 	// add pending insertion
 	__sync_bool_compare_and_swap(&bckt->pending_insert, NULL, node);
 	// put new epoch
 	__sync_bool_compare_and_swap(&bckt->new_epoch, 0, bckt->epoch);
 	
 	freeze(bckt, FREEZE_FOR_EPO);
-	if(bckt->pending_insert == node){
-		fallback_insertions++;
-		return OK;
-	}
-	return ABORT;
+
+	assertf(bckt->pending_insert_res == 0, "Very strange %s\n", "");
+
+	if(bckt->pending_insert_res == 2 || bckt->pending_insert != node)	return ABORT;
+	fallback_insertions++;
+	return OK;
 }
 
 
@@ -540,9 +543,9 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
 		long rand=0;
                 lrand48_r(&seedT, &rand);
 		rand &= 511L;
-        if(rand < 1L)  		freeze(bckt, FREEZE_FOR_DEL);
-        if(extracted == 0)  return ABORT;
-        atomic_bts_x64(&bckt->extractions, 62);
+        //if(extracted == 0)  return ABORT;
+        //if(rand < 1L)  		freeze(bckt, FREEZE_FOR_DEL);
+        atomic_bts_x64(&bckt->extractions, DEL_BIT_POS);
 	assert(is_freezed(bckt->extractions));
 	return EMPTY; // try to compact
   	} 
