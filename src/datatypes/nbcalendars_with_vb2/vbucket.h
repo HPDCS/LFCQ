@@ -62,9 +62,9 @@ extern __thread struct drand48_data seedT;
 #define GC_BUCKETS   0
 #define GC_INTERNALS 1
 
-#define RTM_RETRY 128
-#define RTM_FALLBACK 4
-#define RTM_BACKOFF 511L
+#define RTM_RETRY 64
+#define RTM_FALLBACK 1
+#define RTM_BACKOFF 63L
 typedef struct __node_t node_t;
 struct __node_t
 {
@@ -74,6 +74,7 @@ struct __node_t
 	unsigned int tie_breaker;		// 20
 	unsigned int pad2;				// 24
 	node_t * volatile next;			// 32
+//	char pad3[32];
 };
 
 /**
@@ -83,7 +84,7 @@ typedef struct __bucket_t bucket_t;
 struct __bucket_t
 {
 	volatile unsigned long long extractions;	// 8
-	char pad1[54];
+	char pad1[56];
 	unsigned int epoch;				// 12 //enqueue's epoch
 	unsigned int index;							// 16
 	unsigned int type; 							// 20 // used to resolve the conflict with same timestamp using a FIFO policy
@@ -100,6 +101,7 @@ struct __bucket_t
 	//node_t *tail;
 	node_t head;								// 80 + 88
 	//bucket_t * volatile next;					// 96
+	char pad3[64-sizeof(node_t)];
 };
 
 
@@ -108,6 +110,7 @@ struct __bucket_t
  */
 
 static inline void init_bucket_subsystem(){
+	printf("SIZES: %llu %llu\n", sizeof(bucket_t), sizeof(node_t));
 	gc_aid[GC_BUCKETS] 		= gc_add_allocator(sizeof(bucket_t		));
 	gc_aid[GC_INTERNALS] 	= gc_add_allocator(sizeof(node_t 		));
 }
@@ -490,14 +493,14 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
 			if(_XABORT_CODE(__status) == 0xf2) {rtm_a++;}
 			if(_XABORT_CODE(__status) == 0xf1) {rtm_b++;}
 			if(
-//__status & _XABORT_RETRY && 
+//__status & _XABORT_RETRY ||
 __local_try++ < RTM_RETRY) {
 				lrand48_r(&seedT, &rand);
 				fallback = rand & RTM_BACKOFF;
 				if(fallback & 1L) while(fallback--!=0)_mm_pause();
 				goto retry_tm;
 			}
-			if(__global_try < RTM_FALLBACK) goto begin;
+			if(__global_try < RTM_FALLBACK || __status & _XABORT_EXPLICIT) goto begin;
 			return bucket_connect_fallback(bckt, new);
 
 		}
@@ -536,7 +539,7 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
 		long rand=0;
                 lrand48_r(&seedT, &rand);
 		rand &= 511L;
-        //if(extracted == 0)  return ABORT;
+//        if(extracted == 0)  return ABORT;
         //if(rand < 1L)  		freeze(bckt, FREEZE_FOR_DEL);
         atomic_bts_x64(&bckt->extractions, DEL_BIT_POS);
 	assert(is_freezed(bckt->extractions));
