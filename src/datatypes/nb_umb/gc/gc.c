@@ -403,7 +403,7 @@ static chunk_t *node_get_filled_chunks(int n, int sz, unsigned int numa_node)
     {
 
         // mark the page with the node number
-        ((unsigned long*) node)[0] = numa_node;
+        //((unsigned long*) node)[0] = numa_node;
 
         // compute page boundary
         check = node + page_size;
@@ -759,6 +759,8 @@ void *gc_alloc(ptst_t *ptst, int alloc_id)
         }
     }
 
+    //((unsigned long*) node)[0] = numa_node;
+
     return ch->blk[--ch->i];
 }
 
@@ -767,6 +769,9 @@ void *gc_alloc_node(ptst_t *ptst, int alloc_id, unsigned int node)
 
     gc_t *gc = ptst->gc;
     chunk_t *ch;
+    void *ret;
+    unsigned long* tmp;
+    unsigned int x;
 
     ch = gc->alloc[node][alloc_id];
     if ( ch->i == 0 )
@@ -786,37 +791,17 @@ void *gc_alloc_node(ptst_t *ptst, int alloc_id, unsigned int node)
             gc->alloc[node][alloc_id] = ch;        
         }
     }
+    
+    // metti qui nodo sulla pagina
+    // int node = * ((int*) (((unsigned long) p) & _PAGE_NODE_BITMAKS));
+    ret = ch->blk[--ch->i];
 
-    return ch->blk[--ch->i];
+    tmp = (unsigned long*) (((unsigned long) ret) & _PAGE_NODE_BITMAKS);
+    x = __sync_val_compare_and_swap(tmp, 0, node);
+    assert(x == 0 || x == node);
+
+    return ret;
 }
-
-// void *gc_alloc(ptst_t *ptst, int alloc_id)
-// {
-//     gc_t *gc = ptst->gc;
-//     chunk_t *ch;
-
-//     ch = gc->alloc[alloc_id];
-//     if ( ch->i == 0 )
-//     {
-//         if ( gc->alloc_chunks[alloc_id]++ == 100 )
-//         {
-//             gc->alloc_chunks[alloc_id] = 0;
-//             add_chunks_to_list(ch, gc_global.free_chunks);
-//             gc->alloc[alloc_id] = ch = get_alloc_chunk(gc, alloc_id);
-//         }
-//         else
-//         {
-//             chunk_t *och = ch;
-//             ch = get_alloc_chunk(gc, alloc_id);
-//             ch->next  = och->next;
-//             och->next = ch;
-//             gc->alloc[alloc_id] = ch;        
-//         }
-//     }
-
-//     return ch->blk[--ch->i];
-// }
-
 
 static chunk_t *node_chunk_from_cache(gc_t *gc, unsigned int node)
 {
@@ -835,24 +820,6 @@ static chunk_t *node_chunk_from_cache(gc_t *gc, unsigned int node)
     p->i = 0;
     return(p);
 }
-
-// static chunk_t *chunk_from_cache(gc_t *gc)
-// {
-//     chunk_t *ch = gc->chunk_cache, *p = ch->next;
-
-//     if ( ch == p )
-//     {
-//         gc->chunk_cache = get_empty_chunks(100, node);
-//     }
-//     else
-//     {
-//         ch->next = p->next;
-//         p->next  = p;
-//     }
-
-//     p->i = 0;
-//     return(p);
-// }
 
 void gc_free(ptst_t *ptst, void *p, int alloc_id) 
 {
@@ -886,31 +853,6 @@ void gc_free(ptst_t *ptst, void *p, int alloc_id)
     ch->blk[ch->i++] = p;
 #endif
 }
-// void gc_free(ptst_t *ptst, void *p, int alloc_id) 
-// {
-// #ifndef MINIMAL_GC
-//     gc_t *gc = ptst->gc;
-//     chunk_t *prev, *new, *ch = gc->garbage[gc->epoch][alloc_id];
-
-//     if ( ch == NULL )
-//     {
-//         gc->garbage[gc->epoch][alloc_id] = ch = chunk_from_cache(gc);
-//         gc->garbage_tail[gc->epoch][alloc_id] = ch;
-//     }
-//     else if ( ch->i == BLKS_PER_CHUNK )
-//     {
-//         prev = gc->garbage_tail[gc->epoch][alloc_id];
-//         new  = chunk_from_cache(gc);
-//         gc->garbage[gc->epoch][alloc_id] = new;
-//         new->next  = ch;
-//         prev->next = new;
-//         ch = new;
-//     }
-
-//     ch->blk[ch->i++] = p;
-// #endif
-// }
-
 
 // What if ptr was not allocated by gcalloc?
 void gc_add_ptr_to_hook_list(ptst_t *ptst, void *ptr, int hook_id)
