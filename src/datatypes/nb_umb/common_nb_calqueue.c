@@ -655,6 +655,8 @@ double compute_mean_separation_time(table* h,
 	return newaverage;
 }
 
+
+// @TODO add numa aware allocation of node
 void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 {
 	nbc_bucket_node *replica;
@@ -671,7 +673,7 @@ void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 	int res = 0;
 	
 	//Create a new node to be inserted in the new table as as INValid
-	replica = node_malloc(right_node->payload, right_node->timestamp,  right_node->counter);
+	replica = numa_node_malloc(right_node->payload, right_node->timestamp,  right_node->counter, hash(right_node->timestamp, new_h->bucket_width)%_NUMA_NODES);
 	
 	new_node 			= &replica;
 	new_node_pointer 	= (*new_node);
@@ -890,7 +892,7 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 }
 
 
-void std_free_hook(ptst_t *p, void *ptr){	numa_free(ptr); }
+void std_free_hook(ptst_t *p, void *ptr){	free(ptr); }
 
 
 /**
@@ -971,6 +973,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 
 	nb_calqueue* queue = (nb_calqueue*) q; 	
 	critical_enter();
+
 	nbc_bucket_node *bucket, *new_node = node_malloc(payload, timestamp, 0);
 	table * h = NULL;		
 	unsigned int index, size;
@@ -993,14 +996,23 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 		
 		// It is the first iteration or a node marked as MOV has been met (a resize is occurring)
 		if(res == MOV_FOUND){
+			
+			//free the old node
+			node_free(new_node);
+			
 			// check for a resize
 			h = read_table(&queue->hashtable, th, epb, pub);
 			// get actual size
 			size = h->size;
 	        // read the actual epoch
-        	new_node->epoch = (h->current & MASK_EPOCH);
+        	//new_node->epoch = (h->current & MASK_EPOCH);
 			// compute the index of the virtual bucket
 			newIndex = hash(timestamp, h->bucket_width);
+			
+			// allocate a new node on numa node
+			new_node = numa_node_malloc(payload, timestamp, 0, newIndex%_NUMA_NODES);
+			new_node->epoch = (h->current & MASK_EPOCH);
+			
 			// compute the index of the physical bucket
 			index = ((unsigned int) newIndex) % size;
 			// get the bucket

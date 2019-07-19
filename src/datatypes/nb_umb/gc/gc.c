@@ -35,18 +35,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/*
- * NB: the case a zone runs out of memory and the allocation
- * falls back on another node is not handled
- * -> the memory will be treated as allocated by the node requested even if come from another node
- * -> unlikely, but could happen 
- */
-/*
- * @TODO make a single queue of hooks, allocate chunks in order to take note of the node
- *       On reclamation, since is global, check what is the node of the chunk
- * */
-
-
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -612,7 +600,6 @@ static void gc_reclaim(ptst_t * our_ptst)
         
         }
 
-        // @TODO clean hook queue. the address could come from anywhere
         for ( i = 0; i < gc_global.nr_hooks; i++ )
         {
             hook_fn_t fn = gc_global.hook_fns[i];
@@ -739,7 +726,6 @@ static void gc_reclaim(ptst_t * our_ptst)
 void *gc_alloc(ptst_t *ptst, int alloc_id)
 {
 
-    // male male @TODO avoid syscall
     int node = -1, ret, cpu = -1;
     ret = syscall(SYS_getcpu, &cpu, &node, NULL);
     assert(ret==0);
@@ -869,12 +855,46 @@ void gc_add_ptr_to_hook_list(ptst_t *ptst, void *ptr, int hook_id)
     gc_t *gc = ptst->gc;
     chunk_t *och, *ch;
 
-    int node = 0; // @TODO - find local node
+    int node = -1, ret;
+    ret = get_mempolicy(&node, NULL, 0, (void*)ptr, MPOL_F_NODE | MPOL_F_ADDR);
+    assert(ret == 0);
 
     ch = gc->hook[gc->epoch][hook_id];
 
     if ( ch == NULL )
     {
+        //which node should serve request
+        gc->hook[gc->epoch][hook_id] = ch = node_chunk_from_cache(gc, node); //explode_here
+    }
+    else
+    {
+        ch = ch->next;
+        if ( ch->i == BLKS_PER_CHUNK )
+        {
+            och       = gc->hook[gc->epoch][hook_id];
+            ch        = node_chunk_from_cache(gc, node);
+            ch->next  = och->next;
+            och->next = ch;
+        }
+    }
+
+    ch->blk[ch->i++] = ptr;
+}
+
+/* 
+ * The node parameter is used to determine which cache in case of failure
+ * */
+void node_gc_add_ptr_to_hook_list(ptst_t *ptst, void *ptr, int hook_id, unsigned int node)
+{
+
+    gc_t *gc = ptst->gc;
+    chunk_t *och, *ch;
+
+    ch = gc->hook[gc->epoch][hook_id];
+
+    if ( ch == NULL )
+    {
+        //which node should serve request
         gc->hook[gc->epoch][hook_id] = ch = node_chunk_from_cache(gc, node); //explode_here
     }
     else

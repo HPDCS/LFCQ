@@ -64,7 +64,7 @@ extern int gc_hid[];
 
 
 #define TID tid
-
+#define NID nid
 
 #define BOOL_CAS_ALE(addr, old, new)  CAS_x86(\
 										UNION_CAST(addr, volatile unsigned long long *),\
@@ -195,6 +195,8 @@ struct nb_calqueue
 
 
 extern __thread unsigned int TID;
+extern __thread unsigned int NID;
+
 extern __thread struct drand48_data seedT;
 
 extern __thread unsigned long long concurrent_dequeue;
@@ -239,10 +241,33 @@ static inline nbc_bucket_node* node_malloc(void *payload, pkey_t timestamp, unsi
 	nbc_bucket_node* res;
 	
 	//res = mm_node_malloc(&malloc_status);
+	    
+	res = gc_alloc_node(ptst, gc_aid[0], NID);
+
+	if (unlikely(is_marked(res) || res == NULL))
+	{
+		error("%lu - Not aligned Node or No memory\n", TID);
+		abort();
+	}
+
+	res->counter = tie_breaker;
+	res->next = NULL;
+	res->replica = NULL;
+	res->payload = payload;
+	res->epoch = 0;
+	res->timestamp = timestamp;
+
+	return res;
+}
+
+
+static inline nbc_bucket_node* numa_node_malloc(void *payload, pkey_t timestamp, unsigned int tie_breaker, unsigned int numa_node)
+{
+	nbc_bucket_node* res;
 	
-    //res = gc_alloc(ptst, gc_aid[0]);
-    
-	res = gc_alloc_node(ptst, gc_aid[0], 0);
+	//res = mm_node_malloc(&malloc_status);
+	    
+	res = gc_alloc_node(ptst, gc_aid[0], numa_node);
 
 	if (unlikely(is_marked(res) || res == NULL))
 	{
