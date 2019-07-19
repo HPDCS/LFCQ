@@ -247,9 +247,17 @@ static chunk_t* node_alloc_more_chunks(unsigned int node)
         mem_area += sizeof(unsigned long);
         while (mem_area + sizeof(chunk_t) < check) // is this correct or I'm missing one chunk? 
         {
+            // allocate one chunk
             p->next = mem_area;
+
+            //take address for next chunk
             mem_area += sizeof(chunk_t);
+
+            //take next chunk
+            p = p->next;
         }
+        //next page
+        mem_area = check;   
     }
     
     /*
