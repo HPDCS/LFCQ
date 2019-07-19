@@ -15,7 +15,7 @@ PROB_DEQUEUE_1=0.3
 PROB_DEQUEUE_2=0.5
 
 
-cmd=resize-unit-test
+#cmd=resize-unit-test
 cmd=test
 version=Release
 version=Debug
@@ -47,7 +47,7 @@ echo $list
 
 rm tmp.numa.conf tmp.cpu.list
 
-cmd_line="$PRE1$PRE2 taskset -c $list ./$version/$1-$cmd $2 1 $DIST ${PROB_DEQUEUE_1} $SIZE $DIST  ${PROB_DEQUEUE_2} $OPS $DIST 0 0 $4 $3 0 $MODE $TIME"
+cmd_line="$PRE1$PRE2 ./$version/$1-$cmd $2 1 $DIST ${PROB_DEQUEUE_1} $SIZE $DIST  ${PROB_DEQUEUE_2} $OPS $DIST 0 0 $4 $3 0 $MODE $TIME"
 
 echo ${cmd_line}
 time ${cmd_line}
