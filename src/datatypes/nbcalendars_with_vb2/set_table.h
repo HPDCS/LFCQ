@@ -19,7 +19,7 @@ extern __thread unsigned int read_table_count;
 
 
 #define MINIMUM_SIZE 1
-#define SAMPLE_SIZE 25
+#define SAMPLE_SIZE 50
 
 #define ENABLE_EXPANSION 1
 #define READTABLE_PERIOD 64

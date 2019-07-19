@@ -432,7 +432,7 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
   	while(toskip > 0ULL && curr != tail){
 //		__builtin_prefetch(curr->next, 0, 0);
   		curr = curr->next;
- __builtin_prefetch(curr->next, 0, 0);
+		 __builtin_prefetch(curr->next, 0, 0);
   		toskip--;
   		scan_list_length_en++;
   		position++;

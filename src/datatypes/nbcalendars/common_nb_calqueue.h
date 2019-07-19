@@ -40,7 +40,7 @@ extern int gc_aid[];
 extern int gc_hid[];
 
 
-#define SAMPLE_SIZE 25
+#define SAMPLE_SIZE 50
 #define HEAD_ID 0
 //#define MAXIMUM_SIZE 1048576 //524288 //262144 //131072 //65536 //32768
 #define MINIMUM_SIZE 1
