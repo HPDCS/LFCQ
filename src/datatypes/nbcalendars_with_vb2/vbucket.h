@@ -45,6 +45,10 @@ extern __thread unsigned long long scan_list_length;
 extern __thread struct drand48_data seedT;
 
 
+static inline void clflush(volatile void *p)
+{
+        asm volatile ("clflush (%0)" :: "r"(p));        
+}
 
 #define HEAD 0ULL
 #define ITEM 1ULL
@@ -62,7 +66,7 @@ extern __thread struct drand48_data seedT;
 #define GC_BUCKETS   0
 #define GC_INTERNALS 1
 
-#define RTM_RETRY 64
+#define RTM_RETRY 32
 #define RTM_FALLBACK 1
 #define RTM_BACKOFF 63L
 typedef struct __node_t node_t;
@@ -74,7 +78,7 @@ struct __node_t
 	unsigned int tie_breaker;		// 20
 	unsigned int pad2;				// 24
 	node_t * volatile next;			// 32
-//	char pad3[32];
+//	char pad3[32+32];
 };
 
 /**
@@ -411,6 +415,7 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
   begin:
   	__global_try++;
 	curr = left = &bckt->head;
+	 __builtin_prefetch(curr->next, 0, 0);
 	if(last_key != timestamp){
 		last_key = timestamp;
 		counter_last_key =0 ;
@@ -425,7 +430,9 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
   	toskip		= extracted;
 	position = 0;
   	while(toskip > 0ULL && curr != tail){
+//		__builtin_prefetch(curr->next, 0, 0);
   		curr = curr->next;
+ __builtin_prefetch(curr->next, 0, 0);
   		toskip--;
   		scan_list_length_en++;
   		position++;
@@ -441,7 +448,9 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
 		if(counter_last_key > 1000000ULL)
 			printf("L: %p-%u C: %p-%u\n", left, left->timestamp, curr, curr->timestamp);
   		left = curr;
+//		__builtin_prefetch(curr->next, 0, 0);
   		curr = curr->next;
+ __builtin_prefetch(curr->next, 1, 0);
   		scan_list_length_en++;
   		position++;
   	}
@@ -457,10 +466,10 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
 		long rand;
 		unsigned int __status;
 		unsigned int fallback;
-
+//	clflush(left);
 	  retry_tm:
 
-        if(position < bckt->extractions)  {rtm_debug++;goto begin;}
+	        if(position < bckt->extractions)  {rtm_debug++;goto begin;}
 		if(left->next != curr)	{rtm_nested++;goto begin;}
 
 		++rtm_prova;
@@ -514,7 +523,7 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
 	node_t *curr  = &bckt->head;
 	node_t *tail  = bckt->tail;
 	unsigned long long extracted = 0;
-	
+ __builtin_prefetch(curr->next, 0, 0);	
 	assertf(bckt->type != ITEM, "trying to extract from a head bucket%s\n", "");
 
 	if(bckt->epoch > epoch) return ABORT;
@@ -530,7 +539,9 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
   	if(is_freezed(extracted)) return EMPTY;
   	
   	while(extracted > 0ULL && curr != tail){
+//__builtin_prefetch(curr->next, 0, 0);
   		curr = curr->next;
+ __builtin_prefetch(curr->next, 0, 0);
   		extracted--;
 		scan_list_length++;
   	}

@@ -28,6 +28,8 @@ __thread unsigned int 		acc = 0;
 __thread unsigned int 		acc_counter = 0;
 
 
+__thread double last_bw = 0.0;
+
 
 int gc_aid[2];
 int gc_hid[1];
@@ -137,6 +139,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			size = h->size;
 	        // read the actual epoch
         	epoch = (h->current & MASK_EPOCH);
+			last_bw = h->bucket_width;
 			// compute the index of the virtual bucket
 			newIndex = hash(timestamp, h->bucket_width);
 			// compute the index of the physical bucket
@@ -318,7 +321,7 @@ begin:
 
 __thread unsigned long long rtm_other=0ULL, rtm_prova=0ULL, rtm_failed=0ULL, rtm_retry=0ULL, rtm_conflict=0ULL, rtm_capacity=0ULL, rtm_debug=0ULL,  rtm_explicit=0ULL,  rtm_nested=0ULL, rtm_insertions=0ULL, insertions=0ULL, rtm_a=0ULL, rtm_b=0ULL;
 __thread unsigned long long rtm_other2=0ULL, rtm_prova2=0ULL, rtm_failed2=0ULL, rtm_retry2=0ULL, rtm_conflict2=0ULL, rtm_capacity2=0ULL, rtm_debug2=0ULL,  rtm_explicit2=0ULL,  rtm_nested2=0ULL, rtm_insertions2=0ULL, insertions2=0ULL, rtm_a2=0ULL, rtm_b2=0ULL;
-
+//__thread double last_bw = 0.0;
 
 void pq_report(int TID)
 {
@@ -388,7 +391,7 @@ insertions2-rtm_insertions2);
 	"Enqueue: %.10f LEN: %.10f ### "
 	"Dequeue: %.10f LEN: %.10f NUMCAS: %llu : %llu ### "
 	"NEAR: %llu "
-	"RTC:%d,M:%lld\n",
+	"RTC:%d,M:%lld, BW:%f\n",
 			TID,
 			((float)concurrent_enqueue) /((float)performed_enqueue),
 			((float)scan_list_length_en)/((float)performed_enqueue),
@@ -397,7 +400,7 @@ insertions2-rtm_insertions2);
 			num_cas, num_cas_useful,
 			near,
 			read_table_count	  ,
-			malloc_count);
+			malloc_count, last_bw);
 }
 
 void pq_reset_statistics(){
