@@ -65,7 +65,7 @@
 #define _PAGE_SIZE 4096
 #define _PAGE_NODE_BITMAKS ~0xFFFUL
 
-#define MAX_NODES 16 /* UP to one thread per node <- NUMA_NODES MACRO in makefile does the job*/
+#define MAX_NODES 16 /* UP to one thread per node <- _NUMA_NODES MACRO in makefile does the job*/
 
 /*#define MINIMAL_GC*/
 /*#define YIELD_TO_HELP_PROGRESS*/
@@ -156,11 +156,11 @@ static struct gc_global_st
      */
 
     /* Chain of free, empty chunks. */
-    chunk_t * VOLATILE free_chunks[NUMA_NODES]; /* One cache per node - trying to reduce cross accesses at least in allocation */
+    chunk_t * VOLATILE free_chunks[_NUMA_NODES]; /* One cache per node - trying to reduce cross accesses at least in allocation */
 
     /* Main allocation lists. */
-    chunk_t * VOLATILE alloc[NUMA_NODES][MAX_SIZES];
-    VOLATILE unsigned int alloc_size[NUMA_NODES][MAX_SIZES];
+    chunk_t * VOLATILE alloc[_NUMA_NODES][MAX_SIZES];
+    VOLATILE unsigned int alloc_size[_NUMA_NODES][MAX_SIZES];
 #ifdef PROFILE_GC
     VOLATILE unsigned int total_size;
     VOLATILE unsigned int allocations;
@@ -187,13 +187,13 @@ struct gc_st
     int   async_page_state;
 
     /* Garbage lists. */
-    chunk_t *garbage[NUMA_NODES][NR_EPOCHS][MAX_SIZES];
-    chunk_t *garbage_tail[NUMA_NODES][NR_EPOCHS][MAX_SIZES];
-    chunk_t *chunk_cache[NUMA_NODES];
+    chunk_t *garbage[_NUMA_NODES][NR_EPOCHS][MAX_SIZES];
+    chunk_t *garbage_tail[_NUMA_NODES][NR_EPOCHS][MAX_SIZES];
+    chunk_t *chunk_cache[_NUMA_NODES];
 
     /* Local allocation lists. */
-    chunk_t *alloc[NUMA_NODES][MAX_SIZES];
-    unsigned int alloc_chunks[NUMA_NODES][MAX_SIZES];
+    chunk_t *alloc[_NUMA_NODES][MAX_SIZES];
+    unsigned int alloc_chunks[_NUMA_NODES][MAX_SIZES];
 
     /* Hook pointer lists. */
     chunk_t *hook[NR_EPOCHS][MAX_HOOKS];
