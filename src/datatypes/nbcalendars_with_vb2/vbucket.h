@@ -69,6 +69,10 @@ static inline void clflush(volatile void *p)
 #define RTM_RETRY 32
 #define RTM_FALLBACK 1
 #define RTM_BACKOFF 63L
+
+
+#define CACHE_INDEX(x) ((((unsigned long long)(x)) & (63ULL << 6)  ) >> 6)
+
 typedef struct __node_t node_t;
 struct __node_t
 {
@@ -123,8 +127,12 @@ static inline void init_bucket_subsystem(){
 /* allocate a unrolled nodes */
 static inline node_t* node_alloc(){
 	node_t* res;
-    res = gc_alloc(ptst, gc_aid[GC_INTERNALS]);
-
+	do{
+    	res = gc_alloc(ptst, gc_aid[GC_INTERNALS]);
+    	unsigned long long index = CACHE_INDEX(res);
+    	if(index > 32) break;
+    	if(index % 3)  only_bucket_unsafe_free(res);
+    }while(1);
 	res->next 					= NULL;
 	res->payload				= NULL;
 	res->tie_breaker			= 0;
@@ -152,7 +160,13 @@ static inline node_t* node_alloc(){
 /* allocate a bucket */
 static inline bucket_t* bucket_alloc(){
 	bucket_t* res;
-    res 					= gc_alloc(ptst, gc_aid[GC_BUCKETS]);
+	do{
+	    res 					= gc_alloc(ptst, gc_aid[GC_BUCKETS]);
+	   	if(index < 31) break;
+	   	node_unsafe_free((void*)(res + 0));
+	   	node_unsafe_free((void*)(res + 1));
+	   	node_unsafe_free((void*)(res + 2));
+    }while(1);
     res->extractions 		= 0ULL;
     res->epoch				= 0U;
     res->new_epoch			= 0U;
@@ -406,6 +420,7 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
 	unsigned long long toskip = 0;
 	unsigned long long position = 0;
 	unsigned int __global_try = 0;
+	int res = OK;
 	node_t *new   = node_alloc();
 	
 	new->timestamp = timestamp;
@@ -424,8 +439,8 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
 	new->tie_breaker = 1;
   	extracted 	= bckt->extractions;
 
-  	if(is_freezed_for_mov(extracted)) {node_unsafe_free(new); return MOV_FOUND;	}
-  	if(is_freezed(extracted)) {node_unsafe_free(new); return ABORT; 	}
+  	if(is_freezed_for_mov(extracted)) {node_unsafe_free(new); res = MOV_FOUND; goto out;	}
+  	if(is_freezed(extracted)) {node_unsafe_free(new); res = ABORT; goto out; 	}
   	
   	toskip		= extracted;
 	position = 0;
@@ -441,7 +456,7 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
   	if(curr == tail && toskip >= 0ULL) {
   		freeze(bckt, FREEZE_FOR_DEL);
   		node_unsafe_free(new);
-  		return ABORT;
+  		res = ABORT; goto out;
   	}
 
   	while(curr->timestamp <= timestamp){
@@ -515,7 +530,8 @@ __local_try++ < RTM_RETRY) {
 		}
 
 	rtm_insertions++;
-	return OK;
+  out:
+	return res;
 }
 
 
