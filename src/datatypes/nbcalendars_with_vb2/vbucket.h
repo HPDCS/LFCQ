@@ -78,7 +78,7 @@ struct __node_t
 	unsigned int tie_breaker;		// 20
 	unsigned int pad2;				// 24
 	node_t * volatile next;			// 32
-//	char pad3[32+32];
+	char pad3[32];
 };
 
 /**
@@ -97,7 +97,9 @@ struct __bucket_t
 	bucket_t * volatile next;	
 	node_t * volatile pending_insert;
 	unsigned int volatile pending_insert_res ;
-	char pad2[20];
+	unsigned int pad5;
+	unsigned long long pad3;
+	char pad2[8];
 #ifndef RTM
 	pthread_spinlock_t lock;
 	#endif
@@ -105,7 +107,7 @@ struct __bucket_t
 	//node_t *tail;
 	node_t head;								// 80 + 88
 	//bucket_t * volatile next;					// 96
-	char pad3[64-sizeof(node_t)];
+	char pad4[64-sizeof(node_t)];
 };
 
 
@@ -158,7 +160,7 @@ static inline bucket_t* bucket_alloc(){
     res->new_epoch			= 0U;
     res->pending_insert		= NULL;
     res->pending_insert_res = 0;
-
+res->pad3 = 0ULL;
 	res->tail = node_alloc();
     res->tail->payload		= NULL;
     res->tail->timestamp		= INFTY;
@@ -394,7 +396,10 @@ static inline int bucket_connect_fallback(bucket_t *bckt, node_t *node){
 	return OK;
 }
 
-
+__thread unsigned long long acc_contention = 0ULL;
+__thread unsigned long long cnt_contention = 0ULL;
+__thread unsigned long long min_contention = -1LL;
+__thread unsigned long long max_contention = 0ULL;
 
 
 static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, void* payload){
@@ -406,6 +411,12 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
 	unsigned long long toskip = 0;
 	unsigned long long position = 0;
 	unsigned int __global_try = 0;
+        unsigned int contention = 0; //__sync_fetch_and_add(&bckt->pad3, 1);
+        int res_fin;
+        acc_contention+=contention;
+        cnt_contention++;
+        min_contention = contention <= min_contention ? contention : min_contention;
+        max_contention = contention >= max_contention ? contention : max_contention;
 	node_t *new   = node_alloc();
 	
 	new->timestamp = timestamp;

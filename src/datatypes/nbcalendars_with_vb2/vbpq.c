@@ -388,11 +388,15 @@ insertions2-rtm_insertions2);
 
 
 	printf("%d- "
+"BCKT contention %.10f - %llu - %llu ### "
 	"Enqueue: %.10f LEN: %.10f ### "
 	"Dequeue: %.10f LEN: %.10f NUMCAS: %llu : %llu ### "
 	"NEAR: %llu "
 	"RTC:%d,M:%lld, BW:%f\n",
 			TID,
+			((float)acc_contention)	    /((float)cnt_contention),	
+			min_contention, 
+			max_contention,
 			((float)concurrent_enqueue) /((float)performed_enqueue),
 			((float)scan_list_length_en)/((float)performed_enqueue),
 			((float)concurrent_dequeue) /((float)performed_dequeue),
