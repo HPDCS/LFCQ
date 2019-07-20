@@ -126,6 +126,12 @@ static inline void init_bucket_subsystem(){
 }
 
 
+
+#define node_safe_free(ptr) 			gc_free(ptst, ptr, gc_aid[GC_INTERNALS])
+#define node_unsafe_free(ptr) 			gc_free(ptst, ptr, gc_aid[GC_INTERNALS])
+#define only_bucket_unsafe_free(ptr)	gc_free(ptst, ptr, gc_aid[GC_BUCKETS])
+
+
 /* allocate a unrolled nodes */
 static inline node_t* node_alloc(){
 	node_t* res;
@@ -142,12 +148,6 @@ static inline node_t* node_alloc(){
 	lrand48_r(&seedT, &res->pad2);			
 	return res;
 }
-
-
-#define node_safe_free(ptr) 			gc_free(ptst, ptr, gc_aid[GC_INTERNALS])
-#define node_unsafe_free(ptr) 			gc_free(ptst, ptr, gc_aid[GC_INTERNALS])
-#define only_bucket_unsafe_free(ptr)	gc_free(ptst, ptr, gc_aid[GC_BUCKETS])
-
 
 
 #define is_freezed(extractions)  ((extractions >> 32) != 0ULL)
