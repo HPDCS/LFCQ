@@ -50,6 +50,22 @@ static inline void clflush(volatile void *p)
         asm volatile ("clflush (%0)" :: "r"(p));        
 }
 
+
+#define ENABLE_PREFETCH 
+#define ENABLE_CACHE_PARTITION 
+
+#ifdef ENABLE_PREFETCH
+#define PREFETCH(x, y) __builtin_prefetch(x, y, 0)
+#endif
+
+#ifdef ENABLE_CACHE_PARTITION
+#define CACHE_INDEX_POS 6
+#define CACHE_INDEX_LEN 6
+#define CACHE_INDEX_MASK 63ULL
+#define CACHE_INDEX(x) ((((unsigned long long)(x)) & (CACHE_INDEX_MASK << CACHE_INDEX_POS)  ) >> CACHE_INDEX_POS)
+#define CACHE_LIMIT 48
+#endif
+
 #define HEAD 0ULL
 #define ITEM 1ULL
 #define TAIL 2ULL
@@ -70,10 +86,6 @@ static inline void clflush(volatile void *p)
 #define RTM_FALLBACK 1
 #define RTM_BACKOFF 63L
 
-#define CACHE_INDEX_POS 6
-#define CACHE_INDEX_LEN 6
-#define CACHE_INDEX_MASK 63ULL
-#define CACHE_INDEX(x) ((((unsigned long long)(x)) & (CACHE_INDEX_MASK << CACHE_INDEX_POS)  ) >> CACHE_INDEX_POS)
 
 typedef struct __node_t node_t;
 struct __node_t
@@ -84,7 +96,7 @@ struct __node_t
 	unsigned int tie_breaker;		// 20
 	unsigned int pad2;				// 24
 	node_t * volatile next;			// 32
-//	char pad3[32];
+	char pad3[32];
 };
 
 /**
@@ -146,13 +158,15 @@ static inline void init_bucket_subsystem(){
 /* allocate a unrolled nodes */
 static inline node_t* node_alloc(){
 	node_t* res;
+
 	do{
-	    	res = gc_alloc(ptst, gc_aid[GC_INTERNALS]);
+			res = gc_alloc(ptst, gc_aid[GC_INTERNALS]);
+	    #ifdef ENABLE_CACHE_PARTITION
 	    	unsigned long long index = CACHE_INDEX(res);
-		assert(index <= CACHE_INDEX_MASK);
-//break;
-	    	if(index >  48) {break;}
-//	    	if( (index % 3) == 0 )  only_bucket_unsafe_free(res);
+			assert(index <= CACHE_INDEX_MASK);
+	    	if(CACHE_LIMIT >  48)
+	    #endif
+	    		{break;}
     }while(1);
 	res->next 					= NULL;
 	res->payload				= NULL;
@@ -167,25 +181,30 @@ static inline bucket_t* bucket_alloc(){
 	bucket_t* res;
 	do{
 		res = gc_alloc(ptst, gc_aid[GC_BUCKETS]);
+	  #ifdef ENABLE_CACHE_PARTITION
 	   	unsigned long long index = CACHE_INDEX(res);
 		assert(index <= CACHE_INDEX_MASK);
-//break;
-		if(index <= ( 45 ) && ((index%3) == 0)) {assert((index%3)==0);break;}
+		if(index <= ( CACHE_LIMIT - sizeof(bucket_t)/CACHE_LINE_SIZE ) && ((index%3) == 0)) {
+			assert((index%3)==0);
+	  #endif
+			break;
+	  #ifdef ENABLE_CACHE_PARTITION
+		}
 		if(index%3 != 0) continue;
 	   	node_t *tmp = (node_t*)res;
-		node_unsafe_free(tmp+0);
-	   	node_unsafe_free(tmp+1);
-	   	node_unsafe_free(tmp+2);
-                node_unsafe_free(tmp+3);
-                node_unsafe_free(tmp+4);
-                node_unsafe_free(tmp+5);
+	   	node_t *tmp_end = (node_t*)(res+1);
+	   	while(tmp < tmp_end){
+			node_unsafe_free(tmp);
+			tmp += 1;
+	    }
+      #endif
     }while(1);
     res->extractions 		= 0ULL;
     res->epoch				= 0U;
     res->new_epoch			= 0U;
     res->pending_insert		= NULL;
     res->pending_insert_res = 0;
-res->pad3 = 0ULL;
+	res->pad3 = 0ULL;
 	res->tail = node_alloc();
     res->tail->payload		= NULL;
     res->tail->timestamp		= INFTY;
@@ -453,7 +472,7 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
   begin:
   	__global_try++;
 	curr = left = &bckt->head;
-//	 __builtin_prefetch(curr->next, 0, 0);
+	PREFETCH(curr->next, 0);
 	if(last_key != timestamp){
 		last_key = timestamp;
 		counter_last_key =0 ;
@@ -468,9 +487,8 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
   	toskip		= extracted;
 	position = 0;
   	while(toskip > 0ULL && curr != tail){
-//		__builtin_prefetch(curr->next, 0, 0);
   		curr = curr->next;
-//		if(curr) __builtin_prefetch(curr->next, 0, 0);
+		if(curr) 	PREFETCH(curr->next, 0);
   		toskip--;
   		scan_list_length_en++;
   		position++;
@@ -492,8 +510,7 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
   		scan_list_length_en++;
   		position++;
   	}
-	if(curr->timestamp == INFTY)
-		assert(curr == tail);
+	if(curr->timestamp == INFTY)	assert(curr == tail);
 
   	if(left->timestamp == timestamp)
   		new->tie_breaker+= left->tie_breaker;
@@ -564,7 +581,7 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
 	node_t *curr  = &bckt->head;
 	node_t *tail  = bckt->tail;
 	unsigned long long extracted = 0;
-// __builtin_prefetch(curr->next, 0, 0);	
+	PREFETCH(curr->next, 0);
 	assertf(bckt->type != ITEM, "trying to extract from a head bucket%s\n", "");
 
 	if(bckt->epoch > epoch) return ABORT;
@@ -580,9 +597,8 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
   	if(is_freezed(extracted)) return EMPTY;
   	
   	while(extracted > 0ULL && curr != tail){
-//__builtin_prefetch(curr->next, 0, 0);
   		curr = curr->next;
- //if(curr)__builtin_prefetch(curr->next, 0, 0);
+		if(curr) 	PREFETCH(curr->next, 0);
   		extracted--;
 		scan_list_length++;
   	}
