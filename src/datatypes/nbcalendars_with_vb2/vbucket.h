@@ -70,8 +70,10 @@ static inline void clflush(volatile void *p)
 #define RTM_FALLBACK 1
 #define RTM_BACKOFF 63L
 
-
-#define CACHE_INDEX(x) ((((unsigned long long)(x)) & (63ULL << 6)  ) >> 6)
+#define CACHE_INDEX_POS 6
+#define CACHE_INDEX_LEN 6
+#define CACHE_INDEX_MASK 63ULL
+#define CACHE_INDEX(x) ((((unsigned long long)(x)) & (CACHE_INDEX_MASK << CACHE_INDEX_POS)  ) >> CACHE_INDEX_POS)
 
 typedef struct __node_t node_t;
 struct __node_t
@@ -82,7 +84,7 @@ struct __node_t
 	unsigned int tie_breaker;		// 20
 	unsigned int pad2;				// 24
 	node_t * volatile next;			// 32
-	char pad3[32];
+//	char pad3[32];
 };
 
 /**
@@ -132,24 +134,6 @@ static inline void init_bucket_subsystem(){
 #define only_bucket_unsafe_free(ptr)	gc_free(ptst, ptr, gc_aid[GC_BUCKETS])
 
 
-/* allocate a unrolled nodes */
-static inline node_t* node_alloc(){
-	node_t* res;
-	do{
-    	res = gc_alloc(ptst, gc_aid[GC_INTERNALS]);
-    	unsigned long long index = CACHE_INDEX(res);
-    	if(index > 32) break;
-    	if(index % 3)  only_bucket_unsafe_free(res);
-    }while(1);
-	res->next 					= NULL;
-	res->payload				= NULL;
-	res->tie_breaker			= 0;
-	res->timestamp	 			= INFTY;
-	lrand48_r(&seedT, &res->pad2);			
-	return res;
-}
-
-
 #define is_freezed(extractions)  ((extractions >> 32) != 0ULL)
 
 #define is_freezed_for_del(extractions) (extractions & FREEZE_FOR_DEL)
@@ -159,15 +143,42 @@ static inline node_t* node_alloc(){
 #define get_freezed(extractions, flag)  ((extractions << 32) | extractions | flag)
 #define get_cleaned_extractions(extractions) ((extractions & (~(FREEZE_FOR_EPO | FREEZE_FOR_MOV | FREEZE_FOR_DEL))) >> 32)
 
+/* allocate a unrolled nodes */
+static inline node_t* node_alloc(){
+	node_t* res;
+	do{
+	    	res = gc_alloc(ptst, gc_aid[GC_INTERNALS]);
+	    	unsigned long long index = CACHE_INDEX(res);
+		assert(index <= CACHE_INDEX_MASK);
+//break;
+	    	if(index >  48) {break;}
+//	    	if( (index % 3) == 0 )  only_bucket_unsafe_free(res);
+    }while(1);
+	res->next 					= NULL;
+	res->payload				= NULL;
+	res->tie_breaker			= 0;
+	res->timestamp	 			= INFTY;
+	lrand48_r(&seedT, &res->pad2);			
+	return res;
+}
+
 /* allocate a bucket */
 static inline bucket_t* bucket_alloc(){
 	bucket_t* res;
 	do{
-	    res 					= gc_alloc(ptst, gc_aid[GC_BUCKETS]);
-	   	if(index < 31) break;
-	   	node_unsafe_free((void*)(res + 0));
-	   	node_unsafe_free((void*)(res + 1));
-	   	node_unsafe_free((void*)(res + 2));
+		res = gc_alloc(ptst, gc_aid[GC_BUCKETS]);
+	   	unsigned long long index = CACHE_INDEX(res);
+		assert(index <= CACHE_INDEX_MASK);
+//break;
+		if(index <= ( 45 ) && ((index%3) == 0)) {assert((index%3)==0);break;}
+		if(index%3 != 0) continue;
+	   	node_t *tmp = (node_t*)res;
+		node_unsafe_free(tmp+0);
+	   	node_unsafe_free(tmp+1);
+	   	node_unsafe_free(tmp+2);
+                node_unsafe_free(tmp+3);
+                node_unsafe_free(tmp+4);
+                node_unsafe_free(tmp+5);
     }while(1);
     res->extractions 		= 0ULL;
     res->epoch				= 0U;
@@ -426,7 +437,7 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
 	unsigned long long position = 0;
 	unsigned int __global_try = 0;
 	int res = OK;
-    unsigned int contention = 0; //__sync_fetch_and_add(&bckt->pad3, 1);
+    unsigned long long contention = 0;//__sync_fetch_and_add(&bckt->pad3, 1);
     int res_fin;
     acc_contention+=contention;
     cnt_contention++;
@@ -442,7 +453,7 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
   begin:
   	__global_try++;
 	curr = left = &bckt->head;
-	 __builtin_prefetch(curr->next, 0, 0);
+//	 __builtin_prefetch(curr->next, 0, 0);
 	if(last_key != timestamp){
 		last_key = timestamp;
 		counter_last_key =0 ;
@@ -459,7 +470,7 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
   	while(toskip > 0ULL && curr != tail){
 //		__builtin_prefetch(curr->next, 0, 0);
   		curr = curr->next;
-		 __builtin_prefetch(curr->next, 0, 0);
+//		if(curr) __builtin_prefetch(curr->next, 0, 0);
   		toskip--;
   		scan_list_length_en++;
   		position++;
@@ -477,7 +488,7 @@ static inline int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int 
   		left = curr;
 //		__builtin_prefetch(curr->next, 0, 0);
   		curr = curr->next;
- __builtin_prefetch(curr->next, 1, 0);
+//if(curr) __builtin_prefetch(curr->next, 1, 0);
   		scan_list_length_en++;
   		position++;
   	}
@@ -537,12 +548,14 @@ __local_try++ < RTM_RETRY) {
 				goto retry_tm;
 			}
 			if(__global_try < RTM_FALLBACK || __status & _XABORT_EXPLICIT) goto begin;
+//			__sync_fetch_and_add(&bckt->pad3, -1);
 			return bucket_connect_fallback(bckt, new);
 
 		}
 
 	rtm_insertions++;
   out:
+//__sync_fetch_and_add(&bckt->pad3, -1);
 	return res;
 }
 
@@ -551,7 +564,7 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
 	node_t *curr  = &bckt->head;
 	node_t *tail  = bckt->tail;
 	unsigned long long extracted = 0;
- __builtin_prefetch(curr->next, 0, 0);	
+// __builtin_prefetch(curr->next, 0, 0);	
 	assertf(bckt->type != ITEM, "trying to extract from a head bucket%s\n", "");
 
 	if(bckt->epoch > epoch) return ABORT;
@@ -569,7 +582,7 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
   	while(extracted > 0ULL && curr != tail){
 //__builtin_prefetch(curr->next, 0, 0);
   		curr = curr->next;
- __builtin_prefetch(curr->next, 0, 0);
+ //if(curr)__builtin_prefetch(curr->next, 0, 0);
   		extracted--;
 		scan_list_length++;
   	}

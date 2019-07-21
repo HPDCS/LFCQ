@@ -18,7 +18,7 @@ PROB_DEQUEUE_2=0.5
 cmd=resize-unit-test
 cmd=test
 version=Release
-#version=Debug
+version=Debug
 
 if [ "$6" = "G" ]
 then
@@ -33,8 +33,8 @@ then
     PRE2="LLC-loads,LLC-load-misses,LLC-stores,L1-icache-load-misses,L1-icache-loads,L1-icache-prefetches,dTLB-load-misses,dTLB-loads,iTLB-load-misses,iTLB-loads,node-load-misses,node-loads"
   #  PRE1="perf stat -e L1-dcache-load-misses," #,L1-dcache-loads,"
   #  PRE2="LLC-loads,LLC-load-misses,LLC-stores"
-	PRE1="perf stat -e L1-dcache-load-misses,L1-dcache-loads,L1-dcache-prefetch-misses,L1-dcache-prefetches,"
-	PRE2="LLC-loads,LLC-load-misses,LLC-stores,L1-icache-load-misses,L1-icache-loads,L1-icache-prefetches,dTLB-load-misses,dTLB-loads,iTLB-load-misses,iTLB-loads,node-load-misses,node-loads"
+	PRE1="perf stat -e L1-dcache-load-misses,L1-dcache-loads,"
+	PRE2="LLC-loads,LLC-load-misses,LLC-stores,,dTLB-load-misses,dTLB-loads,iTLB-load-misses,iTLB-loads,node-load-misses,node-loads"
 else	
     PRE=""
 fi
