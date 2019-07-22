@@ -32,7 +32,7 @@ extern __thread unsigned int read_table_count;
 #define RESIZE_PERIOD RESIZE_PERIOD_FACTOR*BASE
 
 
-#define PERC_RESIZE_COUNT 0.5
+#define PERC_RESIZE_COUNT 0.25
 
 typedef struct __table table_t;
 struct __table
