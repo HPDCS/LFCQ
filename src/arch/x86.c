@@ -132,7 +132,7 @@ inline int atomic_test_and_set_x64(unsigned long long *b) {
 	return !result;
 }
 
-inline int atomic_bts_x64(unsigned long long *b, int pos) {
+inline int atomic_bts_x64(volatile unsigned long long *b, int pos) {
     int result = 0;
 
 	__asm__  __volatile__ (
