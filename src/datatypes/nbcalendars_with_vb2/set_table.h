@@ -32,7 +32,7 @@ extern __thread unsigned int read_table_count;
 #define RESIZE_PERIOD RESIZE_PERIOD_FACTOR*BASE
 
 
-#define PERC_RESIZE_COUNT 0.25
+#define PERC_RESIZE_COUNT 0.5
 
 typedef struct __table table_t;
 struct __table
@@ -59,7 +59,7 @@ struct __table
 	char zpad4[56];     
 	
 	bucket_t tail;
-	char zpad5[256-sizeof(bucket_t)];
+//	char zpad5[256-sizeof(bucket_t)];
 
 	bucket_t array[1];			//32
 
