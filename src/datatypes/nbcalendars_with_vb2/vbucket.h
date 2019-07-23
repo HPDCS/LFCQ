@@ -523,12 +523,12 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
   		node_unsafe_free(new);
   		res = ABORT; goto out;
   	}
-	int i=0;
+	//int i=0;
 	left = curr;
 	curr = curr->next;
   	while(curr->timestamp <= timestamp){
 		if(counter_last_key > 1000000ULL)
-			printf("L: %p-%u C: %p-%u\n", left, left->timestamp, curr, curr->timestamp);
+			printf("L: %p-" KEY_STRING " C: %p-" KEY_STRING "\n", left, left->timestamp, curr, curr->timestamp);
   		left = curr;
   		curr = curr->next;
 		if(curr) PREFETCH(curr->next, 1);

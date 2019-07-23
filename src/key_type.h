@@ -23,6 +23,7 @@
 	#include <float.h>
 	#define INFTY 	DBL_MAX
 	#define MIN 	0.0
+	#define KEY_STRING "%f"
 	typedef double pkey_t;
 
 	#define MEAN  1.00;			// Maximum distance from the current event owned by the thread
