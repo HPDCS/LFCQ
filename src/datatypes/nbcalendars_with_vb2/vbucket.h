@@ -311,8 +311,10 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 	unsigned int res_phase_1 = 2;
 	
 	if(!is_freezed_for_epo(old_extractions)){
-		if(bckt->pending_insert == NULL) __sync_bool_compare_and_swap(&bckt->pending_insert, NULL, (void*)1ULL);
-		if(bckt->pending_insert_res == 0)__sync_bool_compare_and_swap(&bckt->pending_insert_res, 0, res_phase_1);
+		if(is_freezed(old_extractions)){
+			if(bckt->pending_insert == NULL) __sync_bool_compare_and_swap(&bckt->pending_insert, NULL, (void*)1ULL);
+			if(bckt->pending_insert_res == 0)__sync_bool_compare_and_swap(&bckt->pending_insert_res, 0, res_phase_1);
+		}
 		return;
 	}
 	// phase 1: block pushing new ops
@@ -453,9 +455,22 @@ __thread pkey_t last_key = 0;
 __thread unsigned long long counter_last_key = 0ULL;
 __thread unsigned long long fallback_insertions = 0ULL;
 
+
+__thread pkey_t last_key_fall = 0;
+__thread unsigned long long counter_last_key_fall = 0ULL;
 static inline int bucket_connect_fallback(bucket_t *bckt, node_t *node){
 	unsigned long long extractions;
 	extractions = bckt->extractions;
+
+	if(last_key_fall != node->timestamp){
+		last_key_fall = node->timestamp;
+		counter_last_key_fall = 0;
+	}
+	else{
+		counter_last_key_fall++;
+		if(counter_last_key_fall > 100000) printf("AZZZO VERO\n");
+	}
+
 	if(is_freezed(extractions)) return ABORT;
 
 	// add pending insertion
@@ -563,7 +578,11 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 //		clock_gettime(CLOCK_MONOTONIC, &spec); if( ((spec.tv_nsec>>15) & 1) != (tid & 1)) goto retry_tm; 
 //new_loops = LOOPS_FOR_CACHE;
 //do{
- if(!BOOL_CAS(&left->next, curr, curr))  {rtm_nested++;goto begin;}
+
+
+if(!BOOL_CAS(&left->next, curr, curr))  {rtm_nested++;goto begin;}
+
+
 // if(position < VAL_CAS(&bckt->extractions, 0, 0))  {rtm_debug++;goto begin;}
 //do{
 	        if(position < bckt->extractions)  {rtm_debug++;goto begin;}
