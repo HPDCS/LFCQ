@@ -17,7 +17,7 @@ extern __thread unsigned long long scan_list_length_en;
 extern __thread unsigned long long scan_list_length;
 extern __thread unsigned int read_table_count;
 
-
+#define FIXED_BW 0.0015
 #define MINIMUM_SIZE 1
 #define SAMPLE_SIZE 50
 
@@ -497,7 +497,7 @@ double compute_mean_separation_time(table_t *h,
 
 			// the bucket is not empty
 			if(left->index == index && left->type != HEAD){
-				printf("INDEX: %u\n", index);
+//				if(tid == 1)LOG("%d- INDEX: %u\n",tid, index);
 				curr = &left->head;
 				toskip = get_cleaned_extractions(left->extractions);
 			  	while(toskip > 0ULL && curr != left->tail){
@@ -505,10 +505,15 @@ double compute_mean_separation_time(table_t *h,
 			  		toskip--;
 			  	}
  				if(curr != left->tail){
+					node_t *prev = curr;
+					assert(curr->next != NULL);
 					curr = curr->next;
 					while(curr != left->tail){
-						printf("TS: " KEY_STRING "\n", curr->timestamp);
+						if(curr->timestamp == INFTY) assert(curr != left->tail);
+//						if(tid == 1)LOG("%d- TS: " "%.10f" "\n", tid, curr->timestamp);
 						sample_array[++counter] = curr->timestamp; 
+						assert(curr->next!=NULL || h->new_table->bucket_width == -1.0 );
+						if(h->new_table->bucket_width != -1.0) return h->new_table->bucket_width;
 						curr = curr->next;
 						if(counter == sample_size) break;
 					}
@@ -560,7 +565,7 @@ double compute_mean_separation_time(table_t *h,
 		newaverage = 1.0;	
     
 	//  LOG("%d- my new bucket %.10f for %p AVG REPEAT:%u\n", TID, newaverage, h, acc/counter);	
-	return newaverage;
+	return FIXED_BW; //newaverage;
 }
 
 __thread void *last_bckt = NULL;
