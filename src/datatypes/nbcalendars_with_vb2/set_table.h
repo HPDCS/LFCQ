@@ -461,6 +461,8 @@ double compute_mean_separation_time(table_t *h,
 
 	table_t *new_h = h->new_table;
 	bucket_t *tmp, *left, *left_next, *right, *array = h->array;
+	node_t *curr;
+	unsigned long long toskip = 0;
 
 	double new_bw = new_h->bucket_width;
 	double average = 0.0;
@@ -495,17 +497,21 @@ double compute_mean_separation_time(table_t *h,
 
 			// the bucket is not empty
 			if(left->index == index && left->type != HEAD){
-				node_t *curr = &left->head;
-				unsigned long long toskip = get_cleaned_extractions(left->extractions);
+				printf("INDEX: %u\n", index);
+				curr = &left->head;
+				toskip = get_cleaned_extractions(left->extractions);
 			  	while(toskip > 0ULL && curr != left->tail){
 			  		curr = curr->next;
 			  		toskip--;
 			  	}
- 
-				while(curr != left->tail){
-					sample_array[++counter] = curr->timestamp; 
+ 				if(curr != left->tail){
 					curr = curr->next;
-					if(counter == sample_size) break;
+					while(curr != left->tail){
+						printf("TS: " KEY_STRING "\n", curr->timestamp);
+						sample_array[++counter] = curr->timestamp; 
+						curr = curr->next;
+						if(counter == sample_size) break;
+					}
 				}
 			}
 
