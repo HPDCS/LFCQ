@@ -565,7 +565,8 @@ double compute_mean_separation_time(table_t *h,
 		newaverage = 1.0;	
     
 	//  LOG("%d- my new bucket %.10f for %p AVG REPEAT:%u\n", TID, newaverage, h, acc/counter);	
-	return FIXED_BW; //newaverage;
+	return //FIXED_BW; //
+	newaverage;
 }
 
 __thread void *last_bckt = NULL;
@@ -599,10 +600,9 @@ int  migrate_node(bucket_t *bckt, table_t *new_h)
 		assertf(!is_freezed_for_del(extractions), "Migrating bucket not del%s\n", "");
 		return OK;
 	}
-	toskip = extractions & (~(3ULL<<62));
-	toskip >>=32;	
+	toskip = get_cleaned_extractions(extractions);
 
-	while(toskip && head != tail){
+	while(toskip > 0ULL && head != tail){
 		head = head->next;
 		toskip--;
 	}
@@ -621,16 +621,14 @@ int  migrate_node(bucket_t *bckt, table_t *new_h)
 
 				//printf("A left: %p right:%p\n", left, right);
 				extractions = left->extractions;
-			  	toskip		= extractions & MASK_EPOCH;
-				// if the right or the left node is MOV signal this to the caller
-				if(is_marked(left_next, MOV) ) 	return OK;
-				//printf("B left: %p right:%p\n", left, right);
+			  	toskip		= extractions;
+				// if the left node is freezed signal this to the caller
 				if(is_freezed(extractions)) 	return OK;
-				//printf("C left: %p right:%p\n", left, right);
+				// if left node has some extraction signal this to the caller
 				if(toskip) return OK;
-				//printf("D left: %p right:%p\n", left, right);
 				
 				assertf(left->type != HEAD && left->tail->timestamp != INFTY, "HUGE Problems....%s\n", "");
+
 				// the virtual bucket is missing thus create a new one with the item
 				if(left->index != new_index || left->type == HEAD){
 					bucket_t *new 			= bucket_alloc();
