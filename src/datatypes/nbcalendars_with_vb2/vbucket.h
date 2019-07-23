@@ -51,7 +51,7 @@ static inline void clflush(volatile void *p){ asm volatile ("clflush (%0)" :: "r
 //#define ENABLE_CACHE_PARTITION 
  
 #ifdef ENABLE_PREFETCH
-#define PREFETCH(x, y) {unsigned int step = 0; while(step++<0)_mm_pause();__builtin_prefetch(x, y, 0);}
+#define PREFETCH(x, y) {unsigned int step = 0; while(step++<10)_mm_pause();__builtin_prefetch(x, y, 0);}
 #else
 #define PREFETCH(x, y) {}
 #endif
@@ -61,7 +61,7 @@ static inline void clflush(volatile void *p){ asm volatile ("clflush (%0)" :: "r
 #define CACHE_INDEX_LEN 6
 #define CACHE_INDEX_MASK ( 63ULL << CACHE_INDEX_POS )
 #define CACHE_INDEX(x) ((((unsigned long long)(x)) & CACHE_INDEX_MASK  ) >> CACHE_INDEX_POS)
-#define CACHE_LIMIT 12
+#define CACHE_LIMIT 9
 //#endif
 
 #define NUM_INDEX 1
@@ -84,13 +84,15 @@ static inline void clflush(volatile void *p){ asm volatile ("clflush (%0)" :: "r
 
 #define RTM_RETRY 32
 #define RTM_FALLBACK 1
-#define RTM_BACKOFF 15L
+#define RTM_BACKOFF 7L
+
+#define LOOPS_FOR_CACHE 64
 
 #define BACKOFF_LOOP() {\
 long rand;\
 long fallback;\
     lrand48_r(&seedT, &rand);\
-    fallback = (rand & RTM_BACKOFF)+nid*128;\
+    fallback = (rand & RTM_BACKOFF);\
     /*if(fallback & 1L)*/ while(fallback--!=0) _mm_pause();\
 }
 
@@ -309,8 +311,8 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 	unsigned int res_phase_1 = 2;
 	
 	if(!is_freezed_for_epo(old_extractions)){
-		__sync_bool_compare_and_swap(&bckt->pending_insert, NULL, (void*)1ULL);
-		__sync_bool_compare_and_swap(&bckt->pending_insert_res, 0, res_phase_1);
+		if(bckt->pending_insert == NULL) __sync_bool_compare_and_swap(&bckt->pending_insert, NULL, (void*)1ULL);
+		if(bckt->pending_insert_res == 0)__sync_bool_compare_and_swap(&bckt->pending_insert_res, 0, res_phase_1);
 		return;
 	}
 	// phase 1: block pushing new ops
@@ -556,11 +558,18 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 //	for(i=0; i<64*8;i+=1)	a |= pages[64*i];
 //	assert(a!=0);
 //	clflush(left);
+//unsigned int new_loops;
 	  retry_tm:
 //		clock_gettime(CLOCK_MONOTONIC, &spec); if( ((spec.tv_nsec>>15) & 1) != (tid & 1)) goto retry_tm; 
+//new_loops = LOOPS_FOR_CACHE;
+//do{
+ if(!BOOL_CAS(&left->next, curr, curr))  {rtm_nested++;goto begin;}
+// if(position < VAL_CAS(&bckt->extractions, 0, 0))  {rtm_debug++;goto begin;}
+//do{
 	        if(position < bckt->extractions)  {rtm_debug++;goto begin;}
 		if(left->next != curr)	{rtm_nested++;goto begin;}
-
+// if(!BOOL_CAS(&left->next, curr, curr))  {rtm_nested++;goto begin;}
+//}while(new_loops--);
 		++rtm_prova;
 		__status = 0;
 
