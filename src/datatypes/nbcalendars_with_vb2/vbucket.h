@@ -610,7 +610,10 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
 	unsigned int count = 0;	long rand;
 	node_t *curr  = &bckt->head;
 	node_t *tail  = bckt->tail;
+	node_t *head  = &bckt->head;
 	unsigned long long extracted = 0;
+	unsigned long long old_extracted = 0;
+	unsigned skipped = 0;
 	PREFETCH(curr->next, 0);
 	assertf(bckt->type != ITEM, "trying to extract from a head bucket%s\n", "");
 
@@ -618,7 +621,7 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
 
         lrand48_r(&seedT, &rand); count = rand & 7L; while(count-->0)_mm_pause();
   #ifdef RTM
-  	extracted 	= __sync_add_and_fetch(&bckt->extractions, 1ULL);
+  	old_extracted = extracted 	= __sync_add_and_fetch(&bckt->extractions, 1ULL);
   #else
 	pthread_spin_lock(&bckt->lock);
 		extracted 	= __sync_add_and_fetch(&bckt->extractions, 1ULL);
@@ -628,9 +631,22 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
   	if(is_freezed(extracted)) return EMPTY;
   	
   	while(extracted > 0ULL && curr != tail){
+  		if(skipped > 25 && extracted > 2){
+  			if((__status = _xbegin ()) == _XBEGIN_STARTED)
+			{
+				if(old_extracted != bckt->extractions){ TM_ABORT(0xf2);}
+				head->next = curr;
+				old_extracted -= skipped; 
+				TM_COMMIT();
+				skipped = 0;
+			}
+			else{}
+
+  		}
   		curr = curr->next;
 		if(curr) 	PREFETCH(curr->next, 0);
   		extracted--;
+  		skipped++;
 		scan_list_length++;
   	}
 
