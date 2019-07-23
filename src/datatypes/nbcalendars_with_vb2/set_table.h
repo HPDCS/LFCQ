@@ -23,7 +23,7 @@ extern __thread unsigned int read_table_count;
 
 #define ENABLE_EXPANSION 1
 #define READTABLE_PERIOD 64
-
+#define COMPACT_RANDOM_ENQUEUE 1
 
 #define BASE 1000000ULL 
 #ifndef RESIZE_PERIOD_FACTOR 
@@ -482,6 +482,9 @@ double compute_mean_separation_time(table_t *h,
 	sample_size = (sample_size > SAMPLE_SIZE) ? SAMPLE_SIZE : sample_size;
     
 	pkey_t sample_array[SAMPLE_SIZE+1]; //<--TODO: DOES NOT FOLLOW STANDARD C90
+	for(i=0;i<SAMPLE_SIZE+1;i++)
+		sample_array[i] = 0;
+	i=0;
     
     //read nodes until the total samples is reached or until someone else do it
 	acc = 0;
@@ -499,7 +502,8 @@ double compute_mean_separation_time(table_t *h,
 			if(left->index == index && left->type != HEAD){
 //				if(tid == 1)LOG("%d- INDEX: %u\n",tid, index);
 				curr = &left->head;
-				toskip = get_cleaned_extractions(left->extractions);
+				unsigned long long toskip = left->extractions;
+				if(is_freezed(toskip)) toskip = get_cleaned_extractions(left->extractions);
 			  	while(toskip > 0ULL && curr != left->tail){
 			  		curr = curr->next;
 			  		toskip--;

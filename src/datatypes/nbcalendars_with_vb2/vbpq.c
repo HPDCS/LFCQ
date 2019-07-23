@@ -182,7 +182,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	unsigned int counter = 0;
 	left_node = search(h->array+((oldIndex + dist + (unsigned int)( ( (double)(size-dist) )*rand )) % size), &left_node_next, &right_node, &counter, 0);
 	if(left_node_next != right_node && BOOL_CAS(&left_node->next, left_node_next, right_node))
-		connect_to_be_freed_node_list(left_node_next, distance);
+		connect_to_be_freed_node_list(left_node_next, counter);
 	#endif
 
   #if KEY_TYPE != DOUBLE

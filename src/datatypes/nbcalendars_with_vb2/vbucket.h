@@ -84,7 +84,7 @@ static inline void clflush(volatile void *p){ asm volatile ("clflush (%0)" :: "r
 
 #define RTM_RETRY 32
 #define RTM_FALLBACK 1
-#define RTM_BACKOFF 63L
+#define RTM_BACKOFF 255L
 
 #define BACKOFF_LOOP() {\
 long rand;\
@@ -639,7 +639,8 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
                 lrand48_r(&seedT, &rand);
 		rand &= 511L;
 //        if(extracted == 0)  return ABORT;
-        //if(rand < 1L)  		freeze(bckt, FREEZE_FOR_DEL);
+        //if(rand < 1L)  		
+//freeze(bckt, FREEZE_FOR_DEL);
         atomic_bts_x64(&bckt->extractions, DEL_BIT_POS);
 	assert(is_freezed(bckt->extractions));
 	return EMPTY; // try to compact
