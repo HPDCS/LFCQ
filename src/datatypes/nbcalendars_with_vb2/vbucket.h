@@ -84,7 +84,7 @@ static inline void clflush(volatile void *p){ asm volatile ("clflush (%0)" :: "r
 
 #define RTM_RETRY 32
 #define RTM_FALLBACK 1
-#define RTM_BACKOFF 255L
+#define RTM_BACKOFF 63L
 
 #define BACKOFF_LOOP() {\
 long rand;\
@@ -524,6 +524,8 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
   		res = ABORT; goto out;
   	}
 	int i=0;
+	left = curr;
+	curr = curr->next;
   	while(curr->timestamp <= timestamp){
 		if(counter_last_key > 1000000ULL)
 			printf("L: %p-%u C: %p-%u\n", left, left->timestamp, curr, curr->timestamp);
