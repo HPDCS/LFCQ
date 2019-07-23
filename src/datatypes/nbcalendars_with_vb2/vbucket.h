@@ -306,9 +306,13 @@ static inline void connect_to_be_freed_node_list(bucket_t *start, unsigned int c
 
 
 static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long old_extractions){
-	if(!is_freezed_for_epo(old_extractions)) return;
-
 	unsigned int res_phase_1 = 2;
+	
+	if(!is_freezed_for_epo(old_extractions)){
+		__sync_bool_compare_and_swap(&bckt->pending_insert, NULL, (void*)1ULL);
+		__sync_bool_compare_and_swap(&bckt->pending_insert_res, 0, res_phase_1);
+		return;
+	}
 	// phase 1: block pushing new ops
 	__sync_bool_compare_and_swap(&bckt->pending_insert, NULL, (void*)1ULL);
 
