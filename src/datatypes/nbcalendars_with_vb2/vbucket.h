@@ -29,7 +29,6 @@
 
 #include <stdlib.h>
 #include <immintrin.h>
-#include <time.h>
 
 #include "../../key_type.h"
 #include "../../utils/rtm.h"
@@ -46,28 +45,26 @@ extern __thread unsigned long long scan_list_length;
 extern __thread struct drand48_data seedT;
 extern __thread unsigned int tid;
 
-static inline void clflush(volatile void *p)
-{
-        asm volatile ("clflush (%0)" :: "r"(p));        
-}
-
+static inline void clflush(volatile void *p){ asm volatile ("clflush (%0)" :: "r"(p)); }
 
 //#define ENABLE_PREFETCH 
 //#define ENABLE_CACHE_PARTITION 
  
 #ifdef ENABLE_PREFETCH
-#define PREFETCH(x, y) {unsigned int step = 0; while(step++<1)_mm_pause();__builtin_prefetch(x, y, 0);}
+#define PREFETCH(x, y) {unsigned int step = 0; while(step++<0)_mm_pause();__builtin_prefetch(x, y, 0);}
 #else
-#define PREFETCH {}
+#define PREFETCH(x, y) {}
 #endif
 
-#ifdef ENABLE_CACHE_PARTITION
+//#ifdef ENABLE_CACHE_PARTITION
 #define CACHE_INDEX_POS 6
 #define CACHE_INDEX_LEN 6
-#define CACHE_INDEX_MASK 63ULL
-#define CACHE_INDEX(x) ((((unsigned long long)(x)) & (CACHE_INDEX_MASK << CACHE_INDEX_POS)  ) >> CACHE_INDEX_POS)
-#define CACHE_LIMIT 18
-#endif
+#define CACHE_INDEX_MASK ( 63ULL << CACHE_INDEX_POS )
+#define CACHE_INDEX(x) ((((unsigned long long)(x)) & CACHE_INDEX_MASK  ) >> CACHE_INDEX_POS)
+#define CACHE_LIMIT 9
+//#endif
+
+#define NUM_INDEX 1
 
 #define HEAD 0ULL
 #define ITEM 1ULL
@@ -85,21 +82,28 @@ static inline void clflush(volatile void *p)
 #define GC_BUCKETS   0
 #define GC_INTERNALS 1
 
-#define RTM_RETRY 20
+#define RTM_RETRY 32
 #define RTM_FALLBACK 1
-#define RTM_BACKOFF 10L
+#define RTM_BACKOFF 255L
 
+#define BACKOFF_LOOP() {\
+long rand;\
+long fallback;\
+    lrand48_r(&seedT, &rand);\
+    fallback = rand & RTM_BACKOFF;\
+    if(fallback & 1L) while(fallback--!=0) _mm_pause();\
+}
 
 typedef struct __node_t node_t;
 struct __node_t
 {
-	void *payload;					// 8
-	pkey_t timestamp;  				//  
-	char pad[8-sizeof(pkey_t)];		// 16
+	void *payload;				// 8
+	pkey_t timestamp;  			//  
+	char __pad_1[8-sizeof(pkey_t)];		// 16
 	unsigned int tie_breaker;		// 20
-	unsigned int pad2;				// 24
+	int hash;				// 24
 	node_t * volatile next;			// 32
-//	char pad3[32];
+	char __pad_2[32];
 };
 
 /**
@@ -108,39 +112,26 @@ struct __node_t
 typedef struct __bucket_t bucket_t;
 struct __bucket_t
 {
-	volatile unsigned long long extractions;	// 8
-	unsigned int epoch;
-	unsigned int index;
+	volatile unsigned long long extractions;	//  8
+	char __pad_2[56];
+	unsigned int epoch;				
+	unsigned int index;				// 16
 	unsigned int type;
-	unsigned int pad;
-	node_t *tail;
-	unsigned long long pad2;
-	volatile int new_epoch;
-	unsigned int volatile pending_insert_res;
-	node_t *volatile pending_insert;
-	
-	char pad1[22];
-	node_t head;
-//	char pad2[64-sizeof(node_t)];
-	//unsigned int epoch;				// 12 //enqueue's epoch
-	//unsigned int index;							// 16
-	//unsigned int type; 							// 20 // used to resolve the conflict with same timestamp using a FIFO policy
-	//volatile unsigned int new_epoch;							// 24
-	//node_t *tail;
-	bucket_t * volatile next;	
-	//node_t * volatile pending_insert;
-	//unsigned int volatile pending_insert_res ;
-	//unsigned int pad5;
-	unsigned long long pad3;
-//	char pad4[8];
-#ifndef RTM
+	volatile unsigned int new_epoch;		// 24
+	volatile long long pad3;
+	node_t *tail;					// 32
+	node_t * volatile pending_insert;		// 40
+	bucket_t * volatile next;			// 48
+	volatile unsigned int pending_insert_res;       // 52
+	char __pad_4[4];
+	char __pad_1[8];				// 64
+//-----------------------------
+	node_t head;					// 32
+	char __pad_3[64-sizeof(node_t)];
+//-----------------------------
+  #ifndef RTM
 	pthread_spinlock_t lock;
-	#endif
-	//node_t tail;								// 56
-	//node_t *tail;
-//	node_t head;								// 80 + 88
-	//bucket_t * volatile next;					// 96
-//	char pad4[sizeof(node_t)];
+  #endif
 };
 
 
@@ -149,9 +140,12 @@ struct __bucket_t
  */
 
 static inline void init_bucket_subsystem(){
-	printf("SIZES: %llu %llu\n", sizeof(bucket_t), sizeof(node_t));
-	gc_aid[GC_BUCKETS] 		= gc_add_allocator(sizeof(bucket_t		));
-	gc_aid[GC_INTERNALS] 	= gc_add_allocator(sizeof(node_t 		));
+	printf("SIZES: %lu %lu\n", sizeof(bucket_t), sizeof(node_t));
+	gc_aid[GC_BUCKETS] 	=  gc_add_allocator(sizeof(bucket_t	));
+	gc_aid[GC_INTERNALS] 	=  gc_add_allocator(sizeof(node_t	));
+	int i; for(i=0;i<30;i++)  //printf("AID: %u\n", 
+ gc_add_allocator(sizeof(node_t       ));
+//);
 }
 
 
@@ -170,12 +164,34 @@ static inline void init_bucket_subsystem(){
 #define get_freezed(extractions, flag)  ((extractions << 32) | extractions | flag)
 #define get_cleaned_extractions(extractions) ((extractions & (~(FREEZE_FOR_EPO | FREEZE_FOR_MOV | FREEZE_FOR_DEL))) >> 32)
 
+static inline node_t* node_alloc_by_index(unsigned int i){
+	unsigned int j;
+	long rand;
+	i = i % NUM_INDEX;
+	node_t *res = gc_alloc(ptst, 2+i);
+	j = CACHE_INDEX(res) % NUM_INDEX ;
+	while( j != i){
+        	gc_unsafe_free(ptst, res, 2+j);
+	        res = gc_alloc(ptst, 2+i);
+		j = CACHE_INDEX(res) % NUM_INDEX ;
+        }
+
+        res->next                       = NULL;
+        res->payload                    = NULL;
+        res->tie_breaker                = 0;
+        res->timestamp                  = INFTY;
+        lrand48_r(&seedT, &rand);
+        res->hash = rand;
+	return res;
+}
+
+
 /* allocate a unrolled nodes */
 static inline node_t* node_alloc(){
 	node_t* res;
-
+	long rand;
 	do{
-			res = gc_alloc(ptst, gc_aid[GC_INTERNALS]);
+		res = gc_alloc(ptst, gc_aid[GC_INTERNALS]);
 	    #ifdef ENABLE_CACHE_PARTITION
 	    	unsigned long long index = CACHE_INDEX(res);
 			assert(index <= CACHE_INDEX_MASK);
@@ -183,11 +199,12 @@ static inline node_t* node_alloc(){
 	    #endif
 	    		{break;}
     }while(1);
-	res->next 					= NULL;
-	res->payload				= NULL;
-	res->tie_breaker			= 0;
-	res->timestamp	 			= INFTY;
-	lrand48_r(&seedT, &res->pad2);			
+	res->next 			= NULL;
+	res->payload			= NULL;
+	res->tie_breaker		= 0;
+	res->timestamp	 		= INFTY;
+	lrand48_r(&seedT, &rand);
+	res->hash = rand;
 	return res;
 }
 
@@ -200,32 +217,29 @@ static inline bucket_t* bucket_alloc(){
 	   	unsigned long long index = CACHE_INDEX(res);
 		assert(index <= CACHE_INDEX_MASK);
 		if(index <= ( CACHE_LIMIT - sizeof(bucket_t)/CACHE_LINE_SIZE ) ) {
-		//	assert((index%3)==0);
 	  #endif
 			break;
 	  #ifdef ENABLE_CACHE_PARTITION
 		}
-//		if(index%3 != 0) continue;
 	   	node_t *tmp = (node_t*)res;
 	   	node_t *tmp_end = (node_t*)(res+1);
 	   	while(tmp < tmp_end){
 			node_unsafe_free(tmp);
 			tmp += 1;
 	    }
-      #endif
+	  #endif
     }while(1);
     res->extractions 		= 0ULL;
     res->epoch				= 0U;
     res->new_epoch			= 0U;
     res->pending_insert		= NULL;
     res->pending_insert_res = 0;
-	res->pad3 = 0ULL;
-	res->tail = node_alloc();
+    res->tail = node_alloc();
     res->tail->payload		= NULL;
     res->tail->timestamp		= INFTY;
     res->tail->tie_breaker	= 0U;
     res->tail->next			= NULL;
-
+    res->pad3 = 0ULL;
     res->head.payload		= NULL;
     res->head.timestamp		= MIN;
     res->head.tie_breaker	= 0U;
@@ -242,7 +256,6 @@ static inline bucket_t* bucket_alloc(){
 static inline void bucket_safe_free(bucket_t *ptr){
 
 	node_t *tmp, *current = ptr->head.next;
-	unsigned long long old_extractions = ptr->extractions;
 	while(current != ptr->tail && !ptr->new_epoch){
 		tmp = current;
 		current = tmp->next;
@@ -256,7 +269,6 @@ static inline void bucket_safe_free(bucket_t *ptr){
 static inline void bucket_unsafe_free(bucket_t *ptr){
 
 	node_t *tmp, *current = ptr->head.next;
-	unsigned long long old_extractions = ptr->extractions;
 	while(current != ptr->tail && !ptr->new_epoch){
 		tmp = current;
 		current = tmp->next;
@@ -313,7 +325,7 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 		toskip			= get_cleaned_extractions(bckt->extractions);
 		new->timestamp  = bckt->pending_insert->timestamp;
 		new->payload	= bckt->pending_insert->payload;
-		new->pad2		= bckt->pending_insert->pad2;
+		new->hash		= bckt->pending_insert->hash;
 		
 		// check if there is space in the bucket
 	  	while(toskip > 0ULL && curr != tail){
@@ -332,7 +344,7 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 			  	
 			  	while(curr->timestamp <= new->timestamp){
 	            	// keep memory if it was inserted to release memory
-	                if(curr->timestamp == new->timestamp && curr->pad2 == new->pad2) present = 1;
+	                if(curr->timestamp == new->timestamp && curr->hash == new->hash) present = 1;
 
 			  		left = curr;
 			  		curr = curr->next;
@@ -433,7 +445,6 @@ static inline int check_increase_bucket_epoch(bucket_t *bckt, unsigned int epoch
 
 __thread pkey_t last_key = 0;
 __thread unsigned long long counter_last_key = 0ULL;
-
 __thread unsigned long long fallback_insertions = 0ULL;
 
 static inline int bucket_connect_fallback(bucket_t *bckt, node_t *node){
@@ -471,15 +482,13 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	unsigned long long position = 0;
 	unsigned int __global_try = 0;
 	int res = OK;
-    unsigned long long contention = 0;//__sync_fetch_and_add(&bckt->pad3, 1);
-    int res_fin;
+    long long contention = 0; //__sync_fetch_and_add(&bckt->pad3, 1LL);
     acc_contention+=contention;
     cnt_contention++;
     min_contention = contention <= min_contention ? contention : min_contention;
     max_contention = contention >= max_contention ? contention : max_contention;
 
 	node_t *new   = node_alloc();
-	
 	new->timestamp = timestamp;
 	new->payload	= payload;
 	complete_freeze(bckt);
@@ -514,15 +523,15 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
   		node_unsafe_free(new);
   		res = ABORT; goto out;
   	}
-
+	int i=0;
   	while(curr->timestamp <= timestamp){
 		if(counter_last_key > 1000000ULL)
 			printf("L: %p-%u C: %p-%u\n", left, left->timestamp, curr, curr->timestamp);
   		left = curr;
-//		__builtin_prefetch(curr->next, 0, 0);
   		curr = curr->next;
-//if(curr) __builtin_prefetch(curr->next, 1, 0);
-  		scan_list_length_en++;
+		if(curr) PREFETCH(curr->next, 1);
+//  		if((i++%64)==0)clflush(curr);
+		scan_list_length_en++;
   		position++;
   	}
 	if(curr->timestamp == INFTY)	assert(curr == tail);
@@ -533,19 +542,16 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 
 //	{
 		unsigned int __local_try=0;
-		long rand;
 		unsigned int __status;
-		unsigned int fallback = 0;
 		unsigned int mask = 1;
-
-    struct timespec spec;
-
+//		struct timespec spec;
+//	char a;
+//	int i=0;
+//	for(i=0; i<64*8;i+=1)	a |= pages[64*i];
+//	assert(a!=0);
 //	clflush(left);
 	  retry_tm:
-
-//    clock_gettime(CLOCK_MONOTONIC_RAW, &spec);
-//		printf("%ld\n", spec.tv_nsec);
-//		if( ((spec.tv_nsec>>15) & 1) != (tid & 1)) goto retry_tm; 
+//		clock_gettime(CLOCK_MONOTONIC, &spec); if( ((spec.tv_nsec>>15) & 1) != (tid & 1)) goto retry_tm; 
 	        if(position < bckt->extractions)  {rtm_debug++;goto begin;}
 		if(left->next != curr)	{rtm_nested++;goto begin;}
 
@@ -581,30 +587,25 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 			if(
 //__status & _XABORT_RETRY ||
 __local_try++ < RTM_RETRY) {
-				lrand48_r(&seedT, &rand);
-				fallback = rand & mask;
-				mask <<= 1; 
-				fallback*RTM_BACKOFF;
-				//if(fallback & 1L) 
-				while(fallback--!=0)_mm_pause();
+				BACKOFF_LOOP();
+				mask = mask | (mask <<1);
 				goto retry_tm;
 			}
 			if(__global_try < RTM_FALLBACK || __status & _XABORT_EXPLICIT) goto begin;
-//			__sync_fetch_and_add(&bckt->pad3, -1);
+			__sync_fetch_and_add(&bckt->pad3, -1LL);
 			return bucket_connect_fallback(bckt, new);
 
 		}
 
 	rtm_insertions++;
   out:
-//__sync_fetch_and_add(&bckt->pad3, -1);
+//	__sync_fetch_and_add(&bckt->pad3, -1LL);
 	return res;
 }
 
 
 static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts, unsigned int epoch){
-	unsigned int count = 0;
-	long rand;
+	unsigned int count = 0;	long rand;
 	node_t *curr  = &bckt->head;
 	node_t *tail  = bckt->tail;
 	unsigned long long extracted = 0;
@@ -613,9 +614,7 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
 
 	if(bckt->epoch > epoch) return ABORT;
 
-                                lrand48_r(&seedT, &rand);
-                                count = rand & RTM_BACKOFF;
-	while(count-->0)_mm_pause();
+        lrand48_r(&seedT, &rand); count = rand & 7L; while(count-->0)_mm_pause();
   #ifdef RTM
   	extracted 	= __sync_add_and_fetch(&bckt->extractions, 1ULL);
   #else
