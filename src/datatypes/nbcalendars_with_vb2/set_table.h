@@ -85,8 +85,8 @@ static inline unsigned int hash(pkey_t timestamp, double bucket_width)
 	int upB = 0;
 
 	assertf(res_d > 4294967295, "Probable Overflow when computing the index: "
-				"TS=%d,"
-				"BW:%e, "
+				"TS=" KEY_STRING ","
+ 				"BW:%e, "
 				"TS/BW:%e, "
 				"2^32:%e\n",
 				timestamp, bucket_width, res_d,  pow(2, 32));
@@ -495,7 +495,13 @@ double compute_mean_separation_time(table_t *h,
 
 			// the bucket is not empty
 			if(left->index == index && left->type != HEAD){
-				node_t *curr = left->head.next;
+				node_t *curr = &left->head;
+				unsigned long long toskip = get_cleaned_extractions(left->extractions);
+			  	while(toskip > 0ULL && curr != left->tail){
+			  		curr = curr->next;
+			  		toskip--;
+			  	}
+ 
 				while(curr != left->tail){
 					sample_array[++counter] = curr->timestamp; 
 					curr = curr->next;
