@@ -44,7 +44,7 @@ extern __thread unsigned long long scan_list_length_en;
 extern __thread unsigned long long scan_list_length;
 extern __thread struct drand48_data seedT;
 extern __thread unsigned int tid;
-
+extern __thread int nid;
 static inline void clflush(volatile void *p){ asm volatile ("clflush (%0)" :: "r"(p)); }
 
 //#define ENABLE_PREFETCH 
@@ -61,7 +61,7 @@ static inline void clflush(volatile void *p){ asm volatile ("clflush (%0)" :: "r
 #define CACHE_INDEX_LEN 6
 #define CACHE_INDEX_MASK ( 63ULL << CACHE_INDEX_POS )
 #define CACHE_INDEX(x) ((((unsigned long long)(x)) & CACHE_INDEX_MASK  ) >> CACHE_INDEX_POS)
-#define CACHE_LIMIT 9
+#define CACHE_LIMIT 12
 //#endif
 
 #define NUM_INDEX 1
@@ -84,14 +84,14 @@ static inline void clflush(volatile void *p){ asm volatile ("clflush (%0)" :: "r
 
 #define RTM_RETRY 32
 #define RTM_FALLBACK 1
-#define RTM_BACKOFF 255L
+#define RTM_BACKOFF 15L
 
 #define BACKOFF_LOOP() {\
 long rand;\
 long fallback;\
     lrand48_r(&seedT, &rand);\
-    fallback = rand & RTM_BACKOFF;\
-    if(fallback & 1L) while(fallback--!=0) _mm_pause();\
+    fallback = (rand & RTM_BACKOFF)+nid*128;\
+    /*if(fallback & 1L)*/ while(fallback--!=0) _mm_pause();\
 }
 
 typedef struct __node_t node_t;
@@ -488,7 +488,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
     min_contention = contention <= min_contention ? contention : min_contention;
     max_contention = contention >= max_contention ? contention : max_contention;
 
-	node_t *new   = node_alloc();
+	node_t *new   = node_alloc(); //node_alloc_by_index(bckt->index);
 	new->timestamp = timestamp;
 	new->payload	= payload;
 	complete_freeze(bckt);
@@ -594,7 +594,7 @@ __local_try++ < RTM_RETRY) {
 				goto retry_tm;
 			}
 			if(__global_try < RTM_FALLBACK || __status & _XABORT_EXPLICIT) goto begin;
-			__sync_fetch_and_add(&bckt->pad3, -1LL);
+//			__sync_fetch_and_add(&bckt->pad3, -1LL);
 			return bucket_connect_fallback(bckt, new);
 
 		}

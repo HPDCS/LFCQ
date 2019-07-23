@@ -328,7 +328,7 @@ __thread unsigned long long rtm_other2=0ULL, rtm_prova2=0ULL, rtm_failed2=0ULL, 
 
 void pq_report(int TID)
 {
-printf("BCKT CONNECT "
+printf("TID:%u NID:%u BCKT CONNECT "
 "ABORTRATE:%f, "
 "TSX:%llu, "
 "RTM_OTHER:%f, "
@@ -344,6 +344,7 @@ printf("BCKT CONNECT "
 "RTM_INSERTIONS %llu, "
 "FALL_INSERTIONS %llu, "
 "NO_RTM INSERTIONS %llu \n", 
+tid,nid,
 ((double)rtm_failed)/((double)rtm_prova),
 rtm_prova, 
 ((double)rtm_other)	/((double)rtm_prova), 	
