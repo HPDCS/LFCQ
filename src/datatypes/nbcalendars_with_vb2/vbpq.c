@@ -177,9 +177,12 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	unsigned long long oldIndex = oldCur >> 32;
 	unsigned long long dist = 1;
 	double rand;
-	nbc_bucket_node *left_node, *right_node;
+	bucket_t *left_node, *left_node_next, *right_node;
 	drand48_r(&seedT, &rand);
-	search(h->array+((oldIndex + dist + (unsigned int)( ( (double)(size-dist) )*rand )) % size), -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
+	unsigned int counter = 0;
+	left_node = search(h->array+((oldIndex + dist + (unsigned int)( ( (double)(size-dist) )*rand )) % size), &left_node_next, &right_node, &counter, 0);
+	if(left_node_next != right_node && BOOL_CAS(&left_node->next, left_node_next, right_node))
+		connect_to_be_freed_node_list(left_node_next, distance);
 	#endif
 
   #if KEY_TYPE != DOUBLE
