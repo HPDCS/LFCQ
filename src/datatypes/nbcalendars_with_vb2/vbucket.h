@@ -340,8 +340,8 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 		  	// Connect...
 			do{
 	  			new->tie_breaker = 1;
-	  			curr = head;
-			  	
+	  			left = curr = head;
+			  	curr = curr->next;
 			  	while(curr->timestamp <= new->timestamp){
 	            	// keep memory if it was inserted to release memory
 	                if(curr->timestamp == new->timestamp && curr->hash == new->hash) present = 1;
