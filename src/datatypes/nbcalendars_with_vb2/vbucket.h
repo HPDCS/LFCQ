@@ -606,22 +606,30 @@ __local_try++ < RTM_RETRY) {
 }
 
 
+__thread bucket_t *last_ext_bckt 	= NULL;
+__thread node_t   *last_ext_node 	= NULL;
+__thread unsigned long long last_ext_val = 0;
+
+
+
 static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts, unsigned int epoch){
-	unsigned int count = 0;	long rand;
 	node_t *curr  = &bckt->head;
 	node_t *tail  = bckt->tail;
-	node_t *head  = &bckt->head;
+	
+	//node_t *head  = &bckt->head;
+	//unsigned long long old_extracted = 0;
+	
 	unsigned long long extracted = 0;
-	unsigned long long old_extracted = 0;
 	unsigned skipped = 0;
 	PREFETCH(curr->next, 0);
 	assertf(bckt->type != ITEM, "trying to extract from a head bucket%s\n", "");
 
 	if(bckt->epoch > epoch) return ABORT;
 
-//        lrand48_r(&seedT, &rand); count = rand & 7L; while(count-->0)_mm_pause();
+//  unsigned int count = 0;	long rand;  lrand48_r(&seedT, &rand); count = rand & 7L; while(count-->0)_mm_pause();
   #ifdef RTM
-  	old_extracted = extracted 	= __sync_add_and_fetch(&bckt->extractions, 1ULL);
+  	//old_extracted = 
+  	extracted 	= __sync_add_and_fetch(&bckt->extractions, 1ULL);
   #else
 	pthread_spin_lock(&bckt->lock);
 		extracted 	= __sync_add_and_fetch(&bckt->extractions, 1ULL);
@@ -629,7 +637,21 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
   #endif
   	if(is_freezed_for_mov(extracted)) return MOV_FOUND;
   	if(is_freezed(extracted)) return EMPTY;
+
+
+  	if(last_ext_bckt != bckt)	{
+  		last_ext_bckt = bckt;
+  		last_ext_val = extracted;
+  	}
+  	else{
+  		curr = last_ext_node;
+ 		unsigned long long tmp = last_ext_val;
+  		last_ext_val = extracted;
+  		extracted -= tmp;
+  	}
   	
+
+
   	while(extracted > 0ULL && curr != tail){
   		/*if(skipped > 25 && extracted > 2){
   			if((__status = _xbegin ()) == _XBEGIN_STARTED)
@@ -661,6 +683,7 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
 	assert(is_freezed(bckt->extractions));
 	return EMPTY; // try to compact
   	} 
+  	last_ext_node = curr;
   	*result = curr->payload;
   	*ts		= curr->timestamp;
   	
