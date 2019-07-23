@@ -256,6 +256,10 @@ static int search_and_insert(bucket_t *head, unsigned int index, pkey_t timestam
 	bucket_t *left, *left_next, *right;
 	unsigned int distance;
 
+	left = search(head, &left_next, &right, &distance, index);
+	if(is_marked(left_next, VAL) && left_next != right && BOOL_CAS(&left->next, left_next, right))
+	connect_to_be_freed_node_list(left_next, distance);
+
 	do{
 		// first get bucket
 		left = search(head, &left_next, &right, &distance, index);
