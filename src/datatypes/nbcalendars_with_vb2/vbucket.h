@@ -619,7 +619,7 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
 
 	if(bckt->epoch > epoch) return ABORT;
 
-        lrand48_r(&seedT, &rand); count = rand & 7L; while(count-->0)_mm_pause();
+//        lrand48_r(&seedT, &rand); count = rand & 7L; while(count-->0)_mm_pause();
   #ifdef RTM
   	old_extracted = extracted 	= __sync_add_and_fetch(&bckt->extractions, 1ULL);
   #else
@@ -631,7 +631,7 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
   	if(is_freezed(extracted)) return EMPTY;
   	
   	while(extracted > 0ULL && curr != tail){
-  		if(skipped > 25 && extracted > 2){
+  		/*if(skipped > 25 && extracted > 2){
   			if((__status = _xbegin ()) == _XBEGIN_STARTED)
 			{
 				if(old_extracted != bckt->extractions){ TM_ABORT(0xf2);}
@@ -642,7 +642,7 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
 			}
 			else{}
 
-  		}
+  		}*/
   		curr = curr->next;
 		if(curr) 	PREFETCH(curr->next, 0);
   		extracted--;
