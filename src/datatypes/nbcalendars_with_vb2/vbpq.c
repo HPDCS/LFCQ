@@ -87,7 +87,7 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	res->hashtable->tail.index = UINT_MAX;
 	res->hashtable->tail.type = TAIL;
 	res->hashtable->tail.next = NULL; 
-
+	res->hashtable->cached_node = NULL;
 	for (i = 0; i < MINIMUM_SIZE; i++)
 	{
 		res->hashtable->array[i].next = &res->hashtable->tail;
@@ -265,7 +265,7 @@ begin:
 
 		old_cached_node = left_node = h->cached_node; 
 	
-		if(left_node == NULL || left_node->index != index || left_node->epoch > epoch){
+		if(left_node == NULL || left_node->index != index){
 
 			left_node = search(min, &left_node_next, &right_node, &counter, index);
 		
@@ -288,7 +288,7 @@ begin:
 
 			// The bucket was not empty
 			if(res == OK){
-					if(old_cached_node != left_node) BOOL_CAS(&h->cached_node, old_cached_node, left_node);
+					if(old_cached_node != left_node) __sync_lock_test_and_set(&h->cached_node, left_node); // BOOL_CAS(&h->cached_node, old_cached_node, left_node);
 					critical_exit();
 					concurrent_dequeue += (unsigned long long) (__sync_fetch_and_add(&h->d_counter.count, 1) - con_de);
 					return left_ts;

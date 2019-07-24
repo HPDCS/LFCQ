@@ -365,7 +365,7 @@ static void set_new_table(table_t *h, unsigned int counter)
 		new_h->perc_used_bucket 	= h->perc_used_bucket;
 		new_h->elem_per_bucket 		= h->elem_per_bucket;
 		new_h->pub_per_epb 			= h->perc_used_bucket * h->elem_per_bucket;
-		
+		new_h->cached_node		= NULL;
 		new_h->tail.extractions 	= 0ULL;
 		new_h->tail.epoch 			= 0U;
 		new_h->tail.index 			= UINT_MAX;
