@@ -208,6 +208,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 
 unsigned int ex = 0;
 
+__thread table_t *last_table = NULL;
+
 pkey_t pq_dequeue(void *q, void** result)
 {
 	vbpq *queue = (vbpq*)q;
@@ -240,6 +242,13 @@ begin:
 	con_de = h->d_counter.count;
 	attempts = 0;
 
+	if(last_table != h){
+		last_table 		= h;
+		last_ext_bckt 	= NULL;
+		last_ext_node 	= NULL;
+		last_ext_val 	= 0;
+	}
+
 	do
 	{	
 
@@ -263,7 +272,7 @@ begin:
 		// a reshuffle has been detected => restart
 		if(is_marked(min_next, MOV)) goto begin;
 
-		old_cached_node = left_node = h->cached_node; 
+		left_node = last_ext_bckt; 
 	
 		if(left_node == NULL || left_node->index != index){
 
@@ -288,7 +297,6 @@ begin:
 
 			// The bucket was not empty
 			if(res == OK){
-					if(old_cached_node != left_node) __sync_lock_test_and_set(&h->cached_node, left_node); // BOOL_CAS(&h->cached_node, old_cached_node, left_node);
 					critical_exit();
 					concurrent_dequeue += (unsigned long long) (__sync_fetch_and_add(&h->d_counter.count, 1) - con_de);
 					return left_ts;
