@@ -96,7 +96,6 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 		res->hashtable->array[i].index = 0U;
 		res->hashtable->array[i].extractions = 0ULL;
 	}
-
 	return res;
 }
 
@@ -190,7 +189,6 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
   #endif
 	critical_exit();
 	return res;
-
 }
 
 
@@ -205,10 +203,9 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
  * @return the highest priority 
  *
  */
-
 unsigned int ex = 0;
 
-__thread unsigned long long *__last_current = 0;
+__thread unsigned long long __last_current = -1;
 __thread table_t *__last_table = NULL;
 __thread bucket_t *__last_bckt 	= NULL;
 
@@ -247,7 +244,7 @@ begin:
 
 	if(__last_table != h){
 		__last_table 	= h;
-		__last_current  = 0;
+		__last_current  = -1;
 		__last_bckt 	= NULL;
 		__last_node 	= NULL;
 		__last_val 	= 0;
@@ -275,18 +272,19 @@ begin:
 		// a reshuffle has been detected => restart
 		if(is_marked(min_next, MOV)) goto begin;
 
-		if(__last_current == current) left_node = __last_bckt;
-		else {
+		if(__last_current != current)
+		{
 			__last_current  = current;
 			__last_bckt 	= NULL;
 			__last_node 	= NULL;
 			__last_val 	= 0;
 		}
-	
+		left_node = __last_bckt;
+
 		if(left_node == NULL || left_node->index != index || is_freezed(left_node->extractions))
 		{
 			left_node = search(min, &left_node_next, &right_node, &counter, index);
-		
+
 			// if i'm here it means that the physical bucket was empty. Check for queue emptyness
 			if(left_node->type == HEAD  && right_node->type == TAIL   && size == 1 && !is_freezed_for_mov(min->extractions))
 			{
@@ -295,9 +293,10 @@ begin:
 				return INFTY;
 			}
 		}
+
 		// Bucket present
 		if(left_node->index == index && left_node->type != HEAD){
-	
+
 			if(left_node->epoch > epoch) goto begin;
 			if(left_node != __last_bckt){
 				__last_bckt 	= left_node;

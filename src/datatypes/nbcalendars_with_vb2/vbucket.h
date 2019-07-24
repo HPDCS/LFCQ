@@ -589,7 +589,7 @@ unsigned int loops = LOOPS_FOR_CACHE;
 //do{
 
 BACKOFF_LOOP();
-//if(!BOOL_CAS(&left->next, curr, curr))  {rtm_nested++;goto begin;}
+if(!BOOL_CAS(&left->next, curr, curr))  {rtm_nested++;goto begin;}
 
 
 // if(position < VAL_CAS(&bckt->extractions, 0, 0))  {rtm_debug++;goto begin;}
@@ -657,9 +657,8 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
 	node_t *tail  = bckt->tail;
 	
 	//node_t *head  = &bckt->head;
-	//unsigned long long old_extracted = 0;
-	
-	unsigned long long old_extracted = extracted = 0;
+	unsigned long long old_extracted = 0;	
+	unsigned long long extracted = 0;
 	unsigned skipped = 0;
 	PREFETCH(curr->next, 0);
 	assertf(bckt->type != ITEM, "trying to extract from a head bucket%s\n", "");
