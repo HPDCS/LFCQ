@@ -213,7 +213,7 @@ pkey_t pq_dequeue(void *q, void** result)
 	vbpq *queue = (vbpq*)q;
 	bucket_t *min, *min_next, 
 					*left_node, *left_node_next, 
-					*array, *right_node;
+					*array, *right_node, *old_cached_node;
 	table_t * h = NULL;
 	
 	unsigned long long current, old_current, new_current;
@@ -263,16 +263,20 @@ begin:
 		// a reshuffle has been detected => restart
 		if(is_marked(min_next, MOV)) goto begin;
 
-		left_node = search(min, &left_node_next, &right_node, &counter, index);
-		
-		// if i'm here it means that the physical bucket was empty. Check for queue emptyness
-		if(left_node->type == HEAD  && right_node->type == TAIL   && size == 1 && !is_freezed_for_mov(min->extractions))
-		{
-			critical_exit();
-			*result = NULL;
-			return INFTY;
-		}
+		old_cached_node = left_node = h->cached_node; 
+	
+		if(left_node == NULL || left_node->index != index || left_node->epoch > epoch){
 
+			left_node = search(min, &left_node_next, &right_node, &counter, index);
+		
+			// if i'm here it means that the physical bucket was empty. Check for queue emptyness
+			if(left_node->type == HEAD  && right_node->type == TAIL   && size == 1 && !is_freezed_for_mov(min->extractions))
+			{
+				critical_exit();
+				*result = NULL;
+				return INFTY;
+			}
+		}
 		// Bucket present
 		if(left_node->index == index && left_node->type != HEAD){
 	
@@ -284,6 +288,7 @@ begin:
 
 			// The bucket was not empty
 			if(res == OK){
+					if(old_cached_node != left_node) BOOL_CAS(&h->cached_node, old_cached_node, left_node);
 					critical_exit();
 					concurrent_dequeue += (unsigned long long) (__sync_fetch_and_add(&h->d_counter.count, 1) - con_de);
 					return left_ts;

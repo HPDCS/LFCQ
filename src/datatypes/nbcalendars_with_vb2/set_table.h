@@ -58,6 +58,9 @@ struct __table
 	volatile unsigned long long current; 
 	char zpad4[56];     
 	
+	bucket_t * volatile cached_node; 
+	char zpad5[56];     
+	
 	bucket_t tail;
 //	char zpad5[256-sizeof(bucket_t)];
 
