@@ -195,19 +195,20 @@ do {                                                                         \
 } while ( 0 )
 
 
-/* Since numa allocation takes at least 1 page
- * Round up to the minimum number of pages to keep chunks
- * */
+/* Allocate more empty chunks from the heap. */
+#define CHUNKS_PER_ALLOC 1000
 static chunk_t* node_alloc_more_chunks(unsigned int node)
 {
-    int i;
+    //int i;
     unsigned int page_size = gc_global.page_size;
     char *mem_area, *end, *check;
 
     chunk_t *h, *p;
-    /* One chunks are 816bytes, a page is 4096, a page is enough for 5 chunks + enough for meta */
-
-    size_t alloc_size = page_size * 50;
+    /* One chunks are 816bytes, a page is 4096, a page is enough for 5 chunks + 16bits (enough for meta) */
+    size_t alloc_size = page_size * 50; //250 chnunks
+    
+    /*
+    // we don't care how many chunks we are allocating
     unsigned int chunks_num = alloc_size/sizeof(chunk_t);
     
     if (chunks_num * sizeof(chunk_t) == alloc_size) { 
@@ -215,8 +216,7 @@ static chunk_t* node_alloc_more_chunks(unsigned int node)
         chunks_num = alloc_size/sizeof(chunk_t);
         //increas memory size in order to have enough for meta
     }
-
-    //printf("Allocated %d chunks\n", chunks_num);
+    */
 
     /* I care which is the numa node of this area of memory because of hooks*/
     mem_area = numa_alloc_onnode(alloc_size, node);
@@ -231,9 +231,9 @@ static chunk_t* node_alloc_more_chunks(unsigned int node)
         // mark the page with the node number
         ((unsigned long*) mem_area)[0] = node;
         check = mem_area + page_size;
-
         mem_area += sizeof(unsigned long);
-        while (mem_area + sizeof(chunk_t) < check) // is this correct or I'm missing one chunk? 
+
+        while (mem_area + sizeof(chunk_t) <= check) 
         {
             // allocate one chunk
             p->next = mem_area;
@@ -247,44 +247,13 @@ static chunk_t* node_alloc_more_chunks(unsigned int node)
         //next page
         mem_area = check;   
     }
-    
-    /*
-    for ( i = 1; i < chunks_num; i++ )
-    {
-        p->next = p + 1;
-        p++;
-    }
-    */
-    p->next = h;
-
-    return(h);
-}
-
-
-/* Allocate more empty chunks from the heap. */
-#define CHUNKS_PER_ALLOC 1000
-/*
-static chunk_t *alloc_more_chunks(void)
-{
-    int i;
-    chunk_t *h, *p;
-
-    h = p = ALIGNED_ALLOC(CHUNKS_PER_ALLOC * sizeof(*h));
-    if ( h == NULL ) MEM_FAIL(CHUNKS_PER_ALLOC * sizeof(*h));
-
-    for ( i = 1; i < CHUNKS_PER_ALLOC; i++ )
-    {
-        p->next = p + 1;
-        p++;
-    }
 
     p->next = h;
 
     return(h);
 }
-*/
 
-/* Put a chain of chunks onto a list. */
+/* Put a chain of chunks onto a list. */ 
 static void add_chunks_to_list(chunk_t *ch, chunk_t *head)
 {
     chunk_t *h_next, *new_h_next, *ch_next;
@@ -293,7 +262,6 @@ static void add_chunks_to_list(chunk_t *ch, chunk_t *head)
     do { ch->next = h_next = new_h_next; WMB_NEAR_CAS(); }
     while ( (new_h_next = CASPO(&head->next, h_next, ch_next)) != h_next );
 }
-
 
 /* Allocate a chain of @n empty chunks. Pointers may be garbage. */
 static chunk_t *node_get_empty_chunks(int n, unsigned int node)
@@ -323,36 +291,6 @@ static chunk_t *node_get_empty_chunks(int n, unsigned int node)
     rt->next = rh;
     return(rh);
 }
-
-/* Allocate a chain of @n empty chunks. Pointers may be garbage. */
-// static chunk_t *get_empty_chunks(int n)
-// {
-//     int i;
-//     chunk_t *new_rh, *rh, *rt, *head;
-
-//  retry:
-//     head = gc_global.free_chunks;
-//     new_rh = head->next;
-//     do {
-//         rh = new_rh;
-//         rt = head;
-//         WEAK_DEP_ORDER_RMB();
-//         for ( i = 0; i < n; i++ )
-//         {
-//             if ( (rt = rt->next) == head )
-//             {
-//                 /* Allocate some more chunks. */
-//                 add_chunks_to_list(alloc_more_chunks(), head);
-//                 goto retry;
-//             }
-//         }
-//     }
-//     while ( (new_rh = CASPO(&head->next, rh, rt->next)) != rh );
-
-//     rt->next = rh;
-//     return(rh);
-// }
-
 
 /* Get @n filled chunks, pointing at blocks of @sz bytes each. 
  * Get them from requested node
@@ -389,8 +327,6 @@ static chunk_t *node_get_filled_chunks(int n, int sz, unsigned int numa_node)
     h = p = node_get_empty_chunks(n, numa_node);
 
     // Clean code below 
-
-    // tmporary code 
     p->i = BLKS_PER_CHUNK;
     i = 0;
 
@@ -399,13 +335,13 @@ static chunk_t *node_get_filled_chunks(int n, int sz, unsigned int numa_node)
     {
 
         // mark the page with the node number
-        //((unsigned long*) node)[0] = numa_node;
-
+        ((unsigned long*) node)[0] = numa_node;
         // compute page boundary
         check = node + page_size;
 
         // skip numa node idx
         node += sizeof(unsigned long);
+
         while (node < check)
         {
             // here node is safe to use
@@ -427,39 +363,6 @@ static chunk_t *node_get_filled_chunks(int n, int sz, unsigned int numa_node)
 out:
     return(h);
 }
-
-/* Get @n filled chunks, pointing at blocks of @sz bytes each. */
-// static chunk_t *get_filled_chunks(int n, int sz)
-// {
-//     chunk_t *h, *p;
-//     char *node;
-//     int i;
-
-// #ifdef PROFILE_GC
-//     ADD_TO(gc_global.total_size, n * BLKS_PER_CHUNK * sz);
-//     ADD_TO(gc_global.allocations, 1);
-// #endif
-
-//     node = ALIGNED_ALLOC(n * BLKS_PER_CHUNK * sz);
-//     if ( node == NULL ) MEM_FAIL(n * BLKS_PER_CHUNK * sz);
-// #ifdef WEAK_MEM_ORDER
-//     INITIALISE_NODES(node, n * BLKS_PER_CHUNK * sz);
-// #endif
-
-//     h = p = get_empty_chunks(n);
-//     do {
-//         p->i = BLKS_PER_CHUNK;
-//         for ( i = 0; i < BLKS_PER_CHUNK; i++ )
-//         {
-//             p->blk[i] = node;
-//             node += sz;
-//         }
-//     }
-//     while ( (p = p->next) != h );
-
-//     return(h);
-// }
-
 
 /*
  * gc_async_barrier: Cause an asynchronous barrier in all other threads. We do 
@@ -508,36 +411,6 @@ static chunk_t *node_get_alloc_chunk(gc_t *gc, int i, unsigned int numa_node)
     assert(p->i == BLKS_PER_CHUNK);
     return(p);
 }
-
-/* Grab a level @i allocation chunk from main chain. */
-// static chunk_t *get_alloc_chunk(gc_t *gc, int i)
-// {
-//     chunk_t *alloc, *p, *new_p, *nh;
-//     unsigned int sz;
-
-//     alloc = gc_global.alloc[i];
-//     new_p = alloc->next;
-
-//     do {
-//         p = new_p;
-//         while ( p == alloc )
-//         {
-//             sz = gc_global.alloc_size[i];
-//             nh = get_filled_chunks(sz, gc_global.blk_sizes[i]);
-//             ADD_TO(gc_global.alloc_size[i], sz >> 3);
-//             gc_async_barrier(gc);
-//             add_chunks_to_list(nh, alloc);
-//             p = alloc->next;
-//         }
-//         WEAK_DEP_ORDER_RMB();
-//     }
-//     while ( (new_p = CASPO(&alloc->next, p, p->next)) != p );
-
-//     p->next = p;
-//     assert(p->i == BLKS_PER_CHUNK);
-//     return(p);
-// }
-
 
 #ifndef MINIMAL_GC
 /*
@@ -612,25 +485,15 @@ static void gc_reclaim(ptst_t * our_ptst)
                 for ( j = 0; j < t->i; j++ ) 
                     fn(our_ptst, t->blk[j]);
 
-                k = * ((unsigned long*) (((unsigned long) t) & _PAGE_NODE_BITMAKS));
+                k = *((unsigned long*) (((unsigned long) t) & _PAGE_NODE_BITMAKS));
                 
                 next_t = t->next;
                 
-                add_chunks_to_list(t, gc_global.free_chunks[k]);
+                // @TODO try to improve this, maybe we can reduce the number of accesses to gc_global
+                add_chunks_to_list(t, gc_global.free_chunks[k]); //this is heavy since we are adding one chunk at a time
                     
             } while ( next_t != ch );
 
-            // the add must be done by hand
-            // create n queues of chunks
-
-                            /*     
-                chunk_t *h_next, *new_h_next, *ch_next;
-                ch_next    = ch->next;
-                new_h_next = head->next;
-                do { ch->next = h_next = new_h_next; WMB_NEAR_CAS(); }
-                while ( (new_h_next = CASPO(&head->next, h_next, ch_next)) != h_next );
-                */
-        
         }
 
     }
@@ -643,86 +506,8 @@ static void gc_reclaim(ptst_t * our_ptst)
     gc_global.inreclaim = 0;
 }
 
-/*
- * gc_reclaim: Scans the list of struct gc_perthread looking for the lowest
- * maximum epoch number seen by a thread that's in the list code. If it's the
- * current epoch, the "nearly-free" lists from the previous epoch are 
- * reclaimed, and the epoch is incremented.
- */
-// static void gc_reclaim(ptst_t * our_ptst)
-// {
-//     ptst_t       *ptst, *first_ptst; //, *our_ptst = NULL;
-//     gc_t         *gc = NULL;
-//     unsigned long curr_epoch;
-//     chunk_t      *ch, *t;
-//     //int           two_ago, three_ago, i, j;
-//     int           three_ago, i, j;
-    
-//     /* Barrier to entering the reclaim critical section. */
-//     if ( gc_global.inreclaim || CASIO(&gc_global.inreclaim, 0, 1) ) return;
-
-//     /*
-//      * Grab first ptst structure *before* barrier -- prevent bugs
-//      * on weak-ordered architectures.
-//      */
-//     first_ptst = ptst_first();
-//     MB();
-//     curr_epoch = gc_global.current;
-
-//     /* Have all threads seen the current epoch, or not in mutator code? */
-//     for ( ptst = first_ptst; ptst != NULL; ptst = ptst_next(ptst) )
-//     {
-//         if ( (ptst->count > 1) && (ptst->gc->epoch != curr_epoch) ) goto out;
-//     }
-
-//     /*
-//      * Three-epoch-old garbage lists move to allocation lists.
-//      * Two-epoch-old garbage lists are cleaned out.
-//      */
-//     //two_ago   = (curr_epoch+2) % NR_EPOCHS;
-//     three_ago = (curr_epoch+1) % NR_EPOCHS;
-//     //if ( gc_global.nr_hooks != 0 )
-//         //our_ptst = (ptst_t *)pthread_getspecific(ptst_key);
-//     for ( ptst = first_ptst; ptst != NULL; ptst = ptst_next(ptst) )
-//     {
-//         gc = ptst->gc;
-
-//         for ( i = 0; i < gc_global.nr_sizes; i++ )
-//         {
-//             /* NB. Leave one chunk behind, as it is probably not yet full. */
-//             t = gc->garbage[three_ago][i];
-//             if ( (t == NULL) || ((ch = t->next) == t) ) continue;
-//             gc->garbage_tail[three_ago][i]->next = ch;
-//             gc->garbage_tail[three_ago][i] = t;
-//             t->next = t;
-//             add_chunks_to_list(ch, gc_global.alloc[i]);
-//         }
-
-//         for ( i = 0; i < gc_global.nr_hooks; i++ )
-//         {
-//             hook_fn_t fn = gc_global.hook_fns[i];
-//             ch = gc->hook[three_ago][i];
-//             if ( ch == NULL ) continue;
-//             gc->hook[three_ago][i] = NULL;
-
-//             t = ch;
-//             do { for ( j = 0; j < t->i; j++ ) fn(our_ptst, t->blk[j]); }
-//             while ( (t = t->next) != ch );
-
-//             add_chunks_to_list(ch, gc_global.free_chunks);
-//         }
-//     }
-
-//     /* Update current epoch. */
-//     WMB();
-//     gc_global.current = (curr_epoch+1) % NR_EPOCHS;
-
-//  out:
-//     gc_global.inreclaim = 0;
-// }
-
 #endif /* MINIMAL_GC */
-
+// @TODO clean up this one
 void *gc_alloc(ptst_t *ptst, int alloc_id)
 {
 
@@ -753,7 +538,7 @@ void *gc_alloc(ptst_t *ptst, int alloc_id)
         }
     }
 
-    //((unsigned long*) node)[0] = numa_node;
+    //((unsigned long*) node)[0] = node; // avoid first touch now
 
     return ch->blk[--ch->i];
 }
@@ -765,7 +550,7 @@ void *gc_alloc_node(ptst_t *ptst, int alloc_id, unsigned int node)
     chunk_t *ch;
     void *ret;
     unsigned long* tmp;
-    unsigned int x;
+    unsigned long x;
 
     ch = gc->alloc[node][alloc_id];
     if ( ch->i == 0 )
@@ -786,12 +571,11 @@ void *gc_alloc_node(ptst_t *ptst, int alloc_id, unsigned int node)
         }
     }
     
-    // metti qui nodo sulla pagina
     // int node = * ((int*) (((unsigned long) p) & _PAGE_NODE_BITMAKS));
     ret = ch->blk[--ch->i];
 
     tmp = (unsigned long*) (((unsigned long) ret) & _PAGE_NODE_BITMAKS);
-    x = __sync_val_compare_and_swap(tmp, 0, node);
+    x = __sync_val_compare_and_swap(tmp, 0, node); //mark the page with zone id
     assert(x == 0 || x == node);
 
     return ret;
@@ -886,7 +670,6 @@ void gc_add_ptr_to_hook_list(ptst_t *ptst, void *ptr, int hook_id)
  * */
 void node_gc_add_ptr_to_hook_list(ptst_t *ptst, void *ptr, int hook_id, unsigned int node)
 {
-
     gc_t *gc = ptst->gc;
     chunk_t *och, *ch;
 
@@ -894,8 +677,8 @@ void node_gc_add_ptr_to_hook_list(ptst_t *ptst, void *ptr, int hook_id, unsigned
 
     if ( ch == NULL )
     {
-        //which node should serve request
-        gc->hook[gc->epoch][hook_id] = ch = node_chunk_from_cache(gc, node); //explode_here
+        //which node should serve request - local node
+        gc->hook[gc->epoch][hook_id] = ch = node_chunk_from_cache(gc, node);
     }
     else
     {
@@ -911,30 +694,6 @@ void node_gc_add_ptr_to_hook_list(ptst_t *ptst, void *ptr, int hook_id, unsigned
 
     ch->blk[ch->i++] = ptr;
 }
-
-// void gc_add_ptr_to_hook_list(ptst_t *ptst, void *ptr, int hook_id)
-// {
-//     gc_t *gc = ptst->gc;
-//     chunk_t *och, *ch = gc->hook[gc->epoch][hook_id];
-
-//     if ( ch == NULL )
-//     {
-//         gc->hook[gc->epoch][hook_id] = ch = chunk_from_cache(gc);
-//     }
-//     else
-//     {
-//         ch = ch->next;
-//         if ( ch->i == BLKS_PER_CHUNK )
-//         {
-//             och       = gc->hook[gc->epoch][hook_id];
-//             ch        = chunk_from_cache(gc);
-//             ch->next  = och->next;
-//             och->next = ch;
-//         }
-//     }
-
-//     ch->blk[ch->i++] = ptr;
-// }
 
 void gc_unsafe_free(ptst_t *ptst, void *p, int alloc_id)
 {
@@ -1045,21 +804,11 @@ int gc_add_allocator(int alloc_size)
     gc_global.blk_sizes[i]  = alloc_size;
     for (k = 0; k < gc_global.numa_nodes; k++) {
         gc_global.alloc_size[k][i] = ALLOC_CHUNKS_PER_LIST;
-        gc_global.alloc[k][i] = node_get_filled_chunks(ALLOC_CHUNKS_PER_LIST, alloc_size, i);
+        gc_global.alloc[k][i] = node_get_filled_chunks(ALLOC_CHUNKS_PER_LIST, alloc_size, k);
     }
     
     return i;
 }
-
-// int gc_add_allocator(int alloc_size)
-// {
-//     int ni, i = gc_global.nr_sizes;
-//     while ( (ni = CASIO(&gc_global.nr_sizes, i, i+1)) != i ) i = ni;
-//     gc_global.blk_sizes[i]  = alloc_size;
-//     gc_global.alloc_size[i] = ALLOC_CHUNKS_PER_LIST;
-//     gc_global.alloc[i] = get_filled_chunks(ALLOC_CHUNKS_PER_LIST, alloc_size);
-//     return i;
-// }
 
 void gc_remove_allocator(int alloc_id)
 {
@@ -1099,7 +848,7 @@ void _init_gc_subsystem(void)
 
     gc_global.page_size   = (unsigned int)sysconf(_SC_PAGESIZE); //maybe move it to a macro
     gc_global.numa_nodes = (unsigned int) numa_num_configured_nodes(); // count number of numa nodes
-    
+
     for (i=0; i<gc_global.numa_nodes; i++) {
         gc_global.free_chunks[i] = node_alloc_more_chunks(i);
     }

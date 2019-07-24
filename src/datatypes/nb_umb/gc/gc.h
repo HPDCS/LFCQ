@@ -17,7 +17,6 @@ void gc_remove_allocator(int alloc_id);
  * not made visible to other processes.
  */
 void *gc_alloc(ptst_t *ptst, int alloc_id);
-
 void *gc_alloc_node(ptst_t *ptst, int alloc_id, unsigned int node); //<--- NEW
 
 void gc_free(ptst_t *ptst, void *p, int alloc_id);
@@ -31,6 +30,7 @@ typedef void (*hook_fn_t)(ptst_t *, void *);
 int gc_add_hook(hook_fn_t fn);
 void gc_remove_hook(int hook_id);
 void gc_add_ptr_to_hook_list(ptst_t *ptst, void *ptr, int hook_id);
+void node_gc_add_ptr_to_hook_list(ptst_t *ptst, void *ptr, int hook_id, unsigned int node);
 
 /* Per-thread entry/exit from critical regions */
 void gc_enter(ptst_t *ptst);

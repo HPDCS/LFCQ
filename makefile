@@ -9,18 +9,19 @@ EXECUTABLES :=
 USER_OBJS :=
 LIBS := -lpthread -lm -lnuma -lrt -mrtm
 SRC_DIR := src
-TARGETS := NBCQ LIND MARO CBCQ SLCQ NBVB 2CAS NRTM VBPQ UNBCQ #V2CQ NUMA WORK
+TARGETS := NBCQ LIND MARO CBCQ SLCQ NBVB 2CAS NRTM VBPQ UNBCQ NUMAQ #V2CQ NUMA WORK
 
 
 UTIL_value := src/utils/common.o src/utils/hpdcs_math.o 
 GACO_value := src/gc/gc.o src/gc/ptst.o
 ARCH_value := src/arch/x86.o
 
-# Attempt of Numa firendly EBR
+
 NGACO_value := src/datatypes/nb_umb/gc/gc.o src/datatypes/nb_umb/gc/ptst.o
-# myCQ + dumb numa 
-UNBCQ_value := src/datatypes/nb_umb/nb_calqueue.o src/datatypes/nb_umb/common_nb_calqueue.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
-#
+
+NUMAQ_value := src/datatypes/nb_umb/numaq/nb_calqueue.o src/datatypes/nb_umb/numaq/msq.o src/datatypes/nb_umb/numaq/common_nb_calqueue.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMAQ_link := gcc
+UNBCQ_value := src/datatypes/nb_umb/unbcq/nb_calqueue.o src/datatypes/nb_umb/unbcq/common_nb_calqueue.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 UNBCQ_link := gcc
 
 SLCQ_value := src/datatypes/slcalqueue/calqueue.o  $(UTIL_value)
@@ -49,7 +50,7 @@ SLCQ_link := gcc
 
 NBCQ_link := gcc 
 VBPQ_link := gcc 
-NBVB_link := gcc 
+NBVB_link := gcc
 2CAS_link := gcc 
 NRTM_link := gcc 
 
@@ -95,7 +96,7 @@ else ifeq ($(OBJS_DIR), GProf)
 	DEBUG+=-pg
 endif
 
-C_SUBDIRS 		:= src src/datatypes/nbcalendars src/datatypes/nbcalendars_with_vb src/datatypes/nbcalendars_with_vb2 src/datatypes/nbcalendars_with_vb_rtm src/datatypes/nbcalendars_with_vb_2CAS  src/datatypes/nbskiplists src/datatypes/slcalqueue  src/arch src/gc src/utils src/datatypes/nb_umb src/datatypes/nb_umb/gc
+C_SUBDIRS 		:= src src/datatypes/nbcalendars src/datatypes/nbcalendars_with_vb src/datatypes/nbcalendars_with_vb2 src/datatypes/nbcalendars_with_vb_rtm src/datatypes/nbcalendars_with_vb_2CAS  src/datatypes/nbskiplists src/datatypes/slcalqueue  src/arch src/gc src/utils src/datatypes/nb_umb/unbcq src/datatypes/nb_umb/numaq src/datatypes/nb_umb/gc
 C_SRCS			:= $(shell ls   $(patsubst %, %/*.c, $(C_SUBDIRS)) )
 C_SRCS 			:= $(filter-out $(FILTER_OUT_C_SRC), $(C_SRCS))
 C_OBJS			:= $(strip $(subst .c,.o, $(C_SRCS)))
