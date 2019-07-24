@@ -229,7 +229,7 @@ static chunk_t* node_alloc_more_chunks(unsigned int node)
     while (mem_area < end)
     {
         // mark the page with the node number
-        ((unsigned long*) mem_area)[0] = node;
+        ((unsigned long*) mem_area)[0] = (unsigned long) node;
         check = mem_area + page_size;
         mem_area += sizeof(unsigned long);
 
@@ -335,7 +335,7 @@ static chunk_t *node_get_filled_chunks(int n, int sz, unsigned int numa_node)
     {
 
         // mark the page with the node number
-        ((unsigned long*) node)[0] = numa_node;
+        ((unsigned long*) node)[0] = (unsigned long) numa_node;
         // compute page boundary
         check = node + page_size;
 
@@ -574,9 +574,12 @@ void *gc_alloc_node(ptst_t *ptst, int alloc_id, unsigned int node)
     // int node = * ((int*) (((unsigned long) p) & _PAGE_NODE_BITMAKS));
     ret = ch->blk[--ch->i];
 
+    *(unsigned long*) (((unsigned long) ret) & _PAGE_NODE_BITMAKS) = node;
+    /*
     tmp = (unsigned long*) (((unsigned long) ret) & _PAGE_NODE_BITMAKS);
     x = __sync_val_compare_and_swap(tmp, 0, node); //mark the page with zone id
-    assert(x == 0 || x == node);
+    assert(x == 0 || x == node); //either is first allocation, or the page was already marked
+    */
 
     return ret;
 }
@@ -608,7 +611,7 @@ void gc_free(ptst_t *ptst, void *p, int alloc_id)
     */
 #ifndef MINIMAL_GC
 
-    int node = * ((int*) (((unsigned long) p) & _PAGE_NODE_BITMAKS));
+    unsigned int node = *((unsigned long*) (((unsigned long) p) & _PAGE_NODE_BITMAKS));
 
     gc_t *gc = ptst->gc;
     chunk_t *prev, *new, *ch = gc->garbage[node][gc->epoch][alloc_id];

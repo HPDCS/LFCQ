@@ -1275,7 +1275,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			// all queues are empty
 			if (extracted_op == NULL) {
 				printf("No op available"); //@TODO how to handle this case 
-				exit(1);
+				continue;
 			}
 
 			//extracted op, executing

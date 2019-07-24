@@ -65,6 +65,6 @@ bool msq_dequeue(queue_t *queue, void **result)
             exit(1);
     }
     
-    gc_free(ptst, node, gc_aid[GC_NODES]);
+    //gc_free(ptst, node, gc_aid[GC_NODES]);
     return true;
 }
