@@ -33,7 +33,7 @@ then
     PRE2="LLC-loads,LLC-load-misses,LLC-stores,L1-icache-load-misses,L1-icache-loads,L1-icache-prefetches,dTLB-load-misses,dTLB-loads,iTLB-load-misses,iTLB-loads,node-load-misses,node-loads"
   #  PRE1="perf stat -e L1-dcache-load-misses," #,L1-dcache-loads,"
     PRE2="LLC-loads,LLC-load-misses,LLC-stores"
-	PRE1="perf stat -e L1-dcache-load-misses,L1-dcache-loads,"
+	PRE1="perf stat -e L1-dcache-load-misses,L1-dcache-loads,L1-dcache-stores,"
 	#PRE2="LLC-loads,LLC-load-misses,
 #PRE2="rtm_retired.aborted,rtm_retired.aborted_misc1,rtm_retired.aborted_misc3,rtm_retired.aborted_misc5,rtm_retired.start"
 else	
