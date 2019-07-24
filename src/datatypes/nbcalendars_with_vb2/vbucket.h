@@ -84,15 +84,15 @@ static inline void clflush(volatile void *p){ asm volatile ("clflush (%0)" :: "r
 
 #define RTM_RETRY 32
 #define RTM_FALLBACK 1
-#define RTM_BACKOFF 7L
+#define RTM_BACKOFF 1L
 
-#define LOOPS_FOR_CACHE 64
+#define LOOPS_FOR_CACHE 256
 
 #define BACKOFF_LOOP() {\
 long rand;\
 long fallback;\
     lrand48_r(&seedT, &rand);\
-    fallback = (rand & RTM_BACKOFF);\
+    fallback = (rand & RTM_BACKOFF) /* + nid*350*/;\
     /*if(fallback & 1L)*/ while(fallback--!=0) _mm_pause();\
 }
 
@@ -125,7 +125,8 @@ struct __bucket_t
 	node_t * volatile pending_insert;		// 40
 	bucket_t * volatile next;			// 48
 	volatile unsigned int pending_insert_res;       // 52
-	char __pad_4[4];
+	//char __pad_4[4];
+	volatile unsigned int socket;
 	char __pad_1[8];				// 64
 //-----------------------------
 	node_t head;					// 32
@@ -246,7 +247,7 @@ static inline bucket_t* bucket_alloc(){
     res->head.timestamp		= MIN;
     res->head.tie_breaker	= 0U;
     res->head.next			= res->tail;
-    
+    res->socket = 0;
     #ifndef RTM
     pthread_spin_init(&res->lock, 0);
     #endif
@@ -492,6 +493,7 @@ __thread unsigned long long cnt_contention = 0ULL;
 __thread unsigned long long min_contention = -1LL;
 __thread unsigned long long max_contention = 0ULL;
 
+volatile unsigned int active_socket = 0;
 
 int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, void* payload){
 	
@@ -528,7 +530,14 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 
   	if(is_freezed_for_mov(extracted)) {node_unsafe_free(new); res = MOV_FOUND; goto out;	}
   	if(is_freezed(extracted)) {node_unsafe_free(new); res = ABORT; goto out; 	}
-  	
+/*
+unsigned int loops = LOOPS_FOR_CACHE;
+	while(active_socket != nid ){
+		if(loops-->0)_mm_pause();
+		else
+			BOOL_CAS(&active_socket, !nid, nid);
+	}
+  */	
   	toskip		= extracted;
 	position = 0;
   	while(toskip > 0ULL && curr != tail){
@@ -579,8 +588,8 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 //new_loops = LOOPS_FOR_CACHE;
 //do{
 
-
-if(!BOOL_CAS(&left->next, curr, curr))  {rtm_nested++;goto begin;}
+BACKOFF_LOOP();
+//if(!BOOL_CAS(&left->next, curr, curr))  {rtm_nested++;goto begin;}
 
 
 // if(position < VAL_CAS(&bckt->extractions, 0, 0))  {rtm_debug++;goto begin;}
@@ -621,7 +630,7 @@ if(!BOOL_CAS(&left->next, curr, curr))  {rtm_nested++;goto begin;}
 			if(
 //__status & _XABORT_RETRY ||
 __local_try++ < RTM_RETRY) {
-				BACKOFF_LOOP();
+	//			BACKOFF_LOOP();
 				mask = mask | (mask <<1);
 				goto retry_tm;
 			}
@@ -657,6 +666,15 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
 	assertf(bckt->type != ITEM, "trying to extract from a head bucket%s\n", "");
 
 	if(bckt->epoch > epoch) return ABORT;
+
+/*
+unsigned int loops = LOOPS_FOR_CACHE;
+        while(active_socket != nid ){
+                if(loops-->0)_mm_pause();
+                else
+                        BOOL_CAS(&active_socket, !nid, nid);
+        }
+*/
 
 //  unsigned int count = 0;	long rand;  lrand48_r(&seedT, &rand); count = rand & 7L; while(count-->0)_mm_pause();
   #ifdef RTM
