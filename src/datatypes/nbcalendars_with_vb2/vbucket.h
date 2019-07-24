@@ -49,7 +49,7 @@ static inline void clflush(volatile void *p){ asm volatile ("clflush (%0)" :: "r
 
 //#define ENABLE_PREFETCH 
 //#define ENABLE_CACHE_PARTITION 
- 
+
 #ifdef ENABLE_PREFETCH
 #define PREFETCH(x, y) {unsigned int step = 0; while(step++<10)_mm_pause();__builtin_prefetch(x, y, 0);}
 #else
@@ -61,7 +61,7 @@ static inline void clflush(volatile void *p){ asm volatile ("clflush (%0)" :: "r
 #define CACHE_INDEX_LEN 6
 #define CACHE_INDEX_MASK ( 63ULL << CACHE_INDEX_POS )
 #define CACHE_INDEX(x) ((((unsigned long long)(x)) & CACHE_INDEX_MASK  ) >> CACHE_INDEX_POS)
-#define CACHE_LIMIT 9
+#define CACHE_LIMIT 15
 //#endif
 
 #define NUM_INDEX 1
@@ -589,7 +589,7 @@ unsigned int loops = LOOPS_FOR_CACHE;
 //do{
 
 BACKOFF_LOOP();
-if(!BOOL_CAS(&left->next, curr, curr))  {rtm_nested++;goto begin;}
+//if(!BOOL_CAS(&left->next, curr, curr))  {rtm_nested++;goto begin;}
 
 
 // if(position < VAL_CAS(&bckt->extractions, 0, 0))  {rtm_debug++;goto begin;}
