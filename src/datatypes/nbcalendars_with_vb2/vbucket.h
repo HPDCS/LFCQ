@@ -647,9 +647,8 @@ __local_try++ < RTM_RETRY) {
 }
 
 
-__thread bucket_t *last_ext_bckt 	= NULL;
-__thread node_t   *last_ext_node 	= NULL;
-__thread unsigned long long last_ext_val = 0;
+__thread node_t   *__last_node 	= NULL;
+__thread unsigned long long __last_val = 0;
 
 
 
@@ -660,7 +659,7 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
 	//node_t *head  = &bckt->head;
 	//unsigned long long old_extracted = 0;
 	
-	unsigned long long extracted = 0;
+	unsigned long long old_extracted = extracted = 0;
 	unsigned skipped = 0;
 	PREFETCH(curr->next, 0);
 	assertf(bckt->type != ITEM, "trying to extract from a head bucket%s\n", "");
@@ -677,31 +676,16 @@ unsigned int loops = LOOPS_FOR_CACHE;
 */
 
 //  unsigned int count = 0;	long rand;  lrand48_r(&seedT, &rand); count = rand & 7L; while(count-->0)_mm_pause();
-  #ifdef RTM
-  	//old_extracted = 
-  	extracted 	= __sync_add_and_fetch(&bckt->extractions, 1ULL);
-  #else
-	pthread_spin_lock(&bckt->lock);
-		extracted 	= __sync_add_and_fetch(&bckt->extractions, 1ULL);
-  	pthread_spin_unlock(&bckt->lock);
-  #endif
+
+  	old_extracted = extracted 	= __sync_add_and_fetch(&bckt->extractions, 1ULL);
+
   	if(is_freezed_for_mov(extracted)) return MOV_FOUND;
   	if(is_freezed(extracted)) return EMPTY;
 
-/*
-  	if(last_ext_bckt != bckt)	{
-  		last_ext_bckt = bckt;
-  		last_ext_val = 0;
-		last_ext_node=NULL;
+	if(__last_node != NULL){
+  		curr = __last_node;
+  		extracted -= __last_val;
   	}
-  	else
-*/	 if(last_ext_node != NULL){
-  		curr = last_ext_node;
- 		unsigned long long tmp = last_ext_val;
-  		last_ext_val = extracted;
-  		extracted -= tmp;
-  	}
-//  */	
 
 
   	while(extracted > 0ULL && curr != tail){
@@ -725,17 +709,18 @@ unsigned int loops = LOOPS_FOR_CACHE;
   	}
 
   	if(curr == tail){
-		long rand=0;
-                lrand48_r(&seedT, &rand);
-		rand &= 511L;
-//        if(extracted == 0)  return ABORT;
+		//long rand=0;
+        //lrand48_r(&seedT, &rand);
+		//rand &= 511L;
+		//if(extracted == 0)  return ABORT;
         //if(rand < 1L)  		
-//freeze(bckt, FREEZE_FOR_DEL);
+		//freeze(bckt, FREEZE_FOR_DEL);
         atomic_bts_x64(&bckt->extractions, DEL_BIT_POS);
-	assert(is_freezed(bckt->extractions));
-	return EMPTY; // try to compact
+		assert(is_freezed(bckt->extractions));
+		return EMPTY; // try to compact
   	} 
-  	last_ext_node = curr;
+  	__last_node = curr;
+  	__last_val  = old_extracted;
   	*result = curr->payload;
   	*ts		= curr->timestamp;
   	

@@ -208,7 +208,10 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 
 unsigned int ex = 0;
 
-__thread table_t *last_table = NULL;
+__thread unsigned long long *__last_current = 0;
+__thread table_t *__last_table = NULL;
+__thread bucket_t *__last_bckt 	= NULL;
+
 
 pkey_t pq_dequeue(void *q, void** result)
 {
@@ -242,11 +245,12 @@ begin:
 	con_de = h->d_counter.count;
 	attempts = 0;
 
-	if(last_table != h){
-		last_table 	= h;
-		last_ext_bckt 	= NULL;
-		last_ext_node 	= NULL;
-		last_ext_val 	= 0;
+	if(__last_table != h){
+		__last_table 	= h;
+		__last_current  = 0;
+		__last_bckt 	= NULL;
+		__last_node 	= NULL;
+		__last_val 	= 0;
 	}
 
 	do
@@ -271,7 +275,13 @@ begin:
 		// a reshuffle has been detected => restart
 		if(is_marked(min_next, MOV)) goto begin;
 
-		left_node = last_ext_bckt; 
+		if(__last_current == current) left_node = __last_bckt;
+		else {
+			__last_current  = current;
+			__last_bckt 	= NULL;
+			__last_node 	= NULL;
+			__last_val 	= 0;
+		}
 	
 		if(left_node == NULL || left_node->index != index || is_freezed(left_node->extractions))
 		{
@@ -289,10 +299,10 @@ begin:
 		if(left_node->index == index && left_node->type != HEAD){
 	
 			if(left_node->epoch > epoch) goto begin;
-			if(left_node != last_ext_bckt){
-				last_ext_bckt = left_node;	
-				last_ext_node = NULL;
-				last_ext_val  = 0;
+			if(left_node != __last_bckt){
+				__last_bckt 	= left_node;
+				__last_node 	= &left_node->head;
+				__last_val 	= 0;
 			}
 			res = extract_from_bucket(left_node, result, &left_ts, (unsigned int)epoch);
 			
