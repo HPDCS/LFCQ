@@ -243,15 +243,14 @@ begin:
 	attempts = 0;
 
 	if(last_table != h){
-		last_table 		= h;
+		last_table 	= h;
 		last_ext_bckt 	= NULL;
 		last_ext_node 	= NULL;
 		last_ext_val 	= 0;
 	}
 
 	do
-	{	
-
+	{
 		*result  = NULL;
 		left_ts  = INFTY;
 
@@ -274,8 +273,8 @@ begin:
 
 		left_node = last_ext_bckt; 
 	
-		if(left_node == NULL || left_node->index != index){
-
+		if(left_node == NULL || left_node->index != index || is_freezed(left_node->extractions))
+		{
 			left_node = search(min, &left_node_next, &right_node, &counter, index);
 		
 			// if i'm here it means that the physical bucket was empty. Check for queue emptyness
@@ -290,7 +289,11 @@ begin:
 		if(left_node->index == index && left_node->type != HEAD){
 	
 			if(left_node->epoch > epoch) goto begin;
-			
+			if(left_node != last_ext_bckt){
+				last_ext_bckt = left_node;	
+				last_ext_node = NULL;
+				last_ext_val  = 0;
+			}
 			res = extract_from_bucket(left_node, result, &left_ts, (unsigned int)epoch);
 			
 			if(res == MOV_FOUND) goto begin;
@@ -312,9 +315,6 @@ begin:
 
 			num_cas++;
 			index++;
-			// try to mark the bucket as empty
-			//if(left_node->type == ITEM)	BOOL_CAS( &(left_node->next), left_node_next, get_marked(left_node_next,DEL) );
-
 
 			// increase current
 			old_current = VAL_CAS( &(h->current), current, ((index << 32) | epoch) );

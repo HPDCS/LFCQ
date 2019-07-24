@@ -688,18 +688,20 @@ unsigned int loops = LOOPS_FOR_CACHE;
   	if(is_freezed_for_mov(extracted)) return MOV_FOUND;
   	if(is_freezed(extracted)) return EMPTY;
 
-
+/*
   	if(last_ext_bckt != bckt)	{
   		last_ext_bckt = bckt;
-  		last_ext_val = extracted;
+  		last_ext_val = 0;
+		last_ext_node=NULL;
   	}
-  	else{
+  	else
+*/	 if(last_ext_node != NULL){
   		curr = last_ext_node;
  		unsigned long long tmp = last_ext_val;
   		last_ext_val = extracted;
   		extracted -= tmp;
   	}
-  	
+//  */	
 
 
   	while(extracted > 0ULL && curr != tail){
