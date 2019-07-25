@@ -16,6 +16,8 @@ extern __thread unsigned long long scan_list_length_en;
 extern __thread unsigned long long scan_list_length;
 extern __thread unsigned int read_table_count;
 
+
+#define ENABLE_CACHE 1
 #define MINIMUM_SIZE 1
 #define SAMPLE_SIZE 50
 
@@ -93,8 +95,9 @@ __thread table_t*  __cache_tblt = NULL;
 static int search_and_insert(bucket_t *head, unsigned int index, pkey_t timestamp, unsigned int tie_breaker, unsigned int epoch, void* payload){
 	bucket_t *left, *left_next, *right;
 	unsigned int distance;
-	unsigned int key = hash64shift(index) % INSERTION_CACHE_LEN;
 
+  #if ENABLE_CACHE == 1
+	unsigned int key = hash64shift(index) % INSERTION_CACHE_LEN;
 	__cache_load[key]++;
 	left = __cache_bckt[key];
 
@@ -104,6 +107,7 @@ static int search_and_insert(bucket_t *head, unsigned int index, pkey_t timestam
 		 	return OK;
 		__cache_bckt[key] = NULL; 	
 	}
+  #endif
 
 	left = search(head, &left_next, &right, &distance, index);
 	if(is_marked(left_next, VAL) && left_next != right && BOOL_CAS(&left->next, left_next, right))
@@ -149,8 +153,10 @@ static int search_and_insert(bucket_t *head, unsigned int index, pkey_t timestam
 		}
 
 		if(check_increase_bucket_epoch(left, epoch) == OK){
+	  #if ENABLE_CACHE == 1
 		 	__cache_bckt[index % INSERTION_CACHE_LEN] = left;
 		 	__cache_hash[index % INSERTION_CACHE_LEN] = left->hash;
+	  #endif
 		 	return bucket_connect(left, timestamp, tie_breaker, payload);
 		 }
 	}while(1);
@@ -336,7 +342,7 @@ int  migrate_node(bucket_t *bckt, table_t *new_h)
 
 				assert(tmp2 == bckt->tail && meet_head);
 			#endif
-				
+
 			flush_current(new_h, new_index);
 //			curr = head->next;
 	}
