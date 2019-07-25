@@ -226,7 +226,7 @@ pkey_t pq_dequeue(void *q, void** result)
 	vbpq *queue = (vbpq*)q;
 	bucket_t *min, *min_next, 
 					*left_node, *left_node_next, 
-					*array, *right_node, *old_cached_node;
+					*array, *right_node;
 	table_t * h = NULL;
 	
 	unsigned long long current, old_current, new_current;

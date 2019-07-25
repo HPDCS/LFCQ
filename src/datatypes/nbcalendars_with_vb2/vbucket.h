@@ -45,6 +45,7 @@ extern __thread struct drand48_data seedT;
 extern __thread unsigned int tid;
 extern __thread int nid;
 
+//#define VALIDATE_BUCKETS
 
 #define GC_BUCKETS   0
 #define GC_INTERNALS 1
@@ -107,7 +108,7 @@ struct __bucket_t
 #include "mm_vbucket.h"
 
 static inline void validate_bucket(bucket_t *bckt){
-  #ifndef NDEBUG
+  #ifdef VALIDATE_BUCKETS 
 	node_t *ln;
 	ln = &bckt->head;
 	while(ln->timestamp != INFTY)
