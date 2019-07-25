@@ -362,13 +362,13 @@ __thread unsigned long long rtm_other2=0ULL, rtm_prova2=0ULL, rtm_failed2=0ULL, 
 void pq_report(int TID)
 {
 
-unsigned long long cache_load, cache_hit;
+unsigned long long cache_load = 0, cache_hit = 0;
 int h=0;
 for(h=0; h<INSERTION_CACHE_LEN-1;h++){
        cache_load+=__cache_load[h];
        cache_hit+=__cache_hit[h];
 }
-printf("Insertion cache efficiency %f\n", ((float)cache_hit/(float)cache_load));
+printf("Insertion cache efficiency %f %llu %llu\n", ((float)cache_hit/(float)cache_load), cache_hit, cache_load);
 
 printf("TID:%u NID:%u BCKT CONNECT "
 "ABORTRATE:%f, "

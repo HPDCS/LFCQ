@@ -65,12 +65,12 @@ long fallback;\
 typedef struct __node_t node_t;
 struct __node_t
 {
-	void *payload;				// 8
-	pkey_t timestamp;  			//  
+	void *payload;						// 8
+	pkey_t timestamp;  					//  
 	char __pad_1[8-sizeof(pkey_t)];		// 16
-	unsigned int tie_breaker;		// 20
-	int hash;				// 24
-	node_t * volatile next;			// 32
+	unsigned int tie_breaker;			// 20
+	int hash;							// 24
+	node_t * volatile next;				// 32
 	void * volatile bucket;
 	void * volatile replica;
 	char __pad_2[16];
