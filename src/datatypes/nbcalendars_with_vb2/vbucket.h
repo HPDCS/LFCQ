@@ -106,7 +106,8 @@ struct __node_t
 	unsigned int tie_breaker;		// 20
 	int hash;				// 24
 	node_t * volatile next;			// 32
-	char __pad_2[32];
+	void * bucket;
+	char __pad_2[24];
 };
 
 /**
@@ -210,6 +211,7 @@ static inline node_t* node_alloc(){
 	    #endif
 	    		{break;}
     }while(1);
+    bzero(res, sizeof(node_t));
 	res->next 			= NULL;
 	res->payload			= NULL;
 	res->tie_breaker		= 0;
@@ -241,6 +243,7 @@ static inline bucket_t* bucket_alloc(){
 	    }
 	  #endif
     }while(1);
+    bzero(res, sizeof(bucket_t));
     res->extractions 		= 0ULL;
     res->epoch				= 0U;
     res->new_epoch			= 0U;
@@ -251,6 +254,7 @@ static inline bucket_t* bucket_alloc(){
     res->tail->timestamp	= INFTY;
     res->tail->tie_breaker	= 0U;
     res->tail->next			= NULL;
+    res->tail->bucket = res;
     res->pad3 = 0ULL;
     res->head.payload		= NULL;
     res->head.timestamp		= MIN;
@@ -695,7 +699,7 @@ unsigned int loops = LOOPS_FOR_CACHE;
 
   	if(is_freezed_for_mov(extracted)) return MOV_FOUND;
   	if(is_freezed(extracted)) return EMPTY;
-  	
+
 validate_bucket(bckt);
 
 	if(__last_node != NULL){
