@@ -141,6 +141,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 					__cache_bckt[i] = NULL;
 					__cache_node[i] = NULL;
 				}
+				__cache_hash = h;
 			}
 
 			// get actual size

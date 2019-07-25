@@ -254,9 +254,9 @@ static inline bucket_t* search(bucket_t *head, bucket_t **old_left_next, bucket_
 
 #define INSERTION_CACHE_LEN 4096
 
-__thread bucket_t __cache_bckt[INSERTION_CACHE_LEN];
-__thread node_t   __cache_node[INSERTION_CACHE_LEN];
-__thread table_t  __cache_hash = NULL;
+__thread bucket_t* __cache_bckt[INSERTION_CACHE_LEN];
+__thread node_t*   __cache_node[INSERTION_CACHE_LEN];
+__thread table_t*  __cache_hash = NULL;
 
 static int search_and_insert(bucket_t *head, unsigned int index, pkey_t timestamp, unsigned int tie_breaker, unsigned int epoch, void* payload){
 	bucket_t *left, *left_next, *right;
@@ -264,10 +264,9 @@ static int search_and_insert(bucket_t *head, unsigned int index, pkey_t timestam
 
 	left = __cache_bckt[index % INSERTION_CACHE_LEN];
 	if(left != NULL && left->index == index){
-		if(check_increase_bucket_epoch(left, epoch) == OK){
-		 	int res = bucket_connect(left, timestamp, tie_breaker, payload);
-		 	if(res != OK) __cache_bckt[index % INSERTION_CACHE_LEN] = NULL;
-		 }
+		if(check_increase_bucket_epoch(left, epoch) == OK && bucket_connect(left, timestamp, tie_breaker, payload) == OK)
+		 	return OK;
+		__cache_bckt[index % INSERTION_CACHE_LEN] = NULL; 	
 	}
 
 	left = search(head, &left_next, &right, &distance, index);
