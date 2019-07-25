@@ -127,7 +127,7 @@ struct __bucket_t
 	volatile unsigned int pending_insert_res;       // 52
 	//char __pad_4[4];
 	volatile unsigned int socket;
-	char __pad_1[8];				// 64
+	volatile long hash;				// 64
 //-----------------------------
 	node_t head;					// 32
 	char __pad_3[64-sizeof(node_t)];
@@ -214,6 +214,7 @@ static inline node_t* node_alloc(){
 /* allocate a bucket */
 static inline bucket_t* bucket_alloc(){
 	bucket_t* res;
+	long rand;
 	do{
 		res = gc_alloc(ptst, gc_aid[GC_BUCKETS]);
 	  #ifdef ENABLE_CACHE_PARTITION
@@ -247,6 +248,8 @@ static inline bucket_t* bucket_alloc(){
     res->head.timestamp		= MIN;
     res->head.tie_breaker	= 0U;
     res->head.next			= res->tail;
+	lrand48_r(&seedT, &rand);
+	res->hash = rand;
     res->socket = 0;
     #ifndef RTM
     pthread_spin_init(&res->lock, 0);
@@ -331,7 +334,7 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 		node_t *head  = curr;
 		node_t *new   = node_alloc();
 		
-		toskip			= get_cleaned_extractions(bckt->extractions);
+		toskip			= get_cleaned_extractions(old_extractions);
 		new->timestamp  = bckt->pending_insert->timestamp;
 		new->payload	= bckt->pending_insert->payload;
 		new->hash		= bckt->pending_insert->hash;
@@ -382,8 +385,7 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 	
 	
 	
-    res->extractions 		= bckt->extractions ;
-    res->extractions 		= (res->extractions & ( ~(FREEZE_FOR_DEL | FREEZE_FOR_MOV | FREEZE_FOR_EPO) ) ) >> 32 ;
+    res->extractions 		= get_cleaned_extractions(old_extractions);
     res->epoch				= bckt->new_epoch;
     res->index				= bckt->index;
     res->type				= bckt->type;

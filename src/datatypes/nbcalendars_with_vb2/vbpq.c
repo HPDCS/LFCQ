@@ -135,13 +135,13 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			// check for a resize
 			h = read_table(&queue->hashtable);
 
-			if(h != __cache_hash){
+			if(h != __cache_tblt){
 				int i = 0;
 				for(i=0;i<INSERTION_CACHE_LEN-1;i++){
 					__cache_bckt[i] = NULL;
 					__cache_node[i] = NULL;
 				}
-				__cache_hash = h;
+				__cache_tblt = h;
 			}
 
 			// get actual size
