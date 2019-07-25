@@ -30,8 +30,8 @@ static inline void init_bucket_subsystem(){
 }
 
 #define node_safe_free(ptr) 			gc_free(ptst, ptr, gc_aid[GC_INTERNALS])
-#define node_unsafe_free(ptr) 			gc_free(ptst, ptr, gc_aid[GC_INTERNALS])
-#define only_bucket_unsafe_free(ptr)	gc_free(ptst, ptr, gc_aid[GC_BUCKETS])
+#define node_unsafe_free(ptr) 			gc_unsafe_free(ptst, ptr, gc_aid[GC_INTERNALS])
+#define only_bucket_unsafe_free(ptr)	gc_unsafe_free(ptst, ptr, gc_aid[GC_BUCKETS])
 
 
 static inline node_t* node_alloc_by_index(unsigned int i){
@@ -151,7 +151,7 @@ static inline void bucket_unsafe_free(bucket_t *ptr){
 		node_unsafe_free(tmp);
 	}
 	if(!ptr->new_epoch)	node_safe_free(ptr->tail);
-	gc_free(ptst, ptr, gc_aid[GC_BUCKETS]);
+	gc_unsafe_free(ptst, ptr, gc_aid[GC_BUCKETS]);
 
 }
 
