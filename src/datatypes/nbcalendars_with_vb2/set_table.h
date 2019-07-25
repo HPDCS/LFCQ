@@ -725,8 +725,10 @@ int  migrate_node(bucket_t *bckt, table_t *new_h)
 			replica->replica		= NULL;
 			replica->next 			= rn;
 
-			if(ln->next   != rn  		) return ABORT; //abort
-			if(curr->replica) return ABORT; //abort
+			if(ln->next   != rn  || curr->replica){
+				node_unsafe_free(replica);
+				return ABORT; //abort
+			} 
 
 
 			// copy node
