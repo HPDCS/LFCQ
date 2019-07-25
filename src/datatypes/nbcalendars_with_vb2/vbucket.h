@@ -45,6 +45,7 @@ extern __thread unsigned long long scan_list_length;
 extern __thread struct drand48_data seedT;
 extern __thread unsigned int tid;
 extern __thread int nid;
+
 static inline void clflush(volatile void *p){ asm volatile ("clflush (%0)" :: "r"(p)); }
 
 //#define ENABLE_PREFETCH 
@@ -151,8 +152,6 @@ static inline void init_bucket_subsystem(){
 //);
 }
 
-
-
 #define node_safe_free(ptr) 			gc_free(ptst, ptr, gc_aid[GC_INTERNALS])
 #define node_unsafe_free(ptr) 			gc_free(ptst, ptr, gc_aid[GC_INTERNALS])
 #define only_bucket_unsafe_free(ptr)	gc_free(ptst, ptr, gc_aid[GC_BUCKETS])
@@ -240,7 +239,7 @@ static inline bucket_t* bucket_alloc(){
     res->pending_insert_res = 0;
     res->tail = node_alloc();
     res->tail->payload		= NULL;
-    res->tail->timestamp		= INFTY;
+    res->tail->timestamp	= INFTY;
     res->tail->tie_breaker	= 0U;
     res->tail->next			= NULL;
     res->pad3 = 0ULL;
@@ -383,8 +382,6 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 	bucket_t *res = bucket_alloc();
 	bool suc = false;
 	
-	
-	
     res->extractions 		= get_cleaned_extractions(old_extractions);
     res->epoch				= bckt->new_epoch;
     res->index				= bckt->index;
@@ -458,9 +455,10 @@ __thread pkey_t last_key = 0;
 __thread unsigned long long counter_last_key = 0ULL;
 __thread unsigned long long fallback_insertions = 0ULL;
 
-
 __thread pkey_t last_key_fall = 0;
 __thread unsigned long long counter_last_key_fall = 0ULL;
+
+
 static inline int bucket_connect_fallback(bucket_t *bckt, node_t *node){
 	unsigned long long extractions;
 	extractions = bckt->extractions;

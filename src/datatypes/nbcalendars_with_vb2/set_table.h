@@ -257,14 +257,17 @@ static inline bucket_t* search(bucket_t *head, bucket_t **old_left_next, bucket_
 __thread bucket_t* __cache_bckt[INSERTION_CACHE_LEN];
 __thread node_t*   __cache_node[INSERTION_CACHE_LEN];
 __thread long 	   __cache_hash[INSERTION_CACHE_LEN];
+__thread unsigned long long __cache_hit[INSERTION_CACHE_LEN];
+__thread unsigned long long __cache_load[INSERTION_CACHE_LEN];
 __thread table_t*  __cache_tblt = NULL;
 
 static int search_and_insert(bucket_t *head, unsigned int index, pkey_t timestamp, unsigned int tie_breaker, unsigned int epoch, void* payload){
 	bucket_t *left, *left_next, *right;
 	unsigned int distance;
-
+	__cache_load[index % INSERTION_CACHE_LEN]++;
 	left = __cache_bckt[index % INSERTION_CACHE_LEN];
 	if(left != NULL && left->index == index && left->hash == __cache_hash[index % INSERTION_CACHE_LEN]){
+		__cache_hit[index % INSERTION_CACHE_LEN]++;
 		if(check_increase_bucket_epoch(left, epoch) == OK && bucket_connect(left, timestamp, tie_breaker, payload) == OK)
 		 	return OK;
 		__cache_bckt[index % INSERTION_CACHE_LEN] = NULL; 	
@@ -714,6 +717,13 @@ int  migrate_node(bucket_t *bckt, table_t *new_h)
 					return ABORT;
 				}
 			END_ATOMIC2(&bckt->lock, &left->lock);
+
+
+			ln = &left->head;
+			while(ln->timestamp != INFTY)
+				ln = ln->next;
+
+			if(ln == INFTY) assert(ln == left->tail);
 
 			flush_current(new_h, new_index);
 			curr = head->next;
