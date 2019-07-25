@@ -723,7 +723,7 @@ int  migrate_node(bucket_t *bckt, table_t *new_h)
 			while(ln->timestamp != INFTY)
 				ln = ln->next;
 
-			if(ln == INFTY) assert(ln == left->tail);
+			if(ln->timestamp == INFTY) assert(ln == left->tail);
 
 			flush_current(new_h, new_index);
 			curr = head->next;
