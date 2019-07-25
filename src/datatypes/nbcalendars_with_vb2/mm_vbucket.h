@@ -100,7 +100,7 @@ static inline bucket_t* bucket_alloc(){
 	    }
 	  #endif
     }while(1);
-    long hash = res->hash++;
+    long hash = res->hash+1;
     bzero(res, sizeof(bucket_t));
     res->extractions 		= 0ULL;
     res->epoch				= 0U;
