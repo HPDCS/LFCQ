@@ -106,8 +106,9 @@ struct __node_t
 	unsigned int tie_breaker;		// 20
 	int hash;				// 24
 	node_t * volatile next;			// 32
-	void * bucket;
-	char __pad_2[24];
+	void * volatile bucket;
+	void * volatile replica;
+	char __pad_2[16];
 };
 
 /**
@@ -216,6 +217,7 @@ static inline node_t* node_alloc(){
 	res->payload			= NULL;
 	res->tie_breaker		= 0;
 	res->timestamp	 		= INFTY;
+	res->replica = NULL;
 	lrand48_r(&seedT, &rand);
 	res->hash = rand;
 	return res;

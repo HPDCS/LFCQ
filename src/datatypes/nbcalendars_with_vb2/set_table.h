@@ -636,11 +636,14 @@ int  migrate_node(bucket_t *bckt, table_t *new_h)
 	}
 	
 	//assertf(head == tail, "While migrating detected extracted tail%s\n", "");
-	if(head != tail)
-	//printf("Try to migrate\n");
-	while( (curr = head->next) != tail){
+	if(head != tail) curr = head->next;
+	else curr = tail;
+	
+	while( curr != tail){
 	//		printf("Moving first\n");
 			curr_next = curr->next; 
+
+			if(curr->replica) {	curr = curr_next; continue;}
 
 			new_index = hash(curr->timestamp, new_h->bucket_width);
 			do{
@@ -695,26 +698,38 @@ int  migrate_node(bucket_t *bckt, table_t *new_h)
 
 			}
 
+			
+
 			assert(curr_next != NULL && curr != NULL && rn != NULL);
 
-			if(head->next != curr		) return ABORT; //abort
+			node_t *replica = node_alloc();
+
+			replica->timestamp 		= curr->timestamp;
+			replica->payload   		= curr->payload;
+			replica->tie_breaker    = curr->tie_breaker;
+			replica->hash    		= curr->hash;
+			replica->replica		= NULL;
+			replica->next 			= rn;
+
 			if(ln->next   != rn  		) return ABORT; //abort
-			if(curr->next != curr_next  ) return ABORT; //abort
+			if(curr->replica) return ABORT; //abort
+
+
+			// copy node
 
 			//atomic
 			rtm_insertions++;
 			ATOMIC2(&bckt->lock, &left->lock){
-					if(head->next != curr		) TM_ABORT(0xf2); //abort
 					if(ln->next   != rn  		) TM_ABORT(0xf3); //abort
-					if(curr->next != curr_next 	) TM_ABORT(0xf4); //abort
+					if(curr->replica 	) TM_ABORT(0xf4); //abort
 				
-					head->next = curr_next;
-					ln->next   = curr;
-					curr->next = rn;
+					ln->next   = replica;
+					curr->replica = replica;
 					TM_COMMIT();
 					__sync_fetch_and_add(&new_h->e_counter.count, 1);
 				}
 				FALLBACK2(&bckt->lock, &left->lock){
+					node_unsafe_free(replica);
 					return ABORT;
 				}
 			END_ATOMIC2(&bckt->lock, &left->lock);
@@ -735,7 +750,7 @@ int  migrate_node(bucket_t *bckt, table_t *new_h)
 				tmp2 = tmp2->next;
 			}
 
-			assert(tmp2 == bckt->tail);
+			assert(tmp2 == bckt->tail && meet_head);
 
 			flush_current(new_h, new_index);
 //			curr = head->next;
