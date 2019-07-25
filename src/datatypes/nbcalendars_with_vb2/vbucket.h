@@ -85,11 +85,11 @@ struct __bucket_t
 	volatile unsigned long long extractions;	//  8
 	char __pad_2[56];
 	unsigned int epoch;				
-	unsigned int index;				// 16
+	volatile unsigned int index;				// 16
 	unsigned int type;
 	volatile unsigned int new_epoch;		// 24
 	volatile long long pad3;
-	node_t *tail;					// 32
+	node_t * volatile tail;					// 32
 	node_t * volatile pending_insert;		// 40
 	bucket_t * volatile next;			// 48
 	volatile unsigned int pending_insert_res;       // 52
