@@ -72,8 +72,17 @@ struct __table
 #include "utils_set_table.h"
 
 #if ENABLE_CACHE == 1
-static unsigned int hash64shift(unsigned int key)
+static unsigned int hash64shift(unsigned int a)
 {
+return a;
+   a = (a+0x7ed55d16) + (a<<12);
+   a = (a^0xc761c23c) ^ (a>>19);
+   a = (a+0x165667b1) + (a<<5);
+   a = (a+0xd3a2646c) ^ (a<<9);
+   a = (a+0xfd7046c5) + (a<<3);
+   a = (a^0xb55a4f09) ^ (a>>16);
+   return a;
+/*
   key = (~key) + (key << 21); // key = (key << 21) - key - 1;
   key = key ^ (key >> 24);
   key = (key + (key << 3)) + (key << 8); // key * 265
@@ -81,11 +90,11 @@ static unsigned int hash64shift(unsigned int key)
   key = (key + (key << 2)) + (key << 4); // key * 21
   key = key ^ (key >> 28);
   key = key + (key << 31);
-  return key;
+  return key;*/
 }
 #endif
 
-#define INSERTION_CACHE_LEN 32771
+#define INSERTION_CACHE_LEN 65536
 
 __thread bucket_t* __cache_bckt[INSERTION_CACHE_LEN];
 __thread node_t*   __cache_node[INSERTION_CACHE_LEN];
