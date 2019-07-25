@@ -263,8 +263,11 @@ static int search_and_insert(bucket_t *head, unsigned int index, pkey_t timestam
 	unsigned int distance;
 
 	left = __cache_bckt[index % INSERTION_CACHE_LEN];
-	if(left->index == index){
-		if(check_increase_bucket_epoch(left, epoch) == OK) 	return bucket_connect(left, timestamp, tie_breaker, payload);
+	if(left != NULL && left->index == index){
+		if(check_increase_bucket_epoch(left, epoch) == OK){
+		 	int res = bucket_connect(left, timestamp, tie_breaker, payload);
+		 	if(res != OK) __cache_bckt[index % INSERTION_CACHE_LEN] = NULL;
+		 }
 	}
 
 	left = search(head, &left_next, &right, &distance, index);
