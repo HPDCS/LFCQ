@@ -1205,7 +1205,6 @@ static inline int single_step_pq_enqueue(table* h, pkey_t timestamp, void* paylo
 
 /* (!new) new enqueue*/
 
-// @TODO me sa che stai a fa macelli con i puntatori, aspettati un segfault
 int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 {
 	assertf(timestamp < MIN || timestamp >= INFTY, "Key out of range %s\n", "");
@@ -1238,28 +1237,28 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 
 		if (requested_op == NULL && operation == NULL) {
 			//first iteration
-			requested_op = operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
+			requested_op = operation = malloc(sizeof(op_node)); //gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
 		
+			//@TODO The structure is handled in a wrong way
 			requested_op->type = OP_PQ_ENQ;
 			requested_op->timestamp = ts;
 			requested_op->payload = payload;
-			requested_op->response = -1; //@TODO Response (there is something wrong)
+			requested_op->response = -1;
 		}
 
-		assertf(operation == NULL, "No operation%s\n","");
+		assertf(operation == NULL, "ENQ - No operation%s\n","");
 
 		msq_enqueue(&(queue->op_queue[dest_node]), (void*) operation, dest_node);
 
-		op_node* extracted_op;
+		op_node* extracted_op = NULL;
 		unsigned int node, i;
 		do  { //dequeue loop
 
-			if (__sync_fetch_and_add(&(requested_op->response),0) != -1) 
+			if ( (ret = __sync_fetch_and_add(&(requested_op->response),0)) != -1) 
 			{
-				ret = requested_op->response;
-				gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
-				requested_op = NULL;
+				//gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
 				critical_exit();
+				requested_op = NULL;
 				// dovrebbe essere come se il thread fosse stato deschedulato prima della return
 				return ret; // someone did my op, we can return	
 			}
@@ -1274,22 +1273,22 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 
 			// all queues are empty
 			if (extracted_op == NULL) {
-				printf("No op available"); //@TODO how to handle this case 
+				assertf(requested_op == NULL,"ENQ - No op available to deq%s\n","");
+				//printf("No op available"); //@TODO how to handle this case 
 				continue;
 			}
 
 			//extracted op, executing
 			handling_op = extracted_op;
-			if (extracted_op->type == OP_PQ_ENQ) 
+			if (handling_op->type == OP_PQ_ENQ) 
 			{
 				ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->payload);
 				if (ret == -1) //enqueue failed, Migration is happening
 					break;
 				//returned 0 or 1, the insertion was successful
 				__sync_bool_compare_and_swap(&(handling_op->response), -1, ret); /* Is this an overkill? */
-				handling_op = NULL;
 			}
-			else if (extracted_op->type == OP_PQ_DEQ)
+			else if (handling_op->type == OP_PQ_DEQ)
 			{
 				/* table* h, nb_calqueue *queue, void** result */
 				ret_ts =  single_step_pq_dequeue(h, queue, &new_payload);
@@ -1298,9 +1297,9 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 				performed_dequeue++;
 				handling_op->payload = new_payload;
 				handling_op->timestamp = ret_ts;
-				__sync_bool_compare_and_swap(&(handling_op->response), -1, 1); /* Is this an overkill? */ 
+				__sync_bool_compare_and_swap(&(handling_op->response), -1, 1); /* Is this an overkill? */
 			}
-
+			handling_op = NULL;
 		} while(true);
 
 		// @TODO in case of failure update ts of vb
@@ -1313,11 +1312,122 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	//return code
 }
 
+/* !(new) dequeue */
+pkey_t pq_dequeue(void *q, void** result) 
+{
+	nb_calqueue *queue = (nb_calqueue*)q;
+	table *h = NULL;
+	pkey_t ret_ts, ts = 1;
+	op_node *operation = NULL;
 
-//pkey_t pq_dequeue(void *q, void** result) 
-//{
-	/*@TODO dequeue*/
-//}
+	int ret;
+
+	//for read table
+	double pub = queue->perc_used_bucket;
+	unsigned int epb = queue->elem_per_bucket;
+	unsigned int th = queue->threshold;
+
+	unsigned long long vb_index;
+	unsigned int dest_node = NID;
+
+	void* new_payload;
+
+	critical_enter();
+
+	do {
+		h = read_table(&queue->hashtable, th, epb, pub);
+
+		// first iteration are dummy
+		vb_index = hash(ts, h->bucket_width);
+		dest_node = vb_index % _NUMA_NODES;
+
+		if (requested_op == NULL && operation == NULL) { 
+			//taken only first iteration
+			
+			// take index of minimum
+			vb_index = (h->current) >> 32;
+			dest_node = vb_index % _NUMA_NODES;
+
+			//compute ts in order to take right node
+			ts = vb_index * (h->bucket_width);
+
+			requested_op = operation = malloc(sizeof(op_node)); //@TODO use gc_alloc
+			
+			//@TODO compute ts from current 
+			requested_op->type = OP_PQ_DEQ;
+			requested_op->timestamp = ts; 
+			requested_op->payload = NULL;
+			requested_op->response = -1;
+		}
+
+		assertf(operation == NULL, "DEQ - No operation%s\n","");
+
+		msq_enqueue(&(queue->op_queue[dest_node]), (void*) operation, dest_node);
+
+		op_node* extracted_op = NULL;
+		unsigned int node, i;
+
+		do {
+			// dequeue loop
+
+			if ( (ret = __sync_fetch_and_add(&(requested_op->response),0)) != -1) 
+			{
+				critical_exit();
+				ret_ts = requested_op->timestamp;
+				*result = requested_op->payload;
+				
+				
+				// @TODO set payload and return value
+				requested_op = NULL;
+				return ret_ts;
+			}
+
+			// extract from one queue
+			i = node = NID;
+			do {
+				if (msq_dequeue(&(queue->op_queue[i]), &extracted_op))
+					break;
+				i = (i + 1) % _NUMA_NODES;
+			} while(i != node);
+
+			// all queues are empty
+			if (extracted_op == NULL) {
+				assertf(requested_op == NULL,"DEQ - No op available to deq%s\n","");
+				//@TODO how to handle this case 
+				continue;
+			}
+
+			//extracted op, executing
+			handling_op = extracted_op;
+			if (handling_op->type == OP_PQ_ENQ) 
+			{
+				ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->payload);
+				if (ret == -1) //enqueue failed, Migration is happening
+					break;
+				//returned 0 or 1, the insertion was successful
+				__sync_bool_compare_and_swap(&(handling_op->response), -1, ret); /* Is this an overkill? */
+			}
+			else if (handling_op->type == OP_PQ_DEQ)
+			{
+				/* table* h, nb_calqueue *queue, void** result */
+				ret_ts =  single_step_pq_dequeue(h, queue, &new_payload);
+				if (ret_ts == -1) //dequeue failed
+					break;
+				performed_dequeue++;
+				handling_op->payload = new_payload;
+				handling_op->timestamp = ret_ts;
+				__sync_bool_compare_and_swap(&(handling_op->response), -1, 1); /* Is this an overkill? */
+			}
+			handling_op = NULL;
+
+		} while(true);
+		// @TODO in case of failure update ts of vb
+		//op failed
+		handling_op = NULL;
+		operation = extracted_op;
+		ts = operation->timestamp;
+	} while(true);
+}
 
 
 /**

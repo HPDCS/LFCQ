@@ -256,7 +256,7 @@ static inline nbc_bucket_node* node_malloc(void *payload, pkey_t timestamp, unsi
 	nbc_bucket_node* res;
 	
 	//res = mm_node_malloc(&malloc_status);
-	    
+	
 	res = gc_alloc_node(ptst, gc_aid[GC_BUCKETNODE], NID);
 
 	if (unlikely(is_marked(res) || res == NULL))
@@ -281,7 +281,7 @@ static inline nbc_bucket_node* numa_node_malloc(void *payload, pkey_t timestamp,
 	nbc_bucket_node* res;
 	
 	//res = mm_node_malloc(&malloc_status);
-	    
+	
 	res = gc_alloc_node(ptst, gc_aid[GC_BUCKETNODE], numa_node);
 
 	if (unlikely(is_marked(res) || res == NULL))

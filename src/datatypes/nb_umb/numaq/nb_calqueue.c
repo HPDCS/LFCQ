@@ -42,6 +42,7 @@
  * @return the highest priority 
  *
  */
+/*
 pkey_t pq_dequeue(void *q, void** result)
 {
 	nb_calqueue *queue = (nb_calqueue*)q;
@@ -198,3 +199,4 @@ begin:
 	
 	return INFTY;
 }
+*/

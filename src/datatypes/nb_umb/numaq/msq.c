@@ -4,12 +4,12 @@
 
 void _init_gc_queue()
 {
-    gc_aid[GC_NODES] = gc_add_allocator(sizeof(node_t));
+    //gc_aid[GC_NODES] = gc_add_allocator(sizeof(node_t));
 }
 
 void init_queue(queue_t *queue, unsigned int numa_node)
 {
-    node_t *node = gc_alloc_node(ptst, gc_aid[GC_NODES], numa_node); // Allocate a free node
+    node_t *node = malloc(sizeof(node_t));//gc_alloc_node(ptst, gc_aid[GC_NODES], numa_node); // Allocate a free node
     node->next = NULL;
     queue->head = queue->tail = node;
     pthread_spin_init(&(queue->h_lock), PTHREAD_PROCESS_PRIVATE);
@@ -18,7 +18,7 @@ void init_queue(queue_t *queue, unsigned int numa_node)
 
 void msq_enqueue(queue_t *queue, void *payload, unsigned int numa_node)
 {
-    node_t *node = gc_alloc_node(ptst, gc_aid[GC_NODES], numa_node);
+    node_t *node = malloc(sizeof(node_t)); //gc_alloc_node(ptst, gc_aid[GC_NODES], numa_node);
     node->value = payload;
     node->next = NULL;
 
@@ -65,6 +65,6 @@ bool msq_dequeue(queue_t *queue, void **result)
             exit(1);
     }
     
-    //gc_free(ptst, node, gc_aid[GC_NODES]);
+    //free(node);
     return true;
 }

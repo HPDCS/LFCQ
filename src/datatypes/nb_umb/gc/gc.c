@@ -226,11 +226,13 @@ static chunk_t* node_alloc_more_chunks(unsigned int node)
 
     end = mem_area + alloc_size;
 
-    while (mem_area < end)
-    {
+    while (mem_area + page_size <= end)
+    {   
+        // compute end of page
+        check = mem_area + page_size;
+
         // mark the page with the node number
         ((unsigned long*) mem_area)[0] = (unsigned long) node;
-        check = mem_area + page_size;
         mem_area += sizeof(unsigned long);
 
         while (mem_area + sizeof(chunk_t) <= check) 
@@ -310,10 +312,12 @@ static chunk_t *node_get_filled_chunks(int n, int sz, unsigned int numa_node)
     ADD_TO(gc_global.allocations, 1);
 #endif
 
-    //allocation size for the node, round to page size
+    //allocation size for the node, rounded to page size
     alloc_size = n * BLKS_PER_CHUNK * sz;
     num_pages = (alloc_size / page_size) + 1;
-    alloc_size = (num_pages) * page_size;
+    alloc_size = (num_pages) * (page_size + 8);
+    num_pages = (alloc_size / page_size) + 1;
+    alloc_size = num_pages * page_size;
 
     node = numa_alloc_onnode(alloc_size, numa_node);
     if ( node == NULL ) MEM_FAIL(alloc_size);
@@ -326,23 +330,37 @@ static chunk_t *node_get_filled_chunks(int n, int sz, unsigned int numa_node)
 
     h = p = node_get_empty_chunks(n, numa_node);
 
-    // Clean code below 
+    check = node+page_size;
+    node += sizeof(unsigned long);
+
+    do {
+        p->i = BLKS_PER_CHUNK;
+        i = 0;
+        do {
+            p->blk[i++] = node;
+            node = node + sz;
+            if (node >= check) {
+                node = check;
+                check = node+page_size;
+                node += sizeof(unsigned long);
+            }
+        } while(i < BLKS_PER_CHUNK);
+    } while((p = p->next) != h);
+    /*
     p->i = BLKS_PER_CHUNK;
     i = 0;
 
-    /* for each page do this */
-    while (node < end) 
+    while (node + page_size <= end) 
     {
-
-        // mark the page with the node number
-        ((unsigned long*) node)[0] = (unsigned long) numa_node;
-        // compute page boundary
         check = node + page_size;
+
+        // write index
+        //((unsigned long*) node)[0] = numa_node;
 
         // skip numa node idx
         node += sizeof(unsigned long);
 
-        while (node < check)
+        while (node + sz <= check) //we have enough memory to handle request?
         {
             // here node is safe to use
             // assign node to blk index
@@ -352,14 +370,15 @@ static chunk_t *node_get_filled_chunks(int n, int sz, unsigned int numa_node)
             node += sz;
 
             if (i == BLKS_PER_CHUNK) {
-                i = 0;
                 if ( (p = p->next) == h ) goto out;
                 p->i = BLKS_PER_CHUNK;
+                i = 0;
             }
         }
         node = check;
     }
-
+    assert(i == BLKS_PER_CHUNK);
+    */
 out:
     return(h);
 }
@@ -573,14 +592,15 @@ void *gc_alloc_node(ptst_t *ptst, int alloc_id, unsigned int node)
     
     // int node = * ((int*) (((unsigned long) p) & _PAGE_NODE_BITMAKS));
     ret = ch->blk[--ch->i];
-
-    *(unsigned long*) (((unsigned long) ret) & _PAGE_NODE_BITMAKS) = node;
-    /*
+    //*(unsigned long*) (((unsigned long) ret) & _PAGE_NODE_BITMAKS) = node;
     tmp = (unsigned long*) (((unsigned long) ret) & _PAGE_NODE_BITMAKS);
-    x = __sync_val_compare_and_swap(tmp, 0, node); //mark the page with zone id
-    assert(x == 0 || x == node); //either is first allocation, or the page was already marked
-    */
 
+    //printf("tmp %p, *tmp %p, ret %p\n", tmp, *tmp, ret);
+
+    x = __sync_val_compare_and_swap(tmp, 0, node); //mark the page with zone id
+   
+    assert((x == 0) || (x == node)); //either is first allocation, or the page was already marked
+    
     return ret;
 }
 
