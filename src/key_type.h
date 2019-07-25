@@ -32,6 +32,7 @@
 
 	#define INFTY INT_MAX
 	#define MIN 	0
+	#define KEY_STRING "%d"
 	typedef int pkey_t;
 
 	#define MILLION 1000000
