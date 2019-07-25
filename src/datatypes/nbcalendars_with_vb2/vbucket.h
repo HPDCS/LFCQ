@@ -169,13 +169,15 @@ static inline void init_bucket_subsystem(){
 #define get_cleaned_extractions(extractions) ((extractions & (~(FREEZE_FOR_EPO | FREEZE_FOR_MOV | FREEZE_FOR_DEL))) >> 32)
 
 static inline void validate_bucket(bucket_t *bckt){
-	node_t *ln;
+/*	node_t *ln;
 	ln = &bckt->head;
 	while(ln->timestamp != INFTY)
 		ln = ln->next;
 
 	if(ln->timestamp == INFTY) assert(ln == bckt->tail);
+*/
 }
+
 
 static inline node_t* node_alloc_by_index(unsigned int i){
 	unsigned int j;
@@ -245,7 +247,7 @@ static inline bucket_t* bucket_alloc(){
 	    }
 	  #endif
     }while(1);
-    bzero(res, sizeof(bucket_t));
+//    bzero(res, sizeof(bucket_t));
     res->extractions 		= 0ULL;
     res->epoch				= 0U;
     res->new_epoch			= 0U;
@@ -262,8 +264,8 @@ static inline bucket_t* bucket_alloc(){
     res->head.timestamp		= MIN;
     res->head.tie_breaker	= 0U;
     res->head.next			= res->tail;
-	lrand48_r(&seedT, &rand);
-	res->hash = rand;
+//	lrand48_r(&seedT, &rand);
+	res->hash++;// = rand;
     res->socket = 0;
     #ifndef RTM
     pthread_spin_init(&res->lock, 0);

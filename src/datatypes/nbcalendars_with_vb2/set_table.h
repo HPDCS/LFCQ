@@ -252,7 +252,19 @@ static inline bucket_t* search(bucket_t *head, bucket_t **old_left_next, bucket_
 }
 
 
-#define INSERTION_CACHE_LEN 4096
+static unsigned int hash64shift(unsigned int key)
+{
+  key = (~key) + (key << 21); // key = (key << 21) - key - 1;
+  key = key ^ (key >> 24);
+  key = (key + (key << 3)) + (key << 8); // key * 265
+  key = key ^ (key >> 14);
+  key = (key + (key << 2)) + (key << 4); // key * 21
+  key = key ^ (key >> 28);
+  key = key + (key << 31);
+  return key;
+}
+
+#define INSERTION_CACHE_LEN 32771
 
 __thread bucket_t* __cache_bckt[INSERTION_CACHE_LEN];
 __thread node_t*   __cache_node[INSERTION_CACHE_LEN];
@@ -264,13 +276,15 @@ __thread table_t*  __cache_tblt = NULL;
 static int search_and_insert(bucket_t *head, unsigned int index, pkey_t timestamp, unsigned int tie_breaker, unsigned int epoch, void* payload){
 	bucket_t *left, *left_next, *right;
 	unsigned int distance;
-	__cache_load[index % INSERTION_CACHE_LEN]++;
-	left = __cache_bckt[index % INSERTION_CACHE_LEN];
-	if(left != NULL && left->index == index && left->hash == __cache_hash[index % INSERTION_CACHE_LEN] && !is_freezed(left->extractions) && is_marked(left->next, VAL)){
-		__cache_hit[index % INSERTION_CACHE_LEN]++;
+	unsigned int key = hash64shift(index) % INSERTION_CACHE_LEN;
+	__cache_load[key]++;
+	left = __cache_bckt[key];
+//__cache_hit[key]+=left != NULL && left->index == index && left->hash == __cache_hash[key];
+	if(left != NULL && left->index == index && left->hash == __cache_hash[key] && !is_freezed(left->extractions) && is_marked(left->next, VAL)){
+		__cache_hit[key]++;
 		if(check_increase_bucket_epoch(left, epoch) == OK && bucket_connect(left, timestamp, tie_breaker, payload) == OK)
 		 	return OK;
-		__cache_bckt[index % INSERTION_CACHE_LEN] = NULL; 	
+		__cache_bckt[key] = NULL; 	
 	}
 
 	left = search(head, &left_next, &right, &distance, index);
