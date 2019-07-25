@@ -31,10 +31,8 @@
 
 /* 
  * @TODO change init to handle per numa queue
- * @TODO change enqueue
- * @TODO change dequeue
  * @TODO add op node definition
- * @TODO change original pq_enq and pq_deq to one step 
+ * @TODO move queue to non blocking 
  *  */
 
 
@@ -1239,7 +1237,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			//first iteration
 			requested_op = operation = malloc(sizeof(op_node)); //gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
 		
-			//@TODO The structure is handled in a wrong way
+			//@TODO The structure must be reshuffled to be handled correctly 
 			requested_op->type = OP_PQ_ENQ;
 			requested_op->timestamp = ts;
 			requested_op->payload = payload;
@@ -1274,7 +1272,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			// all queues are empty
 			if (extracted_op == NULL) {
 				assertf(requested_op == NULL,"ENQ - No op available to deq%s\n","");
-				//printf("No op available"); //@TODO how to handle this case 
+				//@TODO how to handle this case? 
 				continue;
 			}
 
@@ -1353,7 +1351,6 @@ pkey_t pq_dequeue(void *q, void** result)
 
 			requested_op = operation = malloc(sizeof(op_node)); //@TODO use gc_alloc
 			
-			//@TODO compute ts from current 
 			requested_op->type = OP_PQ_DEQ;
 			requested_op->timestamp = ts; 
 			requested_op->payload = NULL;
@@ -1372,13 +1369,12 @@ pkey_t pq_dequeue(void *q, void** result)
 
 			if ( (ret = __sync_fetch_and_add(&(requested_op->response),0)) != -1) 
 			{
-				critical_exit();
 				ret_ts = requested_op->timestamp;
 				*result = requested_op->payload;
 				
-				
-				// @TODO set payload and return value
 				requested_op = NULL;
+				
+				critical_exit();
 				return ret_ts;
 			}
 
@@ -1393,7 +1389,7 @@ pkey_t pq_dequeue(void *q, void** result)
 			// all queues are empty
 			if (extracted_op == NULL) {
 				assertf(requested_op == NULL,"DEQ - No op available to deq%s\n","");
-				//@TODO how to handle this case 
+				//@TODO how to handle this case?
 				continue;
 			}
 
@@ -1421,7 +1417,7 @@ pkey_t pq_dequeue(void *q, void** result)
 			handling_op = NULL;
 
 		} while(true);
-		// @TODO in case of failure update ts of vb
+		// @TODO in case of failure update ts of vb if dequeue
 		//op failed
 		handling_op = NULL;
 		operation = extracted_op;
