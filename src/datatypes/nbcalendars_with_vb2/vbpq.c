@@ -140,6 +140,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 				for(i=0;i<INSERTION_CACHE_LEN-1;i++){
 					__cache_bckt[i] = NULL;
 					__cache_node[i] = NULL;
+					__cache_hash[i] = 0;
 				}
 				__cache_tblt = h;
 			}
