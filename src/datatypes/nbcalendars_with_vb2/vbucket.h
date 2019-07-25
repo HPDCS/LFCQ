@@ -166,6 +166,15 @@ static inline void init_bucket_subsystem(){
 #define get_freezed(extractions, flag)  ((extractions << 32) | extractions | flag)
 #define get_cleaned_extractions(extractions) ((extractions & (~(FREEZE_FOR_EPO | FREEZE_FOR_MOV | FREEZE_FOR_DEL))) >> 32)
 
+static inline void validate_bucket(bucket_t *bckt){
+	node_t *ln;
+	ln = &bckt->head;
+	while(ln->timestamp != INFTY)
+		ln = ln->next;
+
+	if(ln->timestamp == INFTY) assert(ln == bckt->tail);
+}
+
 static inline node_t* node_alloc_by_index(unsigned int i){
 	unsigned int j;
 	long rand;
@@ -518,6 +527,8 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	new->payload	= payload;
 	complete_freeze(bckt);
 
+validate_bucket(bckt);
+
   begin:
   	__global_try++;
 	curr = left = &bckt->head;
@@ -644,6 +655,8 @@ __local_try++ < RTM_RETRY) {
 
 	rtm_insertions++;
   out:
+
+validate_bucket(bckt);
 //	__sync_fetch_and_add(&bckt->pad3, -1LL);
 	return res;
 }
@@ -682,6 +695,8 @@ unsigned int loops = LOOPS_FOR_CACHE;
 
   	if(is_freezed_for_mov(extracted)) return MOV_FOUND;
   	if(is_freezed(extracted)) return EMPTY;
+  	
+validate_bucket(bckt);
 
 	if(__last_node != NULL){
   		curr = __last_node;

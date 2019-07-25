@@ -641,7 +641,6 @@ int  migrate_node(bucket_t *bckt, table_t *new_h)
 	while( (curr = head->next) != tail){
 	//		printf("Moving first\n");
 			curr_next = curr->next; 
-			if(head->next != curr) continue;
 
 			new_index = hash(curr->timestamp, new_h->bucket_width);
 			do{
