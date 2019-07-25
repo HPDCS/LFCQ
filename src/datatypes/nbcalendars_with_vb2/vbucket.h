@@ -707,6 +707,7 @@ unsigned int loops = LOOPS_FOR_CACHE;
 		scan_list_length++;
   	}
 
+	if(curr->timestamp == INFTY)	assert(curr == tail);
   	if(curr == tail){
 		//long rand=0;
         //lrand48_r(&seedT, &rand);
