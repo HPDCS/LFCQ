@@ -318,6 +318,7 @@ static int search_and_insert(bucket_t *head, unsigned int index, pkey_t timestam
 
 		if(check_increase_bucket_epoch(left, epoch) == OK){
 		 	__cache_bckt[index % INSERTION_CACHE_LEN] = left;
+		 	__cache_hash[index % INSERTION_CACHE_LEN] = left->hash;
 		 	return bucket_connect(left, timestamp, tie_breaker, payload);
 		 }
 	}while(1);
