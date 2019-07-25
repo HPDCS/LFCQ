@@ -264,6 +264,7 @@ static inline void bucket_safe_free(bucket_t *ptr){
 	while(current != ptr->tail && !ptr->new_epoch){
 		tmp = current;
 		current = tmp->next;
+		if(tmp->timestamp == INFTY)	assert(tmp == ptr->tail);
 		node_safe_free(tmp);
 	}
 	if(!ptr->new_epoch) node_safe_free(ptr->tail);
@@ -277,6 +278,7 @@ static inline void bucket_unsafe_free(bucket_t *ptr){
 	while(current != ptr->tail && !ptr->new_epoch){
 		tmp = current;
 		current = tmp->next;
+		if(tmp->timestamp == INFTY)	assert(tmp == ptr->tail);
 		node_unsafe_free(tmp);
 	}
 	if(!ptr->new_epoch)	node_safe_free(ptr->tail);
