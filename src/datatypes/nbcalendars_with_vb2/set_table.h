@@ -71,6 +71,7 @@ struct __table
 
 #include "utils_set_table.h"
 
+#if ENABLE_CACHE == 1
 static unsigned int hash64shift(unsigned int key)
 {
   key = (~key) + (key << 21); // key = (key << 21) - key - 1;
@@ -82,6 +83,7 @@ static unsigned int hash64shift(unsigned int key)
   key = key + (key << 31);
   return key;
 }
+#endif
 
 #define INSERTION_CACHE_LEN 32771
 
