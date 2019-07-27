@@ -55,10 +55,12 @@ extern __thread int nid;
 #define RTM_BACKOFF 1L
 
 
-#define NOOP			0
-#define CHANGE_EPOCH	1
-#define	DELETE			2
-#define SET_AS_MOV		3
+#define NOOP			0ULL
+#define CHANGE_EPOCH	1ULL
+#define	DELETE			2ULL
+#define SET_AS_MOV		3ULL
+
+#define get_op_type(x) ((x) >> 32)
 
 
 #define BACKOFF_LOOP() {\
@@ -262,6 +264,39 @@ do{\
                old_next = bckt->next;\
        }while(is_marked(old_next, MOV) && is_freezed_for_del(old_extractions) && !__sync_bool_compare_and_swap(&bckt->next, old_next, get_marked(get_unmarked(old_next), DEL)));\
 }while(0)
+
+
+
+
+static void post_operation(bucket_t *bckt, unsigned long long ops_type, unsigned int epoch, node_t *node){
+	unsigned long long pending_op_descriptor = bckt->op_descriptor;
+	unsigned long long pending_op_type	  = get_op_type(pending_op_descriptor);
+	
+	if(pending_op_type != NOOP) return;
+	if(node) __sync_bool_compare_and_swap(&bckt->pending_insert, NULL, node);
+	pending_op_descriptor = (ops_type << 32) | epoch;
+	__sync_bool_compare_and_swap(&bckt->op_descriptor, NOOP, pending_op_descriptor);
+}
+
+
+
+
+static inline void execute_operation(bucket_t *bckt, unsigned long long pending_op_descriptor){
+	unsigned long long pending_op_type	  = get_op_type(pending_op_descriptor);
+	
+	if(pending_op_type == NOOP) return;
+	else if(pending_op_type == DELETE){
+        atomic_bts_x64(&bckt->next, 0);
+	}
+	else if(pending_op_type == SET_AS_MOV){
+		freeze(bckt, FREEZE_FOR_MOV);
+	}
+	else
+		assert(0);
+
+}
+
+
 
 
 static inline int check_increase_bucket_epoch(bucket_t *bckt, unsigned int epoch){
