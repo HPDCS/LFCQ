@@ -131,7 +131,7 @@ extern int gc_hid[];
 
 
 
-/* (!new) OP load */
+/* (!new) OP load and struct */
 #define OP_PQ_ENQ 0x0
 #define OP_PQ_DEQ 0x2
 typedef struct __op_load op_node; //maybe a union is better?

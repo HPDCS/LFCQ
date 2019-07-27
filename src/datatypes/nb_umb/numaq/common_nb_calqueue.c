@@ -1235,12 +1235,12 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 
 		if (requested_op == NULL && operation == NULL) {
 			//first iteration
-			requested_op = operation = malloc(sizeof(op_node)); //gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
+			requested_op = operation = /* malloc(sizeof(op_node)); */gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
 		
 			//@TODO The structure must be reshuffled to be handled correctly 
 			requested_op->type = OP_PQ_ENQ;
 			requested_op->timestamp = ts;
-			requested_op->payload = payload;
+			requested_op->payload = payload; //DEADBEEF
 			requested_op->response = -1;
 		}
 
@@ -1349,7 +1349,7 @@ pkey_t pq_dequeue(void *q, void** result)
 			//compute ts in order to take right node
 			ts = vb_index * (h->bucket_width);
 
-			requested_op = operation = malloc(sizeof(op_node)); //@TODO use gc_alloc
+			requested_op = operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);//malloc(sizeof(op_node)); //@TODO use gc_alloc
 			
 			requested_op->type = OP_PQ_DEQ;
 			requested_op->timestamp = ts; 
@@ -1397,10 +1397,10 @@ pkey_t pq_dequeue(void *q, void** result)
 			handling_op = extracted_op;
 			if (handling_op->type == OP_PQ_ENQ) 
 			{
-				ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->payload);
+				ret = single_step_pq_enqueue(h, handling_op->timestamp, /*0xABBABBA*/ handling_op->payload);
 				if (ret == -1) //enqueue failed, Migration is happening
 					break;
-				//returned 0 or 1, the insertion was successful
+				//returned 0 or 1, the insertion was "successful"
 				__sync_bool_compare_and_swap(&(handling_op->response), -1, ret); /* Is this an overkill? */
 			}
 			else if (handling_op->type == OP_PQ_DEQ)

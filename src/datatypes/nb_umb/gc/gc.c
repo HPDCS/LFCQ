@@ -99,7 +99,7 @@
  * and means that node locations don't need to be brought into the cache 
  * (most architectures have a non-temporal store instruction).
  */
-#define BLKS_PER_CHUNK 100
+#define BLKS_PER_CHUNK 71//100
 typedef struct chunk_st chunk_t;
 struct chunk_st
 {
