@@ -261,8 +261,10 @@ static void post_operation(bucket_t *bckt, unsigned long long ops_type, unsigned
 	if(pending_op_type != NOOP) return;
 	if(node != NULL) __sync_bool_compare_and_swap(&bckt->pending_insert, NULL, node);
 	pending_op_descriptor = (ops_type << 32) | epoch;
-	if(__sync_bool_compare_and_swap(&bckt->op_descriptor, NOOP, pending_op_descriptor))
-			if(pending_op_type == CHANGE_EPOCH) count_epoch_ops++;
+	if(__sync_bool_compare_and_swap(&bckt->op_descriptor, NOOP, pending_op_descriptor)){
+			if(ops_type == CHANGE_EPOCH) 
+				count_epoch_ops++;
+	}
 }
 
 
