@@ -185,7 +185,7 @@ static inline bucket_t* get_next_valid(bucket_t *bckt){
 
 	do{
 		res = get_unmarked(res_next);
-		complete_freeze(res);
+		execute_operation(res);
 		res_next = res->next;
 		count++;
 	}while(res->type != TAIL && is_marked(res_next, DEL));
@@ -463,7 +463,9 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 				bucket_t *left_node2 = get_next_valid(bucket);
 				if(left_node2->type == TAIL) 	break;			// the bucket is empty	
 
-				freeze(left_node2, FREEZE_FOR_MOV);
+				post_operation(left_node2, SET_AS_MOV);
+				execute_operation(left_node2);
+
 				left_node = search(bucket, &left_node_next, &right_node, &distance, left_node2->index);
 
 				if(distance && BOOL_CAS(&left_node->next, left_node_next, get_marked(right_node, MOV)))
@@ -471,7 +473,10 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 				
 				if(left_node2 != left_node) break;
 				assertf(!is_freezed(left_node->extractions), "%s\n", "NODE not FREEZED");
-				if(right_node->type != TAIL) 	freeze(right_node, FREEZE_FOR_MOV);
+				if(right_node->type != TAIL){
+					post_operation(right_node, SET_AS_MOV);
+					execute_operation(left_node2);
+				}
 				if(left_node->type != HEAD) {	
 					int res = migrate_node(left_node, new_h);
 					if(res == ABORT) break;
@@ -536,7 +541,7 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 		h = new_h;
 	}
 
-	
+
   #if ENABLE_CACHE == 1
 	if(h != __cache_tblt){
 		int i = 0;
@@ -548,7 +553,7 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 		__cache_tblt = h;
 	}
   #endif
-	
+
 	return h;
 
 

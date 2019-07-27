@@ -281,12 +281,14 @@ static void post_operation(bucket_t *bckt, unsigned long long ops_type, unsigned
 
 
 
-static inline void execute_operation(bucket_t *bckt, unsigned long long pending_op_descriptor){
-	unsigned long long pending_op_type	  = get_op_type(pending_op_descriptor);
+static inline void execute_operation(bucket_t *bckt){
+	unsigned long long pending_op_type	  = get_op_type(bckt->op_descriptor);
 	
 	if(pending_op_type == NOOP) return;
 	else if(pending_op_type == DELETE){
+        atomic_bts_x64(&bckt->extractions, DEL_BIT_POS);
         atomic_bts_x64(&bckt->next, 0);
+		freeze(bckt, FREEZE_FOR_DEL);
 	}
 	else if(pending_op_type == SET_AS_MOV){
 		freeze(bckt, FREEZE_FOR_MOV);
@@ -382,7 +384,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	node_t *new   = node_alloc(); //node_alloc_by_index(bckt->index);
 	new->timestamp = timestamp;
 	new->payload	= payload;
-	complete_freeze(bckt);
+	execute_operation(bckt);
 
 	validate_bucket(bckt);
 
@@ -412,7 +414,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
   	}
 
   	if(curr == tail && toskip >= 0ULL) {
-  		freeze(bckt, FREEZE_FOR_DEL);
+		post_operation(bckt, DELETE, 0ULL, NULL);
   		node_unsafe_free(new);
   		res = ABORT; 
   		goto out;
@@ -551,7 +553,8 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
 
 	if(curr->timestamp == INFTY)	assert(curr == tail);
   	if(curr == tail){
-        atomic_bts_x64(&bckt->extractions, DEL_BIT_POS);
+        //atomic_bts_x64(&bckt->extractions, DEL_BIT_POS);
+		post_operation(bckt, DELETE, 0ULL, NULL);
 		assert(is_freezed(bckt->extractions));
 		return EMPTY; 
   	} 

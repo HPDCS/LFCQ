@@ -173,7 +173,7 @@ static inline bucket_t* search(bucket_t *head, bucket_t **old_left_next, bucket_
 		tmp_index = tmp->index;
 		
 		// Check if the right node is marked
-		complete_freeze(tmp);
+		execute_operation(tmp);
 		marked = is_marked(tmp_next, DEL);
 		
 		// Exit if tmp is a tail or its timestamp is > of the searched key
