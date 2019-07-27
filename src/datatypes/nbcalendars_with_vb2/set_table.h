@@ -7,6 +7,8 @@
 #define TID tid
 
 extern __thread unsigned long long near;
+extern __thread unsigned long long num_cas;
+extern __thread unsigned long long num_cas_useful;
 extern __thread unsigned long long malloc_count;
 extern __thread unsigned int TID;
 extern __thread unsigned int acc;
