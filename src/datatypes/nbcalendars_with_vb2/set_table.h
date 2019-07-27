@@ -475,7 +475,7 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 				assertf(!is_freezed(left_node->extractions), "%s\n", "NODE not FREEZED");
 				if(right_node->type != TAIL){
 					post_operation(right_node, SET_AS_MOV, 0ULL, NULL);
-					execute_operation(left_node2);
+					execute_operation(right_node);
 				}
 				if(left_node->type != HEAD) {	
 					int res = migrate_node(left_node, new_h);
@@ -518,7 +518,7 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 				assertf(!is_freezed(left_node->extractions), "%s\n", "NODE not FREEZED");
 				if(right_node->type != TAIL){
 					post_operation(right_node, SET_AS_MOV, 0ULL, NULL);
-					execute_operation(left_node2);
+					execute_operation(right_node);
 				}
 				if(left_node->type != HEAD) 	migrate_node(left_node, new_h);
 			}while(1);
