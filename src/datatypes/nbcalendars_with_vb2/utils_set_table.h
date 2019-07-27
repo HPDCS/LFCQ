@@ -297,18 +297,22 @@ static inline void block_table(table_t *h)
 		bucket = array + ((i + start) % size);	
 		
 		//Try to mark the head as MOV
-		freeze(bucket, FREEZE_FOR_MOV);
+		post_operation(bucket, SET_AS_MOV, 0ULL, NULL);
+		execute_operation(bucket);
 
-		//Try to mark the first VALid node as MOV
+
+		// TODOOOOOOOO
+		//Try to mark the first VALid node as MOV 
 		do
 		{
 			search(bucket, &left_node_next, &right_node, &counter, 0);
 			break;
-			if(right_node->type != TAIL) freeze(right_node, FREEZE_FOR_MOV);
-			//right_node = get_unmarked(left_node_next);
-			break;
-			right_node_next = right_node->next;	
-		}
+			if(right_node->type != TAIL) {
+				post_operation(right_node, SET_AS_MOV, 0ULL, NULL);
+				execute_operation(right_node);
+				break;
+				right_node_next = right_node->next;	
+			}
 		while(
 				right_node->type != TAIL &&
 				(
