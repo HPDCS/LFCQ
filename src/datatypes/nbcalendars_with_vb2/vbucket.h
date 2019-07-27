@@ -271,7 +271,7 @@ static inline void execute_operation(bucket_t *bckt){
 	if(pending_op_type == NOOP) return;
 	else if(pending_op_type == DELETE){
         if(!is_freezed_for_del(bckt->extractions)) 		atomic_bts_x64(&bckt->extractions, DEL_BIT_POS);
-        if(!is_marked(bckt->next, VAL)) 				atomic_bts_x64(&bckt->next, 0);
+        if(is_marked(bckt->next, VAL))		 			atomic_bts_x64(&bckt->next, 0);
 	}
 	else if(pending_op_type == SET_AS_MOV){
 		freeze(bckt, FREEZE_FOR_MOV);
