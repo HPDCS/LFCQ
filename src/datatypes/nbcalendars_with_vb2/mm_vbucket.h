@@ -116,11 +116,11 @@ static inline bucket_t* bucket_alloc(node_t *tail){
 	    }
 	  #endif
     }while(1);
-    long hash = res->hash+1;
-    bzero(res, sizeof(bucket_t));
+    long hash = res->hash;
+    hash++;
+    if(hash == 0) hash++;
     res->extractions 		= 0ULL;
     res->epoch				= 0U;
-    res->new_epoch			= 0U;
     res->pending_insert		= NULL;
     res->pending_insert_res = 0;
     res->op_descriptor 		= 0ULL;
@@ -130,12 +130,13 @@ static inline bucket_t* bucket_alloc(node_t *tail){
     res->tail->timestamp	= INFTY;
     res->tail->tie_breaker	= 0U;
     res->tail->next			= NULL;
+    bzero(res, sizeof(bucket_t));
     res->tail->bucket = res;*/
     res->head.payload		= NULL;
     res->head.timestamp		= MIN;
     res->head.tie_breaker	= 0U;
     res->head.next			= res->tail;
-	res->hash = hash;
+	__sync_bool_compare_and_swap(&res->hash, res->hash, hash);
     #ifndef RTM
     pthread_spin_init(&res->lock, 0);
     #endif

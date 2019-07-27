@@ -140,7 +140,6 @@ static int search_and_insert(bucket_t *head, unsigned int index, pkey_t timestam
 			newb->type 			= ITEM;
 			newb->extractions 	= 0ULL;
 			newb->epoch 		= epoch;
-			newb->new_epoch 	= 0U;
 			newb->next 			= right;
 		
 			newb->head.next			= node_alloc();

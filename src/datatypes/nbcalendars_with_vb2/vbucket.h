@@ -97,7 +97,7 @@ struct __bucket_t
 	unsigned int epoch;				
 	unsigned int index;				// 16
 	unsigned int type;
-	volatile unsigned int new_epoch;		// 24
+	unsigned int __pad_1;		// 24
 	volatile unsigned long long op_descriptor;
 	node_t * tail;					// 32
 	node_t * volatile pending_insert;		// 40
@@ -336,7 +336,7 @@ __thread unsigned long long fallback_insertions = 0ULL;
 __thread pkey_t last_key_fall = 0;
 __thread unsigned long long counter_last_key_fall = 0ULL;
 
-
+/*
 static inline int bucket_connect_fallback(bucket_t *bckt, node_t *node){
 	unsigned long long extractions;
 	extractions = bckt->extractions;
@@ -365,6 +365,7 @@ static inline int bucket_connect_fallback(bucket_t *bckt, node_t *node){
 	fallback_insertions++;
 	return OK;
 }
+*/
 
 __thread unsigned long long acc_contention = 0ULL;
 __thread unsigned long long cnt_contention = 0ULL;
