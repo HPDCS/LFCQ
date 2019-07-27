@@ -252,7 +252,7 @@ do{\
 //}
 */
 
-
+__thread unsigned long long count_epoch_ops = 0ULL;
 
 static void post_operation(bucket_t *bckt, unsigned long long ops_type, unsigned int epoch, node_t *node){
 	unsigned long long pending_op_descriptor = bckt->op_descriptor;
@@ -261,7 +261,8 @@ static void post_operation(bucket_t *bckt, unsigned long long ops_type, unsigned
 	if(pending_op_type != NOOP) return;
 	if(node != NULL) __sync_bool_compare_and_swap(&bckt->pending_insert, NULL, node);
 	pending_op_descriptor = (ops_type << 32) | epoch;
-	__sync_bool_compare_and_swap(&bckt->op_descriptor, NOOP, pending_op_descriptor);
+	if(__sync_bool_compare_and_swap(&bckt->op_descriptor, NOOP, pending_op_descriptor))
+			if(pending_op_type == CHANGE_EPOCH) count_epoch_ops++;
 }
 
 
