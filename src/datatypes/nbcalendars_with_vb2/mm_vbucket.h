@@ -147,13 +147,13 @@ static inline bucket_t* bucket_alloc(node_t *tail){
 static inline void bucket_safe_free(bucket_t *ptr){
 
 	node_t *tmp, *current = ptr->head.next;
-	while(current != ptr->tail && !ptr->new_epoch){
+	while(current != ptr->tail && get_op_type(ptr->op_descriptor) != CHANGE_EPOCH){
 		tmp = current;
 		current = tmp->next;
 		if(tmp->timestamp == INFTY)	assert(tmp == ptr->tail);
 		node_safe_free(tmp);
 	}
-	//if(!ptr->new_epoch) node_safe_free(ptr->tail);
+
 	gc_free(ptst, ptr, gc_aid[GC_BUCKETS]);
 	
 }
@@ -161,13 +161,13 @@ static inline void bucket_safe_free(bucket_t *ptr){
 static inline void bucket_unsafe_free(bucket_t *ptr){
 
 	node_t *tmp, *current = ptr->head.next;
-	while(current != ptr->tail && !ptr->new_epoch){
+	while(current != ptr->tail && get_op_type(ptr->op_descriptor) != CHANGE_EPOCH){
 		tmp = current;
 		current = tmp->next;
 		if(tmp->timestamp == INFTY)	assert(tmp == ptr->tail);
 		node_unsafe_free(tmp);
 	}
-	//if(!ptr->new_epoch)	node_safe_free(ptr->tail);
+
 	gc_unsafe_free(ptst, ptr, gc_aid[GC_BUCKETS]);
 
 }
