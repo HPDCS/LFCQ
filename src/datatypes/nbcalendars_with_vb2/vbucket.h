@@ -154,6 +154,7 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 
 	// phase 2: check if there is a pending op
 	if(bckt->pending_insert != ((void*)1ULL) ){
+		assert(0);
 		unsigned int present=0;
 		unsigned long long toskip;
 		node_t *tail  = bckt->tail;
@@ -213,7 +214,7 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 	bool suc = false;
 	
     res->extractions 		= get_cleaned_extractions(old_extractions);
-    res->epoch				= bckt->new_epoch;
+    res->epoch				= bckt->op_descriptor & UINT_MAX;
     res->index				= bckt->index;
     res->type				= bckt->type;
 
