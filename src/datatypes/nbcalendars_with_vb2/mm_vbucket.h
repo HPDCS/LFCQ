@@ -123,6 +123,7 @@ static inline bucket_t* bucket_alloc(node_t *tail){
     res->new_epoch			= 0U;
     res->pending_insert		= NULL;
     res->pending_insert_res = 0;
+    res->op_descriptor 		= 0ULL;
     res->tail = tail;
 /*    res->tail = node_alloc();
     res->tail->payload		= NULL;
@@ -130,7 +131,6 @@ static inline bucket_t* bucket_alloc(node_t *tail){
     res->tail->tie_breaker	= 0U;
     res->tail->next			= NULL;
     res->tail->bucket = res;*/
-    res->pad3 = 0ULL;
     res->head.payload		= NULL;
     res->head.timestamp		= MIN;
     res->head.tie_breaker	= 0U;

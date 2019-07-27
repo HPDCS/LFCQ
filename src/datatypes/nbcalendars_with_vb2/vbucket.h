@@ -54,6 +54,13 @@ extern __thread int nid;
 #define RTM_FALLBACK 1
 #define RTM_BACKOFF 1L
 
+
+#define NOOP			0
+#define CHANGE_EPOCH	1
+#define	DELETE			2
+#define SET_AS_MOV		3
+
+
 #define BACKOFF_LOOP() {\
 long rand;\
 long fallback;\
@@ -86,11 +93,11 @@ struct __bucket_t
 	volatile unsigned long long extractions;	//  8
 	char __pad_2[56];
 	unsigned int epoch;				
-	volatile unsigned int index;				// 16
+	unsigned int index;				// 16
 	unsigned int type;
 	volatile unsigned int new_epoch;		// 24
-	volatile long long pad3;
-	node_t * volatile tail;					// 32
+	volatile unsigned long long op_descriptor;
+	node_t * tail;					// 32
 	node_t * volatile pending_insert;		// 40
 	bucket_t * volatile next;			// 48
 	volatile unsigned int pending_insert_res;       // 52
@@ -226,8 +233,8 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 
 
 //static inline void freeze(bucket_t *bckt, unsigned long long flag) {
-#define freeze(bckt, flag) 	{\
-	do{\
+#define freeze(bckt, flag) 	\
+do{\
 	unsigned long long old_extractions = 0ULL;\
 	unsigned long long new_extractions = 0ULL;\
 	old_extractions = (bckt)->extractions;\
@@ -237,7 +244,7 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 		old_extractions = (bckt)->extractions;\
 	}\
 	complete_freeze((bckt));\
-}while(0);}
+}while(0)
 //}
 
 
@@ -258,12 +265,18 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 
 
 static inline int check_increase_bucket_epoch(bucket_t *bckt, unsigned int epoch){
+	return OK;
+
+	unsigned int new_epoch;
 	
-	if(bckt->epoch >= epoch && bckt->new_epoch == 0) return OK;
+	if(bckt->epoch >= epoch && (new_epoch = bckt->new_epoch) == 0) return OK;
+	if(new_epoch == 0)			new_epoch = __sync_val_compare_and_swap(&bckt->new_epoch, 0, epoch);
 	
-	__sync_bool_compare_and_swap(&bckt->new_epoch, 0, epoch);
-	
-	freeze(bckt, FREEZE_FOR_EPO);
+	if(new_epoch != UINT_MAX) 	
+		freeze(bckt, FREEZE_FOR_EPO);
+	else
+		freeze(bckt, FREEZE_FOR_DEL);
+
 	
 	return ABORT;
 
@@ -436,9 +449,10 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 			mask = mask | (mask <<1);
 			goto retry_tm;
 		}
-		if(__global_try < RTM_FALLBACK || __status & _XABORT_EXPLICIT) goto begin;
+		//if(__global_try < RTM_FALLBACK || __status & _XABORT_EXPLICIT) 
+			goto begin;
 //		__sync_fetch_and_add(&bckt->pad3, -1LL);
-		return bucket_connect_fallback(bckt, new);
+		//return bucket_connect_fallback(bckt, new);
 	}
 
 	rtm_insertions++;

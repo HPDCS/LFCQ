@@ -120,8 +120,8 @@ static inline void clflush(volatile void *p){ asm volatile ("clflush (%0)" :: "r
 #define is_freezed_for_mov(extractions) (!is_freezed_for_del(extractions) &&  (extractions & FREEZE_FOR_MOV))
 #define is_freezed_for_epo(extractions) (!is_freezed_for_del(extractions) &&  (extractions & FREEZE_FOR_EPO))
 
-#define get_freezed(extractions, flag)  ((extractions << 32) | extractions | flag)
-#define get_cleaned_extractions(extractions) ((extractions & (~(FREEZE_FOR_EPO | FREEZE_FOR_MOV | FREEZE_FOR_DEL))) >> 32)
+#define get_freezed(extractions, flag)  (( (extractions) << 32) | (extractions) | flag)
+#define get_cleaned_extractions(extractions) (( (extractions) & (~(FREEZE_FOR_EPO | FREEZE_FOR_MOV | FREEZE_FOR_DEL))) >> 32)
 
 
 
