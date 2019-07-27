@@ -79,6 +79,22 @@ static inline node_t* node_alloc(){
 	return res;
 }
 
+
+/* allocate a node */
+static inline void tail_node_init(node_t* res){
+	long rand;
+    bzero(res, sizeof(node_t));
+	res->next 				= NULL;
+	res->payload			= NULL;
+	res->tie_breaker		= 0;
+	res->timestamp	 		= INFTY;
+	res->replica 			= NULL;
+	lrand48_r(&seedT, &rand);
+	res->hash = rand;
+}
+
+
+
 /* allocate a bucket */
 static inline bucket_t* bucket_alloc(){
 	bucket_t* res;
