@@ -122,7 +122,6 @@ static inline bucket_t* bucket_alloc(node_t *tail){
     res->extractions 		= 0ULL;
     res->epoch				= 0U;
     res->pending_insert		= NULL;
-    res->pending_insert_res = 0;
     res->op_descriptor 		= 0ULL;
     res->tail = tail;
 /*    res->tail = node_alloc();

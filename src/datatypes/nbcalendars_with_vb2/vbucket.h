@@ -98,13 +98,11 @@ struct __bucket_t
 	unsigned int index;				// 16
 	unsigned int type;
 	unsigned int __pad_1;		// 24
-	volatile unsigned long long op_descriptor;
+	unsigned long long __pad_4;       // 52
 	node_t * tail;					// 32
+	volatile unsigned long long op_descriptor;
 	node_t * volatile pending_insert;		// 40
 	bucket_t * volatile next;			// 48
-	volatile unsigned int pending_insert_res;       // 52
-	//char __pad_4[4];
-	volatile unsigned int socket;
 	volatile long hash;				// 64
 //-----------------------------
 	node_t head;					// 32
@@ -142,13 +140,8 @@ static inline void validate_bucket(bucket_t *bckt){
 static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long old_extractions){
 	unsigned int res_phase_1 = 2;
 	
-	if(!is_freezed_for_epo(old_extractions)){
-		if(is_freezed(old_extractions)){
-			if(bckt->pending_insert == NULL) __sync_bool_compare_and_swap(&bckt->pending_insert, NULL, (void*)1ULL);
-			if(bckt->pending_insert_res == 0)__sync_bool_compare_and_swap(&bckt->pending_insert_res, 0, res_phase_1);
-		}
-		return;
-	}
+	if(!is_freezed_for_epo(old_extractions))	return;
+	
 	// phase 1: block pushing new ops
 	if(!bckt->pending_insert) __sync_bool_compare_and_swap(&bckt->pending_insert, NULL, (void*)1ULL);
 
@@ -204,11 +197,7 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 
 	}
 	
-	if(!bckt->pending_insert_res) __sync_bool_compare_and_swap(&bckt->pending_insert_res, 0, res_phase_1);
-
-
 	// phase 3: replace the bucket for new epoch
-
 	void *old_next = bckt->next;
 	bucket_t *res = bucket_alloc(bckt->tail);
 	bool suc = false;
@@ -228,9 +217,10 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 		res->next = old_next;
 		suc=false;
 	}while(is_marked(old_next, VAL) && !(suc = __sync_bool_compare_and_swap(&(bckt)->next, old_next, get_marked(res, DEL))));
-	
     atomic_bts_x64(&bckt->extractions, DEL_BIT_POS);
+
 	if(suc) return;
+
 	only_bucket_unsafe_free(res);
 }
 
