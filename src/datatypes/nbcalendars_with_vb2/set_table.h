@@ -544,7 +544,9 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 
   #if ENABLE_CACHE == 1
 	if(h != __cache_tblt){
-		count_epoch_ops = 0;
+		count_epoch_ops = 0ULL;
+		bckt_connect_count = 0ULL;
+		rq_epoch_ops = 0ULL;
 		int i = 0;
 		for(i=0;i<INSERTION_CACHE_LEN-1;i++){
 			__cache_bckt[i] = NULL;
