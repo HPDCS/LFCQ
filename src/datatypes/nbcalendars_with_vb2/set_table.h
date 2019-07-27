@@ -463,7 +463,7 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 				bucket_t *left_node2 = get_next_valid(bucket);
 				if(left_node2->type == TAIL) 	break;			// the bucket is empty	
 
-				post_operation(left_node2, SET_AS_MOV);
+				post_operation(left_node2, SET_AS_MOV, 0ULL, NULL);
 				execute_operation(left_node2);
 
 				left_node = search(bucket, &left_node_next, &right_node, &distance, left_node2->index);
@@ -474,7 +474,7 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 				if(left_node2 != left_node) break;
 				assertf(!is_freezed(left_node->extractions), "%s\n", "NODE not FREEZED");
 				if(right_node->type != TAIL){
-					post_operation(right_node, SET_AS_MOV);
+					post_operation(right_node, SET_AS_MOV, 0ULL, NULL);
 					execute_operation(left_node2);
 				}
 				if(left_node->type != HEAD) {	
