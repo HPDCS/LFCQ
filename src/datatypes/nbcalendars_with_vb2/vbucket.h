@@ -253,6 +253,7 @@ do{\
 */
 
 __thread unsigned long long count_epoch_ops = 0ULL;
+__thread unsigned long long rq_epoch_ops = 0ULL;
 
 static void post_operation(bucket_t *bckt, unsigned long long ops_type, unsigned int epoch, node_t *node){
 	unsigned long long pending_op_descriptor = bckt->op_descriptor;
@@ -327,7 +328,7 @@ static inline void finalize_set_as_mov(bucket_t *bckt){
 
 static inline int check_increase_bucket_epoch(bucket_t *bckt, unsigned int epoch){
 	if(bckt->epoch >= epoch) return OK;
-
+rq_epoch_ops++;
 	post_operation(bckt, CHANGE_EPOCH, epoch, NULL);
 	execute_operation(bckt);
 	
