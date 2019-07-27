@@ -63,6 +63,8 @@ long fallback;\
 }
 
 typedef struct __node_t node_t;
+typedef struct __bucket_t bucket_t;
+
 struct __node_t
 {
 	void *payload;						// 8
@@ -70,8 +72,8 @@ struct __node_t
 	char __pad_1[8-sizeof(pkey_t)];		// 16
 	unsigned int tie_breaker;			// 20
 	int hash;							// 24
-	node_t * volatile next;				// 32
-	void * volatile bucket;
+	node_t * next;				// 32
+	bucket_t *  bucket;
 	void * volatile replica;
 	char __pad_2[16];
 };
@@ -79,7 +81,6 @@ struct __node_t
 /**
  *  Struct that define a bucket
  */ 
-typedef struct __bucket_t bucket_t;
 struct __bucket_t
 {
 	volatile unsigned long long extractions;	//  8
@@ -212,7 +213,6 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
     res->head.tie_breaker	= 0U;
     res->head.next			= bckt->head.next;
 
-    node_safe_free(res->tail);
     res->tail = bckt->tail;
         
     do{

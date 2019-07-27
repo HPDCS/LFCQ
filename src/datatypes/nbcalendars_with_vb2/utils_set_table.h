@@ -245,16 +245,18 @@ static void set_new_table(table_t *h, unsigned int counter)
 		new_h->perc_used_bucket 	= h->perc_used_bucket;
 		new_h->elem_per_bucket 		= h->elem_per_bucket;
 		new_h->pub_per_epb 			= h->perc_used_bucket * h->elem_per_bucket;
-		new_h->cached_node		= NULL;
-		new_h->tail.extractions 	= 0ULL;
-		new_h->tail.epoch 			= 0U;
-		new_h->tail.index 			= UINT_MAX;
-		new_h->tail.type 			= TAIL;
-		new_h->tail.next 			= NULL; 
+		new_h->cached_node			= NULL;
+		new_h->b_tail.extractions 	= 0ULL;
+		new_h->b_tail.epoch 		= 0U;
+		new_h->b_tail.index 		= UINT_MAX;
+		new_h->b_tail.type 			= TAIL;
+		new_h->b_tail.next 			= NULL; 
+		tail_node_init(&new_h->n_tail); 
 
 		for (i = 0; i < new_size; i++)
 		{
-			new_h->array[i].next = &new_h->tail;
+			new_h->array[i].next = &new_h->b_tail;
+			new_h->array[i].tail = &new_h->n_tail;
 			new_h->array[i].type = HEAD;
 			new_h->array[i].epoch = 0U;
 			new_h->array[i].index = i;

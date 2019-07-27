@@ -82,15 +82,18 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	res->hashtable->resize_count = 0;
 	res->hashtable->e_counter.count = 0;
 	res->hashtable->d_counter.count = 0;
-	res->hashtable->tail.extractions = 0ULL;
-	res->hashtable->tail.epoch = 0U;
-	res->hashtable->tail.index = UINT_MAX;
-	res->hashtable->tail.type = TAIL;
-	res->hashtable->tail.next = NULL; 
+	res->hashtable->b_tail.extractions = 0ULL;
+	res->hashtable->b_tail.epoch = 0U;
+	res->hashtable->b_tail.index = UINT_MAX;
+	res->hashtable->b_tail.type = TAIL;
+	res->hashtable->b_tail.next = NULL; 
+	tail_node_init(&res->hashtable->n_tail);
+	
 	res->hashtable->cached_node = NULL;
 	for (i = 0; i < MINIMUM_SIZE; i++)
 	{
-		res->hashtable->array[i].next = &res->hashtable->tail;
+		res->hashtable->array[i].next = &res->hashtable->b_tail;
+		res->hashtable->array[i].tail = &res->hashtable->n_tail;
 		res->hashtable->array[i].type = HEAD;
 		res->hashtable->array[i].epoch = 0U;
 		res->hashtable->array[i].index = 0U;

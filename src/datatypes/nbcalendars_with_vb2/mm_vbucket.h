@@ -107,12 +107,12 @@ static inline bucket_t* bucket_alloc(){
     res->new_epoch			= 0U;
     res->pending_insert		= NULL;
     res->pending_insert_res = 0;
-    res->tail = node_alloc();
+/*    res->tail = node_alloc();
     res->tail->payload		= NULL;
     res->tail->timestamp	= INFTY;
     res->tail->tie_breaker	= 0U;
     res->tail->next			= NULL;
-    res->tail->bucket = res;
+    res->tail->bucket = res;*/
     res->pad3 = 0ULL;
     res->head.payload		= NULL;
     res->head.timestamp		= MIN;
@@ -136,7 +136,7 @@ static inline void bucket_safe_free(bucket_t *ptr){
 		if(tmp->timestamp == INFTY)	assert(tmp == ptr->tail);
 		node_safe_free(tmp);
 	}
-	if(!ptr->new_epoch) node_safe_free(ptr->tail);
+	//if(!ptr->new_epoch) node_safe_free(ptr->tail);
 	gc_free(ptst, ptr, gc_aid[GC_BUCKETS]);
 	
 }
@@ -150,7 +150,7 @@ static inline void bucket_unsafe_free(bucket_t *ptr){
 		if(tmp->timestamp == INFTY)	assert(tmp == ptr->tail);
 		node_unsafe_free(tmp);
 	}
-	if(!ptr->new_epoch)	node_safe_free(ptr->tail);
+	//if(!ptr->new_epoch)	node_safe_free(ptr->tail);
 	gc_unsafe_free(ptst, ptr, gc_aid[GC_BUCKETS]);
 
 }

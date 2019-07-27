@@ -61,7 +61,9 @@ struct __table
 	bucket_t * volatile cached_node; 
 	char zpad5[56];     
 	
-	bucket_t tail;
+	node_t n_tail;
+
+	bucket_t b_tail;
 //	char zpad5[256-sizeof(bucket_t)];
 
 	bucket_t array[1];			//32
@@ -141,6 +143,7 @@ static int search_and_insert(bucket_t *head, unsigned int index, pkey_t timestam
 			newb->epoch 		= epoch;
 			newb->new_epoch 	= 0U;
 			newb->next 			= right;
+			newb->tail			= left->tail;
 
 		
 			newb->head.next			= node_alloc();
@@ -267,6 +270,7 @@ int  migrate_node(bucket_t *bckt, table_t *new_h)
 					new->extractions 		= 0ULL;
 					new->epoch 				= 0;
 					new->next 				= right;
+					new->tail				= &new_h->n_tail;
 					
 					tn = new->tail;
 					ln = &new->head;
@@ -370,7 +374,7 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 
 	bucket_t *bucket, *array	;
     #ifndef NDEBUG
-	bucket_t *tail;
+	bucket_t *btail;
     #endif
 	bucket_t *right_node, *left_node, *left_node_next;
 	table_t 			*h = *curr_table_ptr 			;
@@ -426,7 +430,7 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 		array 			= h->array;
 		new_bw 			= new_h->bucket_width;
 	    #ifndef NDEBUG 
-		tail 			= &h->tail;	
+		btail 			= &h->b_tail;	
 	    #endif
 		if(new_bw < 0)
 		{
@@ -518,11 +522,11 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 			if(left_node_next != right_node && BOOL_CAS(&left_node->next, left_node_next, get_marked(right_node, MOV)))
 				connect_to_be_freed_node_list(left_node_next, distance);
 			
-			assertf(get_unmarked(right_node) != tail, "Fail in line 972 %p %p %p %p\n",
+			assertf(get_unmarked(right_node) != btail, "Fail in line 972 %p %p %p %p\n",
 			 bucket,
 			  left_node,
 			   right_node, 
-			   tail); 
+			   btail); 
 	
 		}
 		
