@@ -310,9 +310,10 @@ static inline void block_table(table_t *h)
 			if(right_node->type != TAIL) {
 				post_operation(right_node, SET_AS_MOV, 0ULL, NULL);
 				execute_operation(right_node);
-				break;
-				right_node_next = right_node->next;	
 			}
+			break;
+			right_node_next = right_node->next;	
+		}
 		while(
 				right_node->type != TAIL &&
 				(
