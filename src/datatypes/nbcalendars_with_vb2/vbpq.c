@@ -360,7 +360,7 @@ for(h=0; h<INSERTION_CACHE_LEN-1;h++){
        cache_load+=__cache_load[h];
        cache_hit+=__cache_hit[h];
 }
-printf("CHANGE EPOCH REQ: %llu - %llu - Insertion cache efficiency %f %llu %llu\n", count_epoch_ops, rq_epoch_ops, ((float)cache_hit/(float)cache_load), cache_hit, cache_load);
+printf("CHANGE EPOCH REQ: %llu - %llu - %lu - Insertion cache efficiency %f %llu %llu\n", count_epoch_ops, rq_epoch_ops, bckt_connect_count,  ((float)cache_hit/(float)cache_load), cache_hit, cache_load);
 
 printf("TID:%u NID:%u BCKT CONNECT "
 "ABORTRATE:%f, "
