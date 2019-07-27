@@ -392,8 +392,8 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
     min_contention = contention <= min_contention ? contention : min_contention;
     max_contention = contention >= max_contention ? contention : max_contention;
 
-    if(check_increase_bucket_epoch(left, epoch) != OK) return ABORT;
-     
+    if(check_increase_bucket_epoch(bckt, epoch) != OK) return ABORT;
+
 	node_t *new   = node_alloc(); //node_alloc_by_index(bckt->index);
 	new->timestamp = timestamp;
 	new->payload	= payload;
