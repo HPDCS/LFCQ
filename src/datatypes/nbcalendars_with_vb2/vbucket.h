@@ -234,6 +234,7 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 }
 
 
+/*
 //static inline void freeze(bucket_t *bckt, unsigned long long flag) {
 #define freeze(bckt, flag) 	\
 do{\
@@ -248,7 +249,7 @@ do{\
 	complete_freeze((bckt));\
 }while(0)
 //}
-
+*/
 
 
 
@@ -267,14 +268,22 @@ static void post_operation(bucket_t *bckt, unsigned long long ops_type, unsigned
 
 static inline void execute_operation(bucket_t *bckt){
 	unsigned long long pending_op_type	  = get_op_type(bckt->op_descriptor);
+	unsigned long long old_extractions = bckt->extractions;
 	
 	if(pending_op_type == NOOP) return;
 	else if(pending_op_type == DELETE){
-        if(!is_freezed_for_del(bckt->extractions)) 		atomic_bts_x64(&bckt->extractions, DEL_BIT_POS);
+        if(!is_freezed_for_del(old_extractions)) 		atomic_bts_x64(&bckt->extractions, DEL_BIT_POS);
         if(is_marked(bckt->next, VAL))		 			atomic_bts_x64(&bckt->next, 0);
 	}
 	else if(pending_op_type == SET_AS_MOV){
-		freeze(bckt, FREEZE_FOR_MOV);
+		unsigned long long new_extractions = 0ULL;
+		while(!is_freezed(old_extractions)){
+			new_extractions = get_freezed(old_extractions, FREEZE_FOR_MOV);
+			if(__sync_bool_compare_and_swap(&bckt->extractions, old_extractions, new_extractions)) 	
+				break;
+			old_extractions = bckt->extractions;
+		}
+		complete_freeze(bckt);
 	}
 	else
 		assert(0);
@@ -305,7 +314,7 @@ static inline void finalize_set_as_mov(bucket_t *bckt){
 
 static inline int check_increase_bucket_epoch(bucket_t *bckt, unsigned int epoch){
 	return OK;
-
+/*
 	unsigned int new_epoch;
 	
 	if(bckt->epoch >= epoch && (new_epoch = bckt->new_epoch) == 0) return OK;
@@ -315,7 +324,7 @@ static inline int check_increase_bucket_epoch(bucket_t *bckt, unsigned int epoch
 		freeze(bckt, FREEZE_FOR_EPO);
 	else
 		freeze(bckt, FREEZE_FOR_DEL);
-
+*/
 	
 	return ABORT;
 
