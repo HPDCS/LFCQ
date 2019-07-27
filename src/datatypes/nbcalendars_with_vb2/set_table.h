@@ -116,8 +116,7 @@ static int search_and_insert(bucket_t *head, unsigned int index, pkey_t timestam
 
 	if(left != NULL && left->index == index && left->hash == __cache_hash[key] && !is_freezed(left->extractions) && is_marked(left->next, VAL)){
 		__cache_hit[key]++;
-		if(check_increase_bucket_epoch(left, epoch) == OK && bucket_connect(left, timestamp, tie_breaker, payload) == OK)
-		 	return OK;
+		if(bucket_connect(left, timestamp, tie_breaker, payload, epoch) == OK) return OK;
 		__cache_bckt[key] = NULL; 	
 	}
   #endif
@@ -164,14 +163,12 @@ static int search_and_insert(bucket_t *head, unsigned int index, pkey_t timestam
 			return OK;
 		}
 
-		if(check_increase_bucket_epoch(left, epoch) == OK){
 	  #if ENABLE_CACHE == 1
 		 	__cache_bckt[index % INSERTION_CACHE_LEN] = left;
 		 	__cache_hash[index % INSERTION_CACHE_LEN] = left->hash;
 	  #endif
-		 	return bucket_connect(left, timestamp, tie_breaker, payload);
-		 }
-	}while(1);
+		 	return bucket_connect(left, timestamp, tie_breaker, payload, epoch);
+		}while(1);
 
 	return ABORT;
 }

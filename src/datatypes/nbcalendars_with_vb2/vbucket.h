@@ -324,7 +324,7 @@ static inline int check_increase_bucket_epoch(bucket_t *bckt, unsigned int epoch
 		freeze(bckt, FREEZE_FOR_EPO);
 	else
 		freeze(bckt, FREEZE_FOR_DEL);
-*/
+*/ 
 	
 	return ABORT;
 
@@ -355,7 +355,7 @@ static inline int bucket_connect_fallback(bucket_t *bckt, node_t *node){
 	// put new epoch
 	__sync_bool_compare_and_swap(&bckt->new_epoch, 0, bckt->epoch);
 	
-	freeze(bckt, FREEZE_FOR_EPO);
+	//freeze(bckt, FREEZE_FOR_EPO);
 
 	assertf(bckt->pending_insert_res == 0, "Very strange....%s\n", "the result of the pending_insert in 0 after a freeze for EPO");
 
@@ -373,7 +373,7 @@ __thread pkey_t last_key = 0;
 __thread unsigned long long counter_last_key = 0ULL;
 
 
-int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, void* payload){
+int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, void* payload, unsigned int epoch){
 	
 	node_t *tail  = bckt->tail;
 	node_t *left  = &bckt->head;
@@ -392,6 +392,8 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
     min_contention = contention <= min_contention ? contention : min_contention;
     max_contention = contention >= max_contention ? contention : max_contention;
 
+    if(check_increase_bucket_epoch(left, epoch) != OK) return ABORT;
+     
 	node_t *new   = node_alloc(); //node_alloc_by_index(bckt->index);
 	new->timestamp = timestamp;
 	new->payload	= payload;
