@@ -250,22 +250,6 @@ do{\
 //}
 
 
-#define freeze_from_mov_to_del(bckt) do{\
-	unsigned long long old_extractions = 0;\
-	bucket_t *old_next = NULL;\
-	complete_freeze(bckt);\
-	old_extractions = bckt->extractions;\
-	while(is_freezed_for_mov(old_extractions)){\
-        atomic_bts_x64(&bckt->extractions, DEL_BIT_POS);\
-		old_extractions = bckt->extractions;\
-    }\
-       old_extractions = bckt->extractions;\
-       do{\
-               old_next = bckt->next;\
-       }while(is_marked(old_next, MOV) && is_freezed_for_del(old_extractions) && !__sync_bool_compare_and_swap(&bckt->next, old_next, get_marked(get_unmarked(old_next), DEL)));\
-}while(0)
-
-
 
 
 static void post_operation(bucket_t *bckt, unsigned long long ops_type, unsigned int epoch, node_t *node){
@@ -286,9 +270,8 @@ static inline void execute_operation(bucket_t *bckt){
 	
 	if(pending_op_type == NOOP) return;
 	else if(pending_op_type == DELETE){
-        atomic_bts_x64(&bckt->extractions, DEL_BIT_POS);
-        atomic_bts_x64(&bckt->next, 0);
-		freeze(bckt, FREEZE_FOR_DEL);
+        if(!is_freezed_for_del(bckt->extractions)) 		atomic_bts_x64(&bckt->extractions, DEL_BIT_POS);
+        if(!is_marked(bckt->next, VAL)) 				atomic_bts_x64(&bckt->next, 0);
 	}
 	else if(pending_op_type == SET_AS_MOV){
 		freeze(bckt, FREEZE_FOR_MOV);
@@ -297,6 +280,25 @@ static inline void execute_operation(bucket_t *bckt){
 		assert(0);
 
 }
+
+
+
+
+static inline void finalize_set_as_mov(bucket_t *bckt){
+	unsigned long long old_extractions = 0;
+	bucket_t *old_next = NULL;
+	complete_freeze(bckt);
+	old_extractions = bckt->extractions;
+	while(is_freezed_for_mov(old_extractions)){
+        atomic_bts_x64(&bckt->extractions, DEL_BIT_POS);
+		old_extractions = bckt->extractions;
+    }
+       old_extractions = bckt->extractions;
+       do{
+               old_next = bckt->next;
+       }while(is_marked(old_next, MOV) && is_freezed_for_del(old_extractions) && !__sync_bool_compare_and_swap(&bckt->next, old_next, get_marked(get_unmarked(old_next), DEL)));
+}
+
 
 
 

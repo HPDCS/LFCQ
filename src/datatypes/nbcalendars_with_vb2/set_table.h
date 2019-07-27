@@ -359,7 +359,7 @@ int  migrate_node(bucket_t *bckt, table_t *new_h)
 //			curr = head->next;
 	}
 
-	freeze_from_mov_to_del(bckt);
+	finalize_set_as_mov(bckt);
 	return OK;
 }
 
@@ -507,7 +507,8 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 				bucket_t *left_node2 = get_next_valid(bucket);
 				if(left_node2->type == TAIL) 	break;			// the bucket is empty	
 
-				freeze(left_node2, FREEZE_FOR_MOV);
+				post_operation(left_node2, SET_AS_MOV, 0ULL, NULL);
+				execute_operation(left_node2);
 				left_node = search(bucket, &left_node_next, &right_node, &distance, left_node2->index);
 
 				if(distance && BOOL_CAS(&left_node->next, left_node_next, get_marked(right_node, MOV)))
@@ -515,7 +516,10 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 				
 				if(left_node2 != left_node) continue;
 				assertf(!is_freezed(left_node->extractions), "%s\n", "NODE not FREEZED");
-				if(right_node->type != TAIL) 	freeze(right_node, FREEZE_FOR_MOV);
+				if(right_node->type != TAIL){
+					post_operation(right_node, SET_AS_MOV, 0ULL, NULL);
+					execute_operation(left_node2);
+				}
 				if(left_node->type != HEAD) 	migrate_node(left_node, new_h);
 			}while(1);
 	
