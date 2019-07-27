@@ -259,7 +259,7 @@ static void post_operation(bucket_t *bckt, unsigned long long ops_type, unsigned
 	unsigned long long pending_op_type	  = get_op_type(pending_op_descriptor);
 	
 	if(pending_op_type != NOOP) return;
-	if(node) __sync_bool_compare_and_swap(&bckt->pending_insert, NULL, node);
+	if(node != NULL) __sync_bool_compare_and_swap(&bckt->pending_insert, NULL, node);
 	pending_op_descriptor = (ops_type << 32) | epoch;
 	__sync_bool_compare_and_swap(&bckt->op_descriptor, NOOP, pending_op_descriptor);
 }
