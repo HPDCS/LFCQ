@@ -137,18 +137,6 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 		if(res == MOV_FOUND){
 			// check for a resize
 			h = read_table(&queue->hashtable);
-		  #if ENABLE_CACHE == 1
-			if(h != __cache_tblt){
-				int i = 0;
-				for(i=0;i<INSERTION_CACHE_LEN-1;i++){
-					__cache_bckt[i] = NULL;
-					__cache_node[i] = NULL;
-					__cache_hash[i] = 0;
-				}
-				__cache_tblt = h;
-			}
-		  #endif
-
 			// get actual size
 			size = h->size;
 	        // read the actual epoch
