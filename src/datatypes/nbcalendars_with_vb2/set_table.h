@@ -136,15 +136,13 @@ static int search_and_insert(bucket_t *head, unsigned int index, pkey_t timestam
 
 		// the virtual bucket is missing thus create a new one with the item
 		if(left->index != index || left->type == HEAD){
-			bucket_t *newb 		= bucket_alloc();
+			bucket_t *newb 		= bucket_alloc(left->tail);
 			newb->index 		= index;
 			newb->type 			= ITEM;
 			newb->extractions 	= 0ULL;
 			newb->epoch 		= epoch;
 			newb->new_epoch 	= 0U;
 			newb->next 			= right;
-			newb->tail			= left->tail;
-
 		
 			newb->head.next			= node_alloc();
 			newb->head.tie_breaker 	= 0;
@@ -264,14 +262,13 @@ int  migrate_node(bucket_t *bckt, table_t *new_h)
 
 				// the virtual bucket is missing thus create a new one with the item
 				if(left->index != new_index || left->type == HEAD){
-					bucket_t *new 			= bucket_alloc();
+					bucket_t *new 			= bucket_alloc(&new_h->n_tail);
 					new->index 				= new_index;
 					new->type 				= ITEM;
 					new->extractions 		= 0ULL;
 					new->epoch 				= 0;
 					new->next 				= right;
-					new->tail				= &new_h->n_tail;
-					
+
 					tn = new->tail;
 					ln = &new->head;
 					assertf(ln->next != tn, "Problems....%s\n", "");

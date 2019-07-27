@@ -200,7 +200,7 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 	// phase 3: replace the bucket for new epoch
 
 	void *old_next = bckt->next;
-	bucket_t *res = bucket_alloc();
+	bucket_t *res = bucket_alloc(bckt->tail);
 	bool suc = false;
 	
     res->extractions 		= get_cleaned_extractions(old_extractions);
@@ -212,9 +212,7 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
     res->head.timestamp		= MIN;
     res->head.tie_breaker	= 0U;
     res->head.next			= bckt->head.next;
-
-    res->tail = bckt->tail;
-        
+       
     do{
 		old_next = bckt->next;
 		res->next = old_next;

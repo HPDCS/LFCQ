@@ -96,7 +96,7 @@ static inline void tail_node_init(node_t* res){
 
 
 /* allocate a bucket */
-static inline bucket_t* bucket_alloc(){
+static inline bucket_t* bucket_alloc(node_t *tail){
 	bucket_t* res;
 	do{
 		res = gc_alloc(ptst, gc_aid[GC_BUCKETS]);
@@ -123,6 +123,7 @@ static inline bucket_t* bucket_alloc(){
     res->new_epoch			= 0U;
     res->pending_insert		= NULL;
     res->pending_insert_res = 0;
+    res->tail = tail;
 /*    res->tail = node_alloc();
     res->tail->payload		= NULL;
     res->tail->timestamp	= INFTY;
