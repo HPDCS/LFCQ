@@ -214,7 +214,7 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 	bool suc = false;
 	
     res->extractions 		= get_cleaned_extractions(old_extractions);
-    res->epoch				= bckt->op_descriptor & UINT_MAX;
+    res->epoch				= bckt->op_descriptor & MASK_EPOCH;
     res->index				= bckt->index;
     res->type				= bckt->type;
 
@@ -570,7 +570,7 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
   	if(curr == tail){
         //atomic_bts_x64(&bckt->extractions, DEL_BIT_POS);
 		post_operation(bckt, DELETE, 0ULL, NULL);
-		assert(is_freezed(bckt->extractions));
+		//assert(is_freezed(bckt->extractions));
 		return EMPTY; 
   	} 
   	__last_node = curr;
