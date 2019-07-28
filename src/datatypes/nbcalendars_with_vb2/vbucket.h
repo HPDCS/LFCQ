@@ -481,6 +481,13 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 
 	validate_bucket(bckt);
 //	__sync_fetch_and_add(&bckt->pad3, -1LL);
+
+	#if ENABLE_CACHE == 1
+	if(res == OK){
+	 	__cache_bckt[bckt->index % INSERTION_CACHE_LEN] = bckt;
+	 	__cache_hash[bckt->index % INSERTION_CACHE_LEN] = bckt->hash;
+	 }
+	#endif
 	return res;
 }
 
