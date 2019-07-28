@@ -286,18 +286,9 @@ __thread unsigned long long counter_last_key_fall = 0ULL;
 
 
 static inline int bucket_connect_fallback(bucket_t *bckt, node_t *node, unsigned int epoch){
+	int res = ABORT;
+	node_t *pending_node;
 	bckt_connect_count++;
-	if(bckt->epoch >= epoch) return OK;
-rq_epoch_ops++;
-	post_operation(bckt, CHANGE_EPOCH, epoch, NULL);
-	execute_operation(bckt);
-	
-	return ABORT;
-
-	unsigned long long extractions;
-	extractions = bckt->extractions;
-
-
 
 	if(last_key_fall != node->timestamp){
 		last_key_fall = node->timestamp;
@@ -307,6 +298,21 @@ rq_epoch_ops++;
 		counter_last_key_fall++;
 		if(counter_last_key_fall > 100000) printf("Problems during bucket connect fallback\n");
 	}
+
+	pending_node = __sync_val_compare_and_swap(&bckt->pending_insert, NULL, node);
+	post_operation(bckt, CHANGE_EPOCH, epoch, NULL);
+	execute_operation(bckt);
+
+	if(get_op_type(bckt->op_descriptor) == CHANGE_EPOCH && pending_node == NULL) res = OK;
+
+	rq_epoch_ops++;
+	
+	return res;
+
+	/*
+	unsigned long long extractions;
+	extractions = bckt->extractions;
+
 
 	if(is_freezed(extractions)) return ABORT;
 
@@ -320,7 +326,7 @@ rq_epoch_ops++;
 		return ABORT;
 	fallback_insertions++;
 	return OK;
-	
+	*/
 }
 
 
@@ -356,9 +362,10 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	new->timestamp = timestamp;
 	new->payload	= payload;
 
-    if(bucket_connect_fallback(bckt, new, epoch) != OK){
-  		node_unsafe_free(new);
-    	return ABORT;
+    if(bckt->epoch < epoch){
+    	res = bucket_connect_fallback(bckt, new, epoch); 
+    	if(res != OK) 	node_unsafe_free(new);
+    	return res;
     } 
 
 
