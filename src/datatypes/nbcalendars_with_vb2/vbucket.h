@@ -286,7 +286,6 @@ __thread unsigned long long counter_last_key_fall = 0ULL;
 
 
 static inline int bucket_connect_fallback(bucket_t *bckt, node_t *node, unsigned int epoch){
-
 	bckt_connect_count++;
 	if(bckt->epoch >= epoch) return OK;
 rq_epoch_ops++;
@@ -295,9 +294,10 @@ rq_epoch_ops++;
 	
 	return ABORT;
 
-
 	unsigned long long extractions;
 	extractions = bckt->extractions;
+
+
 
 	if(last_key_fall != node->timestamp){
 		last_key_fall = node->timestamp;
@@ -313,15 +313,14 @@ rq_epoch_ops++;
 	// add pending insertion
 	__sync_bool_compare_and_swap(&bckt->pending_insert, NULL, node);
 	// put new epoch
-	__sync_bool_compare_and_swap(&bckt->new_epoch, 0, bckt->epoch);
 	
-	//freeze(bckt, FREEZE_FOR_EPO);
+	assertf(bckt->pending_insert == 0, "Very strange....%s\n", "the result of the pending_insert in 0 after a freeze for EPO");
 
-	assertf(bckt->pending_insert_res == 0, "Very strange....%s\n", "the result of the pending_insert in 0 after a freeze for EPO");
-
-	if(bckt->pending_insert_res == 2 || bckt->pending_insert != node)	return ABORT;
+	if(bckt->pending_insert != node)	
+		return ABORT;
 	fallback_insertions++;
 	return OK;
+	
 }
 
 
