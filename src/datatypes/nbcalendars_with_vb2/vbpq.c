@@ -169,7 +169,7 @@ restart:
 			bucket = h->array + index;
 			// read the number of executed enqueues for statistics purposes
 			con_en = h->e_counter.count;
-			am_i_sender = index % 2;
+			am_i_sender = (index % 2) == nid;
 			if(thread_state == CLIENT && am_i_sender){
 				unsigned int __status;
 				if((__status = _xbegin ()) == _XBEGIN_STARTED)
