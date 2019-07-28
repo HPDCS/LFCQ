@@ -42,9 +42,8 @@ __thread unsigned long long op_id;
 
 static inline void acquire_channels_ids(){
 	if(have_channel_id) return;
-	am_i_sender = nid != 0;
-	if(!am_i_sender) my_rcv_id = __sync_fetch_and_add(&rcv_id, 1ULL);
-	else 			 my_snd_id = __sync_fetch_and_add(&snd_id, 1ULL);
+	my_rcv_id = __sync_fetch_and_add(&rcv_id, 1ULL);
+	my_snd_id = __sync_fetch_and_add(&snd_id, 1ULL);
 	have_channel_id = true;
 }
 

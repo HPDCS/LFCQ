@@ -128,26 +128,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 
 
 	acquire_channels_ids();
-	if(am_i_sender){
-		unsigned int __status;
-		if((__status = _xbegin ()) == _XBEGIN_STARTED)
-		{
-			communication_channels[my_snd_id].payload   = payload;
-			communication_channels[my_snd_id].timestamp = timestamp;
-			communication_channels[my_snd_id].state 	= OP_PENDING;
-			op_id++;
-			TM_COMMIT();
-			usleep(WAIT_US);
-			unsigned long long state = __sync_lock_test_and_set(&communication_channels[my_snd_id].state, OP_NONE);
-			
-			if(state == OP_NONE) assert(0);
-			if(state == OP_COMPLETED){
-				return 1;
-			}
-
-		}
-	}
-	else if(communication_channels[my_rcv_id].state == OP_PENDING){
+	if(communication_channels[my_rcv_id].state == OP_PENDING){
 		unsigned int __status;
 		unsigned long long state;
 		if((__status = _xbegin ()) == _XBEGIN_STARTED){
@@ -188,6 +169,27 @@ restart:
 			bucket = h->array + index;
 			// read the number of executed enqueues for statistics purposes
 			con_en = h->e_counter.count;
+			am_i_sender = index % 2;
+			if(thread_state == CLIENT && am_i_sender){
+				unsigned int __status;
+				if((__status = _xbegin ()) == _XBEGIN_STARTED)
+				{
+					communication_channels[my_snd_id].payload   = payload;
+					communication_channels[my_snd_id].timestamp = timestamp;
+					communication_channels[my_snd_id].state 	= OP_PENDING;
+					op_id++;
+					TM_COMMIT();
+					usleep(WAIT_US);
+					unsigned long long state = __sync_lock_test_and_set(&communication_channels[my_snd_id].state, OP_NONE);
+					
+					if(state == OP_NONE) assert(0);
+					if(state == OP_COMPLETED){
+						return 1;
+					}
+
+				}
+			}
+
 		}
 
 		#if KEY_TYPE != DOUBLE
