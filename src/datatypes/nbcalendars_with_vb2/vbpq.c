@@ -66,8 +66,9 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	if(res_mem_posix != 0) 	error("No enough memory to allocate queue\n");
 	res_mem_posix = posix_memalign((void**)(&res->hashtable), CACHE_LINE_SIZE, sizeof(table_t));
 	if(res_mem_posix != 0)	error("No enough memory to allocate set table\n");
+	res_mem_posix = posix_memalign((void**)(&communication_channels), CACHE_LINE_SIZE, threshold*sizeof(channel_t));
+	if(res_mem_posix != 0)	error("No enough memory to allocate communication_channels\n");
 	
-
 	
 	res->hashtable->threshold = threshold;
 	res->hashtable->perc_used_bucket = perc_used_bucket;
@@ -103,7 +104,6 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 }
 
 
-
 /**
  * This function implements the enqueue interface of the NBCQ.
  * Cost O(1) when succeeds
@@ -123,15 +123,53 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	unsigned int index, size, epoch;
 	unsigned long long newIndex = 0;
 	int res, con_en = 0;
-	
+	void *old_payload = payload;
+	pkey_t old_timestamp = timestamp;
 
+
+	acquire_channels_ids();
+	if(am_i_sender){
+		unsigned int __status;
+		if((__status = _xbegin ()) == _XBEGIN_STARTED)
+		{
+			communication_channels[my_snd_id].payload   = payload;
+			communication_channels[my_snd_id].timestamp = timestamp;
+			communication_channels[my_snd_id].state 	= OP_PENDING;
+			op_id++;
+			TM_COMMIT();
+			usleep(3);
+			unsigned long long state = __sync_lock_test_and_set(&communication_channels[my_snd_id].state, OP_NONE);
+			
+			if(state == OP_PENDING || state == OP_NONE) assert(0);
+			if(state == OP_COMPLETED){
+				return 1;
+			}
+
+		}
+	}
+	else if(communication_channels[my_rcv_id].state == OP_PENDING){
+		unsigned int __status;
+		unsigned long long state;
+		if((__status = _xbegin ()) == _XBEGIN_STARTED){
+			state = communication_channels[my_rcv_id].state;
+			if(state == OP_PENDING){
+				timestamp = communication_channels[my_rcv_id].timestamp;
+				payload = communication_channels[my_rcv_id].payload;
+				op_id = communication_channels[my_rcv_id].op_id;
+			}
+			TM_COMMIT();
+			if(state == OP_PENDING) thread_state = SERVER;
+		}
+	}
+
+restart:
 	//init the result
 	res = MOV_FOUND;
 
 	critical_enter();
 	
 	//repeat until a successful insert
-	while(res != OK){
+	while(res != OK && thread_state == CLIENT){
 		
 		// It is the first iteration or a node marked as MOV has been met (a resize is occurring)
 		if(res == MOV_FOUND){
@@ -165,10 +203,12 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 
 
 	// the CAS succeeds, thus we want to ensure that the insertion becomes visible
-	flush_current(h, newIndex);
-	performed_enqueue++;
-	res=1;
-	
+	if(res == OK){
+		flush_current(h, newIndex);
+		performed_enqueue++;
+		res=1;
+	}
+
 	// updates for statistics
 	
 	concurrent_enqueue += (unsigned long long) (__sync_fetch_and_add(&h->e_counter.count, 1) - con_en);
@@ -190,6 +230,12 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
   #if KEY_TYPE != DOUBLE
   out:
   #endif
+  	if(thread_state == SERVER){
+  		payload = old_payload;
+  		timestamp = old_timestamp;
+  		thread_state = CLIENT;
+  		goto restart;
+  	}
 	critical_exit();
 	return res;
 }

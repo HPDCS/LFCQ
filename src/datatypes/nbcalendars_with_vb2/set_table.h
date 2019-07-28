@@ -153,9 +153,29 @@ static int search_and_insert(bucket_t *head, unsigned int index, pkey_t timestam
 			newb->head.next->timestamp	  		= timestamp;	
 
 
-			if(!BOOL_CAS(&left->next, left_next, newb)){
-				bucket_unsafe_free(newb);
-				continue;
+			if(thread_state == CLIENT){
+				if(!BOOL_CAS(&left->next, left_next, newb)){
+					bucket_unsafe_free(newb);
+					continue;
+				}
+			}
+			else{
+				if(pre_validate_transaction() == ABORT){
+					bucket_unsafe_free(newb);
+					return ABORT;
+				} 
+				unsigned int __status = 0;
+				if((__status = _xbegin ()) == _XBEGIN_STARTED)
+				{		
+					if(left->next != left_next){ TM_ABORT(0xf1);}
+					left->next = newb; 
+					validate_transaction();
+					TM_COMMIT();
+				}
+				else{
+					bucket_unsafe_free(newb);
+					return ABORT;	
+				}
 			}
 
 			if(left_next != right)	
