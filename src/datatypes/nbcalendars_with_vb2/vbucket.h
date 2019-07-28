@@ -125,17 +125,6 @@ static inline void validate_bucket(bucket_t *bckt){
   #endif
 }
 
-#define complete_freeze(bckt) do{\
-	unsigned long long old_extractions = 0ULL;\
-	void *old_next = NULL;\
-	old_extractions = (bckt)->extractions;\
-	complete_freeze_for_epo(bckt, old_extractions);\
-	do{ old_next = (bckt)->next;\
-	}while(is_marked(old_next, VAL) && is_freezed_for_del(old_extractions) && !__sync_bool_compare_and_swap(&(bckt)->next, old_next, get_marked(old_next, DEL)));\
-	do{ old_next = (bckt)->next;\
-	}while(is_marked(old_next, VAL) && is_freezed_for_mov(old_extractions) && !__sync_bool_compare_and_swap(&(bckt)->next, old_next, get_marked(old_next, MOV)));\
-}while(0)
-
 
 static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long old_extractions){
 	
@@ -241,7 +230,6 @@ static void post_operation(bucket_t *bckt, unsigned long long ops_type, unsigned
 
 
 
-
 static inline void execute_operation(bucket_t *bckt){
 	unsigned long long pending_op_type = get_op_type(bckt->op_descriptor);
 	unsigned long long old_extractions = bckt->extractions;
@@ -281,11 +269,9 @@ static inline void execute_operation(bucket_t *bckt){
 
 
 static inline void finalize_set_as_mov(bucket_t *bckt){
-	unsigned long long old_extractions = 0;
 	bucket_t *old_next = NULL;
-	//complete_freeze(bckt);
-	old_extractions = bckt->extractions;
-	if(is_freezed_for_mov(old_extractions)) atomic_bts_x64(&bckt->extractions, DEL_BIT_POS);
+
+	if(is_freezed_for_mov(bckt->extractions)) atomic_bts_x64(&bckt->extractions, DEL_BIT_POS);
 
     do{
             old_next = bckt->next;
@@ -294,9 +280,13 @@ static inline void finalize_set_as_mov(bucket_t *bckt){
 
 
 
+__thread unsigned long long fallback_insertions = 0ULL;
+__thread pkey_t last_key_fall = 0;
+__thread unsigned long long counter_last_key_fall = 0ULL;
 
 
-static inline int check_increase_bucket_epoch(bucket_t *bckt, unsigned int epoch){
+static inline int bucket_connect_fallback(bucket_t *bckt, node_t *node, unsigned int epoch){
+
 	bckt_connect_count++;
 	if(bckt->epoch >= epoch) return OK;
 rq_epoch_ops++;
@@ -305,14 +295,7 @@ rq_epoch_ops++;
 	
 	return ABORT;
 
-}
 
-__thread unsigned long long fallback_insertions = 0ULL;
-__thread pkey_t last_key_fall = 0;
-__thread unsigned long long counter_last_key_fall = 0ULL;
-
-/*
-static inline int bucket_connect_fallback(bucket_t *bckt, node_t *node){
 	unsigned long long extractions;
 	extractions = bckt->extractions;
 
@@ -340,7 +323,7 @@ static inline int bucket_connect_fallback(bucket_t *bckt, node_t *node){
 	fallback_insertions++;
 	return OK;
 }
-*/
+
 
 __thread unsigned long long acc_contention = 0ULL;
 __thread unsigned long long cnt_contention = 0ULL;
@@ -370,11 +353,16 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
     min_contention = contention <= min_contention ? contention : min_contention;
     max_contention = contention >= max_contention ? contention : max_contention;
 
-    if(check_increase_bucket_epoch(bckt, epoch) != OK) return ABORT;
-
 	node_t *new   = node_alloc(); //node_alloc_by_index(bckt->index);
 	new->timestamp = timestamp;
 	new->payload	= payload;
+
+    if(bucket_connect_fallback(bckt, new, epoch) != OK){
+  		node_unsafe_free(new);
+    	return ABORT;
+    } 
+
+
 	execute_operation(bckt);
 
 	validate_bucket(bckt);
