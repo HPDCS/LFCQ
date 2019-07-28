@@ -295,7 +295,7 @@ static inline int bucket_connect_fallback(bucket_t *bckt, node_t *node, unsigned
 		if(counter_last_key_fall > 100000) printf("Problems during bucket connect fallback\n");
 	}
 
-	pending_node = __sync_val_compare_and_swap(&bckt->pending_insert, NULL, node);
+	if(bckt->epoch >= epoch) pending_node = __sync_val_compare_and_swap(&bckt->pending_insert, NULL, node);
 	post_operation(bckt, CHANGE_EPOCH, epoch, NULL);
 	execute_operation(bckt);
 
@@ -304,25 +304,6 @@ static inline int bucket_connect_fallback(bucket_t *bckt, node_t *node, unsigned
 	rq_epoch_ops++;
 	
 	return res;
-
-	/*
-	unsigned long long extractions;
-	extractions = bckt->extractions;
-
-
-	if(is_freezed(extractions)) return ABORT;
-
-	// add pending insertion
-	__sync_bool_compare_and_swap(&bckt->pending_insert, NULL, node);
-	// put new epoch
-	
-	assertf(bckt->pending_insert == 0, "Very strange....%s\n", "the result of the pending_insert in 0 after a freeze for EPO");
-
-	if(bckt->pending_insert != node)	
-		return ABORT;
-	fallback_insertions++;
-	return OK;
-	*/
 }
 
 
