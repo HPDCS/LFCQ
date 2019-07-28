@@ -138,7 +138,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			else goto retry_post;
 		}
 		else{
-			communication_channels[my_snd_id].state = OP_COMPLETED;
+			__sync_lock_test_and_set(&communication_channels[my_snd_id].state ,  OP_COMPLETED);
 			while(internal_enqueue(q, old_timestamp, old_payload) != OK);
 		}
 

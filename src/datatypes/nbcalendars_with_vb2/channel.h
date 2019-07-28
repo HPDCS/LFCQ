@@ -123,7 +123,7 @@ static int internal_enqueue(void* q, pkey_t timestamp, void* payload){
 		// updates for statistics
 		concurrent_enqueue += (unsigned long long) (__sync_fetch_and_add(&h->e_counter.count, 1) - con_en);
 		performed_enqueue++;
-		res=1;
+		res=OK;
 	}
 
 	#if COMPACT_RANDOM_ENQUEUE == 1
@@ -141,7 +141,7 @@ static int internal_enqueue(void* q, pkey_t timestamp, void* payload){
 	#endif
 
 	critical_exit();
-	return res;
+	return OK;
 
 }
 
