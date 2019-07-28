@@ -139,7 +139,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 		}
 		else{
 			__sync_lock_test_and_set(&communication_channels[my_snd_id].state ,  OP_COMPLETED);
-			if(internal_enqueue(q, old_timestamp, old_payload) == ABORTED) {
+			if(internal_enqueue(q, old_timestamp, old_payload) == ABORT) {
 				__sync_lock_test_and_set(&communication_channels[my_snd_id].state ,  OP_ABORTED);
 				continue;
 			}
