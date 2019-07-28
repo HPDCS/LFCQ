@@ -140,7 +140,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			usleep(3);
 			unsigned long long state = __sync_lock_test_and_set(&communication_channels[my_snd_id].state, OP_NONE);
 			
-			if(state == OP_PENDING || state == OP_NONE) assert(0);
+			if(state == OP_NONE) assert(0);
 			if(state == OP_COMPLETED){
 				return 1;
 			}
@@ -169,7 +169,7 @@ restart:
 	critical_enter();
 	
 	//repeat until a successful insert
-	while(res != OK && thread_state == CLIENT){
+	do{
 		
 		// It is the first iteration or a node marked as MOV has been met (a resize is occurring)
 		if(res == MOV_FOUND){
@@ -199,7 +199,7 @@ restart:
 
 		// search the two adjacent nodes that surround the new key and try to insert with a CAS 
 	    res = search_and_insert(bucket, newIndex, timestamp, 0, epoch, payload);
-	}
+	}while(res != OK && thread_state == CLIENT);
 
 
 	// the CAS succeeds, thus we want to ensure that the insertion becomes visible
