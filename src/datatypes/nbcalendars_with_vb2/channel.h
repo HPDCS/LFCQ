@@ -67,7 +67,7 @@ static inline int am_i_sender(void* q, pkey_t timestamp){
 
 
 
-static int internal_enqueue(void* q, pkey_t timestamp, void* payload, bool sender){
+static int internal_enqueue(void* q, pkey_t timestamp, void* payload){
 	
 	insertions++;
 	assertf(timestamp < MIN || timestamp >= INFTY, "Key out of range %s\n", "");
@@ -98,8 +98,7 @@ static int internal_enqueue(void* q, pkey_t timestamp, void* payload, bool sende
 			newIndex = hash(timestamp, h->bucket_width);
 			// compute the index of the physical bucket
 			index = ((unsigned int) newIndex) % size;
-			if(index % 2 == nid &&  sender) return ABORT;
-			if(index % 2 != nid && !sender) return ABORT;
+			if(index % 2 != nid) return ABORT;
 			// get the bucket
 			bucket = h->array + index;
 			// read the number of executed enqueues for statistics purposes
