@@ -298,7 +298,7 @@ static inline int bucket_connect_fallback(bucket_t *bckt, node_t *node, unsigned
 	post_operation(bckt, CHANGE_EPOCH, epoch, node);
 	execute_operation(bckt);
 
-	if(get_op_type(bckt->op_descriptor) == CHANGE_EPOCH && pending_node == NULL) res = OK;
+	if(get_op_type(bckt->op_descriptor) == CHANGE_EPOCH && bckt->pending_insert == node) res = OK;
 
 	if(last_key_fall != node->timestamp){
 		last_key_fall = node->timestamp;
