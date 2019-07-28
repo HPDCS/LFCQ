@@ -138,9 +138,6 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 	bucket_t *old_next = bckt->next;
 	bool suc = false;
 
-	// phase 1: block pushing new ops
-	if(bckt->pending_insert == NULL) __sync_bool_compare_and_swap(&bckt->pending_insert, NULL, (void*)1ULL);
-
 	// phase 2: check if there is a pending op
 	if(bckt->pending_insert != ((void*)1ULL) ){
 		toskip			= get_cleaned_extractions(old_extractions);
@@ -256,6 +253,8 @@ static inline void execute_operation(bucket_t *bckt){
 			new_extractions = get_freezed(old_extractions, FREEZE_FOR_EPO);
 			old_extractions = __sync_val_compare_and_swap(&bckt->extractions, old_extractions, new_extractions);
 		}
+
+		if(bckt->pending_insert == NULL) __sync_bool_compare_and_swap(&bckt->pending_insert, NULL, (void*)1ULL);
 		complete_freeze_for_epo(bckt, old_extractions);
 	}
 	else 
@@ -275,21 +274,6 @@ static inline void finalize_set_as_mov(bucket_t *bckt){
             old_next = bckt->next;
     }while(is_marked(old_next, MOV)  && !__sync_bool_compare_and_swap(&bckt->next, old_next, get_marked(get_unmarked(old_next), DEL)));
 }
-
-
-static inline bucket_t* increase_epoch(bucket_t *bckt, unsigned int epoch){
-	unsigned int original_index = bckt->index;
-	bucket_t *res; 
-	post_operation(bckt, CHANGE_EPOCH, epoch, NULL);
-	execute_operation(bckt);
-	res = get_unmarked(bckt->next);
-	
-	if(get_op_type(bckt->op_descriptor) != CHANGE_EPOCH) return NULL;
-	if(res->index != original_index) return NULL;
-
-	return res;
-}
-
 
 
 __thread unsigned long long fallback_insertions = 0ULL;
@@ -329,6 +313,22 @@ __thread pkey_t last_key = 0;
 __thread unsigned long long counter_last_key = 0ULL;
 
 
+
+
+static inline bucket_t* increase_epoch(bucket_t *bckt, unsigned int epoch){
+	unsigned int original_index = bckt->index;
+	bucket_t *res; 
+	post_operation(bckt, CHANGE_EPOCH, epoch, NULL);
+	execute_operation(bckt);
+	res = get_unmarked(bckt->next);
+	
+	if(get_op_type(bckt->op_descriptor) != CHANGE_EPOCH) return NULL;
+	if(res->index != original_index) return NULL;
+
+	return res;
+}
+
+
 int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, void* payload, unsigned int epoch){
 
     while(bckt != NULL && bckt->epoch < epoch){
@@ -358,8 +358,6 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	new->timestamp = timestamp;
 	new->payload	= payload;
 
-	execute_operation(bckt);
-
 	validate_bucket(bckt);
 
   begin:
@@ -374,8 +372,8 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	new->tie_breaker = 1;
   	extracted 	= bckt->extractions;
 
-  	if(is_freezed_for_mov(extracted)) {node_unsafe_free(new); res = MOV_FOUND; goto out;	}
-  	if(is_freezed(extracted)) {node_unsafe_free(new); res = ABORT; goto out; 	}
+  	if(get_op_type(bckt->op_descriptor) == SET_AS_MOV) 	{node_unsafe_free(new); res = MOV_FOUND; goto out;	}
+  	if(get_op_type(bckt->op_descriptor) != NOOP) 		{node_unsafe_free(new); res = ABORT; 	 goto out; 	}
 
   	toskip		= extracted;
 	position = 0;
@@ -500,7 +498,8 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
   	old_extracted = extracted 	= __sync_add_and_fetch(&bckt->extractions, 1ULL);
 
   	if(is_freezed_for_mov(extracted)) return MOV_FOUND;
-  	if(is_freezed(extracted)) return EMPTY;
+  	if(is_freezed_for_epo(extracted)) return ABORT;
+  	if(is_freezed_for_del(extracted)) return EMPTY;
 
 	validate_bucket(bckt);
 
@@ -531,9 +530,7 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
 
 	if(curr->timestamp == INFTY)	assert(curr == tail);
   	if(curr == tail){
-        //atomic_bts_x64(&bckt->extractions, DEL_BIT_POS);
 		post_operation(bckt, DELETE, 0ULL, NULL);
-		//assert(is_freezed(bckt->extractions));
 		return EMPTY; 
   	} 
   	__last_node = curr;
