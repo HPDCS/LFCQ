@@ -164,6 +164,10 @@ static int search_and_insert(bucket_t *head, unsigned int index, pkey_t timestam
 			return OK;
 		}
 
+	  #if ENABLE_CACHE == 1
+		 	__cache_bckt[index % INSERTION_CACHE_LEN] = left;
+		 	__cache_hash[index % INSERTION_CACHE_LEN] = left->hash;
+	  #endif
 		 	return bucket_connect(left, timestamp, tie_breaker, payload, epoch);
 		}while(1);
 
