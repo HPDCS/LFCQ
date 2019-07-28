@@ -278,11 +278,16 @@ static inline void finalize_set_as_mov(bucket_t *bckt){
 
 
 static inline bucket_t* increase_epoch(bucket_t *bckt, unsigned int epoch){
+	unsigned int original_index = bckt->index;
+	bucket_t *res; 
 	post_operation(bckt, CHANGE_EPOCH, epoch, NULL);
 	execute_operation(bckt);
+	res = get_unmarked(bckt->next);
+	
 	if(get_op_type(bckt->op_descriptor) != CHANGE_EPOCH) return NULL;
-	return get_unmarked(bckt->next);
+	if(res->index != original_index) return NULL;
 
+	return res;
 }
 
 
@@ -352,8 +357,6 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	node_t *new   = node_alloc(); //node_alloc_by_index(bckt->index);
 	new->timestamp = timestamp;
 	new->payload	= payload;
-
-
 
 	execute_operation(bckt);
 
@@ -457,13 +460,14 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 			mask = mask | (mask <<1);
 			goto retry_tm;
 		}
-		if(__global_try < RTM_FALLBACK || __status & _XABORT_EXPLICIT) 
+		//if(__global_try < RTM_FALLBACK || __status & _XABORT_EXPLICIT) 
 			goto begin;
 //		__sync_fetch_and_add(&bckt->pad3, -1LL);
 
+		/*
     	res = bucket_connect_fallback(bckt, new, epoch); 
     	if(res != OK) 	node_unsafe_free(new);
-    	return res;
+    	return res;*/
 	}
 
 	rtm_insertions++;
