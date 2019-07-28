@@ -187,6 +187,7 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 	res = bucket_alloc(bckt->tail);
     res->extractions 		= get_cleaned_extractions(old_extractions);
     res->epoch				= bckt->op_descriptor & MASK_EPOCH;
+    res->epoch				= res->epoch < bckt->epoch ? bckt->epoch :  res->epoch;
     res->index				= bckt->index;
     res->type				= bckt->type;
 
@@ -276,6 +277,15 @@ static inline void finalize_set_as_mov(bucket_t *bckt){
 }
 
 
+static inline bucket_t* increase_epoch(bucket_t *bckt, unsigned int epoch){
+	post_operation(bckt, CHANGE_EPOCH, epoch, NULL);
+	execute_operation(bckt);
+	if(get_op_type(bckt->op_descriptor) != CHANGE_EPOCH) return NULL;
+	return get_unmarked(bckt->next);
+
+}
+
+
 
 __thread unsigned long long fallback_insertions = 0ULL;
 __thread pkey_t last_key_fall = 0;
@@ -284,15 +294,9 @@ __thread unsigned long long counter_last_key_fall = 0ULL;
 
 static inline int bucket_connect_fallback(bucket_t *bckt, node_t *node, unsigned int epoch){
 	int res = ABORT;
-	node_t *pending_node == NULL;
-	bool for_epoch = bckt->epoch >= epoch;
 
-	if(for_epoch) pending_node = __sync_val_compare_and_swap(&bckt->pending_insert, NULL, node);
-
-	post_operation(bckt, CHANGE_EPOCH, epoch, NULL);
+	post_operation(bckt, CHANGE_EPOCH, epoch, node);
 	execute_operation(bckt);
-
-	if(for_epoch) return ABORT;
 
 	if(get_op_type(bckt->op_descriptor) == CHANGE_EPOCH && pending_node == NULL) res = OK;
 
@@ -321,7 +325,12 @@ __thread unsigned long long counter_last_key = 0ULL;
 
 
 int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, void* payload, unsigned int epoch){
-	
+
+    while(bckt->epoch < epoch && bckt != NULL){
+    	bckt = increase_epoch(bckt, epoch);
+    } 
+    if(bckt == NULL) return ABORT;
+
 	node_t *tail  = bckt->tail;
 	node_t *left  = &bckt->head;
 	node_t *curr  = left;
@@ -344,14 +353,9 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	new->timestamp = timestamp;
 	new->payload	= payload;
 
-    if(bckt->epoch < epoch){
-    	res = bucket_connect_fallback(bckt, new, epoch); 
-    	if(res != OK) 	node_unsafe_free(new);
-    	return res;
-    } 
 
 
-	//execute_operation(bckt);
+	execute_operation(bckt);
 
 	validate_bucket(bckt);
 
