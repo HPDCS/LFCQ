@@ -288,7 +288,6 @@ __thread unsigned long long counter_last_key_fall = 0ULL;
 static inline int bucket_connect_fallback(bucket_t *bckt, node_t *node, unsigned int epoch){
 	int res = ABORT;
 	node_t *pending_node;
-	bckt_connect_count++;
 
 	if(last_key_fall != node->timestamp){
 		last_key_fall = node->timestamp;
@@ -357,6 +356,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
     cnt_contention++;
     min_contention = contention <= min_contention ? contention : min_contention;
     max_contention = contention >= max_contention ? contention : max_contention;
+	bckt_connect_count++;
 
 	node_t *new   = node_alloc(); //node_alloc_by_index(bckt->index);
 	new->timestamp = timestamp;
@@ -471,10 +471,13 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 			mask = mask | (mask <<1);
 			goto retry_tm;
 		}
-		//if(__global_try < RTM_FALLBACK || __status & _XABORT_EXPLICIT) 
+		if(__global_try < RTM_FALLBACK || __status & _XABORT_EXPLICIT) 
 			goto begin;
 //		__sync_fetch_and_add(&bckt->pad3, -1LL);
-		//return bucket_connect_fallback(bckt, new);
+
+    	res = bucket_connect_fallback(bckt, new, epoch); 
+    	if(res != OK) 	node_unsafe_free(new);
+    	return res;
 	}
 
 	rtm_insertions++;
