@@ -466,14 +466,14 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 			mask = mask | (mask <<1);
 			goto retry_tm;
 		}
-		//if(__global_try < RTM_FALLBACK || __status & _XABORT_EXPLICIT) 
+		if(__global_try < RTM_FALLBACK || __status & _XABORT_EXPLICIT) 
 			goto begin;
 //		__sync_fetch_and_add(&bckt->pad3, -1LL);
 
-		/*
+		
     	res = bucket_connect_fallback(bckt, new, epoch); 
     	if(res != OK) 	node_unsafe_free(new);
-    	return res;*/
+    	return res;
 	}
 
 	rtm_insertions++;
