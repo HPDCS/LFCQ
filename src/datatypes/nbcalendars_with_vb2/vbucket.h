@@ -326,7 +326,7 @@ __thread unsigned long long counter_last_key = 0ULL;
 
 int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, void* payload, unsigned int epoch){
 
-    while(bckt->epoch < epoch && bckt != NULL){
+    while(bckt != NULL && bckt->epoch < epoch){
     	bckt = increase_epoch(bckt, epoch);
     } 
     if(bckt == NULL) return ABORT;
