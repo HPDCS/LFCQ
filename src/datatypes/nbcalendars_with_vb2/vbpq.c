@@ -133,7 +133,6 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 				communication_channels[my_snd_id].payload   = old_payload;
 				communication_channels[my_snd_id].timestamp = old_timestamp;
 				communication_channels[my_snd_id].state 	= OP_PENDING;
-				op_id++;
 				TM_COMMIT();
 			}
 			else goto retry_post;

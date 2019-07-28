@@ -6,8 +6,6 @@
 #define OP_COMPLETED	2ULL
 #define OP_ABORTED		3ULL
 
-#define WAIT_US 		2
-
 
 typedef struct __channel channel_t;
 struct __channel{
@@ -32,12 +30,6 @@ __thread unsigned long long my_rcv_id = 0ULL;
 __thread unsigned long long my_snd_id = 0ULL;
 
 
-#define CLIENT 0ULL
-#define SERVER 1ULL
-
-__thread unsigned long long thread_state = 0ULL;
-__thread unsigned long long op_id;
-
 
 static inline void acquire_channels_ids(){
 	if(have_channel_id) return;
@@ -51,23 +43,6 @@ static inline void acquire_channels_ids(){
 	}
 	have_channel_id = true;
 }
-
-static inline void validate_transaction(){
-	if(thread_state == SERVER){
-		if(op_id != communication_channels[my_rcv_id].op_id)  		TM_ABORT(0xf2);
-		if(OP_PENDING != communication_channels[my_rcv_id].state)  TM_ABORT(0xf2);
-		communication_channels[my_rcv_id].state = OP_COMPLETED;
-	}
-}
-
-static inline int pre_validate_transaction(){
-	if(thread_state == SERVER){
-		if(op_id != communication_channels[my_rcv_id].op_id)  	  return ABORT;
-		if(OP_PENDING != communication_channels[my_rcv_id].state) return ABORT;
-	}
-	return OK;
-}
-
 
 static inline int am_i_sender(void* q, pkey_t timestamp){
 	
@@ -140,7 +115,7 @@ static int internal_enqueue(void* q, pkey_t timestamp, void* payload, bool sende
 
 		// search the two adjacent nodes that surround the new key and try to insert with a CAS 
 	    res = search_and_insert(bucket, newIndex, timestamp, 0, epoch, payload);
-	}while(res != OK && thread_state == CLIENT);
+	}while(res != OK);
 
 
 	// the CAS succeeds, thus we want to ensure that the insertion becomes visible
