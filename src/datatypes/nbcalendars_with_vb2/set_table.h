@@ -128,6 +128,9 @@ static int search_and_insert(bucket_t *head, unsigned int index, pkey_t timestam
 	connect_to_be_freed_node_list(left_next, distance);
 
 	do{
+		unsigned int att = 0; 
+	   retry_tm:
+		att++;
 		// first get bucket
 		left = search(head, &left_next, &right, &distance, index);
 		
@@ -173,6 +176,7 @@ static int search_and_insert(bucket_t *head, unsigned int index, pkey_t timestam
 					TM_COMMIT();
 				}
 				else{
+					if(att < 65) goto retry_tm;
 					bucket_unsafe_free(newb);
 					return ABORT;	
 				}
