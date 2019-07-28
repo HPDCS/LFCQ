@@ -205,13 +205,12 @@ restart:
 	// the CAS succeeds, thus we want to ensure that the insertion becomes visible
 	if(res == OK){
 		flush_current(h, newIndex);
+		// updates for statistics
+		concurrent_enqueue += (unsigned long long) (__sync_fetch_and_add(&h->e_counter.count, 1) - con_en);
 		performed_enqueue++;
 		res=1;
 	}
 
-	// updates for statistics
-	
-	concurrent_enqueue += (unsigned long long) (__sync_fetch_and_add(&h->e_counter.count, 1) - con_en);
 	
 	#if COMPACT_RANDOM_ENQUEUE == 1
 	// clean a random bucket
