@@ -268,11 +268,13 @@ static inline void execute_operation(bucket_t *bckt){
 	else if(pending_op_type == CHANGE_EPOCH){
 		while(!is_freezed(old_extractions)){
 			new_extractions = get_freezed(old_extractions, FREEZE_FOR_EPO);
+			old_extractions = __sync_val_compare_and_swap(&bckt->extractions, old_extractions, new_extractions);
+			/*
 			if(__sync_bool_compare_and_swap(&bckt->extractions, old_extractions, new_extractions)) 	
 				break;
-			old_extractions = bckt->extractions;
+			old_extractions = bckt->extractions;*/
 		}
-		complete_freeze(bckt);
+		complete_freeze_for_epo(bckt, old_extractions);
 	}
 	else 
 		assert(0);
