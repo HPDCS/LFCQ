@@ -127,24 +127,24 @@ static inline void validate_bucket(bucket_t *bckt){
 
 
 static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long old_extractions){
-	
-	if(!is_freezed_for_epo(old_extractions))	return;
-	
+	unsigned int present	=	0;
+	unsigned long long toskip;
+	node_t *tail  = bckt->tail;
+	node_t *left  = &bckt->head;
+	node_t *curr  = left;
+	node_t *head  = curr;
+	node_t *new;
+	bucket_t *res;
+	bucket_t *old_next = bckt->next;
+	bool suc = false;
+
 	// phase 1: block pushing new ops
-	if(!bckt->pending_insert) __sync_bool_compare_and_swap(&bckt->pending_insert, NULL, (void*)1ULL);
+	if(bckt->pending_insert == NULL) __sync_bool_compare_and_swap(&bckt->pending_insert, NULL, (void*)1ULL);
 
 	// phase 2: check if there is a pending op
 	if(bckt->pending_insert != ((void*)1ULL) ){
-		assert(0);
-		unsigned int present=0;
-		unsigned long long toskip;
-		node_t *tail  = bckt->tail;
-		node_t *left  = &bckt->head;
-		node_t *curr  = left;
-		node_t *head  = curr;
-		node_t *new   = node_alloc();
-		
 		toskip			= get_cleaned_extractions(old_extractions);
+		new   = node_alloc();
 		new->timestamp  = bckt->pending_insert->timestamp;
 		new->payload	= bckt->pending_insert->payload;
 		new->hash		= bckt->pending_insert->hash;
@@ -184,10 +184,7 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 	}
 	
 	// phase 3: replace the bucket for new epoch
-	void *old_next = bckt->next;
-	bucket_t *res = bucket_alloc(bckt->tail);
-	bool suc = false;
-	
+	res = bucket_alloc(bckt->tail);
     res->extractions 		= get_cleaned_extractions(old_extractions);
     res->epoch				= bckt->op_descriptor & MASK_EPOCH;
     res->index				= bckt->index;
@@ -369,7 +366,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
     } 
 
 
-	execute_operation(bckt);
+	//execute_operation(bckt);
 
 	validate_bucket(bckt);
 
