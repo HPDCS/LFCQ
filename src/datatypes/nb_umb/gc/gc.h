@@ -16,7 +16,7 @@ void gc_remove_allocator(int alloc_id);
  * Memory allocate/free. An unsafe free can be used when an object was
  * not made visible to other processes.
  */
-void *gc_alloc(ptst_t *ptst, int alloc_id);
+//void *gc_alloc(ptst_t *ptst, int alloc_id);
 void *gc_alloc_node(ptst_t *ptst, int alloc_id, unsigned int node); //<--- NEW
 
 void gc_free(ptst_t *ptst, void *p, int alloc_id);
