@@ -269,10 +269,6 @@ static inline void execute_operation(bucket_t *bckt){
 		while(!is_freezed(old_extractions)){
 			new_extractions = get_freezed(old_extractions, FREEZE_FOR_EPO);
 			old_extractions = __sync_val_compare_and_swap(&bckt->extractions, old_extractions, new_extractions);
-			/*
-			if(__sync_bool_compare_and_swap(&bckt->extractions, old_extractions, new_extractions)) 	
-				break;
-			old_extractions = bckt->extractions;*/
 		}
 		complete_freeze_for_epo(bckt, old_extractions);
 	}
@@ -287,16 +283,13 @@ static inline void execute_operation(bucket_t *bckt){
 static inline void finalize_set_as_mov(bucket_t *bckt){
 	unsigned long long old_extractions = 0;
 	bucket_t *old_next = NULL;
-	complete_freeze(bckt);
+	//complete_freeze(bckt);
 	old_extractions = bckt->extractions;
-	while(is_freezed_for_mov(old_extractions)){
-        atomic_bts_x64(&bckt->extractions, DEL_BIT_POS);
-		old_extractions = bckt->extractions;
-    }
-       old_extractions = bckt->extractions;
-       do{
-               old_next = bckt->next;
-       }while(is_marked(old_next, MOV) && is_freezed_for_del(old_extractions) && !__sync_bool_compare_and_swap(&bckt->next, old_next, get_marked(get_unmarked(old_next), DEL)));
+	if(is_freezed_for_mov(old_extractions)) atomic_bts_x64(&bckt->extractions, DEL_BIT_POS);
+
+    do{
+            old_next = bckt->next;
+    }while(is_marked(old_next, MOV)  && !__sync_bool_compare_and_swap(&bckt->next, old_next, get_marked(get_unmarked(old_next), DEL)));
 }
 
 
