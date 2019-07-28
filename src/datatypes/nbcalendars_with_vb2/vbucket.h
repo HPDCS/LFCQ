@@ -284,7 +284,17 @@ __thread unsigned long long counter_last_key_fall = 0ULL;
 
 static inline int bucket_connect_fallback(bucket_t *bckt, node_t *node, unsigned int epoch){
 	int res = ABORT;
-	node_t *pending_node;
+	node_t *pending_node == NULL;
+	bool for_epoch = bckt->epoch >= epoch;
+
+	if(for_epoch) pending_node = __sync_val_compare_and_swap(&bckt->pending_insert, NULL, node);
+
+	post_operation(bckt, CHANGE_EPOCH, epoch, NULL);
+	execute_operation(bckt);
+
+	if(for_epoch) return ABORT;
+
+	if(get_op_type(bckt->op_descriptor) == CHANGE_EPOCH && pending_node == NULL) res = OK;
 
 	if(last_key_fall != node->timestamp){
 		last_key_fall = node->timestamp;
@@ -294,12 +304,6 @@ static inline int bucket_connect_fallback(bucket_t *bckt, node_t *node, unsigned
 		counter_last_key_fall++;
 		if(counter_last_key_fall > 100000) printf("Problems during bucket connect fallback\n");
 	}
-
-	if(bckt->epoch >= epoch) pending_node = __sync_val_compare_and_swap(&bckt->pending_insert, NULL, node);
-	post_operation(bckt, CHANGE_EPOCH, epoch, NULL);
-	execute_operation(bckt);
-
-	if(get_op_type(bckt->op_descriptor) == CHANGE_EPOCH && pending_node == NULL) res = OK;
 
 	rq_epoch_ops++;
 	
