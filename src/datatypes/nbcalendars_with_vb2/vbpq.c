@@ -137,7 +137,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			communication_channels[my_snd_id].state 	= OP_PENDING;
 			op_id++;
 			TM_COMMIT();
-			usleep(3);
+			usleep(WAIT_US);
 			unsigned long long state = __sync_lock_test_and_set(&communication_channels[my_snd_id].state, OP_NONE);
 			
 			if(state == OP_NONE) assert(0);

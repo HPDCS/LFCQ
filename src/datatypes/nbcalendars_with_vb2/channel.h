@@ -6,6 +6,8 @@
 #define OP_COMPLETED	2ULL
 #define OP_ABORTED		3ULL
 
+#define WAIT_US 		2
+
 
 typedef struct __channel channel_t;
 struct __channel{
