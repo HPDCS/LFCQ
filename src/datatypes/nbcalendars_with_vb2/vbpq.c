@@ -139,17 +139,18 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 		}
 		else{
 			__sync_lock_test_and_set(&communication_channels[my_snd_id].state ,  OP_COMPLETED);
-			if(internal_enqueue(q, old_timestamp, old_payload) == ABORTED) continue;
+			if(internal_enqueue(q, old_timestamp, old_payload) == ABORTED) {
+				__sync_lock_test_and_set(&communication_channels[my_snd_id].state ,  OP_ABORTED);
+				continue;
+			}
 		}
 
-		while(communication_channels[my_snd_id].state == OP_PENDING || communication_channels[my_rcv_id].state == OP_PENDING){
-			if(communication_channels[my_rcv_id].state == OP_PENDING){
+		if(communication_channels[my_snd_id].state == OP_PENDING || communication_channels[my_rcv_id].state == OP_PENDING){
 				payload 	= communication_channels[my_rcv_id].payload;
 				timestamp 	= communication_channels[my_rcv_id].timestamp;
 				int res = internal_enqueue(q, timestamp, payload);
 				if(res == OK) 	 __sync_bool_compare_and_swap(&communication_channels[my_rcv_id].state, OP_PENDING, OP_COMPLETED);
 				if(res == ABORT) __sync_bool_compare_and_swap(&communication_channels[my_rcv_id].state, OP_PENDING, OP_ABORTED );
-			} 
 			// do other work
 		}
 	}while(communication_channels[my_snd_id].state != OP_COMPLETED);
