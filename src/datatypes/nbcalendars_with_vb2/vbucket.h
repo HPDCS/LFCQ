@@ -217,10 +217,7 @@ static void post_operation(bucket_t *bckt, unsigned long long ops_type, unsigned
 	if(pending_op_type != NOOP) return;
 	if(node != NULL) __sync_bool_compare_and_swap(&bckt->pending_insert, NULL, node);
 	pending_op_descriptor = (ops_type << 32) | epoch;
-	if(__sync_bool_compare_and_swap(&bckt->op_descriptor, NOOP, pending_op_descriptor)){
-			if(ops_type == CHANGE_EPOCH) 
-				count_epoch_ops++;
-	}
+	__sync_bool_compare_and_swap(&bckt->op_descriptor, NOOP, pending_op_descriptor);
 }
 
 
@@ -282,6 +279,7 @@ __thread unsigned long long counter_last_key_fall = 0ULL;
 
 
 static inline int bucket_connect_fallback(bucket_t *bckt, node_t *node, unsigned int epoch){
+	fallback_insertions++;
 	int res = ABORT;
 
 	post_operation(bckt, CHANGE_EPOCH, epoch, node);
@@ -297,8 +295,6 @@ static inline int bucket_connect_fallback(bucket_t *bckt, node_t *node, unsigned
 		counter_last_key_fall++;
 		if(counter_last_key_fall > 100000) printf("Problems during bucket connect fallback\n");
 	}
-
-	rq_epoch_ops++;
 	
 	return res;
 }
@@ -319,6 +315,7 @@ static inline bucket_t* increase_epoch(bucket_t *bckt, unsigned int epoch){
 	unsigned int __status,  original_index = bckt->index;
 	bucket_t *res = bckt; 
 
+	count_epoch_ops++;
 	if((__status = _xbegin ()) == _XBEGIN_STARTED)
 	{
 		if(is_freezed(bckt->extractions)){ TM_ABORT(0xf2);}
@@ -330,17 +327,18 @@ static inline bucket_t* increase_epoch(bucket_t *bckt, unsigned int epoch){
 		post_operation(bckt, CHANGE_EPOCH, epoch, NULL);
 		execute_operation(bckt);
 		res = get_unmarked(bckt->next);
+		rq_epoch_ops++;
 		
 		if(get_op_type(bckt->op_descriptor) != CHANGE_EPOCH) return NULL;
 		if(res->index != original_index) return NULL;
 	}
-	
 
 	return res;
 }
 
 
 int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, void* payload, unsigned int epoch){
+	bckt_connect_count++;
 
     while(bckt != NULL && bckt->epoch < epoch){
     	bckt = increase_epoch(bckt, epoch);
@@ -363,7 +361,6 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
     cnt_contention++;
     min_contention = contention <= min_contention ? contention : min_contention;
     max_contention = contention >= max_contention ? contention : max_contention;
-	bckt_connect_count++;
 
 	node_t *new   = node_alloc(); //node_alloc_by_index(bckt->index);
 	new->timestamp = timestamp;
