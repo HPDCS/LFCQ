@@ -138,7 +138,6 @@ static inline void validate_bucket(bucket_t *bckt){
 
 
 static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long old_extractions){
-	unsigned int res_phase_1 = 2;
 	
 	if(!is_freezed_for_epo(old_extractions))	return;
 	
@@ -192,9 +191,7 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 
 			if(present) node_unsafe_free(new);
 			// now either it was present or i'm inserted so communicate that the op has compleated
-			res_phase_1 = 1;
 		}
-
 	}
 	
 	// phase 3: replace the bucket for new epoch
@@ -225,23 +222,6 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 }
 
 
-/*
-//static inline void freeze(bucket_t *bckt, unsigned long long flag) {
-#define freeze(bckt, flag) 	\
-do{\
-	unsigned long long old_extractions = 0ULL;\
-	unsigned long long new_extractions = 0ULL;\
-	old_extractions = (bckt)->extractions;\
-	while(!is_freezed(old_extractions)){\
-		new_extractions = get_freezed(old_extractions, flag);\
-		if(__sync_bool_compare_and_swap(&(bckt)->extractions, old_extractions, new_extractions)) 	break;\
-		old_extractions = (bckt)->extractions;\
-	}\
-	complete_freeze((bckt));\
-}while(0)
-//}
-*/
-
 __thread unsigned long long count_epoch_ops = 0ULL;
 __thread unsigned long long rq_epoch_ops = 0ULL;
 __thread unsigned long long bckt_connect_count = 0ULL;
@@ -266,7 +246,8 @@ static inline void execute_operation(bucket_t *bckt){
 	unsigned long long pending_op_type = get_op_type(bckt->op_descriptor);
 	unsigned long long old_extractions = bckt->extractions;
 	unsigned long long new_extractions = 0ULL;
-	
+	bucket_t *old_next = NULL;
+
 	if(pending_op_type == NOOP) return;
 	else if(pending_op_type == DELETE){
         if(!is_freezed_for_del(old_extractions)) 		atomic_bts_x64(&bckt->extractions, DEL_BIT_POS);
@@ -279,7 +260,10 @@ static inline void execute_operation(bucket_t *bckt){
 				break;
 			old_extractions = bckt->extractions;
 		}
-		complete_freeze(bckt);
+	
+		do{ old_next = bckt->next;
+		}while(is_marked(old_next, VAL) && !__sync_bool_compare_and_swap(&bckt->next, old_next, get_marked(old_next, MOV)));
+
 	}
 	else if(pending_op_type == CHANGE_EPOCH){
 		while(!is_freezed(old_extractions)){
