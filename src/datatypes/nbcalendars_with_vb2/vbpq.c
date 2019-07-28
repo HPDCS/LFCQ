@@ -123,29 +123,29 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	pkey_t old_timestamp = timestamp;
 	acquire_channels_ids();
 
+	__sync_lock_test_and_set(&communication_channels[my_snd_id].state ,  OP_NONE);
 
 	do{
-		if(am_i_sender(q, timestamp)){
-			unsigned int __status;
-			retry_post:
-			if((__status = _xbegin ()) == _XBEGIN_STARTED)
-			{
-				communication_channels[my_snd_id].payload   = old_payload;
-				communication_channels[my_snd_id].timestamp = old_timestamp;
-				communication_channels[my_snd_id].state 	= OP_PENDING;
-				TM_COMMIT();
+		if(communication_channels[my_snd_id].state != OP_COMPLETED){
+			if(am_i_sender(q, timestamp)){
+				unsigned int __status;
+				retry_post:
+				if((__status = _xbegin ()) == _XBEGIN_STARTED)
+				{
+					communication_channels[my_snd_id].payload   = old_payload;
+					communication_channels[my_snd_id].timestamp = old_timestamp;
+					communication_channels[my_snd_id].state 	= OP_PENDING;
+					TM_COMMIT();
+				}
+				else goto retry_post;
 			}
-			else goto retry_post;
-		}
-		else{
-			__sync_lock_test_and_set(&communication_channels[my_snd_id].state ,  OP_COMPLETED);
-			if(internal_enqueue(q, old_timestamp, old_payload) == ABORT) {
-				__sync_lock_test_and_set(&communication_channels[my_snd_id].state ,  OP_ABORTED);
-				continue;
+			else{
+				if(internal_enqueue(q, old_timestamp, old_payload) == OK)
+				__sync_lock_test_and_set(&communication_channels[my_snd_id].state ,  OP_COMPLETED);
 			}
 		}
 
-		if(communication_channels[my_snd_id].state == OP_PENDING || communication_channels[my_rcv_id].state == OP_PENDING){
+		if(communication_channels[my_rcv_id].state == OP_PENDING){
 				payload 	= communication_channels[my_rcv_id].payload;
 				timestamp 	= communication_channels[my_rcv_id].timestamp;
 				int res = internal_enqueue(q, timestamp, payload);
@@ -153,7 +153,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 				if(res == ABORT) __sync_bool_compare_and_swap(&communication_channels[my_rcv_id].state, OP_PENDING, OP_ABORTED );
 			// do other work
 		}
-	}while(communication_channels[my_snd_id].state != OP_COMPLETED);
+	}while(communication_channels[my_snd_id].state != OP_COMPLETED || communication_channels[my_rcv_id].state == OP_PENDING);
 
 	return 1;
 
