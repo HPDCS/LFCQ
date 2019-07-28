@@ -317,13 +317,25 @@ __thread unsigned long long counter_last_key = 0ULL;
 
 static inline bucket_t* increase_epoch(bucket_t *bckt, unsigned int epoch){
 	unsigned int original_index = bckt->index;
-	bucket_t *res; 
-	post_operation(bckt, CHANGE_EPOCH, epoch, NULL);
-	execute_operation(bckt);
-	res = get_unmarked(bckt->next);
+	bucket_t *res = bckt; 
+
+	if((__status = _xbegin ()) == _XBEGIN_STARTED)
+	{
+		if(is_freezed(bckt->extractions)){ TM_ABORT(0xf2);}
+		if(get_op_type(bckt->op_descriptor)){TM_ABORT(0xf2);}
+		if(bckt->epoch < epoch) bckt->epoch = epoch;
+		TM_COMMIT();
+		skipped = 0;
+	}
+	else{
+		post_operation(bckt, CHANGE_EPOCH, epoch, NULL);
+		execute_operation(bckt);
+		res = get_unmarked(bckt->next);
+		
+		if(get_op_type(bckt->op_descriptor) != CHANGE_EPOCH) return NULL;
+		if(res->index != original_index) return NULL;
+	}
 	
-	if(get_op_type(bckt->op_descriptor) != CHANGE_EPOCH) return NULL;
-	if(res->index != original_index) return NULL;
 
 	return res;
 }
