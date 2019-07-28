@@ -45,9 +45,6 @@ extern __thread struct drand48_data seedT;
 extern __thread unsigned int tid;
 extern __thread int nid;
 
-#include "channel.h"
-
-
 //#define VALIDATE_BUCKETS
 
 #define GC_BUCKETS   0
@@ -432,8 +429,6 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
     if(position < bckt->extractions)  {rtm_debug++;goto begin;}
 	if(left->next != curr)	{rtm_nested++;goto begin;}
 
-	if(pre_validate_transaction() == ABORT) return ABORT;
-
 	++rtm_prova;
 	__status = 0;
 
@@ -443,7 +438,6 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 		if(position < bckt->extractions){ TM_ABORT(0xf2);}
 		if(left->next != curr){ TM_ABORT(0xf1);}
 		left->next = new; 
-		validate_transaction();
 		TM_COMMIT();
 	}
 	else
@@ -475,8 +469,6 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 		if(__global_try < RTM_FALLBACK || __status & _XABORT_EXPLICIT) 
 			goto begin;
 //		__sync_fetch_and_add(&bckt->pad3, -1LL);
-
-		if(thread_state == SERVER) return ABORT;
 
     	res = bucket_connect_fallback(bckt, new, epoch); 
     	if(res != OK) 	node_unsafe_free(new);
