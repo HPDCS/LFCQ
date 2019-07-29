@@ -341,6 +341,11 @@ void classic_hold(
 }
 
 
+int *numa_mapping;
+int num_numa_nodes;
+int num_cpus;
+int num_cpus_per_node;
+
 void* process(void *arg)
 {
 	int my_id;
@@ -353,16 +358,16 @@ void* process(void *arg)
 
 	my_id 		=  *((int*)(arg));
 	(TID) 		= my_id;
-	int cpu 	= sched_getcpu();
+	int cpu 	= numa_mapping[my_id];
 	(NID) 		= numa_node_of_cpu(cpu);
 	srand48_r(my_id+157, &seed2);
     srand48_r(my_id+359, &seed);
     srand48_r(my_id+254, &seedT);
     
 
-//	CPU_ZERO(&cpuset);
-//	CPU_SET((unsigned int)my_id, &cpuset);
-//	pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+	CPU_ZERO(&cpuset);
+	CPU_SET((unsigned int)cpu, &cpuset);
+	pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
 
 
     __sync_fetch_and_add(&BARRIER, 1);
@@ -402,6 +407,22 @@ void* process(void *arg)
 
 int main(int argc, char **argv)
 {
+	num_numa_nodes		= numa_max_node()+1;
+	num_cpus			= numa_num_configured_cpus();
+	num_cpus_per_node 	= num_cpus/num_numa_nodes;
+	numa_mapping		= malloc(sizeof(int)*num_cpus);
+	
+	int i,k,j=0;
+
+	k = 0;
+	for(i=0;i<num_numa_nodes;i++){
+		for(j=0;j<num_cpus;j++){
+			if( i == numa_node_of_cpu(j))
+				numa_mapping[k++] = j;
+		}
+	}
+
+
 	int par = 1;
 	int num_par = 17;
 	unsigned int i = 0;
