@@ -130,11 +130,12 @@ static inline void validate_bucket(bucket_t *bckt){
 }
 
 
-static inline void acquire_node(int old_socket){
+static inline void acquire_node(volatile int *socket){
+	int old_socket = *socket;
 	int loops = CLUSTER_WAIT;
 	if(old_socket != nid){
 		if(old_socket != -1) while(loops--)_mm_pause(); //usleep(MICROSLEEP_TIME);	
-		__sync_bool_compare_and_swap(&bckt->socket, old_socket, nid);
+		__sync_bool_compare_and_swap(socket, old_socket, nid);
 	}
 }
 
