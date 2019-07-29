@@ -61,7 +61,7 @@ extern __thread int nid;
 #define SET_AS_MOV		3ULL
 
 #define MICROSLEEP_TIME 5
-#define CLUSTER_WAIT 2500000
+#define CLUSTER_WAIT 200000
 #define WAIT_LOOPS CLUSTER_WAIT //2
 
 #define get_op_type(x) ((x) >> 32)
@@ -141,12 +141,13 @@ unsigned long tacc_rdtscp(int *chip, int *core)
 
 static inline void acquire_node(volatile int *socket){
 //return;
-//	int core, l_nid;
-//	tacc_rdtscp(&l_nid, &core);
+	int core, l_nid;
+	tacc_rdtscp(&l_nid, &core);
 //	if(nid != l_nid) printf("NID: %d  LNID: %d\n", nid, l_nid);
-//	nid = l_nid;
+	nid = l_nid;
 	int old_socket = *socket;
 	int loops = WAIT_LOOPS;
+//	if(nid == 0) loops >>=1;
 	if(old_socket != nid){
 		if(old_socket != -1) 
 			while(
