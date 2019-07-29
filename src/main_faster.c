@@ -353,7 +353,7 @@ void* process(void *arg)
 	long long n_enqueue = 0; 
 	struct drand48_data seed;
 	struct drand48_data seed2    ;
-//	cpu_set_t cpuset;
+	cpu_set_t cpuset;
 	double timestamp;
 
 	my_id 		=  *((int*)(arg));
@@ -425,7 +425,7 @@ int main(int argc, char **argv)
 
 	int par = 1;
 	int num_par = 17;
-	unsigned int i = 0;
+	i = 0;
 	//unsigned long numa_mask = 1;
 	long long sum = 0;
 	long long min = LONG_MAX;
