@@ -62,6 +62,9 @@ struct __table
 	
 	bucket_t * volatile cached_node; 
 	char zpad5[56];     
+
+	volatile int socket; 
+	char zpad5[60];     
 	
 	node_t n_tail;
 
@@ -562,6 +565,8 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 	}
   #endif
 
+
+	acquire_node(h->socket);
 	return h;
 
 

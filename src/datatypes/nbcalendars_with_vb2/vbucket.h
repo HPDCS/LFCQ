@@ -61,6 +61,7 @@ extern __thread int nid;
 #define SET_AS_MOV		3ULL
 
 #define MICROSLEEP_TIME 50
+#define CLUSTER_WAIT 5000
 
 
 #define get_op_type(x) ((x) >> 32)
@@ -129,10 +130,10 @@ static inline void validate_bucket(bucket_t *bckt){
 }
 
 
-static inline void acquire_node(bucket_t *bckt){
-	int old_socket = bckt->socket; 
+static inline void acquire_node(int old_socket){
+	int loops = CLUSTER_WAIT;
 	if(old_socket != nid){
-		if(old_socket != -1) usleep(MICROSLEEP_TIME);	
+		if(old_socket != -1) while(loops--)_mm_pause(); //usleep(MICROSLEEP_TIME);	
 		__sync_bool_compare_and_swap(&bckt->socket, old_socket, nid);
 	}
 }
@@ -352,7 +353,7 @@ static inline bucket_t* increase_epoch(bucket_t *bckt, unsigned int epoch){
 int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, void* payload, unsigned int epoch){
 	bckt_connect_count++;
 	
-	acquire_node(bckt);
+	//acquire_node(bckt->socket);
 
     while(bckt != NULL && bckt->epoch < epoch){
     	bckt = increase_epoch(bckt, epoch);

@@ -78,6 +78,7 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	res->hashtable->new_table = NULL;
 	res->hashtable->size = MINIMUM_SIZE;
 	res->hashtable->current = 0;
+	res->hashtable->socket = -1;
 	res->hashtable->last_resize_count = 0;
 	res->hashtable->resize_count = 0;
 	res->hashtable->e_counter.count = 0;
