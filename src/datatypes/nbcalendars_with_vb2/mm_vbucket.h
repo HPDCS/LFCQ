@@ -123,7 +123,8 @@ static inline bucket_t* bucket_alloc(node_t *tail){
     res->epoch				= 0U;
     res->pending_insert		= NULL;
     res->op_descriptor 		= 0ULL;
-    res->tail = tail;
+    res->tail 				= tail;
+    res->socket 			= -1;
 /*    res->tail = node_alloc();
     res->tail->payload		= NULL;
     res->tail->timestamp	= INFTY;

@@ -97,7 +97,7 @@ struct __bucket_t
 	unsigned int epoch;				
 	unsigned int index;				// 16
 	unsigned int type;
-	unsigned int __pad_1;		// 24
+	volatile int socket;		// 24
 	unsigned long long __pad_4;       // 52
 	node_t * tail;					// 32
 	volatile unsigned long long op_descriptor;
@@ -123,6 +123,15 @@ static inline void validate_bucket(bucket_t *bckt){
 		ln = ln->next;
 	assert(ln == bckt->tail);
   #endif
+}
+
+
+static inline void acquire_node(bucket_t *bckt){
+	int old_socket = bckt->socket; 
+	if(old_socket != nid){
+		if(old_socket != -1) usleep(100);	
+		__sync_bool_compare_and_swap(&bckt->socket, old_socket, nid);
+	}
 }
 
 
@@ -339,6 +348,8 @@ static inline bucket_t* increase_epoch(bucket_t *bckt, unsigned int epoch){
 
 int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, void* payload, unsigned int epoch){
 	bckt_connect_count++;
+	
+	acquire_node(bckt);
 
     while(bckt != NULL && bckt->epoch < epoch){
     	bckt = increase_epoch(bckt, epoch);
