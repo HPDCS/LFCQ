@@ -128,6 +128,7 @@ static inline void flush_current(table_t* h, unsigned long long newIndex)
 
 static inline bucket_t* search(bucket_t *head, bucket_t **old_left_next, bucket_t **right_bucket, unsigned int *distance, unsigned int index)
 {
+//	acquire_node(&head->socket);
 	bucket_t *left, *left_next, *tmp, *tmp_next;
 	unsigned int counter;
 	unsigned int len;
