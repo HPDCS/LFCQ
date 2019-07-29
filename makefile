@@ -29,10 +29,9 @@ MARO_value := src/datatypes/nbskiplists/prioq_v2.o src/datatypes/nbskiplists/com
 
 CBCQ_value := src/datatypes/ChunkBasedPriorityQueue/cbpq.opp\
 			  src/datatypes/ChunkBasedPriorityQueue/Atomicable.opp\
-  			  src/datatypes/ChunkBasedPriorityQueue/listNode.opp\
 			  src/datatypes/ChunkBasedPriorityQueue/skipListCommon.opp\
 			  src/datatypes/ChunkBasedPriorityQueue/skipList.opp\
-			  src/datatypes/ChunkBasedPriorityQueue/ChunkedPriorityQueue.opp $(UTIL_value) 
+			  src/datatypes/ChunkBasedPriorityQueue/ChunkedPriorityQueue.opp $(UTIL_value)  $(GACO_value)
 
 
 

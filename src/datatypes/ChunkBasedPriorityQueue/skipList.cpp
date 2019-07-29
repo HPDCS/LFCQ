@@ -23,6 +23,10 @@
 #include <assert.h>
 #include <time.h>
 
+extern "C" {
+#include "../../gc/gc.h"
+#include "../../gc/ptst.h"
+}
 
 int
 skipListFind(SkipList skipList, pkey_t key, ListNode preds[], ListNode succs[]);
@@ -31,10 +35,52 @@ int
 skipListdelete(SkipList skipList, pkey_t key, ListNode preds[],ListNode succs[]);
 
 
+extern __thread  ptst_t *ptst; 
+
+static int gc_id[MAX_LEVEL+1];
+
+
+
+ListNode makeSentinelNode(int key) {
+	return makeNormalNode(key, MAX_LEVEL, 0);
+}
+
+ListNode makeNormalNode(int key, int height, intptr_t value) {
+	int i;
+	ListNode newNode = (ListNode) gc_alloc(ptst, height); //malloc(sizeof (struct listNode_t) + (sizeof(markable_ref) * (height+1)));
+	assert(newNode != NULL);
+	newNode->key = key;
+	newNode->value = value;
+
+	for (i = 0; i <= height; i++)
+		newNode->next[i] = (markable_ref)NULL;
+	newNode->topLevel = height;
+
+	return newNode;
+}
+
+
+void freeListNode(ListNode node) {
+	free(node);
+}
+
+
 
 /* creates a new skipList*/
 SkipList skipListInit() {
-	int i;
+	// init fraser garbage collector/allocator 
+
+	_init_gc_subsystem();
+
+	int i; 
+	for(i=0;i<MAX_LEVEL+1;i++)  
+		gc_id[i] = gc_add_allocator(sizeof (struct listNode_t) + (sizeof(markable_ref) * (i+1)));
+	
+	// add callback for set tables and array of nodes whene a grace period has been identified
+	critical_enter();
+	critical_exit();
+
+
 
 	srand(time(NULL));
 
@@ -62,16 +108,20 @@ int skipListAdd(SkipList skipList, pkey_t key, intptr_t value) {
 
 	int topLevel = randomLevel();
 	int level;
-	ListNode* preds = getListNodeArray(MAX_LEVEL + 1);
-	ListNode* succs = getListNodeArray(MAX_LEVEL + 1);
+	//ListNode* preds = getListNodeArray(MAX_LEVEL + 1);
+	//ListNode* succs = getListNodeArray(MAX_LEVEL + 1);
+
+
+	ListNode preds[MAX_LEVEL + 1];
+	ListNode succs[MAX_LEVEL + 1]; 
 
 	while (TRUE) {
 		//retry:
 		int found = skipListFind(skipList, key, preds, succs);
 
 		if (found) {
-			free(preds);
-			free(succs);
+			//free(preds);
+			//free(succs);
 			return FALSE;
 		} else {
 			ListNode newNode = makeNormalNode(key, topLevel, value);
@@ -82,7 +132,7 @@ int skipListAdd(SkipList skipList, pkey_t key, intptr_t value) {
 			ListNode pred = preds[BOTTOM_LEVEL];
 			ListNode succ = succs[BOTTOM_LEVEL];
 			if (  !(REF_CAS(&(pred->next[BOTTOM_LEVEL]), succ, newNode, FALSE_MARK, FALSE_MARK))  ) {
-				free(newNode);
+				gc_free(ptst, newNode, topLevel);
 				continue;
 			}
 			for (level = BOTTOM_LEVEL + 1; level <= topLevel; level++) {
@@ -107,8 +157,8 @@ int skipListAdd(SkipList skipList, pkey_t key, intptr_t value) {
 				}
 			}
 
-			free(preds);
-			free(succs);
+			//free(preds);
+			//free(succs);
 			return TRUE;
 		}
 	}
@@ -124,14 +174,18 @@ int skipListAdd(SkipList skipList, pkey_t key, intptr_t value) {
  */
 int skipListRemove(SkipList skipList, pkey_t key) {
 	int level;
-	ListNode* preds = getListNodeArray(MAX_LEVEL + 1);
-	ListNode* succs = getListNodeArray(MAX_LEVEL + 1);
+	//ListNode* preds = getListNodeArray(MAX_LEVEL + 1);
+	//ListNode* succs = getListNodeArray(MAX_LEVEL + 1);
+
+	ListNode preds[MAX_LEVEL + 1];
+	ListNode succs[MAX_LEVEL + 1]; 
+
 	ListNode succ;
 	while (TRUE) {
 		int found = skipListFind(skipList, key, preds, succs);
 		if (!found) {
-			free(preds);
-			free(succs);
+			//free(preds);
+			//free(succs);
 			return FALSE;
 		} else {
 			ListNode nodeToRemove = succs[BOTTOM_LEVEL];
@@ -153,12 +207,12 @@ int skipListRemove(SkipList skipList, pkey_t key) {
 				succ = (ListNode)get_mark_and_ref(succs[BOTTOM_LEVEL]->next[BOTTOM_LEVEL], &marked);
 				if (iMarkedIt) {
 					skipListFind(skipList, nodeToRemove->key, preds, succs);
-					free(preds);
-					free(succs);
+					//free(preds);
+					//free(succs);
 					return TRUE;
 				} else if (marked) {
-					free(preds);
-					free(succs);
+					//free(preds);
+					//free(succs);
 					return FALSE;
 				}
 			}
@@ -266,6 +320,8 @@ int skipListFind(SkipList skipList, pkey_t key, ListNode preds[], ListNode succs
 
 /*Destroy the skiplist*/
 void skipListDestroy(SkipList sl) {
+	return;
+	/*
 	ListNode curr = sl->head;
 	ListNode next;
 
@@ -275,5 +331,6 @@ void skipListDestroy(SkipList sl) {
 		curr = next;
 	}
 	free(sl);
+	*/
 }
 
