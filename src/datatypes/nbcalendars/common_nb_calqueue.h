@@ -29,6 +29,7 @@
 
 #include <float.h>
 #include <math.h>
+#include <immintrin.h>
 
 #include "../../key_type.h"
 #include "../../arch/atomic.h"
@@ -172,7 +173,7 @@ struct table
 	atomic_t d_counter;
 	char zpad1[60];
 	int socket;
-	char zpad1[60];
+	char zpad2[60];
 	volatile unsigned long long current;
 };
 
@@ -197,6 +198,7 @@ struct nb_calqueue
 
 
 extern __thread unsigned int TID;
+extern __thread unsigned int nid;
 extern __thread struct drand48_data seedT;
 
 extern __thread unsigned long long concurrent_dequeue;
