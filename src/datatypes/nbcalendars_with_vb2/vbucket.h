@@ -60,6 +60,9 @@ extern __thread int nid;
 #define	DELETE			2ULL
 #define SET_AS_MOV		3ULL
 
+#define MICROSLEEP_TIME 50
+
+
 #define get_op_type(x) ((x) >> 32)
 
 
@@ -129,7 +132,7 @@ static inline void validate_bucket(bucket_t *bckt){
 static inline void acquire_node(bucket_t *bckt){
 	int old_socket = bckt->socket; 
 	if(old_socket != nid){
-		if(old_socket != -1) usleep(100);	
+		if(old_socket != -1) usleep(MICROSLEEP_TIME);	
 		__sync_bool_compare_and_swap(&bckt->socket, old_socket, nid);
 	}
 }
