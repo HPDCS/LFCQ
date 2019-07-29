@@ -121,15 +121,19 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	assertf(timestamp < MIN || timestamp >= INFTY, "Key out of range %s\n", "");
 	void *old_payload = payload;
 	pkey_t old_timestamp = timestamp;
+	bool completed1 = false, completed2 = false;
 	acquire_channels_ids();
-
+	unsigned long long my_current_state;
+	unsigned long long buddy_current_state;
 	__sync_lock_test_and_set(&communication_channels[my_snd_id].state ,  OP_NONE);
 
 	do{
-		if(communication_channels[my_snd_id].state != OP_COMPLETED){
+		my_current_state = communication_channels[my_snd_id].state;
+		if(my_current_state == OP_COMPLETED) completed1 = true;
+		if(!completed1  && my_current_state != OP_PENDING ){
 			if(am_i_sender(q, timestamp)){
 				unsigned int __status;
-				retry_post:
+			  retry_post:
 				if((__status = _xbegin ()) == _XBEGIN_STARTED)
 				{
 					communication_channels[my_snd_id].payload   = old_payload;
@@ -145,7 +149,9 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			}
 		}
 
-		if(communication_channels[my_rcv_id].state == OP_PENDING){
+		buddy_current_state = communication_channels[my_rcv_id].state;
+		if(buddy_current_state == OP_NONE)	 completed2 =true;
+		if(!completed2 && buddy_current_state == OP_PENDING){
 				payload 	= communication_channels[my_rcv_id].payload;
 				timestamp 	= communication_channels[my_rcv_id].timestamp;
 				int res = internal_enqueue(q, timestamp, payload);
@@ -153,7 +159,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 				if(res == ABORT) __sync_bool_compare_and_swap(&communication_channels[my_rcv_id].state, OP_PENDING, OP_ABORTED );
 			// do other work
 		}
-	}while(communication_channels[my_snd_id].state != OP_COMPLETED || communication_channels[my_rcv_id].state == OP_PENDING);
+	}while(!completed1 || !completed2);
 
 	return 1;
 
