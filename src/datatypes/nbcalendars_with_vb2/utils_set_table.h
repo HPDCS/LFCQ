@@ -261,6 +261,7 @@ static void set_new_table(table_t *h, unsigned int counter)
 			new_h->array[i].type = HEAD;
 			new_h->array[i].epoch = 0U;
 			new_h->array[i].index = i;
+			new_h->array[i].socket = -1;
 			new_h->array[i].extractions = 0ULL;
 		}
 

@@ -98,6 +98,7 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 		res->hashtable->array[i].type = HEAD;
 		res->hashtable->array[i].epoch = 0U;
 		res->hashtable->array[i].index = 0U;
+		res->hashtable->array[i].socket = -1;
 		res->hashtable->array[i].extractions = 0ULL;
 	}
 	return res;
