@@ -60,9 +60,9 @@ extern __thread int nid;
 #define	DELETE			2ULL
 #define SET_AS_MOV		3ULL
 
-#define MICROSLEEP_TIME 50
-#define CLUSTER_WAIT 5000
-
+#define MICROSLEEP_TIME 5
+#define CLUSTER_WAIT 2500000
+#define WAIT_LOOPS CLUSTER_WAIT //2
 
 #define get_op_type(x) ((x) >> 32)
 
@@ -129,13 +129,36 @@ static inline void validate_bucket(bucket_t *bckt){
   #endif
 }
 
+unsigned long tacc_rdtscp(int *chip, int *core)
+{
+    unsigned long a,d,c;
+    __asm__ volatile("rdtscp" : "=a" (a), "=d" (d), "=c" (c));
+    *chip = (c & 0xFFF000)>>12;
+    *core = c & 0xFFF;
+    return ((unsigned long)a) | (((unsigned long)d) << 32);;
+}
+
 
 static inline void acquire_node(volatile int *socket){
+//return;
+//	int core, l_nid;
+//	tacc_rdtscp(&l_nid, &core);
+//	if(nid != l_nid) printf("NID: %d  LNID: %d\n", nid, l_nid);
+//	nid = l_nid;
 	int old_socket = *socket;
-	int loops = CLUSTER_WAIT;
+	int loops = WAIT_LOOPS;
 	if(old_socket != nid){
-		if(old_socket != -1) while(loops--)_mm_pause(); //usleep(MICROSLEEP_TIME);	
-		__sync_bool_compare_and_swap(socket, old_socket, nid);
+		if(old_socket != -1) 
+			while(
+				loops-- && 
+				(old_socket = *socket) != nid
+			)
+			_mm_pause(); 
+//			usleep(MICROSLEEP_TIME);	
+//		if(old_socket == -1) printf("old_socket:%d\n", old_socket);
+		if(old_socket != nid)
+			__sync_bool_compare_and_swap(socket, old_socket, nid);
+//			__sync_lock_test_and_set(socket, nid);
 	}
 }
 
@@ -353,7 +376,9 @@ static inline bucket_t* increase_epoch(bucket_t *bckt, unsigned int epoch){
 
 int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, void* payload, unsigned int epoch){
 	bckt_connect_count++;
-	
+
+//	acquire_node(&bckt->socket);
+
     while(bckt != NULL && bckt->epoch < epoch){
     	bckt = increase_epoch(bckt, epoch);
     } 
@@ -510,8 +535,10 @@ __thread node_t   *__last_node 	= NULL;
 __thread unsigned long long __last_val = 0;
 
 static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts, unsigned int epoch){
+//	acquire_node(&bckt->socket);
 	node_t *curr  = &bckt->head;
 	node_t *tail  = bckt->tail;
+
 	
 	//node_t *head  = &bckt->head;
 	unsigned long long old_extracted = 0;	
