@@ -351,9 +351,10 @@ void* process(void *arg)
 //	cpu_set_t cpuset;
 	double timestamp;
 
-	my_id =  *((int*)(arg));
-	(TID) = my_id;
-	(NID) 		= numa_node_of_cpu(tid);
+	my_id 		=  *((int*)(arg));
+	(TID) 		= my_id;
+	int cpu 	= sched_getcpu();
+	(NID) 		= numa_node_of_cpu(cpu);
 	srand48_r(my_id+157, &seed2);
     srand48_r(my_id+359, &seed);
     srand48_r(my_id+254, &seedT);

@@ -354,8 +354,6 @@ static inline bucket_t* increase_epoch(bucket_t *bckt, unsigned int epoch){
 int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, void* payload, unsigned int epoch){
 	bckt_connect_count++;
 	
-	//acquire_node(bckt->socket);
-
     while(bckt != NULL && bckt->epoch < epoch){
     	bckt = increase_epoch(bckt, epoch);
     } 
