@@ -25,10 +25,10 @@
 
 
 int
-skipListFind(SkipList skipList, int key, ListNode preds[], ListNode succs[]);
+skipListFind(SkipList skipList, pkey_t key, ListNode preds[], ListNode succs[]);
 
 int 
-skipListdelete(SkipList skipList, int key, ListNode preds[],ListNode succs[]);
+skipListdelete(SkipList skipList, pkey_t key, ListNode preds[],ListNode succs[]);
 
 
 
@@ -58,7 +58,7 @@ SkipList skipListInit() {
  * adds key to the skiplist
  * returns 1 on success or 0 if the key was already in the skiplist.
  */
-int skipListAdd(SkipList skipList, int key, intptr_t value) {
+int skipListAdd(SkipList skipList, pkey_t key, intptr_t value) {
 
 	int topLevel = randomLevel();
 	int level;
@@ -122,7 +122,7 @@ int skipListAdd(SkipList skipList, int key, intptr_t value) {
  * removes a key from the skiplist
  * returns 1 on success or 0 if the key wasn't in the skiplist.
  */
-int skipListRemove(SkipList skipList, int key) {
+int skipListRemove(SkipList skipList, pkey_t key) {
 	int level;
 	ListNode* preds = getListNodeArray(MAX_LEVEL + 1);
 	ListNode* succs = getListNodeArray(MAX_LEVEL + 1);
@@ -175,7 +175,7 @@ int skipListRemove(SkipList skipList, int key) {
  * returns 1 if the key was in the skiplist or 0 if it wasn't.
  * in any case pValue is holding this or previous key value or NULL
  */
-int skipListContains(SkipList skipList, int key, intptr_t* pValue) {
+int skipListContains(SkipList skipList, pkey_t key, intptr_t* pValue) {
 	int marked = 0, level;
 	*pValue = 0;		// initialize for the case the key is the non-existing minimal 
 
@@ -211,7 +211,7 @@ int skipListContains(SkipList skipList, int key, intptr_t* pValue) {
  * returns all its predecessors and successors in the preds & succs arrarys.
  * Also makes sure the the first MAX_LEVEL*2 hazard pointers point to the elemesnts in preds & succs
  */
-int skipListFind(SkipList skipList, int key, ListNode preds[], ListNode succs[]) {
+int skipListFind(SkipList skipList, pkey_t key, ListNode preds[], ListNode succs[]) {
 	int marked, snip, level, retry, currkey;
 	ListNode pred = NULL, curr = NULL, succ = NULL;
 	while (TRUE) {

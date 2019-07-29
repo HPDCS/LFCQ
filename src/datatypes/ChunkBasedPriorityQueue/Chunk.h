@@ -36,7 +36,7 @@ class Chunk
 public:
 	struct metadata{				// the chunks meta data, takes one cache line
 		Atomicable 		status;		// the index for insertion or deletion, state and frozen index
-		volatile int 	max;		// constant value initialized on chunk creation
+		volatile pkey_t 	max;		// constant value initialized on chunk creation
 		volatile Chunk* next;		// pointer to the next chunk in the linked list
 		volatile Chunk* buffer;		// used only for first chunk
 		volatile u64 				// used for freeze optimization: a bit is set for each frozen value
@@ -91,7 +91,7 @@ public:
 		return ( expectedNext == (Chunk*)atomicCAS((void**)&this->meta.next, expectedNext, newNext) );
 	}
 
-	int countForDebug( int key ) {
+	int countForDebug( pkey_t key ) {
 		int res = 0;
 		for(int i=MIN_IDX; i<CHUNK_SIZE; ++i) {
 			if (vals[i] == key) res++;

@@ -9,6 +9,8 @@
 #ifndef SKIPLISTCOMMON_H_
 #define SKIPLISTCOMMON_H_
 
+#include "../../key_type.h"
+
 #ifndef	FALSE
 #define	FALSE	(0)
 #endif

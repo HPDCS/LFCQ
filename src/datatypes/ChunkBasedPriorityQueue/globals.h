@@ -1,6 +1,9 @@
 #ifndef GLOBALS_H
 #define GLOBALS_H
 
+
+#include "../../key_type.h"
+
 typedef unsigned long long u64;
 
 #define dev inline

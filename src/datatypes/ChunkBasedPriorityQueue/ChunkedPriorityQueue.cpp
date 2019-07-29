@@ -25,7 +25,7 @@ using namespace std;
 
 /******************************************************************************************************/
 // checkInputInsert(int key)	- only keys between MIN_VAL and MAX_VAL (not included) are acceptable
-static inline void checkInputInsert(int key){
+static inline void checkInputInsert(pkey_t key){
 	if ((key <= MIN_VAL)||(key >= MAX_VAL)){
 		cout<<"NOT VALID KEY"<<endl;
 		_assert(false);
@@ -149,7 +149,7 @@ inline void ChunkedPriorityQueue::debugPrintLoopInInsert(
 /******************************************************************************************************/
 // ChunkedPriorityQueue::insert(int key) 	
 //		- insert the key into PQ, the key must be positive and require less than 32 bits
-void ChunkedPriorityQueue::insert(int key, ThrInf* t){
+void ChunkedPriorityQueue::insert(pkey_t key, ThrInf* t){
 
 	Chunk* curr = NULL, *prev = NULL;
 	int iter = 0; 
@@ -243,7 +243,7 @@ void ChunkedPriorityQueue::insert(int key, ThrInf* t){
 // 		successful. If buffer pointer is already not NULL, because freeze has started or someone else 
 // 		attached another buffer, returns false. In case freeze has started "curbuf" is going to be marked
 // 		as deleted (DELETED_PTR).
-bool ChunkedPriorityQueue::create_insert_buffer(int key, Chunk *currhead, Chunk **curbuf){
+bool ChunkedPriorityQueue::create_insert_buffer(pkey_t key, Chunk *currhead, Chunk **curbuf){
 
 	Chunk *buf = alloc();
 
@@ -266,7 +266,7 @@ bool ChunkedPriorityQueue::create_insert_buffer(int key, Chunk *currhead, Chunk 
 // ChunkedPriorityQueue::insert_to_first_chunk(int key, Chunk *currhead) 	
 // 		- inserts the key into the first chunk (currhead is needed for possible later update due to freeze).
 // 		As it is impossible to insert to the first chunk, instead the key is inserted into the buffer
-bool ChunkedPriorityQueue::insert_to_first_chunk(ThrInf* t, int key, Chunk *currhead){
+bool ChunkedPriorityQueue::insert_to_first_chunk(ThrInf* t, pkey_t key, Chunk *currhead){
 
 	Chunk *curbuf = currhead->meta.buffer;		// PHASE I: insertion into the buffer
 	t->insInFirstCnt++;
@@ -340,7 +340,7 @@ bool ChunkedPriorityQueue::insert_to_first_chunk(ThrInf* t, int key, Chunk *curr
 /***************************************************************************************/
 // ChunkedPriorityQueue::delmin() - main interface that deletes the minimal value from the PQ
 // 		What does it return when the PQ is empty?
-int ChunkedPriorityQueue::delmin(ThrInf* t){
+pkey_t ChunkedPriorityQueue::delmin(ThrInf* t){
 	DEB(int iter=0;)
 
 #ifdef FLAG_RELEASE

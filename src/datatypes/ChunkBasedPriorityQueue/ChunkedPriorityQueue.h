@@ -110,9 +110,9 @@ public:
 			Chunk** nextFrozen,                // second chunk if needed
 			Chunk** nextNextFrozen,
 			Chunk** nextCreated, ThrInf* t);
-	bool insert_to_first_chunk( ThrInf* t, int key,             // inserts a key into the buffer instead of first
+	bool insert_to_first_chunk( ThrInf* t, pkey_t key,             // inserts a key into the buffer instead of first
 			Chunk *currhead);
-	bool create_insert_buffer(int key, Chunk *currhead,         // buffer creation and attachment
+	bool create_insert_buffer(pkey_t key, Chunk *currhead,         // buffer creation and attachment
 			Chunk **curbuf);
 	void fill_chunk(int *svals, int len, int start,             // updates chunks values from the given array
 			int pivotIdx, Chunk *c);                    // on split
@@ -220,8 +220,8 @@ public:
 		skipListDestroy(sl);
 	}
 
-	void insert(int key, ThrInf* t);				// the interface for inserting a key
-	int  delmin(ThrInf* t);							// the interface for deleting the min value
+	void insert(pkey_t key, ThrInf* t);				// the interface for inserting a key
+	pkey_t  delmin(ThrInf* t);							// the interface for deleting the min value
 	void print();
 
 	void assertStructure(){
