@@ -171,6 +171,8 @@ struct table
 	char zpad3[60];
 	atomic_t d_counter;
 	char zpad1[60];
+	int socket;
+	char zpad1[60];
 	volatile unsigned long long current;
 };
 

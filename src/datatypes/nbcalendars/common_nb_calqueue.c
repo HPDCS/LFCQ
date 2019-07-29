@@ -455,6 +455,7 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 		if(res != 0) {free(new_h); printf("No enough memory to new table structure\n"); return;}
 		
 		tail = h->array->tail;
+		new_h->socket = -1;
 		new_h->bucket_width  = -1.0;
 		new_h->size 		 = new_size;
 		new_h->new_table 	 = NULL;
@@ -721,6 +722,33 @@ void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 	right_node_next = FETCH_AND_AND(&(right_node->next), MASK_DEL);
 }
 
+#define WAIT_LOOPS 200000
+static inline void acquire_node(volatile int *socket){
+//return;
+//	int core, l_nid;
+//	tacc_rdtscp(&l_nid, &core);
+//	if(nid != l_nid) printf("NID: %d  LNID: %d\n", nid, l_nid);
+//	nid = l_nid;
+	int old_socket = *socket;
+	int loops = WAIT_LOOPS;
+	if(old_socket != nid){
+		if(old_socket != -1) 
+			while(
+				loops-- && 
+				(old_socket = *socket) != nid
+			)
+			_mm_pause(); 
+//			usleep(MICROSLEEP_TIME);	
+//		if(old_socket == -1) printf("old_socket:%d\n", old_socket);
+		if(old_socket != nid)
+			__sync_bool_compare_and_swap(socket, old_socket, nid);
+//			__sync_lock_test_and_set(socket, nid);
+	}
+}
+
+
+
+
 table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsigned int elem_per_bucket, double perc_used_bucket)
 {
   #if ENABLE_EXPANSION == 0
@@ -888,6 +916,7 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 	}
 	
 	// return the current set table
+	acquire_node(&h->socket);
 	return h;
 }
 
@@ -936,6 +965,7 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	res->tail = node_malloc(NULL, INFTY, 0);
 	res->tail->next = NULL;
 
+	res->hashtable->socket = -1;
 	res->hashtable->bucket_width = 1.0;
 	res->hashtable->new_table = NULL;
 	res->hashtable->size = MINIMUM_SIZE;
