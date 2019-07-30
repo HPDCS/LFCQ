@@ -86,22 +86,26 @@ public:
 	volatile SkipList sl;	// pointer to the skip list
 
 	/* --------------- Memory Management structures and methods - start --------------- */
-	//Chunk arr[ALLOCCACHE];
+	Chunk arr[ALLOCCACHE];
 	int freecnt; 			// from where to start next allocation (initialized to zero by constructor)
 
 	Chunk* alloc(){
-		return (Chunk*) gc_alloc(ptst, gc_ck);
+		//return (Chunk*) gc_alloc(ptst, gc_ck);
 
-		/*
+		
 		int val = atomicInc(&freecnt, 1);
 		if(val>=ALLOCCACHE){
-			printf(" Statically allocated %d chunks were not enough :-(\n", ALLOCCACHE);
-			assert(0);
+			Chunk* res = (Chunk*) gc_alloc(ptst, gc_ck);
+			if(!res){
+				printf(" Statically allocated %d chunks were not enough :-(\n", ALLOCCACHE);
+				assert(0);
+			}
+			return res;
 		}
 		memset(&arr[val], 0, sizeof(Chunk));	// zero the space for the chunks (long operation)
 		
 		return &arr[val];
-		*/
+		
 	}
 	void free(Chunk *c) {
 		gc_free(ptst, c, gc_ck);
