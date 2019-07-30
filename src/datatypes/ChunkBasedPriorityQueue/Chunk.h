@@ -58,7 +58,7 @@ public:
 	}
 
 	// special initialization method and not a constructor is used, as chunks are statically allocated
-	dev void init(int max, Chunk *next, ChunkState s, int initIdx){
+	dev void init(pkey_t max, Chunk *next, ChunkState s, int initIdx){
 		//memset(this, 0, sizeof(Chunk));
 		meta.max = max;
 		meta.next = next;
