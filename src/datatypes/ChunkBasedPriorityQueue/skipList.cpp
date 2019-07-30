@@ -41,7 +41,7 @@ int gc_id[MAX_LEVEL+1];
 
 
 
-ListNode makeSentinelNode(int key) {
+ListNode makeSentinelNode(pkey_t key) {
 	return makeNormalNode(key, MAX_LEVEL, 0);
 }
 
