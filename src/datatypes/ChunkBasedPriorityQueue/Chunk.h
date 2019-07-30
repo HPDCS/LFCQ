@@ -14,6 +14,8 @@
 #include "globals.h"
 #include "Atomicable.h"
 
+
+
 using namespace std;
 
 
@@ -21,8 +23,8 @@ using namespace std;
 /* ------------------------ CONSTANTS DEFINITIONS  ------------------------ */
 const int MIN_IDX 		= 0; 							// minimal VALID value for the index in the chunk
 const int MAX_IDX		= (CHUNK_SIZE);					// maximal INVALID value for the index in the chunk
-const int MIN_VAL		= 0;							// minimal value to never be inserted to the PQ
-const int MAX_VAL 		= (0x7fffffff-1);				// maximal value to never be inserted to the PQ, -1
+const pkey_t MIN_VAL		= MIN;							// minimal value to never be inserted to the PQ
+const pkey_t MAX_VAL 		= INFTY-1;				// maximal value to never be inserted to the PQ, -1
 // is needed to distinguish it from SL max sentinel
 const int DELETED_PTR	= 0x00000001;					// the mask for the least significant bit being set
 /************************************************************************************************/
