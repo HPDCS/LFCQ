@@ -144,7 +144,7 @@ public:
 			int key, Chunk* prev, Chunk* curr, int iter, int r);
 
 	/*******************************************************************************************************/
-	int getChunk (Chunk** cur, Chunk** prev, int key){         // search the needed (according to the key) chunk
+	int getChunk (Chunk** cur, Chunk** prev, pkey_t key){         // search the needed (according to the key) chunk
 		//Chunk* frozen   = NULL;
 		*cur = head; *prev = NULL;
 
