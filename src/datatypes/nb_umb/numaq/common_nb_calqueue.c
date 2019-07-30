@@ -29,9 +29,11 @@
 
 #include "common_nb_calqueue.h"
 
+//#define USE_TASK_QUEUE
+
 /* 
- * @TODO add op node definition
- * @TODO move queue to non blocking 
+ * @TODO improve op node definition
+ * @TODO move queue to non blocking (Use LCRQ?)
  *  */
 
 
@@ -42,7 +44,7 @@
 int gc_aid[3];
 int gc_hid[1];
 
-unsigned int ACTIVE_NUMA_NODES;
+//unsigned int ACTIVE_NUMA_NODES;
 
 /*************************************
  * THREAD LOCAL VARIABLES			 *
@@ -60,8 +62,6 @@ __thread unsigned long long num_cas_useful = 0ULL;
 __thread unsigned long long near = 0;
 __thread unsigned int 		acc = 0;
 __thread unsigned int 		acc_counter = 0;
-
-//@TODO move statistics
 
 // (!new) new fields
 __thread op_node *requested_op;
@@ -682,7 +682,7 @@ void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 	int res = 0;
 	
 	//Create a new node to be inserted in the new table as as INValid
-	replica = numa_node_malloc(right_node->payload, right_node->timestamp,  right_node->counter, hash(right_node->timestamp, new_h->bucket_width)%ACTIVE_NUMA_NODES);
+	replica = numa_node_malloc(right_node->payload, right_node->timestamp,  right_node->counter, hash(right_node->timestamp, new_h->bucket_width)%_NUMA_NODES);
 	
 	new_node 			= &replica;
 	new_node_pointer 	= (*new_node);
@@ -914,12 +914,11 @@ void std_free_hook(ptst_t *p, void *ptr){	free(ptr); }
 void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket)
 {
 	//ceil(a / b) = (a / b) + ((a % b) != 0);
-
+	/*
 	ACTIVE_NUMA_NODES = (((THREADS * _NUMA_NODES)) / NUM_CPUS) + ((((THREADS * _NUMA_NODES)) % NUM_CPUS) != 0); // (!new) compute the number of active numa nodes 
 	ACTIVE_NUMA_NODES = ACTIVE_NUMA_NODES < _NUMA_NODES? ACTIVE_NUMA_NODES:_NUMA_NODES;
-
-	printf("\n#######\nt %d, nn %d, cpu %d, ad%d\n########\n", THREADS, _NUMA_NODES, NUM_CPUS, ACTIVE_NUMA_NODES);
-
+	printf("\n#######\nt %d, nn %d, cpu %d, ann%d\n########\n", THREADS, _NUMA_NODES, NUM_CPUS, ACTIVE_NUMA_NODES);
+	*/
 	unsigned int i = 0;
 	int res_mem_posix = 0;
 	nb_calqueue* res = NULL;
@@ -954,7 +953,7 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	res->tail->next = NULL;
 
 	// (!new) initialize numa queues 
-	for (i = 0; i < ACTIVE_NUMA_NODES; i++ ) 
+	for (i = 0; i < _NUMA_NODES; i++ ) 
 	{
 		init_queue(&(res->op_queue[i]), i);
 	}
@@ -1149,7 +1148,7 @@ static inline int single_step_pq_enqueue(table* h, pkey_t timestamp, void* paylo
 	newIndex = hash(timestamp, h->bucket_width);
 	
 	// allocate node on right NUMA NODE
-	new_node = numa_node_malloc(payload, timestamp, 0, newIndex%ACTIVE_NUMA_NODES);
+	new_node = numa_node_malloc(payload, timestamp, 0, newIndex%_NUMA_NODES);
 	
 	// read actual epoch
 	new_node->epoch = (h->current & MASK_EPOCH);
@@ -1209,7 +1208,8 @@ static inline int single_step_pq_enqueue(table* h, pkey_t timestamp, void* paylo
 }
 
 /* (!new) new enqueue*/
-
+// @TODO Cluster of bucket - change has function - move it to a macro maybe
+// @TODO Improve path in case of compilation with queues not active
 int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 {
 	assertf(timestamp < MIN || timestamp >= INFTY, "Key out of range %s\n", "");
@@ -1238,7 +1238,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	
 		//compute vb
 		vb_index = hash(ts, h->bucket_width);
-		dest_node = vb_index % ACTIVE_NUMA_NODES;
+		dest_node = vb_index % _NUMA_NODES;
 
 		if (requested_op == NULL && operation == NULL) {
 			//first iteration
@@ -1253,10 +1253,17 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 
 		assertf(operation == NULL, "ENQ - No operation%s\n","");
 
+#ifdef USE_TASK_QUEUE
 		msq_enqueue(&(queue->op_queue[dest_node]), (void*) operation, dest_node);
-
 		op_node* extracted_op = NULL;
 		unsigned int node, i;
+#endif
+
+#ifndef USE_TASK_QUEUE
+		op_node* extracted_op = requested_op;
+#endif
+
+
 		do  { //dequeue loop
 
 			if ( (ret = __sync_fetch_and_add(&(requested_op->response),0)) != -1) 
@@ -1267,13 +1274,14 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 				// dovrebbe essere come se il thread fosse stato deschedulato prima della return
 				return ret; // someone did my op, we can return	
 			}
+#ifdef USE_TASK_QUEUE
 
 			// extract from one queue
 			i = node = NID;
 			do {
 				if (msq_dequeue(&(queue->op_queue[i]), &extracted_op))
 					break;
-				i = (i + 1) % ACTIVE_NUMA_NODES;
+				i = (i + 1) % _NUMA_NODES;
 			} while(i != node);
 
 			// all queues are empty
@@ -1282,7 +1290,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 				//@TODO how to handle this case? 
 				continue;
 			}
-
+#endif
 			//extracted op, executing
 			handling_op = extracted_op;
 			if (handling_op->type == OP_PQ_ENQ) 
@@ -1304,20 +1312,27 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 				handling_op->timestamp = ret_ts;
 				__sync_bool_compare_and_swap(&(handling_op->response), -1, 1); /* Is this an overkill? */
 			}
+#ifdef USE_TASK_QUEUE
 			handling_op = NULL;
+#endif
 		} while(true);
 
 		// @TODO in case of failure update ts of vb
 		//op failed
+
+#ifdef USE_TASK_QUEUE
 		handling_op = NULL;
 		operation = extracted_op;
 		ts = operation->timestamp;
+#endif
 	} while(true);
 	//critical_exit()
 	//return code
 }
 
 /* !(new) dequeue */
+// @TODO Cluster of bucket - change has function - move it to a macro maybe
+// @TODO Improve path in case of compilation with queues not active
 pkey_t pq_dequeue(void *q, void** result) 
 {
 	nb_calqueue *queue = (nb_calqueue*)q;
@@ -1344,19 +1359,19 @@ pkey_t pq_dequeue(void *q, void** result)
 
 		// first iteration are dummy
 		vb_index = hash(ts, h->bucket_width);
-		dest_node = vb_index % ACTIVE_NUMA_NODES;
+		dest_node = vb_index % _NUMA_NODES;
 
 		if (requested_op == NULL && operation == NULL) { 
 			//taken only first iteration
 			
 			// take index of minimum
 			vb_index = (h->current) >> 32;
-			dest_node = vb_index % ACTIVE_NUMA_NODES;
+			dest_node = vb_index % _NUMA_NODES;
 
 			//compute ts in order to take right node
 			ts = vb_index * (h->bucket_width);
 
-			requested_op = operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);//malloc(sizeof(op_node)); //@TODO use gc_alloc
+			requested_op = operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
 			
 			requested_op->type = OP_PQ_DEQ;
 			requested_op->timestamp = ts; 
@@ -1366,11 +1381,15 @@ pkey_t pq_dequeue(void *q, void** result)
 
 		assertf(operation == NULL, "DEQ - No operation%s\n","");
 
+#ifdef USE_TASK_QUEUE
 		msq_enqueue(&(queue->op_queue[dest_node]), (void*) operation, dest_node);
-
 		op_node* extracted_op = NULL;
 		unsigned int node, i;
+#endif
 
+#ifndef USE_TASK_QUEUE
+		op_node* extracted_op = operation;
+#endif
 		do {
 			// dequeue loop
 
@@ -1385,12 +1404,14 @@ pkey_t pq_dequeue(void *q, void** result)
 				return ret_ts;
 			}
 
+
+#ifdef USE_TASK_QUEUE
 			// extract from one queue
 			i = node = NID;
 			do {
 				if (msq_dequeue(&(queue->op_queue[i]), &extracted_op))
 					break;
-				i = (i + 1) % ACTIVE_NUMA_NODES;
+				i = (i + 1) % _NUMA_NODES;
 			} while(i != node);
 
 			// all queues are empty
@@ -1400,6 +1421,7 @@ pkey_t pq_dequeue(void *q, void** result)
 				continue;
 			}
 
+#endif
 			//extracted op, executing
 			handling_op = extracted_op;
 			if (handling_op->type == OP_PQ_ENQ) 
@@ -1421,14 +1443,18 @@ pkey_t pq_dequeue(void *q, void** result)
 				handling_op->timestamp = ret_ts;
 				__sync_bool_compare_and_swap(&(handling_op->response), -1, 1); /* Is this an overkill? */
 			}
+#ifdef USE_TASK_QUEUE
 			handling_op = NULL;
-
+#endif
 		} while(true);
+
 		// @TODO in case of failure update ts of vb if dequeue
 		//op failed
+#ifdef USE_TASK_QUEUE
 		handling_op = NULL;
 		operation = extracted_op;
 		ts = operation->timestamp;
+#endif
 	} while(true);
 }
 
