@@ -30,7 +30,6 @@
 #include "common_nb_calqueue.h"
 
 /* 
- * @TODO change init to handle per numa queue
  * @TODO add op node definition
  * @TODO move queue to non blocking 
  *  */
@@ -42,6 +41,8 @@
 
 int gc_aid[3];
 int gc_hid[1];
+
+unsigned int ACTIVE_NUMA_NODES;
 
 /*************************************
  * THREAD LOCAL VARIABLES			 *
@@ -681,7 +682,7 @@ void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 	int res = 0;
 	
 	//Create a new node to be inserted in the new table as as INValid
-	replica = numa_node_malloc(right_node->payload, right_node->timestamp,  right_node->counter, hash(right_node->timestamp, new_h->bucket_width)%_NUMA_NODES);
+	replica = numa_node_malloc(right_node->payload, right_node->timestamp,  right_node->counter, hash(right_node->timestamp, new_h->bucket_width)%ACTIVE_NUMA_NODES);
 	
 	new_node 			= &replica;
 	new_node_pointer 	= (*new_node);
@@ -902,7 +903,6 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 
 void std_free_hook(ptst_t *p, void *ptr){	free(ptr); }
 
-
 /**
  * This function create an instance of a NBCQ.
  *
@@ -913,6 +913,13 @@ void std_free_hook(ptst_t *p, void *ptr){	free(ptr); }
  */
 void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket)
 {
+	//ceil(a / b) = (a / b) + ((a % b) != 0);
+
+	ACTIVE_NUMA_NODES = (((THREADS * _NUMA_NODES)) / NUM_CPUS) + ((((THREADS * _NUMA_NODES)) % NUM_CPUS) != 0); // (!new) compute the number of active numa nodes 
+	ACTIVE_NUMA_NODES = ACTIVE_NUMA_NODES < _NUMA_NODES? ACTIVE_NUMA_NODES:_NUMA_NODES;
+
+	printf("\n#######\nt %d, nn %d, cpu %d, ad%d\n########\n", THREADS, _NUMA_NODES, NUM_CPUS, ACTIVE_NUMA_NODES);
+
 	unsigned int i = 0;
 	int res_mem_posix = 0;
 	nb_calqueue* res = NULL;
@@ -947,7 +954,7 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	res->tail->next = NULL;
 
 	// (!new) initialize numa queues 
-	for (i = 0; i < _NUMA_NODES; i++ ) 
+	for (i = 0; i < ACTIVE_NUMA_NODES; i++ ) 
 	{
 		init_queue(&(res->op_queue[i]), i);
 	}
@@ -1142,7 +1149,7 @@ static inline int single_step_pq_enqueue(table* h, pkey_t timestamp, void* paylo
 	newIndex = hash(timestamp, h->bucket_width);
 	
 	// allocate node on right NUMA NODE
-	new_node = numa_node_malloc(payload, timestamp, 0, newIndex%_NUMA_NODES);
+	new_node = numa_node_malloc(payload, timestamp, 0, newIndex%ACTIVE_NUMA_NODES);
 	
 	// read actual epoch
 	new_node->epoch = (h->current & MASK_EPOCH);
@@ -1231,7 +1238,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	
 		//compute vb
 		vb_index = hash(ts, h->bucket_width);
-		dest_node = vb_index % _NUMA_NODES;
+		dest_node = vb_index % ACTIVE_NUMA_NODES;
 
 		if (requested_op == NULL && operation == NULL) {
 			//first iteration
@@ -1266,7 +1273,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			do {
 				if (msq_dequeue(&(queue->op_queue[i]), &extracted_op))
 					break;
-				i = (i + 1) % _NUMA_NODES;
+				i = (i + 1) % ACTIVE_NUMA_NODES;
 			} while(i != node);
 
 			// all queues are empty
@@ -1337,14 +1344,14 @@ pkey_t pq_dequeue(void *q, void** result)
 
 		// first iteration are dummy
 		vb_index = hash(ts, h->bucket_width);
-		dest_node = vb_index % _NUMA_NODES;
+		dest_node = vb_index % ACTIVE_NUMA_NODES;
 
 		if (requested_op == NULL && operation == NULL) { 
 			//taken only first iteration
 			
 			// take index of minimum
 			vb_index = (h->current) >> 32;
-			dest_node = vb_index % _NUMA_NODES;
+			dest_node = vb_index % ACTIVE_NUMA_NODES;
 
 			//compute ts in order to take right node
 			ts = vb_index * (h->bucket_width);
@@ -1383,7 +1390,7 @@ pkey_t pq_dequeue(void *q, void** result)
 			do {
 				if (msq_dequeue(&(queue->op_queue[i]), &extracted_op))
 					break;
-				i = (i + 1) % _NUMA_NODES;
+				i = (i + 1) % ACTIVE_NUMA_NODES;
 			} while(i != node);
 
 			// all queues are empty

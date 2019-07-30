@@ -208,6 +208,7 @@ struct nb_calqueue
 };
 
 
+extern unsigned int THREADS; // (!new) number of threads in execution
 
 extern __thread unsigned int TID;
 extern __thread unsigned int NID;
