@@ -106,6 +106,7 @@ SkipList skipListInit() {
  */
 int skipListAdd(SkipList skipList, pkey_t key, intptr_t value) {
 
+	critical_enter();
 	int topLevel = randomLevel();
 	int level;
 	//ListNode* preds = getListNodeArray(MAX_LEVEL + 1);
@@ -122,6 +123,7 @@ int skipListAdd(SkipList skipList, pkey_t key, intptr_t value) {
 		if (found) {
 			//free(preds);
 			//free(succs);
+	critical_exit();
 			return FALSE;
 		} else {
 			ListNode newNode = makeNormalNode(key, topLevel, value);
@@ -159,6 +161,7 @@ int skipListAdd(SkipList skipList, pkey_t key, intptr_t value) {
 
 			//free(preds);
 			//free(succs);
+	critical_exit();
 			return TRUE;
 		}
 	}
@@ -173,6 +176,7 @@ int skipListAdd(SkipList skipList, pkey_t key, intptr_t value) {
  * returns 1 on success or 0 if the key wasn't in the skiplist.
  */
 int skipListRemove(SkipList skipList, pkey_t key) {
+	critical_enter();
 	int level;
 	//ListNode* preds = getListNodeArray(MAX_LEVEL + 1);
 	//ListNode* succs = getListNodeArray(MAX_LEVEL + 1);
@@ -186,6 +190,7 @@ int skipListRemove(SkipList skipList, pkey_t key) {
 		if (!found) {
 			//free(preds);
 			//free(succs);
+	critical_exit();
 			return FALSE;
 		} else {
 			ListNode nodeToRemove = succs[BOTTOM_LEVEL];
@@ -209,10 +214,12 @@ int skipListRemove(SkipList skipList, pkey_t key) {
 					skipListFind(skipList, nodeToRemove->key, preds, succs);
 					//free(preds);
 					//free(succs);
+	critical_exit();
 					return TRUE;
 				} else if (marked) {
 					//free(preds);
 					//free(succs);
+	critical_exit();
 					return FALSE;
 				}
 			}
@@ -230,6 +237,7 @@ int skipListRemove(SkipList skipList, pkey_t key) {
  * in any case pValue is holding this or previous key value or NULL
  */
 int skipListContains(SkipList skipList, pkey_t key, intptr_t* pValue) {
+	critical_enter();
 	int marked = 0, level;
 	*pValue = 0;		// initialize for the case the key is the non-existing minimal 
 
@@ -255,6 +263,7 @@ int skipListContains(SkipList skipList, pkey_t key, intptr_t* pValue) {
 
 		} // end of the for loop going over the levels
 
+	critical_exit();
 		return (curr->key == key);
 	} // end of the while loop
 
@@ -266,6 +275,7 @@ int skipListContains(SkipList skipList, pkey_t key, intptr_t* pValue) {
  * Also makes sure the the first MAX_LEVEL*2 hazard pointers point to the elemesnts in preds & succs
  */
 int skipListFind(SkipList skipList, pkey_t key, ListNode preds[], ListNode succs[]) {
+	critical_enter();
 	int marked, snip, level, retry, currkey;
 	ListNode pred = NULL, curr = NULL, succ = NULL;
 	while (TRUE) {
@@ -314,6 +324,7 @@ int skipListFind(SkipList skipList, pkey_t key, ListNode preds[], ListNode succs
 		}
 		if (retry)
 			continue;
+	critical_exit();
 		return (currkey == key);
 	}
 }
