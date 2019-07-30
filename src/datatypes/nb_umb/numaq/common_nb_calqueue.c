@@ -1254,7 +1254,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 
 			if ( (ret = __sync_fetch_and_add(&(requested_op->response),0)) != -1) 
 			{
-				//gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
+				gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
 				critical_exit();
 				requested_op = NULL;
 				// dovrebbe essere come se il thread fosse stato deschedulato prima della return
@@ -1371,10 +1371,10 @@ pkey_t pq_dequeue(void *q, void** result)
 			{
 				ret_ts = requested_op->timestamp;
 				*result = requested_op->payload;
+				gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
+				critical_exit();
 				
 				requested_op = NULL;
-				
-				critical_exit();
 				return ret_ts;
 			}
 

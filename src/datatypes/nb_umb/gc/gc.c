@@ -204,19 +204,7 @@ static chunk_t* node_alloc_more_chunks(unsigned int node)
     char *mem_area, *end, *next_page;
 
     chunk_t *h, *p;
-    /* One chunks are 816bytes, a page is 4096, a page is enough for 5 chunks + 16bits (enough for meta) */
     size_t alloc_size = page_size * 150; //1050 chnunks
-    
-    /*
-    // we don't care how many chunks we are allocating
-    unsigned int chunks_num = alloc_size/sizeof(chunk_t);
-    
-    if (chunks_num * sizeof(chunk_t) == alloc_size) { 
-        alloc_size += page_size;
-        chunks_num = alloc_size/sizeof(chunk_t);
-        //increas memory size in order to have enough for meta
-    }
-    */
 
     /* I care which is the numa node of this area of memory because of hooks*/
     mem_area = numa_alloc_onnode(alloc_size, node);
