@@ -19,6 +19,16 @@
 #include "Chunk.h"
 #include "skipList.h"
 
+
+extern "C" {
+#include "../../gc/gc.h"
+#include "../../gc/ptst.h"
+}
+
+
+extern __thread  ptst_t *ptst; 
+extern int gc_ck;
+
 using namespace std;
 
 struct privateThreadInfo;                   // forward declaration
@@ -76,10 +86,13 @@ public:
 	volatile SkipList sl;	// pointer to the skip list
 
 	/* --------------- Memory Management structures and methods - start --------------- */
-	Chunk arr[ALLOCCACHE];
+	//Chunk arr[ALLOCCACHE];
 	int freecnt; 			// from where to start next allocation (initialized to zero by constructor)
 
 	Chunk* alloc(){
+		return (Chunk*) gc_alloc(ptst, gc_ck);
+
+		/*
 		int val = atomicInc(&freecnt, 1);
 		if(val>=ALLOCCACHE){
 			printf(" Statically allocated %d chunks were not enough :-(\n", ALLOCCACHE);
@@ -88,8 +101,11 @@ public:
 		memset(&arr[val], 0, sizeof(Chunk));	// zero the space for the chunks (long operation)
 		
 		return &arr[val];
+		*/
 	}
-	void free(Chunk *c) {}
+	void free(Chunk *c) {
+		gc_free(ptst, c, gc_ck);
+	}
 	/* --------------- Memory Management structures and methods - end ----------------- */
 	/************************************************************************************************/
 
