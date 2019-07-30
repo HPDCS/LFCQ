@@ -84,6 +84,8 @@ void generate_trace(char d)
 	trace[0] = 1;
 	for(i = 1; i< TRACE_LEN;i++){
 		trace[i] += trace[i-1];
+		if(trace[i] < trace[i-1])
+			printf("Overflow problem while generating trace\n");
 	}
 	LOG("%s\n", "Done");
 
