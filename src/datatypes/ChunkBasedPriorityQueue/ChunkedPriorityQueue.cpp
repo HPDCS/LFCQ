@@ -405,7 +405,7 @@ pkey_t ChunkedPriorityQueue::delmin(ThrInf* t){
         							#if KEY_TYPE == LONG || KEY_TYPE == DOUBLE
         							(u64*) &b->vals[bIdx], bKey, ( (*((unsigned long long*) &bKey)) | ELM_TAKEN) 
         							#else
-        							(unsigned int) &b->vals[bIdx], bKey, (bKey | ELM_TAKEN) 
+        							&b->vals[bIdx], bKey, (bKey | ELM_TAKEN) 
         							#endif
         							) == (pkey_t) bKey ) {
         							//printf("   <<< Thread %d - key %d was marked for elimination. Size of int: %d\n", t->id, bKey, (int)sizeof(int));

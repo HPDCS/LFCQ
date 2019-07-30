@@ -23,7 +23,7 @@
 #ifdef DEBUG
 
 #define _assert assert
-#define PRINT(...) printf(__VA_ARGS__)			// use printf and not cout because of the multi-threading
+#define PRINT(...) //printf(__VA_ARGS__)			// use printf and not cout because of the multi-threading
 #define DEB(...) __VA_ARGS__
 
 #else
