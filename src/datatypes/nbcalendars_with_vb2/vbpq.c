@@ -239,7 +239,7 @@ pkey_t pq_dequeue(void *q, void** result)
 begin:
 	// Get the current set table
 	h = read_table(&queue->hashtable);
-
+   acquire_node(&h->socket);
 	// Get data from the table
 	size = h->size;
 	array = h->array;

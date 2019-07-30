@@ -566,7 +566,7 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
   #endif
 
 
-	acquire_node(&h->socket);
+//	acquire_node(&h->socket);
 	return h;
 
 
