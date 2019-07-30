@@ -36,7 +36,7 @@ typedef struct privateThreadInfo ThrInf;
 
 
 /*************************************** CONSTANT DEFINITIONS **********************************************/
-#define ALLOCCACHE 		10000             // static allocation of 3,000,000 chunks
+#define ALLOCCACHE 		30000000             // static allocation of 3,000,000 chunks
 
 #ifdef FREEZE_64
 #define DIRTY_EXIST 	0x8000000000000000ull

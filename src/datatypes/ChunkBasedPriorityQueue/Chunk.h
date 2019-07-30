@@ -24,7 +24,16 @@ using namespace std;
 const int MIN_IDX 		= 0; 							// minimal VALID value for the index in the chunk
 const int MAX_IDX		= (CHUNK_SIZE);					// maximal INVALID value for the index in the chunk
 const pkey_t MIN_VAL		= MIN;							// minimal value to never be inserted to the PQ
-const pkey_t MAX_VAL 		= INFTY-1;				// maximal value to never be inserted to the PQ, -1
+
+#if KEY_TYPE == INT
+const pkey_t MAX_VAL 		= 0x7fffffff -1;				// maximal value to never be inserted to the PQ, -1
+#endif
+
+
+#if KEY_TYPE == LONG || KEY_TYPE == DOUBLE
+const pkey_t MAX_VAL 		= 0x7fffffffffffffffull -1;   // MSB reset, all the rest set
+#endif
+
 // is needed to distinguish it from SL max sentinel
 const int DELETED_PTR	= 0x00000001;					// the mask for the least significant bit being set
 /************************************************************************************************/
