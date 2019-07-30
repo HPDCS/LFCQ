@@ -85,6 +85,8 @@ public:
 			printf(" Statically allocated %d chunks were not enough :-(\n", ALLOCCACHE);
 			assert(0);
 		}
+		memset(&arr[val], 0, sizeof(Chunk));	// zero the space for the chunks (long operation)
+		
 		return &arr[val];
 	}
 	void free(Chunk *c) {}
@@ -201,7 +203,7 @@ public:
 public:
 	ChunkedPriorityQueue(){								// ChunkedPriorityQueue constructor
 		freecnt = 0;									// allocator counter initialization
-		memset(this->arr, 0, sizeof(Chunk)*ALLOCCACHE);	// zero the space for the chunks (long operation)
+		//memset(this->arr, 0, sizeof(Chunk)*ALLOCCACHE);	// zero the space for the chunks (long operation)
 		//flag=0; count=0;
 		Chunk *second = alloc(), *first=alloc();		// local pointers to first and second chunks
 		first->init(MIN_VAL, second, DELETE, MAX_IDX);	// initialize PQ so that first deletion immediately
@@ -217,7 +219,7 @@ public:
 	}
 
 	~ChunkedPriorityQueue(){							// ChunkedPriorityQueue destructor	
-		skipListDestroy(sl);
+		//skipListDestroy(sl);
 	}
 
 	void insert(pkey_t key, ThrInf* t);				// the interface for inserting a key
