@@ -261,7 +261,8 @@ int skipListContains(SkipList skipList, pkey_t key, intptr_t* pValue) {
  * Also makes sure the the first MAX_LEVEL*2 hazard pointers point to the elemesnts in preds & succs
  */
 int skipListFind(SkipList skipList, pkey_t key, ListNode preds[], ListNode succs[]) {
-	int marked, snip, level, retry, currkey;
+	int marked, snip, level, retry;
+	pkey_t currkey;
 	ListNode pred = NULL, curr = NULL, succ = NULL;
 	while (TRUE) {
 		//retry:
