@@ -81,8 +81,8 @@ SkipList skipListInit() {
 
 	SkipList newSkipList = (SkipList) malloc(sizeof(struct skipList_t));
 	assert(newSkipList != NULL);
-	newSkipList->head = makeSentinelNode(INT_MIN);
-	newSkipList->tail = makeSentinelNode(INT_MAX);
+	newSkipList->head = makeSentinelNode(MIN);
+	newSkipList->tail = makeSentinelNode(INFTY);
 
 	for (i = 0; i <= MAX_LEVEL; i++) {
 		newSkipList->head->next[i]
