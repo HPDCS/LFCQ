@@ -2,8 +2,8 @@
 /* For now used this for fast implementation, then try to move to LCRQ */
 //@TODO move to LCRQ
 
-#ifndef MSQ
-#define MSQ
+#ifndef MSQ_H
+#define MSQ_H
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -38,4 +38,4 @@ void init_queue(queue_t *queue, unsigned int numa_node);
 void msq_enqueue(queue_t *queue, void* payload, unsigned int numa_node);
 bool msq_dequeue(queue_t *queue, void* *result);
 
-#endif /* !MSQ */
+#endif /* !MSQ_H */

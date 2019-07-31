@@ -41,8 +41,8 @@ extern __thread ptst_t *ptst;
 extern int gc_aid[];
 extern int gc_hid[];
 
-#define GC_BUCKETNODE 1
-#define GC_OPNODE 2
+#define GC_BUCKETNODE 2
+#define GC_OPNODE 3
 
 #define SAMPLE_SIZE 25
 #define HEAD_ID 0

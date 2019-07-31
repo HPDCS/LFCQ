@@ -213,7 +213,7 @@ static chunk_t* node_alloc_more_chunks(unsigned int node)
     end = mem_area + alloc_size;
     next_page = mem_area + page_size;
 
-    mem_area += sizeof(unsigned long);
+    mem_area += sizeof(unsigned long); // @TODO change the skip, the empty goes to the beginning, in this way the addresses power of 2 will be aligned (More performances)
 
     h = p = mem_area;
     mem_area += sizeof(chunk_t);
@@ -341,7 +341,7 @@ static chunk_t *node_get_filled_chunks(int n, int sz, unsigned int numa_node)
         check = node + page_size;
 
         // skip numa node idx
-        node += sizeof(unsigned long);
+        node += sizeof(unsigned long); // @TODO change the skip, the empty goes to the beginning, in this way the addresses will be aligned (More performances)
 
         while (node + sz <= check) //we have enough memory to handle request?
         {

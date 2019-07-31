@@ -29,7 +29,8 @@
 
 #include "common_nb_calqueue.h"
 
-//#define USE_TASK_QUEUE
+#define USE_TASK_QUEUE
+#define NODE_HASH(bucket_id) ((bucket_id >> 2ull) % _NUMA_NODES)
 
 /* 
  * @TODO improve op node definition
@@ -41,8 +42,8 @@
  * GLOBAL VARIABLES					 *
  ************************************/
 
-int gc_aid[3];
-int gc_hid[1];
+int gc_aid[32];
+int gc_hid[4];
 
 //unsigned int ACTIVE_NUMA_NODES;
 
@@ -1208,7 +1209,6 @@ static inline int single_step_pq_enqueue(table* h, pkey_t timestamp, void* paylo
 }
 
 /* (!new) new enqueue*/
-// @TODO Cluster of bucket - change has function - move it to a macro maybe
 // @TODO Improve path in case of compilation with queues not active
 int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 {
@@ -1230,7 +1230,6 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	double pub = queue->perc_used_bucket;
 	unsigned int epb = queue->elem_per_bucket;
 	unsigned int th = queue->threshold;
-
 	
 	do {
 		//read table
@@ -1238,11 +1237,11 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	
 		//compute vb
 		vb_index = hash(ts, h->bucket_width);
-		dest_node = vb_index % _NUMA_NODES;
+		dest_node = NODE_HASH(vb_index);
 
 		if (requested_op == NULL && operation == NULL) {
 			//first iteration
-			requested_op = operation = /* malloc(sizeof(op_node)); */gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
+			requested_op = operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
 		
 			//@TODO The structure must be reshuffled to be handled correctly 
 			requested_op->type = OP_PQ_ENQ;
@@ -1359,14 +1358,14 @@ pkey_t pq_dequeue(void *q, void** result)
 
 		// first iteration are dummy
 		vb_index = hash(ts, h->bucket_width);
-		dest_node = vb_index % _NUMA_NODES;
+		dest_node = NODE_HASH(vb_index);
 
 		if (requested_op == NULL && operation == NULL) { 
 			//taken only first iteration
 			
 			// take index of minimum
 			vb_index = (h->current) >> 32;
-			dest_node = vb_index % _NUMA_NODES;
+			dest_node = NODE_HASH(vb_index);
 
 			//compute ts in order to take right node
 			ts = vb_index * (h->bucket_width);
