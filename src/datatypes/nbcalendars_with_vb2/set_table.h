@@ -295,7 +295,7 @@ int  migrate_node(bucket_t *bckt, table_t *new_h)
 			while(rn != tn){
 				if(rn->timestamp == curr->timestamp && rn->tie_breaker == curr->tie_breaker && rn->hash == curr->hash){
 					if(curr->replica == NULL) __sync_bool_compare_and_swap(&curr->replica, NULL, rn);
-					continue;
+					return ABORT;
 				}
 				if(rn->timestamp < curr->timestamp || (rn->timestamp == curr->timestamp && rn->tie_breaker < curr->tie_breaker) ){
 					ln = rn;
