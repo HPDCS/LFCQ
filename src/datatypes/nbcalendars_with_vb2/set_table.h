@@ -295,7 +295,7 @@ int  migrate_node(bucket_t *bckt, table_t *new_h)
 			while(rn != tn){
 				if(rn->timestamp == curr->timestamp && rn->tie_breaker == curr->tie_breaker && rn->hash == curr->hash){
 					if(curr->replica == NULL) __sync_bool_compare_and_swap(&curr->replica, NULL, rn);
-					return ABORT;
+					continue;
 				}
 				if(rn->timestamp < curr->timestamp || (rn->timestamp == curr->timestamp && rn->tie_breaker < curr->tie_breaker) ){
 					ln = rn;
@@ -345,10 +345,13 @@ int  migrate_node(bucket_t *bckt, table_t *new_h)
 				    rand = (rand & 1) ;
 					if(rand & 1) {node_unsafe_free(replica);return ABORT;}
 					int res = bucket_connect_fallback(left, replica, 0);
-					if(res == ABORT) node_unsafe_free(replica);
-					else __sync_bool_compare_and_swap(&curr->replica, NULL, replica);
-					if(rand & 2) goto begin;
-					return ABORT;
+					if(res == ABORT){
+						node_unsafe_free(replica);
+					}	if(rand & 2) goto begin;
+						return ABORT;
+
+					__sync_bool_compare_and_swap(&curr->replica, NULL, replica);
+					
 				}
 			END_ATOMIC2(&bckt->lock, &left->lock);
 
