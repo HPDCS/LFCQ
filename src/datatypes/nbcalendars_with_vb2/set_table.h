@@ -339,7 +339,7 @@ int  migrate_node(bucket_t *bckt, table_t *new_h)
 
 					long rand;
 				    lrand48_r(&seedT, &rand);
-				    fallback = (rand & 1) 
+				    rand = (rand & 1) 
 					if(rand & 1) return ABORT;
 					else goto begin;
 				}
