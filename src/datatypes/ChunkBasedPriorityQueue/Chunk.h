@@ -30,8 +30,12 @@ const pkey_t MAX_VAL 		= 0x7fffffff -1;				// maximal value to never be inserted
 #endif
 
 
-#if KEY_TYPE == LONG || KEY_TYPE == DOUBLE
+#if KEY_TYPE == LONG 
 const pkey_t MAX_VAL 		= 0x7fffffffffffffffull -1;   // MSB reset, all the rest set
+#endif
+
+#if KEY_TYPE == DOUBLE
+const pkey_t MAX_VAL 		= 1000000000000000000000.0;   // MSB reset, all the rest set
 #endif
 
 // is needed to distinguish it from SL max sentinel
