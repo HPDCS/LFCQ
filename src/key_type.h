@@ -50,11 +50,11 @@
         #define KEY_STRING "%ld"
         typedef long pkey_t;
 
-        #define MILLION 1000000
-        #define BILLION (1000*MILLION)
+        #define MILLION 1000000ULL
+        #define BILLION (1000ULL*MILLION)
 //        #define TRACE_LEN (300*MILLION)
 #define LOOKAHEAD 100
-        #define MEAN 500000000;                        // Maximum distance from the current event owned by the thread
+        #define MEAN 500ULL*MILLION;                        // Maximum distance from the current event owned by the thread
 
 #endif
 
