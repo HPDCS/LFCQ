@@ -39,6 +39,13 @@ for u in $usage_factor; do
 			out2=$output/"$version-$cmd-$p-1-$DIST-0.3-$SIZE-$DIST-0.5-$OPS-$DIST-0-0-$u-0-$MODE-$TIME.dat"
 			
 			for e in `eval echo '$'elem_per_bucket_$p`; do
+				if [ "$p" == "NBCQ" ] ; then 
+				    e=`echo "$t * 2" | bc`
+				fi
+				if [ "$p" == "VBPQ" ]; then 
+				    e=`echo "$t * 2" | bc`
+					e=$(($e<48?$e:48))
+				fi
 				ofile="$version-$cmd-$p-$t-1-$DIST-0.3-$SIZE-$DIST-0.5-$OPS-$DIST-0-0-$u-$e-0-$MODE-$TIME"
 				#echo "$ofile"
 				count=0
@@ -48,7 +55,8 @@ for u in $usage_factor; do
 					file="$ofile-$i"
 					file=`echo "$file" | tr '.' '_'`.dat
 					file=$input/$file
-					val=`cat $file |head -n1 | cut -d',' -f20 | cut -d':' -f2` 
+					val=`cat $file |tail -n1 | cut -d',' -f20 | cut -d':' -f2` 
+					val=`cat $file | tail -n1  | cut -d',' -f4 | cut -d':' -f2`
 					sum=`echo $sum+$val | bc`
 					count=$(($count+1))
 				done
@@ -58,6 +66,7 @@ for u in $usage_factor; do
 					file=`echo "$file" | tr '.' '_'`.dat
 					file=$input/$file
 					val=`cat $file |head -n1 | cut -d',' -f20 | cut -d':' -f2` 
+					val=`cat $file | tail -n1  | cut -d',' -f4 | cut -d':' -f2`
 					ssum=`echo "($val-$avg)*($val-$avg)" | bc`
 				done
 				#std=`echo "sqrt($ssum/($count-1))" | bc`

@@ -12,11 +12,10 @@ double MEAN_INTERARRIVAL_TIME = MEAN;			// Maximum distance from the current eve
 
 
 
-#define NUM_CORES 8
+extern int NUM_CORES;
 
 
 static char distribution = 'A';
-static pthread_t p_tid[NUM_CORES];
 
 #ifdef TRACE_LEN
 pkey_t *trace = NULL;
@@ -68,7 +67,7 @@ void* local_trace(void *arg){
 void generate_trace(char d)
 {
 	int i;
-
+	pthread_t p_tid[NUM_CORES];
 	LOG("Building a timestamp trace...%s", "");
 	fflush(NULL);
 	trace = (pkey_t*) malloc(TRACE_LEN*sizeof(pkey_t));
