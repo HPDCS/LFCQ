@@ -304,7 +304,7 @@ int  migrate_node(bucket_t *bckt, table_t *new_h)
 
 			
 
-			assert(curr_next != NULL && curr != NULL && rn != NULL);
+			assert(curr_next != NULL && curr != NULL && rn != NULL && curr->timestamp != INFTY);
 
 			node_t *replica = node_alloc();
 
