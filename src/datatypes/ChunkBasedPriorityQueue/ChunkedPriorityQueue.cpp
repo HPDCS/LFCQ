@@ -105,7 +105,7 @@ dev void ChunkedPriorityQueue::print()
 inline void ChunkedPriorityQueue::debugPrintLoopInInsert(	
 		ThrInf* t, Chunk* prevPrev, Chunk* prevCurr, pkey_t key,
 		Chunk* prev, Chunk* curr, int iter, int r){
-
+	return;
 	if (prevPrev)
 		printf("   <<< Thread %d for key " KEY_STRING " is repeatedly getting (%d times): prev=%p and curr=%p from getChunk, prevPrev = %p (%s), prevCurr=%p (%s).\n",
 				t->id, key, iter, prev, curr, prevPrev, prevPrev->meta.status.printState(), prevCurr, prevCurr->meta.status.printState()  );
