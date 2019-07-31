@@ -347,9 +347,9 @@ int  migrate_node(bucket_t *bckt, table_t *new_h)
 					int res = bucket_connect_fallback(left, replica, 0);
 					if(res == ABORT){
 						node_unsafe_free(replica);
-					}	if(rand & 2) goto begin;
+						if(rand & 2) goto begin;
 						return ABORT;
-
+					}
 					__sync_bool_compare_and_swap(&curr->replica, NULL, replica);
 					
 				}
