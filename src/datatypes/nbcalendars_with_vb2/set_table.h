@@ -294,7 +294,8 @@ int  migrate_node(bucket_t *bckt, table_t *new_h)
 			rn = ln->next;
 			while(rn != tn){
 				if(rn->timestamp == curr->timestamp && rn->tie_breaker == curr->tie_breaker && rn->hash == curr->hash){
-					if(curr->replica == NULL) __sync_bool_compare_and_swap(&curr->replica, NULL, rn);
+					if(curr->replica == NULL && __sync_bool_compare_and_swap(&curr->replica, NULL, rn))
+						__sync_fetch_and_add(&new_h->e_counter.count, 1);
 					return ABORT;
 				}
 				if(rn->timestamp < curr->timestamp || (rn->timestamp == curr->timestamp && rn->tie_breaker < curr->tie_breaker) ){
@@ -350,7 +351,8 @@ int  migrate_node(bucket_t *bckt, table_t *new_h)
 						if(rand & 2) goto begin;
 						return ABORT;
 					}
-					__sync_bool_compare_and_swap(&curr->replica, NULL, replica);
+					if(__sync_bool_compare_and_swap(&curr->replica, NULL, replica))
+						__sync_fetch_and_add(&new_h->e_counter.count, 1);
 					
 				}
 			END_ATOMIC2(&bckt->lock, &left->lock);
