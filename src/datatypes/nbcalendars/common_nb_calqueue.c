@@ -373,7 +373,7 @@ int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, unsigned int tie_
 			*new_node = left;
 			return OK;
 		}
-		
+/*		
 		#if KEY_TYPE != DOUBLE
 		if(is_new_key && D_EQUAL(timestamp, left_timestamp ))
 		{
@@ -382,7 +382,7 @@ int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, unsigned int tie_
 			return PRESENT;
 		}
 		#endif
-		
+*/		
 
 		// copy left node mark			
 		if (BOOL_CAS(&(left->next), left_next, get_marked(new_node_pointer,get_mark(left_next))))
@@ -439,7 +439,7 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 	
 	
 	// is time for periodic resize?
-	if(new_size == 0 && (h->e_counter.count + h->d_counter.count) > RESIZE_PERIOD && h->resize_count/log_size < 0.75)
+	if(new_size == 0 && (h->e_counter.count + h->d_counter.count) > RESIZE_PERIOD && h->resize_count/log_size < 0.35)
 		new_size = h->size;
 	// the num of items is doubled/halved but it is not enough for change size
 	//if(new_size == 0 && h->last_resize_count != 0 && (counter >  h->last_resize_count*2 || counter < h->last_resize_count/2 ) )

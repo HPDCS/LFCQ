@@ -6,9 +6,9 @@
 
 DIST=$5
 OPS=4000000
-SIZE=64000
+SIZE=64000000
 PRUNE=500
-TIME=20
+TIME=8
 MODE=T
 
 PROB_DEQUEUE_1=0.3
@@ -18,7 +18,7 @@ PROB_DEQUEUE_2=0.5
 cmd=resize-unit-test
 cmd=test
 version=Release
-version=Debug
+#version=Debug
 
 if [ "$6" = "G" ]
 then

@@ -47,7 +47,9 @@ ListNode makeSentinelNode(pkey_t key) {
 
 ListNode makeNormalNode(pkey_t key, int height, intptr_t value) {
 	int i;
-	ListNode newNode = (ListNode) gc_alloc(ptst, height); //malloc(sizeof (struct listNode_t) + (sizeof(markable_ref) * (height+1)));
+	ListNode newNode = (ListNode) 
+gc_alloc(ptst, height); 
+//malloc(sizeof (struct listNode_t) + (sizeof(markable_ref) * (height+1)));
 	assert(newNode != NULL);
 	newNode->key = key;
 	newNode->value = value;

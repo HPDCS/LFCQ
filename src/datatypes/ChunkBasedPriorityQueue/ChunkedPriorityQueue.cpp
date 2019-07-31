@@ -23,13 +23,15 @@ using namespace std;
 
 int gc_ck;
 
+#define ATTEMPT_LOOPS 500
 
 /******************************************************************************************************/
 // checkInputInsert(int key)	- only keys between MIN_VAL and MAX_VAL (not included) are acceptable
 static inline void checkInputInsert(pkey_t key){
 	if ((key <= MIN_VAL)||(key >= MAX_VAL)){
-		cout<<"NOT VALID KEY"<<endl;
-		_assert(false);
+		printf("NOT VALID KEY " KEY_STRING "\n", key);
+		//cout<<"NOT VALID KEY"<<endl;
+		assert(false);
 	}
 	//PRINT2("   <<< Key %d is going to be inserted into the PQ\n", key);
 }
@@ -176,15 +178,18 @@ void ChunkedPriorityQueue::insert(pkey_t key, ThrInf* t){
 		if ((iter>35) && (prevCurr==curr)) {
 			Chunk* curSkipL = NULL;
 			Chunk* prevForSlCheck = NULL;
+			Chunk* __my_tmp_chunk = NULL;
 #ifdef SKIP_LIST
 			skipListContains(sl, key, (intptr_t*)&curSkipL);
+			__my_tmp_chunk = curSkipL;
 			if (!getChunk(&curSkipL, &prevForSlCheck)) {
+				assert(curSkipL);
 				skipListRemove(sl, curSkipL->meta.max);
 			}
 #endif //SKIP_LIST
 		}
 
-		if (((iter++ > 50) && (prevCurr == curr)) || iter>1000000)
+		if (((iter++ > ATTEMPT_LOOPS) && (prevCurr == curr)) || iter>1000000)
 			debugPrintLoopInInsert(t, prevPrev, prevCurr, key, prev, curr, iter, r);
 
 		prevCurr = curr; prevPrev = prev;			// for debugging only!
@@ -941,7 +946,7 @@ Chunk* ChunkedPriorityQueue::recoverFirstChunk(	Chunk *curr,        // can be th
 			Chunk *second = alloc(), *first=alloc();		
 			first->init(MIN_VAL, second, DELETE, CHUNK_SIZE);
 			second->init(MAX_VAL, NULL, INSERT, MIN_IDX);
-			printf("  <<< Queue became empty, new 1st chunk %p, new second: %p\n", first, second);
+//			printf("  <<< Queue became empty, new 1st chunk %p, new second: %p\n", first, second);
 			return first;
 		} else {
 			printf("  <<< Recovering 1st chunk %p, taking %d from first, %d from buffer %p, and %d from second %p\n",

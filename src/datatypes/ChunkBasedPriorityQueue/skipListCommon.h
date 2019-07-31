@@ -22,7 +22,7 @@
 #include "listNode.h"
 
 //Max skiplist level
-#define MAX_LEVEL 10
+#define MAX_LEVEL 30
 
 #define BOTTOM_LEVEL 0
 

@@ -439,12 +439,18 @@ double compute_mean_separation_time(table_t *h,
 	newaverage = (newaverage / j) * elem_per_bucket;	/* this is the new width */
 	//	LOG("%d- my new bucket %.10f for %p\n", TID, newaverage, h);   
 
-	if(newaverage <= 0.0)
-		newaverage = 1.0;
+	if(newaverage <= 0.0){
+//		newaverage = 1.0;
+	printf("NEW AVG:.%10f\n" , newaverage);
+newaverage=1.0;
+	}
 	//if(newaverage <  pow(10,-4))
 	//	newaverage = pow(10,-3);
-	if(isnan(newaverage))
-		newaverage = 1.0;	
+	if(isnan(newaverage)){
+	//	newaverage = 1.0;
+        printf("NEW AVG:.%10f\n" , newaverage);
+newaverage=1.0;       
+ }	
     
 	//  LOG("%d- my new bucket %.10f for %p AVG REPEAT:%u\n", TID, newaverage, h, acc/counter);	
 	return //FIXED_BW; //
