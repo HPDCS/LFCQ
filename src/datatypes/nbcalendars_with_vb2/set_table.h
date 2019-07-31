@@ -212,7 +212,10 @@ int  migrate_node(bucket_t *bckt, table_t *new_h)
 	node_t *curr = head->next;
 	node_t *curr_next;
 	node_t *ln, *rn, *tn;
-	unsigned blocked = 0;	
+	unsigned blocked;
+  
+  begin:
+  	blocked = 0;	
 
 	if(last_bckt == bckt){
 		if(++last_bckt_count == 1000000){
@@ -333,7 +336,12 @@ int  migrate_node(bucket_t *bckt, table_t *new_h)
 				}
 				FALLBACK2(&bckt->lock, &left->lock){
 					node_unsafe_free(replica);
-					return ABORT;
+
+					long rand;
+				    lrand48_r(&seedT, &rand);
+				    fallback = (rand & 1) 
+					if(rand & 1) return ABORT;
+					else goto begin;
 				}
 			END_ATOMIC2(&bckt->lock, &left->lock);
 
