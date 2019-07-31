@@ -258,9 +258,9 @@ int  migrate_node(bucket_t *bckt, table_t *new_h)
 				extractions = left->extractions;
 			  	toskip		= extractions;
 				// if the left node is freezed signal this to the caller
-				if(is_freezed(extractions)) 	return OK;
+				if(is_freezed(extractions)) 	return ABORT;
 				// if left node has some extraction signal this to the caller
-				if(toskip) return OK;
+				if(toskip) return ABORT;
 				
 				assertf(left->type != HEAD && left->tail->timestamp != INFTY, "HUGE Problems....%s\n", "");
 
