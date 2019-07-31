@@ -341,7 +341,9 @@ int  migrate_node(bucket_t *bckt, table_t *new_h)
 				    rand = (rand & 1) ;
 					if(rand & 1) {node_unsafe_free(replica);return ABORT;}
 					int res = bucket_connect_fallback(left, replica, 0);
-					if(res == ABORT) goto begin;
+					if(res == ABORT) node_unsafe_free(replica);
+					if(rand & 2) goto begin;
+					return ABORT;
 				}
 			END_ATOMIC2(&bckt->lock, &left->lock);
 
