@@ -1,5 +1,12 @@
 Change LOG
 
+
+/********** globals.h ***************/
+
+1. #define dev inline 
+
+
+
 /**************** C FILES ************************/
 1. Changed extension from "c" to "cpp"
 
@@ -16,3 +23,4 @@ Change LOG
 /********** Chunk.h ***************/
 
 1. #define dev inline 
+

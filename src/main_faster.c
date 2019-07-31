@@ -129,7 +129,7 @@ void classic_hold(
 {
 
 	pkey_t timestamp = 0.0;
-	pkey_t local_min = 0.0;
+	pkey_t local_min = 1.0;
 	double random_num = 0.0;
 	long long tot_count = 0;
 	long long par_count = 0;
