@@ -320,6 +320,7 @@ int  migrate_node(bucket_t *bckt, table_t *new_h)
 				return ABORT; //abort
 			} 
 
+			assert(curr_next != NULL && curr != NULL && rn != NULL && curr->timestamp != INFTY);
 
 			// copy node
 
