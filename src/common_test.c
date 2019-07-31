@@ -121,8 +121,10 @@ int enqueue(int my_id, struct drand48_data* seed, pkey_t local_min, double (*cur
 		timestamp = local_min + update;
 	}while(timestamp == INFTY);
 	
-	if(timestamp < 0.0)
-		timestamp = 0.0;
+	if(timestamp < 0 || timestamp < 1)
+		timestamp = 1.0;
+	timestamp+=LOOKAHEAD;
+	if(timestamp < local_min) printf("Timestamp overflow " KEY_STRING " > " KEY_STRING "\n",timestamp, local_min);
 #else
 	unsigned long long index = __sync_fetch_and_add(&trace_index, 1); 
 	assertf(index > TRACE_LEN, "THE TRACE IS SHORT: %d vs %llu\n", TRACE_LEN, index);
