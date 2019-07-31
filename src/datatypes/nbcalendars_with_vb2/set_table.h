@@ -336,8 +336,6 @@ int  migrate_node(bucket_t *bckt, table_t *new_h)
 					__sync_fetch_and_add(&new_h->e_counter.count, 1);
 				}
 				FALLBACK2(&bckt->lock, &left->lock){
-					node_unsafe_free(replica);
-
 					long rand;
 				    lrand48_r(&seedT, &rand);
 				    rand = (rand & 1) ;
