@@ -916,7 +916,7 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 	}
 	
 	// return the current set table
-	acquire_node(&h->socket);
+//	acquire_node(&h->socket);
 	return h;
 }
 
