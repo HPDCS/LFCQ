@@ -78,7 +78,7 @@ typedef struct LCRQ {
 
 // Function used by the PQ
 void _init_gc_queue();
-void init_queue(LCRQ *queue, unsigned int numa_node);
+void init_lcrq(LCRQ *queue, unsigned int numa_node);
 void lcrq_enqueue(LCRQ *queue, void* payload, unsigned int numa_node);
 bool lcrq_dequeue(LCRQ *queue, void* *result);
 

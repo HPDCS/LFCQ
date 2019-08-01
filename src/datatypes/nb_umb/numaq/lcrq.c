@@ -102,8 +102,8 @@ void _init_gc_queue() {
 }
 
 // SHARED_OBJECT_INIT
-void init_queue(LCRQ *queue, unsigned int numa_node) {
-    RingQueue *rq = malloc(sizeof(RingQueue));//gc_alloc_node(ptst, gc_aid[GC_RING_QUEUE], numa_node);
+void init_lcrq(LCRQ *queue, unsigned int numa_node) {
+    RingQueue *rq = gc_alloc_node(ptst, gc_aid[GC_RING_QUEUE], numa_node);
     init_ring(rq);
     queue->head = queue->tail = rq;
 }
@@ -128,7 +128,7 @@ void lcrq_enqueue(LCRQ *queue, void* payload, unsigned int numa_node) {
         if (crq_is_closed(t)) {
 alloc:
             if (nrq == NULL) {
-                nrq = malloc(sizeof(RingQueue));//gc_alloc_node(ptst, gc_aid[GC_RING_QUEUE], numa_node);
+                nrq = gc_alloc_node(ptst, gc_aid[GC_RING_QUEUE], numa_node);
                 init_ring(nrq);
             }
             // Solo enqueue
@@ -153,7 +153,7 @@ alloc:
                 if ((likely(!node_unsafe(idx)) || rq->head < t) && CAS2((uint64_t*)cell, -1, idx, payload, t)) {
                     
                     if (nrq != NULL) {
-                        free(nrq);//gc_free(ptst, nrq, gc_aid[GC_RING_QUEUE]); // to avoid use per thread variable
+                        gc_free(ptst, nrq, gc_aid[GC_RING_QUEUE]); // to avoid use per thread variable
                     }
                     return;
                 }

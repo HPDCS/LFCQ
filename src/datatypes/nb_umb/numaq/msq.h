@@ -1,7 +1,6 @@
 // micheal-scott locking fifo queue
 /* For now used this for fast implementation, then try to move to LCRQ */
 //@TODO move to LCRQ
-#define MSQ_H
 #ifndef MSQ_H
 #define MSQ_H
 
@@ -33,8 +32,8 @@ typedef struct
 }
 queue_t;
 
-void _init_gc_queue();
-void init_queue(queue_t *queue, unsigned int numa_node);
+void _init_gc_msq();
+void init_msq(queue_t *queue, unsigned int numa_node);
 void msq_enqueue(queue_t *queue, void* payload, unsigned int numa_node);
 bool msq_dequeue(queue_t *queue, void* *result);
 

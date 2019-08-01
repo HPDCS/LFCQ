@@ -287,7 +287,7 @@ static chunk_t *node_get_filled_chunks(int n, int sz, unsigned int numa_node)
     char *node, *start, *end, *check;
     int i;
     
-    unsigned int page_size = gc_global.page_size;
+    unsigned int reminder, page_size = gc_global.page_size;
 
     int alloc_size, num_pages, sizes_per_page, page_available;
 
@@ -298,7 +298,9 @@ static chunk_t *node_get_filled_chunks(int n, int sz, unsigned int numa_node)
  
     sizes_per_page = (page_size - sizeof(unsigned long))/sz;
     page_available = sizes_per_page * sz;
-
+    
+    reminder = page_size-sizeof(unsigned long)-page_available;
+    
     alloc_size = n * BLKS_PER_CHUNK * sz; // original size
     num_pages = (alloc_size / page_available) + 1;
     alloc_size = num_pages * page_size;
@@ -341,7 +343,7 @@ static chunk_t *node_get_filled_chunks(int n, int sz, unsigned int numa_node)
         check = node + page_size;
 
         // skip numa node idx
-        node += sizeof(unsigned long); // @TODO change the skip, the empty goes to the beginning, in this way the addresses will be aligned (More performances)
+        node += sizeof(unsigned long)+reminder; // Unused bytes at beginning - In this way the addresses will be aligned in most of the cases
 
         while (node + sz <= check) //we have enough memory to handle request?
         {

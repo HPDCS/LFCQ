@@ -1,16 +1,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-
-#ifdef MSQ_H
 #include "msq.h"
 
-void _init_gc_queue()
+void _init_gc_msq()
 {
     gc_aid[GC_NODES] = gc_add_allocator(sizeof(node_t));
 }
 
-void init_queue(queue_t *queue, unsigned int numa_node)
+void init_msq(queue_t *queue, unsigned int numa_node)
 {
     node_t *node = /*malloc(sizeof(node_t));*/gc_alloc_node(ptst, gc_aid[GC_NODES], numa_node); // Allocate a free node
     node->next = NULL;
@@ -71,5 +69,3 @@ bool msq_dequeue(queue_t *queue, void **result)
     gc_free(ptst, node, gc_aid[GC_NODES]);
     return true;
 }
-
-#endif

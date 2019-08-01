@@ -35,7 +35,7 @@
 #include "../../../utils/hpdcs_utils.h"
 #include "../gc/ptst.h"
 
-#include "lcrq.h"
+#include "task_queue.h"
 
 extern __thread ptst_t *ptst;
 extern int gc_aid[];
@@ -204,7 +204,7 @@ struct nb_calqueue
 	table * volatile hashtable;
 	//char pad[24];
 	// 64
-	LCRQ op_queue[_NUMA_NODES]; // (!new) per numa node queue
+	task_queue op_queue[_NUMA_NODES]; // (!new) per numa node queue
 };
 
 

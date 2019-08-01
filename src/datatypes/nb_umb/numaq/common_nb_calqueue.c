@@ -926,7 +926,7 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 
 	// init fraser garbage collector/allocator 
 	_init_gc_subsystem();
-	_init_gc_queue();
+	_init_gc_tq();
 	// add allocator of nbc_bucket_node
 	gc_aid[GC_BUCKETNODE] = gc_add_allocator(sizeof(nbc_bucket_node));
 	gc_aid[GC_OPNODE] = gc_add_allocator(sizeof(op_node));
@@ -956,7 +956,7 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	// (!new) initialize numa queues 
 	for (i = 0; i < _NUMA_NODES; i++ ) 
 	{
-		init_queue(&(res->op_queue[i]), i);
+		init_tq(&(res->op_queue[i]), i);
 	}
 
 	res->hashtable->bucket_width = 1.0;
@@ -1253,7 +1253,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 		assertf(operation == NULL, "ENQ - No operation%s\n","");
 
 #ifdef USE_TASK_QUEUE
-		lcrq_enqueue(&(queue->op_queue[dest_node]), (void*) operation, dest_node);
+		tq_enqueue(&(queue->op_queue[dest_node]), (void*) operation, dest_node);
 		op_node* extracted_op = NULL;
 		unsigned int node, i;
 #endif
@@ -1262,11 +1262,11 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 		op_node* extracted_op = requested_op;
 #endif
 
-
 		do  { //dequeue loop
 
 			if ( (ret = __sync_fetch_and_add(&(requested_op->response),0)) != -1) 
 			{
+				//printf("Success\n	");
 				gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
 				critical_exit();
 				requested_op = NULL;
@@ -1274,12 +1274,12 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 				return ret; // someone did my op, we can return	
 			}
 #ifdef USE_TASK_QUEUE
-
 			// extract from one queue
 			i = node = NID;
 			do {
-				if (lcrq_dequeue(&(queue->op_queue[i]), &extracted_op))
+				if (tq_dequeue(&(queue->op_queue[i]), &extracted_op)) {
 					break;
+				}
 				i = (i + 1) % _NUMA_NODES;
 			} while(i != node);
 
@@ -1330,7 +1330,6 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 }
 
 /* !(new) dequeue */
-// @TODO Cluster of bucket - change has function - move it to a macro maybe
 // @TODO Improve path in case of compilation with queues not active
 pkey_t pq_dequeue(void *q, void** result) 
 {
@@ -1381,7 +1380,7 @@ pkey_t pq_dequeue(void *q, void** result)
 		assertf(operation == NULL, "DEQ - No operation%s\n","");
 
 #ifdef USE_TASK_QUEUE
-		lcrq_enqueue(&(queue->op_queue[dest_node]), (void*) operation, dest_node);
+		tq_enqueue(&(queue->op_queue[dest_node]), (void*) operation, dest_node);
 		op_node* extracted_op = NULL;
 		unsigned int node, i;
 #endif
@@ -1408,7 +1407,7 @@ pkey_t pq_dequeue(void *q, void** result)
 			// extract from one queue
 			i = node = NID;
 			do {
-				if (lcrq_dequeue(&(queue->op_queue[i]), &extracted_op))
+				if (tq_dequeue(&(queue->op_queue[i]), &extracted_op))
 					break;
 				i = (i + 1) % _NUMA_NODES;
 			} while(i != node);
