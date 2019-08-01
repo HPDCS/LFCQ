@@ -19,7 +19,7 @@ mkdir -p $results
                                                         PWD=`pwd`
 echo $PWD
                                                         cd ..
-#                                                        make clean; make $version;
+                                                        make clean; make $version;
                                                         cd script
 
 for i in $iterations; do

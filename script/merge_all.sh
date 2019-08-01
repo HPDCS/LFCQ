@@ -45,6 +45,7 @@ for u in $usage_factor; do
 				if [ "$p" == "VBPQ" ]; then 
 				    e=`echo "$t * 2" | bc`
 					e=$(($e<48?$e:48))
+					e=$(($e==2?3:$e))
 				fi
 				ofile="$version-$cmd-$p-$t-1-$DIST-0.3-$SIZE-$DIST-0.5-$OPS-$DIST-0-0-$u-$e-0-$MODE-$TIME"
 				#echo "$ofile"
@@ -57,6 +58,8 @@ for u in $usage_factor; do
 					file=$input/$file
 					val=`cat $file |tail -n1 | cut -d',' -f20 | cut -d':' -f2` 
 					val=`cat $file | tail -n1  | cut -d',' -f4 | cut -d':' -f2`
+					echo ""
+					grep "Time to setup queu" $file | cut -d',' -f17-
 					sum=`echo $sum+$val | bc`
 					count=$(($count+1))
 				done
