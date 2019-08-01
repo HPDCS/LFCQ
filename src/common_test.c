@@ -7,7 +7,7 @@
 #include "utils/hpdcs_utils.h"
 #include "utils/hpdcs_math.h"
 
-#ifndef
+#ifndef ENABLE_ACQUIRE_SOCKET
 #define ENABLE_ACQUIRE_SOCKET 1
 #endif
 
