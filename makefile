@@ -56,11 +56,15 @@ WORK_value := src/datatypes/worker_queue.o  src/datatypes/common_nb_calqueue.o  
 
 
 L1_CACHE_LINE_SIZE := $(shell getconf LEVEL1_DCACHE_LINESIZE)
+
 MACRO := -DARCH_X86_64  -DCACHE_LINE_SIZE=$(L1_CACHE_LINE_SIZE) -DINTEL
 DEBUG := -g3
 
 
 
+ifdef(ENABLE_ACQUIRE_SOCKET)
+	MACRO += -DENABLE_ACQUIRE_SOCKET=$(ENABLE_ACQUIRE_SOCKET)
+endif
 
 FILTER_OUT_C_SRC := src/main.c src/main_2.c
                   
