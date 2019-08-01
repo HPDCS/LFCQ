@@ -1253,7 +1253,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 		assertf(operation == NULL, "ENQ - No operation%s\n","");
 
 #ifdef USE_TASK_QUEUE
-		msq_enqueue(&(queue->op_queue[dest_node]), (void*) operation, dest_node);
+		lcrq_enqueue(&(queue->op_queue[dest_node]), (void*) operation, dest_node);
 		op_node* extracted_op = NULL;
 		unsigned int node, i;
 #endif
@@ -1278,7 +1278,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			// extract from one queue
 			i = node = NID;
 			do {
-				if (msq_dequeue(&(queue->op_queue[i]), &extracted_op))
+				if (lcrq_dequeue(&(queue->op_queue[i]), &extracted_op))
 					break;
 				i = (i + 1) % _NUMA_NODES;
 			} while(i != node);
@@ -1381,7 +1381,7 @@ pkey_t pq_dequeue(void *q, void** result)
 		assertf(operation == NULL, "DEQ - No operation%s\n","");
 
 #ifdef USE_TASK_QUEUE
-		msq_enqueue(&(queue->op_queue[dest_node]), (void*) operation, dest_node);
+		lcrq_enqueue(&(queue->op_queue[dest_node]), (void*) operation, dest_node);
 		op_node* extracted_op = NULL;
 		unsigned int node, i;
 #endif
@@ -1408,7 +1408,7 @@ pkey_t pq_dequeue(void *q, void** result)
 			// extract from one queue
 			i = node = NID;
 			do {
-				if (msq_dequeue(&(queue->op_queue[i]), &extracted_op))
+				if (lcrq_dequeue(&(queue->op_queue[i]), &extracted_op))
 					break;
 				i = (i + 1) % _NUMA_NODES;
 			} while(i != node);

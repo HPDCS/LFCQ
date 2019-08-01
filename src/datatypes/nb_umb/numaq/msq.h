@@ -1,7 +1,7 @@
 // micheal-scott locking fifo queue
 /* For now used this for fast implementation, then try to move to LCRQ */
 //@TODO move to LCRQ
-
+#define MSQ_H
 #ifndef MSQ_H
 #define MSQ_H
 

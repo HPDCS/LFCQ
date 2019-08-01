@@ -93,7 +93,7 @@ static inline int close_crq(RingQueue *rq, const uint64_t t, const int tries) {
         return BIT_TEST_AND_SET(&rq->tail, 63);
 }
 
-void _init_gc_queue_lrcq() {
+void _init_gc_queue() {
 
     printf("Ring Node size: %ld, Ring Queue size: %ld\n", sizeof(RingNode), sizeof(RingQueue));
 
@@ -102,7 +102,7 @@ void _init_gc_queue_lrcq() {
 }
 
 // SHARED_OBJECT_INIT
-void init_lrcq_queue(LCRQ *queue, unsigned int numa_node) {
+void init_queue(LCRQ *queue, unsigned int numa_node) {
     RingQueue *rq = malloc(sizeof(RingQueue));//gc_alloc_node(ptst, gc_aid[GC_RING_QUEUE], numa_node);
     init_ring(rq);
     queue->head = queue->tail = rq;
@@ -152,7 +152,9 @@ alloc:
             if (likely(node_index(idx) <= t)) {
                 if ((likely(!node_unsafe(idx)) || rq->head < t) && CAS2((uint64_t*)cell, -1, idx, payload, t)) {
                     
-                    //if (nrq != NULL) gc_free(ptst, nrq, gc_aid[GC_RING_QUEUE]); // to avoid use per thread variable
+                    if (nrq != NULL) {
+                        free(nrq);//gc_free(ptst, nrq, gc_aid[GC_RING_QUEUE]); // to avoid use per thread variable
+                    }
                     return;
                 }
             }
@@ -192,7 +194,7 @@ bool lcrq_dequeue(LCRQ *queue, void* *result) {
             if (likely(!is_empty(val))) {
                 if (likely(idx == h)) {
                     if (CAS2((uint64_t*)cell, val, cell_idx, -1, unsafe | h + RING_SIZE))
-                        result = val;
+                        *result = val;
                         return true;
                 } else {
                     if (CAS2((uint64_t*)cell, val, cell_idx, val, set_unsafe(idx))) {
@@ -227,7 +229,7 @@ bool lcrq_dequeue(LCRQ *queue, void* *result) {
             // try to return empty
             next = rq->next;
             if (next == NULL) {
-                result = NULL;
+                *result = NULL;
                 return false;  // EMPTY
             }
             if (tail_index(rq->tail) <= h + 1)

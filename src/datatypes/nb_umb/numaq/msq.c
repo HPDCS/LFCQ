@@ -1,5 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
+
+
+#ifdef MSQ_H
 #include "msq.h"
 
 void _init_gc_queue()
@@ -68,3 +71,5 @@ bool msq_dequeue(queue_t *queue, void **result)
     gc_free(ptst, node, gc_aid[GC_NODES]);
     return true;
 }
+
+#endif
