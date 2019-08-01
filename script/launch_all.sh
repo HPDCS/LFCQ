@@ -15,6 +15,13 @@ mkdir -p $results
 
 ./estimate_runtime.sh $1
 
+
+                                                        PWD=`pwd`
+echo $PWD
+                                                        cd ..
+#                                                        make clean; make $version;
+                                                        cd script
+
 for i in $iterations; do
 	for DIST in $distributions; do
 		for s in $queue_sizes; do
@@ -29,7 +36,9 @@ for i in $iterations; do
 							if [ "$p" == "VBPQ" ]; then 
 							    e=`echo "$t * 2" | bc`
 								e=$(($e<48?$e:48))
+								e=$(($e==2?3:$e))
 							fi
+							
 							cmd_line="../$version/$p-$cmd $t 1 $DIST 0.3 $SIZE $DIST 0.5 $OPS $DIST 0 0 $u $e 0 $MODE $TIME"
 							file="$version-$cmd-$p-$t-1-$DIST-0.3-$SIZE-$DIST-0.5-$OPS-$DIST-0-0-$u-$e-0-$MODE-$TIME-$i"
 							file=`echo "$file" | tr '.' '_'`.dat
@@ -42,7 +51,7 @@ for i in $iterations; do
 							while [[ $(grep -c "THROUGHPUT" $file) -eq 0 ]]
 							do
 								#/usr/bin/time -f R:%e,U:%U,S:%S $cmd_line &> $file
-								{ timeout $((TIME * 2)) /usr/bin/time -f R:%e,U:%U,S:%S $cmd_line; } &> $file
+								{ timeout $((TIME * 3)) /usr/bin/time -f R:%e,U:%U,S:%S $cmd_line; } &> $file
 
 								if test $N -ge $MAX_RETRY ; then echo break; break; fi
 								N=$(( N+1 ))
@@ -54,3 +63,5 @@ for i in $iterations; do
 		done
 	done
 done
+
+echo BHO
