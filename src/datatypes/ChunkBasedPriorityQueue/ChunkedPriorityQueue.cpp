@@ -23,6 +23,9 @@ using namespace std;
 
 int gc_ck;
 
+__thread Chunk __local_arr[REDUCE_CACHE];
+__thread int local_cache_usage = 0;
+
 #define ATTEMPT_LOOPS 500
 
 /******************************************************************************************************/

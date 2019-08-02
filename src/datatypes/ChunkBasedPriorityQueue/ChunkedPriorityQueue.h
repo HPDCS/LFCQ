@@ -34,9 +34,14 @@ using namespace std;
 struct privateThreadInfo;                   // forward declaration
 typedef struct privateThreadInfo ThrInf;
 
-
+//__thread Chunk local_arr[ALLOCCACHE/20];
+//__thread int local_cache_usage = 0;
 /*************************************** CONSTANT DEFINITIONS **********************************************/
 #define ALLOCCACHE 		30000000             // static allocation of 3,000,000 chunks
+#define REDUCE_CACHE		250
+                                                                                               
+extern __thread Chunk __local_arr[];                                                       
+extern __thread int local_cache_usage;
 
 #ifdef FREEZE_64
 #define DIRTY_EXIST 	0x8000000000000000ull
@@ -101,21 +106,25 @@ public:
 	Chunk* alloc(){
 		//return (Chunk*) gc_alloc(ptst, gc_ck);
 
-		
-		int val = atomicInc(&freecnt, 1);
-		if(val>=ALLOCCACHE){
-			Chunk* res = (Chunk*) gc_alloc(ptst, gc_ck);
-			if(!res){
-				printf(" Statically allocated %d chunks were not enough :-(\n", ALLOCCACHE);
-				assert(0);
+		int val = local_cache_usage;
+		if(val >= REDUCE_CACHE){
+			int val = atomicInc(&freecnt, 1);
+			if(val>=ALLOCCACHE){
+				Chunk* res = (Chunk*) gc_alloc(ptst, gc_ck);
+				if(!res){
+					printf(" Statically allocated %d chunks were not enough :-(\n", ALLOCCACHE);
+					assert(0);
+				}
+				memset(res, 0, sizeof(Chunk));
+				return res;
 			}
-			memset(res, 0, sizeof(Chunk));
-			return res;
+//			memset(&arr[val], 0, sizeof(Chunk));	// zero the space for the chunks (long operation)
+		
+			return &arr[val];
 		}
-		memset(&arr[val], 0, sizeof(Chunk));	// zero the space for the chunks (long operation)
-		
-		return &arr[val];
-		
+//		memset(&__local_arr[val], 0, sizeof(Chunk));
+		local_cache_usage++;
+		return &__local_arr[val];
 	}
 	void free(Chunk *c) {
 		gc_free(ptst, c, gc_ck);
