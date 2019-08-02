@@ -385,6 +385,20 @@ unsigned long long skip_extracted(node_t *tail, node_t **curr, unsigned long lon
   	return position;
 }
 
+
+unsigned long long fetch_position(node_t **curr, node_t **left, pkey_t timestamp){
+	unsigned long long position = 0;
+	  	while((*curr)->timestamp <= timestamp){
+		if(counter_last_key > 1000000ULL)	printf("L: %p-" KEY_STRING " C: %p-" KEY_STRING "\n", *left, (*left)->timestamp, *curr, (*curr)->timestamp);
+  		*left = *curr;
+  		*curr = (*curr)->next;
+		if(*curr) PREFETCH((*curr)->next, 1);
+  		position++;
+  	}
+  	return position;
+}
+
+
 int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, void* payload, unsigned int epoch){
 	bckt_connect_count++;
 
@@ -459,6 +473,8 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 
 	left = curr;
 	curr = curr->next;
+	position += fetch_position(&curr, &left, timestamp);
+	/*
   	while(curr->timestamp <= timestamp){
 		if(counter_last_key > 1000000ULL)	printf("L: %p-" KEY_STRING " C: %p-" KEY_STRING "\n", left, left->timestamp, curr, curr->timestamp);
   		left = curr;
@@ -467,7 +483,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 		scan_list_length_en++;
   		position++;
   	}
-	
+	*/ 
 	assert(curr->timestamp != INFTY || curr == tail);
 
   	if(left->timestamp == timestamp) new->tie_breaker+= left->tie_breaker;
