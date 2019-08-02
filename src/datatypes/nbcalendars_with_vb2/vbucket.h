@@ -374,6 +374,16 @@ static inline bucket_t* increase_epoch(bucket_t *bckt, unsigned int epoch){
 	return res;
 }
 
+unsigned long long skip_extracted(node_t *tail, node_t **curr, unsigned long long toskip){
+	unsigned long long position;
+	while(toskip > 0ULL && *curr != tail){
+  		*curr = (*curr)->next;
+		if(*curr) 	PREFETCH((*curr)->next, 0);
+  		toskip--;
+  		position++;
+  	}
+  	return position;
+}
 
 int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, void* payload, unsigned int epoch){
 	bckt_connect_count++;
@@ -424,14 +434,21 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
   	if(get_op_type(bckt->op_descriptor) != NOOP) 		{node_unsafe_free(new); res = ABORT; 	 goto out; 	}
 
   	toskip		= extracted;
-	position = 0;
-  	while(toskip > 0ULL && curr != tail){
+	/*
+  	position = 0;
+	while(toskip > 0ULL && curr != tail){
   		curr = curr->next;
 		if(curr) 	PREFETCH(curr->next, 0);
   		toskip--;
   		scan_list_length_en++;
   		position++;
   	}
+	*/
+
+	position = skip_extracted(tail, &curr, toskip);
+	scan_list_length_en+=position;
+
+	toskip -= position;
 
   	if(curr == tail && toskip >= 0ULL) {
 		post_operation(bckt, DELETE, 0ULL, NULL);
@@ -544,7 +561,7 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
 	//node_t *head  = &bckt->head;
 	unsigned long long old_extracted = 0;	
 	unsigned long long extracted = 0;
-	unsigned skipped = 0;
+	//unsigned skipped = 0;
 	PREFETCH(curr->next, 0);
 	assertf(bckt->type != ITEM, "trying to extract from a head bucket%s\n", "");
 
@@ -565,25 +582,29 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
   		extracted -= __last_val;
   	}
 
-  	while(extracted > 0ULL && curr != tail){
-  		/*if(skipped > 25 && extracted > 2){
-  			if((__status = _xbegin ()) == _XBEGIN_STARTED)
-			{
-				if(old_extracted != bckt->extractions){ TM_ABORT(0xf2);}
-				head->next = curr;
-				old_extracted -= skipped; 
-				TM_COMMIT();
-				skipped = 0;
-			}
-			else{}
+	scan_list_length += skip_extracted(tail, &curr, extracted);
 
-  		}*/
+	/*
+  	while(extracted > 0ULL && curr != tail){
+  		//if(skipped > 25 && extracted > 2){
+  		//	if((__status = _xbegin ()) == _XBEGIN_STARTED)
+		//	{
+		//		if(old_extracted != bckt->extractions){ TM_ABORT(0xf2);}
+		//		head->next = curr;
+		//		old_extracted -= skipped; 
+		//		TM_COMMIT();
+		//		skipped = 0;
+		//	}
+		//	else{}
+		//
+  		//}
   		curr = curr->next;
 		if(curr) 	PREFETCH(curr->next, 0);
   		extracted--;
   		skipped++;
 		scan_list_length++;
   	}
+	*/
 
 	if(curr->timestamp == INFTY)	assert(curr == tail);
   	if(curr == tail){
