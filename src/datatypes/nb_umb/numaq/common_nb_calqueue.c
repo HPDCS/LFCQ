@@ -1266,7 +1266,6 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 
 			if ( (ret = __sync_fetch_and_add(&(requested_op->response),0)) != -1) 
 			{
-				//printf("Success\n	");
 				gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
 				critical_exit();
 				requested_op = NULL;

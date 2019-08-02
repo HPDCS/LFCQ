@@ -93,11 +93,9 @@ static inline int close_crq(RingQueue *rq, const uint64_t t, const int tries) {
         return BIT_TEST_AND_SET(&rq->tail, 63);
 }
 
-void _init_gc_queue() {
-
+void _init_gc_lcrq() 
+{
     printf("Ring Node size: %ld, Ring Queue size: %ld\n", sizeof(RingNode), sizeof(RingQueue));
-
-    gc_aid[GC_RING_NODE] = gc_add_allocator(sizeof(RingNode));
     gc_aid[GC_RING_QUEUE] = gc_add_allocator(sizeof(RingQueue));
 }
 
@@ -151,7 +149,6 @@ alloc:
         if (likely(is_empty(val))) {
             if (likely(node_index(idx) <= t)) {
                 if ((likely(!node_unsafe(idx)) || rq->head < t) && CAS2((uint64_t*)cell, -1, idx, payload, t)) {
-                    
                     if (nrq != NULL) {
                         gc_free(ptst, nrq, gc_aid[GC_RING_QUEUE]); // to avoid use per thread variable
                     }
@@ -233,7 +230,10 @@ bool lcrq_dequeue(LCRQ *queue, void* *result) {
                 return false;  // EMPTY
             }
             if (tail_index(rq->tail) <= h + 1)
-                CASPTR(&queue->head, rq, next);
+                if (CASPTR(&queue->head, rq, next))
+                {
+                    gc_free(ptst, rq, gc_aid[GC_RING_QUEUE]);
+                }
         }
     }
 }

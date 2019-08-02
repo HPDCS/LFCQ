@@ -55,8 +55,7 @@ extern int gc_aid[];
 extern int gc_hid[];
 extern __thread ptst_t *ptst;
 
-#define GC_RING_NODE    0
-#define GC_RING_QUEUE   1
+#define GC_RING_QUEUE   0
 
 typedef struct RingNode {
     volatile uint64_t val;
@@ -77,7 +76,7 @@ typedef struct LCRQ {
 } LCRQ __attribute__ ((aligned (128)));
 
 // Function used by the PQ
-void _init_gc_queue();
+void _init_gc_lcrq();
 void init_lcrq(LCRQ *queue, unsigned int numa_node);
 void lcrq_enqueue(LCRQ *queue, void* payload, unsigned int numa_node);
 bool lcrq_dequeue(LCRQ *queue, void* *result);

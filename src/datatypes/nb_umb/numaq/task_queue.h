@@ -1,13 +1,16 @@
 #ifndef TASK_QUEUE_H
 #define TASK_QUEUE_H
 
-#include "msq.h"
+//#include "msq.h"
 //#include "lcrq.h"
+#include "stack.h"
 
 #ifdef MSQ_H
 typedef queue_t task_queue;
 #elif defined(LCRQ_H)
 typedef LCRQ task_queue;
+#elif defined(TRIEBER_H)
+typedef t_stack task_queue;
 #endif
 
 #define _init_gc_tq() __init_gc_tq()
@@ -16,6 +19,8 @@ inline static void __init_gc_tq() {
     return _init_gc_msq();
 #elif defined(LCRQ_H)
     return _init_gc_lcrq();
+#elif defined(TRIEBER_H)
+    return _init_gc_trieber();
 #endif
 }
 
@@ -25,6 +30,8 @@ inline static void _init_tq(task_queue *queue, unsigned int numa_node) {
     return init_msq(queue, numa_node);
 #elif defined(LCRQ_H)
     return init_lcrq(queue, numa_node);
+#elif defined(TRIEBER_H)
+    return init_trieber(queue, numa_node);
 #endif
 }
 
@@ -34,6 +41,8 @@ inline static void _tq_enqueue(task_queue *queue, void* payload, unsigned int nu
     return msq_enqueue(queue, payload, numa_node);
 #elif defined(LCRQ_H)
     return lcrq_enqueue(queue, payload, numa_node);
+#elif defined(TRIEBER_H)
+    return t_push(queue, payload, numa_node);
 #endif
 }
 
@@ -43,6 +52,8 @@ inline static bool _tq_dequeue(task_queue *queue, void* *result){
     return msq_dequeue(queue, result);
 #elif defined(LCRQ_H)
     return lcrq_dequeue(queue, result);
+#elif defined(TRIEBER_H)
+    return t_pop(queue, result);
 #endif
 }
 
