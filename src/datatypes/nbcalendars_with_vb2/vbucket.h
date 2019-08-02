@@ -375,7 +375,7 @@ static inline bucket_t* increase_epoch(bucket_t *bckt, unsigned int epoch){
 }
 
 unsigned long long skip_extracted(node_t *tail, node_t **curr, unsigned long long toskip){
-	unsigned long long position;
+	unsigned long long position = 0;  
 	while(toskip > 0ULL && *curr != tail){
   		*curr = (*curr)->next;
 		if(*curr) 	PREFETCH((*curr)->next, 0);
