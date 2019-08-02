@@ -51,23 +51,23 @@ set style line 11 dt 10 lc rgb "#000000"
 set style line 12 dt 11 lc rgb "#000000"
 
 	
-set yrange [500:8000]
-set xrange [0:50]
+set yrange [2000:16000]
+set xrange [1:8]
 set offset 2,2,1,1
 
 maxitems=56
 
 start=2
-end=12
+end=4
 outfile=out.'/Real-'.queue.'.eps'
 
 set output outfile
 
 
-#plot for [col=start:end] file using 1:col with lines ls col t columnheader
+plot for [col=start:end] file using 1:col with lines ls col t columnheader
 
 
-plot file using 1:12 with lines ls 2 t columnheader(12),\
+#plot file using 1:12 with lines ls 2 t columnheader(12),\
 file using 1:13 with lines ls 3 t columnheader(13),\
 file using 1:14 with lines ls 4 t columnheader(14),\
 file using 1:6 with lines ls 6 t columnheader(6)

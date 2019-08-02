@@ -2,8 +2,8 @@
 #define TASK_QUEUE_H
 
 //#include "msq.h"
-//#include "lcrq.h"
-#include "stack.h"
+#include "lcrq.h"
+//#include "stack.h"
 
 #ifdef MSQ_H
 typedef queue_t task_queue;

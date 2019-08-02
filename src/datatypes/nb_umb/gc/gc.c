@@ -55,6 +55,13 @@
 
 #define MAX_NODES 16 /* UP to one thread per node <- _NUMA_NODES MACRO in makefile does the job*/
 
+/* @TODO Increase minimal pre-allocation size to a power of 2 - 
+ * Handling more pages at once increase the maximum handled allocation size
+ * Reduce the waste of memory
+ * Only need to change the bitmask
+ * Maybe create a mapping allocation_size-bitmask in order to reduce the granularity of some allocations
+ *  */
+
 /*#define MINIMAL_GC*/
 /*#define YIELD_TO_HELP_PROGRESS*/
 //#define PROFILE_GC
@@ -279,7 +286,7 @@ static chunk_t *node_get_empty_chunks(int n, unsigned int node)
 }
 
 /* Get @n filled chunks, pointing at blocks of @sz bytes each. 
- * Get them from requested node // @TODO Fix this bad boy
+ * Get them from requested node
  * */
 static chunk_t *node_get_filled_chunks(int n, int sz, unsigned int numa_node)
 {

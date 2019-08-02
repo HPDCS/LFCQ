@@ -48,7 +48,8 @@ for u in $usage_factor; do
 					file="$ofile-$i"
 					file=`echo "$file" | tr '.' '_'`.dat
 					file=$input/$file
-					val=`cat $file |head -n1 | cut -d',' -f20 | cut -d':' -f2` 
+					val=`cat $file | grep THROUGHPUT | cut -d',' -f4 | cut -d':' -f2`
+					#val=`cat $file | head -n1 | cut -d',' -f20 | cut -d':' -f2` 
 					sum=`echo $sum+$val | bc`
 					count=$(($count+1))
 				done
@@ -57,7 +58,8 @@ for u in $usage_factor; do
 					file="$ofile-$i"
 					file=`echo "$file" | tr '.' '_'`.dat
 					file=$input/$file
-					val=`cat $file |head -n1 | cut -d',' -f20 | cut -d':' -f2` 
+					val=`cat $file | grep THROUGHPUT | cut -d',' -f4 | cut -d':' -f2`
+					#val=`cat $file | head -n1 | cut -d',' -f20 | cut -d':' -f2` 
 					ssum=`echo "($val-$avg)*($val-$avg)" | bc`
 				done
 				#std=`echo "sqrt($ssum/($count-1))" | bc`

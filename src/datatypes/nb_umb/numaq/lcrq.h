@@ -1,19 +1,24 @@
 #ifndef LCRQ_H
 #define LCRQ_H
 
-#include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
 
 #include "../gc/gc.h"
-#include "../../../utils/hpdcs_utils.h"
+
 // Definition: RING_POW
 // --------------------
 // The LCRQ's ring size will be 2^{RING_POW}.
 #ifndef RING_POW
-#define RING_POW        (4)//(17)   //otherwise the allocator cannot handle it
+#define RING_POW        (4)
 #endif
 #define RING_SIZE       (1ull << RING_POW)
+
+/*
+#include <stdlib.h>
+
+#include "../../../utils/hpdcs_utils.h"
+
 
 #define __CAS2(ptr, o1, o2, n1, n2)                             \
 ({                                                              \
@@ -49,7 +54,7 @@
 
 #define ReadPrefetch(A)            __builtin_prefetch((const void *)A, 0, 3);
 #define StorePrefetch(A)           __builtin_prefetch((const void *)A, 1, 3);
-
+*/
 
 extern int gc_aid[];
 extern int gc_hid[];
