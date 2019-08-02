@@ -331,12 +331,13 @@ begin:
 			// save from livelock with empty queue
 			if(index == MASK_EPOCH && h->e_counter.count == 0) goto begin;
 
-			num_cas++;
 			index++;
 			__last_index++;
 
 			if( (__last_index - (__last_current>>32)) == EXTRACTION_VIRTUAL_BUCKET_LEN){
 				// increase current
+
+				num_cas++;
 				old_current = VAL_CAS( &(h->current), current, ((index << 32) | epoch) );
 				if(old_current == current){
 					current = ((index << 32) | epoch);
