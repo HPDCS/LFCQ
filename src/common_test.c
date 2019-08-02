@@ -8,7 +8,7 @@
 #include "utils/hpdcs_math.h"
 
 #ifndef ENABLE_ACQUIRE_SOCKET
-#define ENABLE_ACQUIRE_SOCKET 1
+#define ENABLE_ACQUIRE_SOCKET 0
 #endif
 
 #define MICROSLEEP_TIME 5
@@ -145,15 +145,16 @@ void generate_trace(char d)
 
 
 
-
+int debug = 0;
 
 pkey_t dequeue(void)
 {
-
+	
 	pkey_t timestamp = INFTY;
 	void* free_pointer = NULL;
 
 #if ENABLE_ACQUIRE_SOCKET == 1
+	if(!debug){printf("Alternating socket enabled\n");debug=1;} 
 	acquire_node(&socket);
 #endif
 
