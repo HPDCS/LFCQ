@@ -441,7 +441,7 @@ insertions2-rtm_insertions2);
 "BCKT contention %.10f - %llu - %llu - %llu ### "
 	"Enqueue: %.10f LEN: %.10f ### "
 	"Dequeue: %.10f LEN: %.10f ### "
-	"SEARCH STEPS: %llu ### "
+	"SEARCH STEPS: %.10f ### "
 	"NUMCAS: %llu : %llu ### "
 	"NEAR: %llu "
 	"RTC:%d,M:%lld, BW:%f\n",
@@ -454,7 +454,7 @@ insertions2-rtm_insertions2);
 			((float)scan_list_length_en)/((float)performed_enqueue),
 			((float)concurrent_dequeue) /((float)performed_dequeue),
 			((float)scan_list_length)   /((float)performed_dequeue),
-			search_steps,
+			((float)search_steps)		/((float)performed_dequeue+performed_enqueue),
 			num_cas, num_cas_useful,
 			near,
 			read_table_count	  ,
