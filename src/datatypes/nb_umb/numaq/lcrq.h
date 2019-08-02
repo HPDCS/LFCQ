@@ -10,51 +10,9 @@
 // --------------------
 // The LCRQ's ring size will be 2^{RING_POW}.
 #ifndef RING_POW
-#define RING_POW        (4)
+#define RING_POW        (4) //(17) //find a way to use a size of at least 6
 #endif
 #define RING_SIZE       (1ull << RING_POW)
-
-/*
-#include <stdlib.h>
-
-#include "../../../utils/hpdcs_utils.h"
-
-
-#define __CAS2(ptr, o1, o2, n1, n2)                             \
-({                                                              \
-    char __ret;                                                 \
-    __typeof__(o2) __junk;                                      \
-    __typeof__(*(ptr)) __old1 = (o1);                           \
-    __typeof__(o2) __old2 = (o2);                               \
-    __typeof__(*(ptr)) __new1 = (n1);                           \
-    __typeof__(o2) __new2 = (n2);                               \
-    asm volatile("lock cmpxchg16b %2;setz %1"                   \
-                   : "=d"(__junk), "=a"(__ret), "+m" (*ptr)     \
-                   : "b"(__new1), "c"(__new2),                  \
-                     "a"(__old1), "d"(__old2));                 \
-    __ret; })
-
-#define CAS2(ptr, o1, o2, n1, n2)    __CAS2(ptr, o1, o2, n1, n2)
-
-#define BIT_TEST_AND_SET(ptr, b)                                \
-({                                                              \
-    char __ret;                                                 \
-    asm volatile("lock btsq $63, %0; setnc %1" : "+m"(*ptr), "=a"(__ret) : : "cc"); \
-    __ret;                                                      \
-})
-
-#define __FAA64(A, B)   __sync_fetch_and_add(A, B)
-#define FAA64(A, B) __FAA64((volatile int64_t *)A, (int64_t)B);
-
-#define __CAS64(A, B, C)    __sync_bool_compare_and_swap(A, B, C)
-#define CAS64(A, B, C) __CAS64((uint64_t *)A, (uint64_t)B, (uint64_t)C)
-
-#define __CASPTR(A, B, C)   __sync_bool_compare_and_swap((long *)A, (long)B, (long)C)
-#define CASPTR(A, B, C) __CASPTR((void *)A, (void *)B, (void *)C)
-
-#define ReadPrefetch(A)            __builtin_prefetch((const void *)A, 0, 3);
-#define StorePrefetch(A)           __builtin_prefetch((const void *)A, 1, 3);
-*/
 
 extern int gc_aid[];
 extern int gc_hid[];
