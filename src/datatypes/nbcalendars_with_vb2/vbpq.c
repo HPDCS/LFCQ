@@ -356,7 +356,8 @@ begin:
 	return INFTY;
 }
 
-
+__thread unsigned long long search_steps = 0ULL;
+__thread unsigned long long search_de = 0ULL;
 
 __thread unsigned long long rtm_other=0ULL, rtm_prova=0ULL, rtm_failed=0ULL, rtm_retry=0ULL, rtm_conflict=0ULL, rtm_capacity=0ULL, rtm_debug=0ULL,  rtm_explicit=0ULL,  rtm_nested=0ULL, rtm_insertions=0ULL, insertions=0ULL, rtm_a=0ULL, rtm_b=0ULL;
 __thread unsigned long long rtm_other2=0ULL, rtm_prova2=0ULL, rtm_failed2=0ULL, rtm_retry2=0ULL, rtm_conflict2=0ULL, rtm_capacity2=0ULL, rtm_debug2=0ULL,  rtm_explicit2=0ULL,  rtm_nested2=0ULL, rtm_insertions2=0ULL, insertions2=0ULL, rtm_a2=0ULL, rtm_b2=0ULL;
@@ -439,7 +440,9 @@ insertions2-rtm_insertions2);
 	printf("%d- "
 "BCKT contention %.10f - %llu - %llu - %llu ### "
 	"Enqueue: %.10f LEN: %.10f ### "
-	"Dequeue: %.10f LEN: %.10f NUMCAS: %llu : %llu ### "
+	"Dequeue: %.10f LEN: %.10f ### "
+	"SEARCH STEPS: %llu ### "
+	"NUMCAS: %llu : %llu ### "
 	"NEAR: %llu "
 	"RTC:%d,M:%lld, BW:%f\n",
 			TID,
@@ -451,6 +454,7 @@ insertions2-rtm_insertions2);
 			((float)scan_list_length_en)/((float)performed_enqueue),
 			((float)concurrent_dequeue) /((float)performed_dequeue),
 			((float)scan_list_length)   /((float)performed_dequeue),
+			search_steps,
 			num_cas, num_cas_useful,
 			near,
 			read_table_count	  ,
