@@ -474,6 +474,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	left = curr;
 	curr = curr->next;
 	position += fetch_position(&curr, &left, timestamp);
+	scan_list_length_en+=position;
 	/*
   	while(curr->timestamp <= timestamp){
 		if(counter_last_key > 1000000ULL)	printf("L: %p-" KEY_STRING " C: %p-" KEY_STRING "\n", left, left->timestamp, curr, curr->timestamp);
