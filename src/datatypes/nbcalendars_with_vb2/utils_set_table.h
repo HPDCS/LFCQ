@@ -60,12 +60,13 @@ static inline void flush_current(table_t* h, unsigned long long newIndex)
 	oldEpoch = oldCur & MASK_EPOCH;
 	oldIndex = oldCur >> 32;
 
-	newCur =  newIndex << 32;
+	newCur =  newIndex < oldIndex ? newIndex : oldIndex;
+	newCur =  newCur << 32;
 	
 	// Try to update the current if it need	
 	if(
 		// if the new item falls into a subsequent bucket of current we can return
-		newIndex >	oldIndex 
+		newIndex >=	oldIndex + EXTRACTION_VIRTUAL_BUCKET_LEN
 		// if we do not fall in the previous cases we try to update current and return if we succeed
 		|| oldCur 	== 	(tmpCur =  VAL_CAS(
 										&(h->current), 
@@ -87,6 +88,9 @@ static inline void flush_current(table_t* h, unsigned long long newIndex)
 		oldCur = tmpCur;
 		oldEpoch = oldCur & MASK_EPOCH;
 		oldIndex = oldCur >> 32;
+	
+		newCur =  newIndex < oldIndex ? newIndex : oldIndex;
+		newCur =  newCur << 32;
 
 		// keep statistics
 		near+=mark;
@@ -95,7 +99,7 @@ static inline void flush_current(table_t* h, unsigned long long newIndex)
 	while (
 		// retry 
 		// if the item is in a previous bucket of current and
-		newIndex <	oldIndex 
+		newIndex <	oldIndex + EXTRACTION_VIRTUAL_BUCKET_LEN
 		&& (mark = true)
 		// if the cas has failed
 		&& oldCur 	!= 	(tmpCur = 	VAL_CAS(

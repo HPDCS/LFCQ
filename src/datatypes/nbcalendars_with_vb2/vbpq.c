@@ -210,9 +210,10 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
  */
 unsigned int ex = 0;
 
-__thread unsigned long long __last_current = -1;
-__thread table_t *__last_table = NULL;
-__thread bucket_t *__last_bckt 	= NULL;
+__thread unsigned long long __last_current 	= -1;
+__thread unsigned long long __last_index 	= -1;
+__thread table_t *__last_table 				= NULL;
+__thread bucket_t *__last_bckt 				= NULL;
 
 
 pkey_t pq_dequeue(void *q, void** result)
@@ -250,6 +251,7 @@ begin:
 	if(__last_table != h){
 		__last_table 	= h;
 		__last_current  = -1;
+		__last_index  = -1;
 		__last_bckt 	= NULL;
 		__last_node 	= NULL;
 		__last_val 	= 0;
@@ -261,13 +263,22 @@ begin:
 		left_ts  = INFTY;
 
 		// To many attempts: there is some problem? recheck the table
-		if( h->read_table_period == attempts){
-			goto begin;
-		}
+		if( h->read_table_period == attempts){	goto begin; }
 		attempts++;
 
-		// get fields from current
-		index = current >> 32;
+		if(__last_current != current)
+		{
+			// get fields from current
+			index = current >> 32;
+
+			__last_current  = current;
+			__last_index	= index;
+			__last_bckt 	= NULL;
+			__last_node 	= NULL;
+			__last_val 		= 0;
+		}
+		else index = __last_index;
+
 		epoch = current & MASK_EPOCH;
 
 		// get the physical bucket
@@ -277,13 +288,6 @@ begin:
 		// a reshuffle has been detected => restart
 		if(is_marked(min_next, MOV)) goto begin;
 
-		if(__last_current != current)
-		{
-			__last_current  = current;
-			__last_bckt 	= NULL;
-			__last_node 	= NULL;
-			__last_val 	= 0;
-		}
 		left_node = __last_bckt;
 
 		if(left_node == NULL || left_node->index != index || is_freezed(left_node->extractions))
@@ -329,18 +333,22 @@ begin:
 
 			num_cas++;
 			index++;
+			__last_index++;
 
-			// increase current
-			old_current = VAL_CAS( &(h->current), current, ((index << 32) | epoch) );
-			if(old_current == current){
-				current = ((index << 32) | epoch);
-				num_cas_useful++;
+			if( (__last_index - (__last_current>>32)) == EXTRACTION_VIRTUAL_BUCKET_LEN){
+				// increase current
+				old_current = VAL_CAS( &(h->current), current, ((index << 32) | epoch) );
+				if(old_current == current){
+					current = ((index << 32) | epoch);
+					num_cas_useful++;
+				}
+				else
+					current = old_current;
 			}
-			else
-				current = old_current;
 		}
 		else
 			current = new_current;
+		
 		
 	}while(1);
 	
