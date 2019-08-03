@@ -36,10 +36,20 @@ typedef int bool_t;
 #define FALSE 0
 #define TRUE  1
 
+/*
 #define ADD_TO(_v,_x)                                                   \
 do {                                                                    \
     int __val = (_v), __newval;                                         \
     while ( (__newval = CASIO(&(_v),__val,__val+(_x))) != __val )       \
+        __val = __newval;                                               \
+} while ( 0 )
+*/
+
+
+#define ADD_TO(_v,_x)                                                   \
+do {                                                                    \
+    size_t __val = (_v), __newval;                                         \
+    while ( (__newval = __sync_val_compare_and_swap(&(_v),__val,__val+(_x))) != __val )       \
         __val = __newval;                                               \
 } while ( 0 )
 
@@ -50,7 +60,7 @@ do {                                                                    \
 #define CACHE_PAD(_n) char __pad ## _n [CACHE_LINE_SIZE]
 #define ALIGNED_ALLOC(_s)                                       \
     ((void *)(((unsigned long)malloc((_s)+CACHE_LINE_SIZE*2) +  \
-        CACHE_LINE_SIZE - 1) & ~(CACHE_LINE_SIZE-1))); malloc_count += 1
+        CACHE_LINE_SIZE - 1) & ~(CACHE_LINE_SIZE-1))); malloc_count += 1; if(_s < 0) printf("Overflow if size type")
 
 
 /*

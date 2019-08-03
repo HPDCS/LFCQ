@@ -118,7 +118,7 @@ static struct gc_global_st
 
     /* Node sizes (run-time constants). */
     int nr_sizes;
-    int blk_sizes[MAX_SIZES];
+    size_t blk_sizes[MAX_SIZES];
 
     /* Registered epoch hooks. */
     int nr_hooks;
@@ -176,7 +176,7 @@ struct gc_st
 
 #define MEM_FAIL(_s)                                                         \
 do {                                                                         \
-    fprintf(stderr, "OUT OF MEMORY: %d bytes at line %d\n", (int) (_s), __LINE__); \
+    fprintf(stderr, "OUT OF MEMORY: %lu bytes at line %d\n", (size_t) (_s), __LINE__); \
     exit(1);                                                                 \
 } while ( 0 )
 
@@ -245,7 +245,7 @@ static chunk_t *get_empty_chunks(int n)
 
 
 /* Get @n filled chunks, pointing at blocks of @sz bytes each. */
-static chunk_t *get_filled_chunks(int n, int sz)
+static chunk_t *get_filled_chunks(int n, size_t sz)
 {
     chunk_t *h, *p;
     char *node;
@@ -300,7 +300,7 @@ static void gc_async_barrier(gc_t *gc)
 static chunk_t *get_alloc_chunk(gc_t *gc, int i)
 {
     chunk_t *alloc, *p, *new_p, *nh;
-    unsigned int sz;
+    int sz;
 
     alloc = gc_global.alloc[i];
     new_p = alloc->next;
@@ -604,7 +604,7 @@ gc_t *gc_init(void)
 }
 
 
-int gc_add_allocator(int alloc_size)
+int gc_add_allocator(size_t alloc_size)
 {
     int ni, i = gc_global.nr_sizes;
     while ( (ni = CASIO(&gc_global.nr_sizes, i, i+1)) != i ) i = ni;
