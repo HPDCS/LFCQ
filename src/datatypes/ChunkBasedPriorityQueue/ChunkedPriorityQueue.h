@@ -45,10 +45,10 @@ extern __thread int local_cache_usage;
 
 #ifdef FREEZE_64
 #define DIRTY_EXIST 	0x8000000000000000ull
-#define SET_WORD		0xFFFFFFFFFFFFFFFFULL
+#define SET_WORD	0xFFFFFFFFFFFFFFFFULL
 #else
 #define DIRTY_EXIST 	0x100000000ull	// for 32 bits word
-#define SET_WORD		0xFFFFFFFF
+#define SET_WORD	0xFFFFFFFF
 #endif	// FREEZE_64
 
 #if KEY_TYPE == INT || KEY_TYPE == FLOAT
@@ -110,7 +110,10 @@ public:
 		if(val >= REDUCE_CACHE){
 			int val = atomicInc(&freecnt, 1);
 			if(val>=ALLOCCACHE){
-				Chunk* res = (Chunk*) gc_alloc(ptst, gc_ck);
+				if(val==ALLOCCACHE) printf("Cache finita %llu\n", sizeof(Chunk));
+				Chunk* res = (Chunk*) 
+				//	malloc(sizeof(Chunk));// 
+					gc_alloc(ptst, gc_ck);
 				if(!res){
 					printf(" Statically allocated %d chunks were not enough :-(\n", ALLOCCACHE);
 					assert(0);
