@@ -19,7 +19,7 @@ extern __thread unsigned long long scan_list_length;
 extern __thread unsigned int read_table_count;
 
 
-#define ENABLE_CACHE 1
+#define ENABLE_CACHE 0
 #define MINIMUM_SIZE 1
 #define SAMPLE_SIZE 50
 

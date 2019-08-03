@@ -131,7 +131,8 @@ static inline void flush_current(table_t* h, unsigned long long newIndex)
  */   
 
 
-extern __thread unsigned long long search_steps;
+extern __thread unsigned long long search_en, search_de;
+extern __thread unsigned int t_state;
 
 static inline bucket_t* search(bucket_t *head, bucket_t **old_left_next, bucket_t **right_bucket, unsigned int *distance, unsigned int index)
 {
@@ -191,7 +192,12 @@ static inline bucket_t* search(bucket_t *head, bucket_t **old_left_next, bucket_
 	*old_left_next = left_next;
 	*right_bucket = tmp;
 	*distance = counter;
-	search_steps+=len;
+
+	if(t_state)
+		search_en+=len;
+	else
+		search_de+=len;
+
 	return left;		
 }
 

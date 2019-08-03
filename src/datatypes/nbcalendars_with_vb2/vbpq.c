@@ -117,6 +117,7 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
  */
 int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 {
+	t_state = 1;
 	insertions++;
 	assertf(timestamp < MIN || timestamp >= INFTY, "Key out of range %s\n", "");
 	vbpq* queue = (vbpq*) q; 	
@@ -218,6 +219,7 @@ __thread bucket_t *__last_bckt 				= NULL;
 
 pkey_t pq_dequeue(void *q, void** result)
 {
+t_state = 0;
 	vbpq *queue = (vbpq*)q;
 	bucket_t *min, *min_next, 
 					*left_node, *left_node_next, 
@@ -356,7 +358,8 @@ begin:
 	return INFTY;
 }
 
-__thread unsigned long long search_steps = 0ULL;
+__thread unsigned int t_state = 0;
+__thread unsigned long long search_en = 0ULL;
 __thread unsigned long long search_de = 0ULL;
 
 __thread unsigned long long rtm_other=0ULL, rtm_prova=0ULL, rtm_failed=0ULL, rtm_retry=0ULL, rtm_conflict=0ULL, rtm_capacity=0ULL, rtm_debug=0ULL,  rtm_explicit=0ULL,  rtm_nested=0ULL, rtm_insertions=0ULL, insertions=0ULL, rtm_a=0ULL, rtm_b=0ULL;
@@ -441,7 +444,8 @@ insertions2-rtm_insertions2);
 "BCKT contention %.10f - %llu - %llu - %llu ### "
 	"Enqueue: %.10f LEN: %.10f ### "
 	"Dequeue: %.10f LEN: %.10f ### "
-	"SEARCH STEPS: %.10f ### "
+	"SEARCH STEPS EN: %.10f ### "
+ "SEARCH STEPS DE: %.10f ### "
 	"NUMCAS: %llu : %llu ### "
 	"NEAR: %llu "
 	"RTC:%d,M:%lld, BW:%f\n",
@@ -454,7 +458,8 @@ insertions2-rtm_insertions2);
 			((float)scan_list_length_en)/((float)performed_enqueue),
 			((float)concurrent_dequeue) /((float)performed_dequeue),
 			((float)scan_list_length)   /((float)performed_dequeue),
-			((float)search_steps)		/((float)performed_dequeue+performed_enqueue),
+			((float)search_en)		/((float)performed_enqueue),
+			((float)search_de)              /((float)performed_dequeue),
 			num_cas, num_cas_useful,
 			near,
 			read_table_count	  ,

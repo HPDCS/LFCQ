@@ -88,7 +88,8 @@ struct __node_t
 	node_t * next;				// 32
 	bucket_t *  bucket;
 	void * volatile replica;
-	char __pad_2[16];
+	volatile unsigned long long taken;
+	char __pad_2[8];
 };
 
 /**
@@ -630,6 +631,7 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
   	} 
   	__last_node = curr;
   	__last_val  = old_extracted;
+//	__sync_bool_compare_and_swap(&curr->taken, 0, 1);
   	*result = curr->payload;
   	*ts		= curr->timestamp;
   	
