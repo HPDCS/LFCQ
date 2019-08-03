@@ -38,6 +38,11 @@ const pkey_t MAX_VAL 		= 0x7fffffffffffffffull -1;   // MSB reset, all the rest 
 const pkey_t MAX_VAL 		= 9007199254740992.0;   // MSB reset, all the rest set
 #endif
 
+
+#if KEY_TYPE == FLOAT
+const pkey_t MAX_VAL 		= 9007199254740992.0;   // MSB reset, all the rest set
+#endif
+
 // is needed to distinguish it from SL max sentinel
 const int DELETED_PTR	= 0x00000001;					// the mask for the least significant bit being set
 /************************************************************************************************/

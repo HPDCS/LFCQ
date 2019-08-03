@@ -51,7 +51,7 @@ extern __thread int local_cache_usage;
 #define SET_WORD		0xFFFFFFFF
 #endif	// FREEZE_64
 
-#if KEY_TYPE == INT
+#if KEY_TYPE == INT || KEY_TYPE == FLOAT
 #define ELM_TAKEN           0x80000000ull	// MSB set for 32 bits word, key must take less then 31 bit
 #define NO_ELM_TAKEN        0x7fffffffull   // MSB reset, all the rest set
 #endif

@@ -338,7 +338,7 @@ bool ChunkedPriorityQueue::insert_to_first_chunk(ThrInf* t, pkey_t key, Chunk *c
 	#if KEY_TYPE == LONG || KEY_TYPE == DOUBLE
 		if ( (*((unsigned long long*) &curbuf->vals[idx])) & ELM_TAKEN) {    // check if the key was taken
 		#else
-		if (curbuf->vals[idx] & ELM_TAKEN) {    // check if the key was taken
+		if ( (*((unsigned int*		) &curbuf->vals[idx])) & ELM_TAKEN) {    // check if the key was taken
 	#endif
         	//printf("insert to first finished without recovery\n");
 			t->eleminCnt++;
@@ -400,7 +400,7 @@ pkey_t ChunkedPriorityQueue::delmin(ThrInf* t){
 					#if KEY_TYPE == LONG || KEY_TYPE == DOUBLE
         				if ( bKey &&  !( (*((unsigned long long*) &bKey)) & ELM_TAKEN) ) {               // if the buffer key exists (not zero) and not taken (MSB not set)
 					#else
-        				if ( bKey &&  !(bKey & ELM_TAKEN) ) {               // if the buffer key exists (not zero) and not taken (MSB not set)
+        				if ( bKey &&  !( (*((unsigned int*) 	  &bKey)) & ELM_TAKEN) ) {               // if the buffer key exists (not zero) and not taken (MSB not set)
         			#endif
         					pkey_t fKey =                         // read a key from first chunk (the rest of the keys are greater)
         							head->vals[head->meta.status.bword.idx];
@@ -411,9 +411,9 @@ pkey_t ChunkedPriorityQueue::delmin(ThrInf* t){
 
         						if (atomicCAS(
         							#if KEY_TYPE == LONG || KEY_TYPE == DOUBLE
-        							(u64*) &b->vals[bIdx], bKey, ( (*((unsigned long long*) &bKey)) | ELM_TAKEN) 
+        							(u64*) 	&b->vals[bIdx], bKey, ( (*((unsigned long long*) &bKey)) | ELM_TAKEN) 
         							#else
-        							&b->vals[bIdx], bKey, (bKey | ELM_TAKEN) 
+        							(int*)		&b->vals[bIdx], bKey, ((*((int*) 		 &bKey)) | ELM_TAKEN) 
         							#endif
         							) == (pkey_t) bKey ) {
         							//printf("   <<< Thread %d - key %d was marked for elimination. Size of int: %d\n", t->id, bKey, (int)sizeof(int));
@@ -488,7 +488,7 @@ void ChunkedPriorityQueue::readAndFreezeValues(Chunk *curr, int frozenIdx, pkey_
 			#if KEY_TYPE == LONG || KEY_TYPE == DOUBLE
 				if ((curr->meta.status.getState()==BUFFER) && ((*((unsigned long long*) &val)) & ELM_TAKEN)) continue;   // in the first chunk the value  taken
 			#else
-				if ((curr->meta.status.getState()==BUFFER) && (val & ELM_TAKEN)) continue;   // in the first chunk the value  taken
+				if ((curr->meta.status.getState()==BUFFER) && ((*((unsigned int*) &val)) & ELM_TAKEN)) continue;   // in the first chunk the value  taken
 			#endif
     
 				if ((curr->meta.status.getState()==BUFFER) && (i%SKIP_ENTRIES_IN_BUFFER==0)) continue;

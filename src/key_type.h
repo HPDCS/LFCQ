@@ -9,7 +9,7 @@
 #define INT 	2
 #define LONG	3
 
-#define KEY_TYPE LONG
+#define KEY_TYPE FLOAT
 
 #define LESS(a,b) 		( (a) <  (b) )
 #define LEQ(a,b)		( (a) <= (b) )
@@ -23,10 +23,22 @@
 	#define INFTY 	DBL_MAX
 	#define MIN 	0.0
 	#define KEY_STRING "%f"
-	#define LOOKAHEAD 100.00
+	#define LOOKAHEAD 0.00
 	typedef double pkey_t;
 
 	#define MEAN  1.00;			// Maximum distance from the current event owned by the thread
+
+#elif KEY_TYPE == FLOAT
+
+	#include <float.h>
+	#define INFTY 	FLT_MAX
+	#define MIN 	0.0
+	#define KEY_STRING "%f"
+	#define LOOKAHEAD 0.00
+	typedef float pkey_t;
+
+	#define MEAN  1.00;			// Maximum distance from the current event owned by the thread
+
 
 #elif KEY_TYPE == INT
 
