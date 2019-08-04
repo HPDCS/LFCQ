@@ -220,34 +220,52 @@ int  migrate_node(bucket_t *bckt, table_t *new_h)
 	if(last_bckt == bckt){
 		if(++last_bckt_count == 1000000){
 			blocked = 1;
-			printf("YUSTON abbiamo un problema %p\n", bckt);
+			printf("HUSTON abbiamo un problema %p\n", bckt);
 //			while(1);
 		}
 	}
 	else
-		last_bckt = bckt;
+	
+	last_bckt = bckt;
 	extractions = bckt->extractions;
+	head = &bckt->head;
 	assertf(!is_freezed(extractions), "Migrating bucket not freezed%s\n", "");
+
+/*
 	if(!is_freezed_for_mov(extractions)){
 		assertf(!is_freezed_for_del(extractions), "Migrating bucket not del%s\n", "");
 		return OK;
 	}
+*/
+
 	toskip = get_cleaned_extractions(extractions);
 
 	while(toskip > 0ULL && head != tail){
 		head = head->next;
 		toskip--;
 	}
-	
+
 	//assertf(head == tail, "While migrating detected extracted tail%s\n", "");
+	curr = head;
+
 	if(head != tail) curr = head->next;
 	else curr = tail;
-	
-	while( curr != tail){
+
+//	if(curr != tail)
+	while
+//( 
+(
+curr
+// = curr->next) 
+!= tail)
+{
 	//		printf("Moving first\n");
 			curr_next = curr->next; 
 
-			if(curr->replica) {	curr = curr_next; continue;}
+			if(curr->replica) {	
+				curr = curr_next; 
+				continue;
+			}
 
 			new_index = hash(curr->timestamp, new_h->bucket_width);
 			do{
@@ -331,17 +349,30 @@ int  migrate_node(bucket_t *bckt, table_t *new_h)
 
 			//atomic
 			rtm_insertions++;
-			ATOMIC2(&bckt->lock, &left->lock){
+//CMB();
+//if(0)	
+bool committed = false;		
+unsigned int __status = 0;
+//ATOMIC2(&bckt->lock, &left->lock)
+if((__status = _xbegin ()) == _XBEGIN_STARTED)
+			     {
+//CMB();
 					if(ln->next   != rn  		) TM_ABORT(0xf3); //abort
-					if(curr->replica 	) TM_ABORT(0xf4); //abort
+					if(curr->replica  != NULL	) TM_ABORT(0xf4); //abort
 				
 					ln->next   = replica;
-					curr->replica = replica;
+//					curr->replica = replica;
+					committed = true;
 					TM_COMMIT();
-					__sync_fetch_and_add(&new_h->e_counter.count, 1);
+//				CMB();
+//					__sync_fetch_and_add(&new_h->e_counter.count, 1);
+//					CMB();
 				}
-				FALLBACK2(&bckt->lock, &left->lock){
-					long rand;
+else
+//				FALLBACK2(&bckt->lock, &left->lock)
+{
+committed = false;
+				long rand;
 				    lrand48_r(&seedT, &rand);
 				    rand = (rand & 1) ;
 					if(rand & 1) {node_unsafe_free(replica);return ABORT;}
@@ -355,8 +386,9 @@ int  migrate_node(bucket_t *bckt, table_t *new_h)
 						__sync_fetch_and_add(&new_h->e_counter.count, 1);
 					
 				}
-			END_ATOMIC2(&bckt->lock, &left->lock);
-
+//			END_ATOMIC2(&bckt->lock, &left->lock);
+//CMB();
+//if(committed)__sync_fetch_and_add(&new_h->e_counter.count, 1);
 			#ifdef VALIDATE_BUCKETS
 				node_t *tmp1 = &left->head;
 				while(tmp1->timestamp != INFTY)
@@ -379,7 +411,22 @@ int  migrate_node(bucket_t *bckt, table_t *new_h)
 			flush_current(new_h, new_index);
 //			curr = head->next;
 	}
+/*	
+	head = &bckt->head;
+	tail = bckt->tail;
+	toskip = get_cleaned_extractions(bckt->extractions);
 
+	while(toskip > 0ULL && head != tail){
+		head = head->next;
+		toskip--;
+	}
+	unsigned long long miss = 0;
+	while( (head = head->next) != tail){
+		if(!head->replica) miss++;
+	//head = head->next;
+	}
+	if(miss) LOG("%llu items not migrated\n", miss);
+*/
 	finalize_set_as_mov(bckt);
 	return OK;
 }
@@ -557,9 +604,15 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 	
 		}
 		
-		
+unsigned long long a,b;
+a = ATOMIC_READ( &h->e_counter ) - ATOMIC_READ( &h->d_counter );
+b =  ATOMIC_READ( &new_h->e_counter ) - ATOMIC_READ( &new_h->d_counter );
+assert(a == b || *curr_table_ptr != h);
+//LOG("OLD ELEM COUNT: %llu NEW ELEM_COUNT %llu\n", ATOMIC_READ( &h->e_counter ) - ATOMIC_READ( &h->d_counter ), ATOMIC_READ( &new_h->e_counter ) - ATOMIC_READ( &new_h->d_counter ));		
 		if( BOOL_CAS(curr_table_ptr, h, new_h) ){ //Try to replace the old table with the new one
 		 	// I won the challenge thus I collect memory
+//			LOG("OLD ELEM COUNT: %llu\n", ATOMIC_READ( &h->e_counter ) - ATOMIC_READ( &h->d_counter ));
+//LOG("OLD ELEM COUNT: %llu NEW ELEM_COUNT %llu\n",a,b);
 		 	gc_add_ptr_to_hook_list(ptst, h, 		 gc_hid[0]);
 		 }
 
