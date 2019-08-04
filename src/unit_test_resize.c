@@ -106,7 +106,7 @@ volatile unsigned int end_phase_3 = 0;
 volatile unsigned int end_test = 0;
 volatile long long final_ops = 0;
 
-#define QSIZE 250
+#define QSIZE 2500000
 
 __thread unsigned int stopforcheck = 0;
 
@@ -118,7 +118,7 @@ void* process(void *arg)
 	struct drand48_data seed;
 	struct drand48_data seed2    ;
 	cpu_set_t cpuset;
-	pkey_t timestamp, local_min = 0.0;
+	pkey_t timestamp, local_min = 1.0;
 
 	double (*current_dist) (struct drand48_data*, double) ;
 
@@ -293,7 +293,8 @@ int main(int argc, char **argv)
 		qsi += ops[i];
 		sum += tmp;
 	}
-	
+//	if(qsi)while(1);
 	printf("MISSING ITEMS:%lld\n" , qsi);
+	if(qsi)while(1);
 	return 0;
 }

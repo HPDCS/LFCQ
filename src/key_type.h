@@ -9,7 +9,7 @@
 #define INT 	2
 #define LONG	3
 
-#define KEY_TYPE FLOAT
+#define KEY_TYPE DOUBLE
 
 #define LESS(a,b) 		( (a) <  (b) )
 #define LEQ(a,b)		( (a) <= (b) )
