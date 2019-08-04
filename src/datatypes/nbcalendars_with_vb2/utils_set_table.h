@@ -1,3 +1,4 @@
+
 #ifndef SET_TABLE_UTILS_H_
 #define SET_TABLE_UTILS_H_
 
@@ -378,7 +379,7 @@ double compute_mean_separation_time(table_t *h,
 	for(i=0;i<SAMPLE_SIZE+1;i++)
 		sample_array[i] = 0;
 	i=0;
-    
+	counter = 1;    
     //read nodes until the total samples is reached or until someone else do it
 	acc = 0;
 	while(counter != sample_size && new_h->bucket_width == -1.0)
@@ -407,7 +408,8 @@ double compute_mean_separation_time(table_t *h,
 					while(curr != left->tail){
 						if(curr->timestamp == INFTY) assert(curr != left->tail);
 //						if(tid == 1)LOG("%d- TS: " "%.10f" "\n", tid, curr->timestamp);
-						sample_array[++counter] = curr->timestamp; 
+						if(curr->timestamp != sample_array[counter-1])
+							sample_array[++counter] = curr->timestamp; 
 						assert(curr->next!=NULL || h->new_table->bucket_width == -1.0 );
 						if(h->new_table->bucket_width != -1.0) return h->new_table->bucket_width;
 						curr = curr->next;
@@ -455,14 +457,20 @@ double compute_mean_separation_time(table_t *h,
 
 	if(newaverage <= 0.0){
 //		newaverage = 1.0;
-	printf("NEW AVG:.%10f\n" , newaverage);
+	printf("NEW AVG:.%10f AVG:%.20f 2*AVG:%.20f SAMPLE SIZE:%u:\n" , newaverage, average, 2.0*average, sample_size);
 newaverage=1.0;
+
+        for(i = 1; i<sample_size;i++)
+                printf("%u: %.20f\n", i, sample_array[i]);
+
+        for(i = 2; i<=sample_size;i++)
+                printf("%u: %.20f %u %.20f\n", i, sample_array[i]-sample_array[i-1], sample_array[i]==sample_array[i-1], 2.0*average);
 	}
 	//if(newaverage <  pow(10,-4))
 	//	newaverage = pow(10,-3);
 	if(isnan(newaverage)){
 	//	newaverage = 1.0;
-        printf("NEW AVG:.%10f\n" , newaverage);
+        printf("NEW AVG:.%10f AVG:%.10f SAMPLE SIZE:%u\n" , newaverage, average, sample_size);
 newaverage=1.0;       
  }	
     
