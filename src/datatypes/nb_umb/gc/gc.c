@@ -770,6 +770,7 @@ gc_t *gc_init(void)
 
 int gc_add_allocator(int alloc_size)
 {
+    assert(alloc_size < gc_global.page_size); // @TODO find a way to handle bigger sizes
     int ni, i = gc_global.nr_sizes, k;
     while ( (ni = CASIO(&gc_global.nr_sizes, i, i+1)) != i ) i = ni;
     gc_global.blk_sizes[i]  = alloc_size;
