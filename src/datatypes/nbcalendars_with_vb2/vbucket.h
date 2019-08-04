@@ -85,7 +85,7 @@ struct __node_t
 	char __pad_1[8-sizeof(pkey_t)];		// 16
 	unsigned int tie_breaker;			// 20
 	int hash;							// 24
-	node_t * next;				// 32
+	node_t * volatile next;				// 32
 	bucket_t *  bucket;
 	void * volatile replica;
 	volatile unsigned long long taken;
