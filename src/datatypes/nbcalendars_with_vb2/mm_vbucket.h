@@ -24,9 +24,10 @@ static inline void init_bucket_subsystem(){
 	printf("SIZES: %lu %lu\n", sizeof(bucket_t), sizeof(node_t));
 	gc_aid[GC_BUCKETS] 	=  gc_add_allocator(sizeof(bucket_t	));
 	gc_aid[GC_INTERNALS] 	=  gc_add_allocator(sizeof(node_t	));
-	int i; for(i=0;i<30;i++)  //printf("AID: %u\n", 
- gc_add_allocator(sizeof(node_t       ));
-//);
+	
+	//int i; for(i=0;i<30;i++)  //printf("AID: %u\n", 
+	//	 gc_add_allocator(sizeof(node_t       ));
+	//);
 }
 
 #define node_safe_free(ptr) 			gc_free(ptst, ptr, gc_aid[GC_INTERNALS])

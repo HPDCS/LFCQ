@@ -131,8 +131,6 @@ void __init_skipList_subsystem() {
 	for(i=0;i<NUM_LEVELS;i++)  
 		gc_id[i] = gc_add_allocator(sizeof (struct listNode_t) + (sizeof(markable_ref) * (i+1)));
 
-	critical_enter();
-	critical_exit();
 	
 	srand(time(NULL));
 }
