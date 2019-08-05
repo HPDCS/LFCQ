@@ -101,6 +101,9 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 		res->hashtable->array[i].socket = -1;
 		res->hashtable->array[i].extractions = 0ULL;
 	}
+
+	res->hashtable->index = alloc_index(MINIMUM_SIZE);
+	init_index(res->hashtable->index);
 	return res;
 }
 
@@ -126,6 +129,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	unsigned int index, size, epoch;
 	unsigned long long newIndex = 0;
 	int res, con_en = 0;
+	SkipList *lookup_table = NULL;
 	
 
 	//init the result
@@ -149,6 +153,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			newIndex = hash(timestamp, h->bucket_width);
 			// compute the index of the physical bucket
 			index = ((unsigned int) newIndex) % size;
+
+			lookup_table = h->index->array[index];
 			// get the bucket
 			bucket = h->array + index;
 			// read the number of executed enqueues for statistics purposes
@@ -163,7 +169,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 		#endif
 
 		// search the two adjacent nodes that surround the new key and try to insert with a CAS 
-	    res = search_and_insert(bucket, newIndex, timestamp, 0, epoch, payload);
+	    res = search_and_insert(bucket, lookup_table, newIndex, timestamp, 0, epoch, payload);
 	}
 
 
@@ -186,7 +192,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	drand48_r(&seedT, &rand);
 	unsigned int counter = 0;
 	left_node = search(h->array+((oldIndex + dist + (unsigned int)( ( (double)(size-dist) )*rand )) % size), &left_node_next, &right_node, &counter, 0);
-	if(is_marked(left_node, VAL) && left_node_next != right_node && BOOL_CAS(&left_node->next, left_node_next, right_node))
+	if(is_marked(left_node_next, VAL) && left_node_next != right_node && BOOL_CAS(&left_node->next, left_node_next, right_node))
 		connect_to_be_freed_node_list(left_node_next, counter);
 	#endif
 
@@ -295,6 +301,9 @@ begin:
 		if(left_node == NULL || left_node->index != index || is_freezed(left_node->extractions))
 		{
 			left_node = search(min, &left_node_next, &right_node, &counter, index);
+			if(is_marked(left_node_next, VAL) && left_node_next != right_node && BOOL_CAS(&left_node->next, left_node_next, right_node))
+				connect_to_be_freed_node_list(left_node_next, counter);
+	
 
 			// if i'm here it means that the physical bucket was empty. Check for queue emptyness
 			if(left_node->type == HEAD  && right_node->type == TAIL   && size == 1 && !is_freezed_for_mov(min->extractions))

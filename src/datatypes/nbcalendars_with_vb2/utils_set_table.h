@@ -281,6 +281,8 @@ static void set_new_table(table_t *h, unsigned int counter)
 			new_h->array[i].extractions = 0ULL;
 		}
 
+		new_h->index = alloc_index(new_size);
+
 		// try to publish the table
 		if(!BOOL_CAS(&(h->new_table), NULL,	new_h))
 		{

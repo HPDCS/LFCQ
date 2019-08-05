@@ -3,6 +3,7 @@
 
 #include "../../arch/atomic.h"
 #include "vbucket.h"
+#include "index.h"
 
 #define TID tid
 
@@ -49,7 +50,9 @@ struct __table
 	unsigned int last_resize_count; //48
 	unsigned int resize_count; 		//52
 	unsigned int elem_per_bucket;	//56
-	char zpad1[8];					//64
+	index_t		*index;				//64
+	//char zpad1[8];				//64
+
 
 	atomic_t e_counter;	
 	char zpad2[60];
@@ -110,8 +113,8 @@ __thread unsigned long long __cache_hit[INSERTION_CACHE_LEN];
 __thread unsigned long long __cache_load[INSERTION_CACHE_LEN];
 __thread table_t*  __cache_tblt = NULL;
 
-static int search_and_insert(bucket_t *head, unsigned int index, pkey_t timestamp, unsigned int tie_breaker, unsigned int epoch, void* payload){
-	bucket_t *left, *left_next, *right;
+static int search_and_insert(bucket_t *head, SkipList *lookup_table, unsigned int index, pkey_t timestamp, unsigned int tie_breaker, unsigned int epoch, void* payload){
+	bucket_t *left, *left_next, *right, *lookup_res;
 	unsigned int distance;
 
   #if ENABLE_CACHE == 1
@@ -126,13 +129,29 @@ static int search_and_insert(bucket_t *head, unsigned int index, pkey_t timestam
 	}
   #endif
 
-	left = search(head, &left_next, &right, &distance, index);
-	if(is_marked(left_next, VAL) && left_next != right && BOOL_CAS(&left->next, left_next, right))
-	connect_to_be_freed_node_list(left_next, distance);
+	int res = skipListContains(lookup_table, index, (intptr_t*) &lookup_res);
+	if(
+		res &&
+		lookup_res != NULL && 
+		lookup_res->index == index && 
+		//left->hash == __cache_hash[key] && 
+		!is_freezed(lookup_res->extractions) && 
+		is_marked(lookup_res->next, VAL)
+	)
+	{
+		if(bucket_connect(lookup_res, timestamp, tie_breaker, payload, epoch) == OK) return OK;
+	}
+
+
+	//left = search(head, &left_next, &right, &distance, index);
+	//if(is_marked(left_next, VAL) && left_next != right && BOOL_CAS(&left->next, left_next, right))
+	//connect_to_be_freed_node_list(left_next, distance);
 
 	do{
 		// first get bucket
 		left = search(head, &left_next, &right, &distance, index);
+		if(is_marked(left_next, VAL) && left_next != right && BOOL_CAS(&left->next, left_next, right))
+		connect_to_be_freed_node_list(left_next, distance);
 		
 		scan_list_length_en += distance;
 		// if the right or the left node is MOV signal this to the caller
@@ -164,7 +183,12 @@ static int search_and_insert(bucket_t *head, unsigned int index, pkey_t timestam
 			if(left_next != right)	
 				connect_to_be_freed_node_list(left_next, distance);
 
+			skipListAdd(lookup_table, index, (intptr_t)newb);
 			return OK;
+		}
+		if(left != lookup_res){
+			skipListRemove(lookup_table, index);
+			skipListAdd(lookup_table, index, (intptr_t)left);
 		}
 
 	  #if ENABLE_CACHE == 1
@@ -497,6 +521,7 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 	    #ifndef NDEBUG 
 		btail 			= &h->b_tail;	
 	    #endif
+	    init_index(h->new_table->index);
 		if(new_bw < 0)
 		{
 			block_table(h); 
