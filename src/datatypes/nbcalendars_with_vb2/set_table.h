@@ -129,8 +129,10 @@ static int search_and_insert(bucket_t *head, SkipList *lookup_table, unsigned in
 	}
   #endif
 
-	int res = skipListContains(lookup_table, index, (intptr_t*) &lookup_res);
+	int res = 0;
+	res = skipListContains(lookup_table, index, &lookup_res);
 	if(
+//		0 &&
 		res &&
 		lookup_res != NULL && 
 		lookup_res->index == index && 
@@ -183,12 +185,15 @@ static int search_and_insert(bucket_t *head, SkipList *lookup_table, unsigned in
 			if(left_next != right)	
 				connect_to_be_freed_node_list(left_next, distance);
 
-			skipListAdd(lookup_table, index, (intptr_t)newb);
+			skipListAdd(lookup_table, index, newb);
 			return OK;
 		}
-		if(left != lookup_res){
+		if(
+//0 && 
+left != lookup_res
+){
 			skipListRemove(lookup_table, index);
-			skipListAdd(lookup_table, index, (intptr_t)left);
+			skipListAdd(lookup_table, index, left);
 		}
 
 	  #if ENABLE_CACHE == 1
@@ -521,7 +526,7 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 	    #ifndef NDEBUG 
 		btail 			= &h->b_tail;	
 	    #endif
-	    init_index(h->new_table->index);
+		init_index(new_h->index);
 		if(new_bw < 0)
 		{
 			block_table(h); 
