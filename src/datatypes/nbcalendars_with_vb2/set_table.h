@@ -140,7 +140,7 @@ static int search_and_insert(bucket_t *head, SkipList *lookup_table, unsigned in
 		is_marked(lookup_res->next, VAL)
 	)
 	{
-		__cache_load[key]++;
+		__cache_load[0]++;
 		if(bucket_connect(lookup_res, timestamp, tie_breaker, payload, epoch) == OK) return OK;
 	}
 
