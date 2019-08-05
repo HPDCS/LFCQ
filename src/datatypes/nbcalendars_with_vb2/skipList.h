@@ -18,7 +18,7 @@
 #include "../../key_type.h"
 #include "../../gc/gc.h"
 #include "../../gc/ptst.h"
-
+#include "vbucket.h"
 
 
 #define REF_MASK   (~((uintptr_t)0x1))
@@ -30,9 +30,9 @@ typedef unsigned int sl_key_t;
 
 typedef struct listNode_t {
 	sl_key_t key;
-	intptr_t value;
+	bucket_t *value;
 	int topLevel;
-	struct listNode_t* next[];
+	struct listNode_t* volatile next[];
 } ListNode;
 
 typedef struct skipList_t {
@@ -62,7 +62,7 @@ static inline void* get_mark_and_ref(markable_ref m_ref, int* mark)
 //atomic actions:
 #define SET_ATOMIC_REF(ptr, newAddr, newMark) 	(*ptr = ADD_MARK(newAddr, newMark))
 
-#define REF_CAS(ptr,oldaddr,newaddr,oldmark,newmark) (__sync_val_compare_and_swap(ptr, ADD_MARK(oldaddr, oldmark), ADD_MARK(newaddr, newmark)))
+#define REF_CAS(ptr,oldaddr,newaddr,oldmark,newmark) (__sync_bool_compare_and_swap(ptr, ADD_MARK(oldaddr, oldmark), ADD_MARK(newaddr, newmark)))
 
 
 #ifndef	FALSE
@@ -106,7 +106,7 @@ inline static int randomLevel() {
 	return ctr;
 }
 
-ListNode* makeNormalNode(sl_key_t key, int height, intptr_t value) {
+ListNode* makeNormalNode(sl_key_t key, int height, bucket_t *value) {
 	int i;
 	ListNode *newNode = (ListNode*) 
 	gc_alloc(ptst, gc_id[height]); 
@@ -142,7 +142,7 @@ static SkipList* skipListInit() {
 	assert(newSkipList != NULL);
 	newSkipList->head = makeNormalNode(0  		, MAX_LEVEL, 0);   //makeSentinelNode(MIN);
 	newSkipList->tail = makeNormalNode(UINT_MAX	, MAX_LEVEL, 0); //makeSentinelNode(INFTY);
-
+//	printf("nw SL H:%p T:%p\n", newSkipList->head, newSkipList->tail);
 	for (i = 0; i <= MAX_LEVEL; i++) {
 		newSkipList->head->next[i]
 					= NEW_MARKED_REFERENCE(newSkipList->tail, FALSE_MARK);
@@ -214,7 +214,7 @@ int skipListFind(SkipList *skipList, sl_key_t key, ListNode *preds[], ListNode *
  * adds key to the skiplist
  * returns 1 on success or 0 if the key was already in the skiplist.
  */
-int skipListAdd(SkipList *skipList, sl_key_t key, intptr_t value) {
+int skipListAdd(SkipList *skipList, sl_key_t key, bucket_t *value) {
 	int topLevel = randomLevel();
 	int level;
 
@@ -234,7 +234,7 @@ int skipListAdd(SkipList *skipList, sl_key_t key, intptr_t value) {
 			ListNode *pred = preds[MIN_LEVEL];
 			ListNode *succ = succs[MIN_LEVEL];
 			if (  !(REF_CAS(&(pred->next[MIN_LEVEL]), succ, newNode, FALSE_MARK, FALSE_MARK))  ) {
-				gc_free(ptst, newNode, topLevel);
+				gc_free(ptst, newNode, gc_id[topLevel]);
 				continue;
 			}
 			for (level = MIN_LEVEL + 1; level <= topLevel; level++) {
@@ -311,7 +311,7 @@ int skipListRemove(SkipList *skipList, sl_key_t key) {
  * returns 1 if the key was in the skiplist or 0 if it wasn't.
  * in any case pValue is holding this or previous key value or NULL
  */
-int skipListContains(SkipList *skipList, sl_key_t key, intptr_t* pValue) {
+int skipListContains(SkipList *skipList, sl_key_t key, bucket_t **pValue) {
 	int marked = 0, level;
 	*pValue = 0;		// initialize for the case the key is the non-existing minimal 
 

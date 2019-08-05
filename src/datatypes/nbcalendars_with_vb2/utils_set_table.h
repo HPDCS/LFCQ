@@ -292,7 +292,6 @@ static void set_new_table(table_t *h, unsigned int counter)
 		else
 			LOG("%u - CHANGE SIZE from %u to %u, items %u OLD_TABLE:%p NEW_TABLE:%p\n", TID, size, new_size, counter, h, new_h);
 
-		init_index(h->new_table->index);
 	}
 }
 
