@@ -21,9 +21,9 @@
 
 
 
-#define REF_MASK (~(0x1))
-#define TRUE_MARK 0x1
-#define FALSE_MARK 0x0
+#define REF_MASK   (~((uintptr_t)0x1))
+#define TRUE_MARK  (  (uintptr_t)0x1 )
+#define FALSE_MARK (  (uintptr_t)0x0 )
 #define LSB 0x1
 
 typedef unsigned int sl_key_t;
