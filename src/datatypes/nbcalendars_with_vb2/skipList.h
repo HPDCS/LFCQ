@@ -31,6 +31,7 @@ typedef unsigned int sl_key_t;
 typedef struct listNode_t {
 	sl_key_t key;
 	bucket_t *value;
+	long hash;
 	int topLevel;
 	struct listNode_t* volatile next[];
 } ListNode;
@@ -114,6 +115,7 @@ ListNode* makeNormalNode(sl_key_t key, int height, bucket_t *value) {
 	assert(newNode != NULL);
 	newNode->key = key;
 	newNode->value = value;
+	newNode->hash = value->hash;
 
 	for (i = 0; i <= height; i++)
 		newNode->next[i] = (markable_ref)NULL;
@@ -337,7 +339,7 @@ int skipListContains(SkipList *skipList, sl_key_t key, bucket_t **pValue) {
 
 		} // end of the for loop going over the levels
 
-		return (curr->key == key);
+		return (curr->key == key && curr->hash == curr->value->hash);
 	} // end of the while loop
 
 }

@@ -136,11 +136,11 @@ static int search_and_insert(bucket_t *head, SkipList *lookup_table, unsigned in
 		res &&
 		lookup_res != NULL && 
 		lookup_res->index == index && 
-		//left->hash == __cache_hash[key] && 
 		!is_freezed(lookup_res->extractions) && 
 		is_marked(lookup_res->next, VAL)
 	)
 	{
+		__cache_load[key]++;
 		if(bucket_connect(lookup_res, timestamp, tie_breaker, payload, epoch) == OK) return OK;
 	}
 
