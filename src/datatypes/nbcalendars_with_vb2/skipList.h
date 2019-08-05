@@ -26,14 +26,29 @@
 #define FALSE_MARK 0x0
 #define LSB 0x1
 
-typedef size_t markable_ref;
+typedef unsigned int sl_key_t;
+
+typedef struct listNode_t {
+	sl_key_t key;
+	intptr_t value;
+	int topLevel;
+	struct listNode_t* next[];
+} ListNode;
+
+typedef struct skipList_t {
+	ListNode *head;
+	ListNode *tail;
+} SkipList;
+
+typedef ListNode* markable_ref;
+
 
 //#define CAS(ptr, oldval, newval) __sync_val_compare_and_swap(ptr, oldval, newval)
 
-#define NEW_MARKED_REFERENCE(addr, mark) ((markable_ref)addr | mark)
+#define NEW_MARKED_REFERENCE(addr, mark) ((markable_ref)((uintptr_t)addr | mark))
 
-#define GET_MARK(m_ref) ((int)(m_ref & LSB))
-#define GET_REF(m_ref) ((void*)(m_ref & REF_MASK))
+#define GET_MARK(m_ref) ( (int  ) ( ((uintptr_t)m_ref) & LSB)		)
+#define GET_REF(m_ref)  ( (void*) ( ((uintptr_t)m_ref) & REF_MASK)	)
 
 static inline void* get_mark_and_ref(markable_ref m_ref, int* mark)
 {
@@ -42,7 +57,7 @@ static inline void* get_mark_and_ref(markable_ref m_ref, int* mark)
 }
 
 //adds mark to a pointer
-#define ADD_MARK(addr, mark) ((markable_ref)(GET_REF((markable_ref)addr)) | mark)
+#define ADD_MARK(addr, mark)  ( (markable_ref) (  ( (uintptr_t) GET_REF(addr) ) | mark  ) )
 
 //atomic actions:
 #define SET_ATOMIC_REF(ptr, newAddr, newMark) 	(*ptr = ADD_MARK(newAddr, newMark))
@@ -57,21 +72,6 @@ static inline void* get_mark_and_ref(markable_ref m_ref, int* mark)
 #ifndef	TRUE
 #define	TRUE	(!FALSE)
 #endif
-
-typedef unsigned int sl_key_t;
-
-typedef struct listNode_t {
-	sl_key_t key;
-	intptr_t value;
-	int topLevel;
-	markable_ref next[];
-} ListNode;
-
-typedef struct skipList_t {
-	ListNode *head;
-	ListNode *tail;
-} SkipList;
-
 
 //__thread unsigned long nextr = 1;
 __thread unsigned long nextr;
@@ -142,8 +142,8 @@ static SkipList* skipListInit() {
 	int i;
 	SkipList *newSkipList = (SkipList*) malloc(sizeof(SkipList));
 	assert(newSkipList != NULL);
-	newSkipList->head = makeNormalNode(0  , MAX_LEVEL, 0);   //makeSentinelNode(MIN);
-	newSkipList->tail = makeNormalNode(UINT_MAX, MAX_LEVEL, 0); //makeSentinelNode(INFTY);
+	newSkipList->head = makeNormalNode(0  		, MAX_LEVEL, 0);   //makeSentinelNode(MIN);
+	newSkipList->tail = makeNormalNode(UINT_MAX	, MAX_LEVEL, 0); //makeSentinelNode(INFTY);
 
 	for (i = 0; i <= MAX_LEVEL; i++) {
 		newSkipList->head->next[i]
@@ -174,7 +174,7 @@ int skipListFind(SkipList *skipList, sl_key_t key, ListNode *preds[], ListNode *
 				while (marked) {
 
 					snip
-					= REF_CAS(&(pred->next[level]),curr,succ,FALSE_MARK,FALSE_MARK);
+					= (uintptr_t) REF_CAS(&(pred->next[level]),curr,succ,FALSE_MARK,FALSE_MARK);
 
 					if (!snip) {
 						//goto retry
@@ -287,7 +287,7 @@ int skipListRemove(SkipList *skipList, sl_key_t key) {
 				int marked = FALSE;
 				succ = (ListNode*)get_mark_and_ref(nodeToRemove->next[level], &marked);
 				while (!marked) {
-					REF_CAS(&(nodeToRemove->next[level]), succ, succ, FALSE_MARK, TRUE_MARK);
+					(void)REF_CAS(&(nodeToRemove->next[level]), succ, succ, FALSE_MARK, TRUE_MARK);
 					succ = (ListNode*)get_mark_and_ref(nodeToRemove->next[level], &marked);
 				}
 			}
@@ -295,7 +295,7 @@ int skipListRemove(SkipList *skipList, sl_key_t key) {
 			succ = (ListNode*)get_mark_and_ref(nodeToRemove->next[MIN_LEVEL], &marked);
 			while (TRUE) {
 				int
-				iMarkedIt =
+				iMarkedIt = (uintptr_t)
 						REF_CAS(&(nodeToRemove->next[MIN_LEVEL]), succ, succ, FALSE_MARK, TRUE_MARK);
 				succ = (ListNode*)get_mark_and_ref(succs[MIN_LEVEL]->next[MIN_LEVEL], &marked);
 				if (iMarkedIt) {
