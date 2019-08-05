@@ -56,6 +56,7 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	_init_gc_subsystem();
 	// add allocator of nbc_bucket_node
 	init_bucket_subsystem();
+	__init_skipList_subsystem();
 	// add callback for set tables and array of nodes whene a grace period has been identified
 	gc_hid[0] = gc_add_hook(std_free_hook);
 	critical_enter();
