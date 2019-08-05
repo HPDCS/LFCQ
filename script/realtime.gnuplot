@@ -34,9 +34,10 @@ set size 0.6,0.7
 set offset 2,2,10,10
 set title 'Queue Size = '.queue
 set xlabel '#Threads'
-set grid  lc rgb "#888888"
+set grid  lc rgb "#666666"
 set ylabel 'Throughput (MOps/s)' offset 2
 set xtics 0,4,50
+set ytics 2
 
 set style line  2 dt  1 lc rgb "#000000"
 set style line  3 dt  2 lc rgb "#000000"
@@ -51,7 +52,7 @@ set style line 11 dt 10 lc rgb "#000000"
 set style line 12 dt 11 lc rgb "#000000"
 
 	
-#set yrange [500:8000]
+set yrange [0:24]
 set xrange [0:50]
 set offset 2,2,1,1
 

@@ -9,7 +9,7 @@ TIME=10
 # cmd parameters
 ##############################
 
-data_types="NBCQ MARO VBPQ" #CBCQ"
+data_types="NBCQ MARO VBPQ CBCQ"
 threads="48 36 24 12 6 1"
 iterations="1 2 3 4 5" # 6 7 8 9 10"
 distributions="E" #E" # U T N C"
