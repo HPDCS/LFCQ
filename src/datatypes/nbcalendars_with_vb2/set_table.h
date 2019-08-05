@@ -129,27 +129,24 @@ static int search_and_insert(bucket_t *head, SkipList *lookup_table, unsigned in
 	}
   #endif
 
-	int res = 0;
-	res = skipListContains(lookup_table, index, &lookup_res);
-	if(
-//		0 &&
-		res &&
-		lookup_res != NULL && 
-		lookup_res->index == index && 
-		!is_freezed(lookup_res->extractions) && 
-		is_marked(lookup_res->next, VAL)
-	)
-	{
-		__cache_load[0]++;
-		if(bucket_connect(lookup_res, timestamp, tie_breaker, payload, epoch) == OK) return OK;
-	}
-
-
 	//left = search(head, &left_next, &right, &distance, index);
 	//if(is_marked(left_next, VAL) && left_next != right && BOOL_CAS(&left->next, left_next, right))
 	//connect_to_be_freed_node_list(left_next, distance);
 
 	do{
+		int res = skipListContains(lookup_table, index, &lookup_res);
+		if(
+	//		0 &&
+			res &&
+			lookup_res != NULL && 
+			lookup_res->index == index && 
+			!is_freezed(lookup_res->extractions) && 
+			is_marked(lookup_res->next, VAL)
+		)
+		{
+			__cache_load[0]++;
+			if(bucket_connect(lookup_res, timestamp, tie_breaker, payload, epoch) == OK) return OK;
+		}
 		// first get bucket
 		left = search(head, &left_next, &right, &distance, index);
 		if(is_marked(left_next, VAL) && left_next != right && BOOL_CAS(&left->next, left_next, right))
@@ -189,9 +186,10 @@ static int search_and_insert(bucket_t *head, SkipList *lookup_table, unsigned in
 			return OK;
 		}
 		if(
-//0 && 
-left != lookup_res
-){
+		//0 && 
+		left != lookup_res
+		)
+		{
 			skipListRemove(lookup_table, index);
 			skipListAdd(lookup_table, index, left);
 		}
