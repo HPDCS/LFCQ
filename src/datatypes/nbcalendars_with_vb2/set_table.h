@@ -687,9 +687,12 @@ assert(a == b || *curr_table_ptr != h);
 		near = 0ULL;
 		int i = 0;
 		for(i=0;i<INSERTION_CACHE_LEN-1;i++){
-			__cache_bckt[i] = NULL;
-			__cache_node[i] = NULL;
-			__cache_hash[i] = 0;
+			__cache_bckt[i]  = NULL;
+			__cache_node[i]  = NULL;
+			__cache_hash[i]  = 0;
+			__cache_hit[i]   = 0;
+			__cache_load[i]  = 0;
+			__cache_index[i] = 0;
 		}
 		__cache_tblt = h;
 	}
