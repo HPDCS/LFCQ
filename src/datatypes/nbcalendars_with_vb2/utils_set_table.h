@@ -307,6 +307,14 @@ static void init_table(table_t *table){
 	for(i=0;i<table->size;i++){
 		if(table->array[i] == NULL){
 			if(curr == NULL) curr = bucket_alloc(&table->n_tail);
+
+			curr->next = &table->b_tail;
+			curr->tail = &table->n_tail;
+			curr->type = HEAD;
+			curr->epoch = 0U;
+			curr->index = i;
+			curr->socket = -1;
+			curr->extractions = 0ULL;
 			if(__sync_bool_compare_and_swap(table->array + i, NULL, curr)){
 //				printf("Setting skip list %d %p\n", i, curr);
 				 curr = NULL;
