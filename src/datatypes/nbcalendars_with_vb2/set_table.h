@@ -3,7 +3,8 @@
 
 #include "../../arch/atomic.h"
 #include "vbucket.h"
-#include "index.h"
+#include "skipList.h"
+
 
 #define TID tid
 
@@ -36,6 +37,15 @@ extern __thread unsigned int read_table_count;
 
 
 #define PERC_RESIZE_COUNT 0.25
+
+typedef struct __index index_t;
+struct __index
+{
+	unsigned int length;
+	SkipList ** volatile array;
+};
+
+
 
 typedef struct __table table_t;
 struct __table
@@ -79,6 +89,7 @@ struct __table
 
 };
 
+#include "index.h"
 #include "utils_set_table.h"
 
 #if ENABLE_CACHE == 1
@@ -150,10 +161,6 @@ static int search_and_insert(bucket_t *head, SkipList *lookup_table, unsigned in
 	}
   #endif
 
-	//left = search(head, &left_next, &right, &distance, index);
-	//if(is_marked(left_next, VAL) && left_next != right && BOOL_CAS(&left->next, left_next, right))
-	//connect_to_be_freed_node_list(left_next, distance);
-
 	do{
 		long old_hash = 0;
 //		int res = skipListContains(lookup_table, index, &lookup_res, &old_hash);
@@ -192,14 +199,35 @@ static int search_and_insert(bucket_t *head, SkipList *lookup_table, unsigned in
 				
 			}while(right->index <= index);
 		}
-		else
-		{
-		//	start_node = head;
-			// first get bucket
-			left = search(head, &left_next, &right, &distance, index);
-			if(is_marked(left_next, VAL) && left_next != right && BOOL_CAS(&left->next, left_next, right))
-				connect_to_be_freed_node_list(left_next, distance);
+	
+/*	}
+
+		if(!found){
+			ListNode *pred = preds[MIN_LEVEL];
+			ListNode *succ = succs[MIN_LEVEL];
+
+			ListNode *newNode = makeNormalNode(key, topLevel, value);
+			for (level = MIN_LEVEL; level <= topLevel; level++) {
+				ListNode *succ = succs[level];
+				SET_ATOMIC_REF(&(newNode->next[level]), succ, FALSE_MARK);
+			}
+			ListNode *pred = preds[MIN_LEVEL];
+			ListNode *succ = succs[MIN_LEVEL];
+			if (  !(REF_CAS(&(pred->next[MIN_LEVEL]), succ, newNode, FALSE_MARK, FALSE_MARK))  ) {
+				gc_free(ptst, newNode, gc_id[topLevel]);
+				continue;
+			}
 		}
+
+		
+		{
+*/
+		// first get bucket
+		left = search(head, &left_next, &right, &distance, index);
+		if(is_marked(left_next, VAL) && left_next != right && BOOL_CAS(&left->next, left_next, right))
+			connect_to_be_freed_node_list(left_next, distance);
+		
+
 		//scan_list_length_en += distance;
 		// if the right or the left node is MOV signal this to the caller
 		if(is_marked(left_next, MOV) ) 	return MOV_FOUND;
@@ -233,6 +261,7 @@ static int search_and_insert(bucket_t *head, SkipList *lookup_table, unsigned in
 			//skipListAdd(lookup_table, index, newb);
 			return OK;
 		}
+/*		
 		if(
 		0 && 
 		left != lookup_res
@@ -241,7 +270,7 @@ static int search_and_insert(bucket_t *head, SkipList *lookup_table, unsigned in
 			skipListRemove(lookup_table, index);
 			skipListAdd(lookup_table, index, left);
 		}
-
+*/
 	  #if ENABLE_CACHE == 1
 		 	__cache_bckt[index % INSERTION_CACHE_LEN] = left;
 		 	__cache_hash[index % INSERTION_CACHE_LEN] = left->hash;
@@ -252,26 +281,6 @@ static int search_and_insert(bucket_t *head, SkipList *lookup_table, unsigned in
 	return ABORT;
 }
 
-
-/*
-static inline bucket_t* get_next_valid(bucket_t *bckt){
-	bucket_t *res, *res_next, *bckt_next;
-	unsigned int count = -1;
-	bckt_next = res_next = bckt->next;
-
-	do{
-		res = get_unmarked(res_next);
-		execute_operation(res);
-		res_next = res->next;
-		count++;
-	}while(res->type != TAIL && is_marked(res_next, DEL));
-
-	if( count && __sync_bool_compare_and_swap(&bckt->next, bckt_next, get_marked(res, MOV)) ){
-		connect_to_be_freed_node_list(bckt_next, count);
-	}
-	return res;
-}
-*/
 
 __thread void *last_bckt = NULL;
 __thread unsigned long long last_bckt_count = 0ULL;
@@ -572,7 +581,7 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 	    #ifndef NDEBUG 
 		btail 			= &h->b_tail;	
 	    #endif
-		init_index(new_h->index);
+		init_index(new_h);
 		if(new_bw < 0)
 		{
 			block_table(h); 

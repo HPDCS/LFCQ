@@ -26,22 +26,7 @@
 #define FALSE_MARK (  (uintptr_t)0x0 )
 #define LSB 0x1
 
-typedef unsigned int sl_key_t;
 
-typedef struct listNode_t {
-	sl_key_t key;
-	bucket_t *value;
-	long hash;
-	int topLevel;
-	struct listNode_t* volatile next[];
-} ListNode;
-
-typedef struct skipList_t {
-	ListNode *head;
-	ListNode *tail;
-} SkipList;
-
-typedef ListNode* markable_ref;
 
 
 //#define CAS(ptr, oldval, newval) __sync_val_compare_and_swap(ptr, oldval, newval)
@@ -85,7 +70,7 @@ inline static long simRandom(void) {
 
 
 //Max skiplist level
-#define NUM_LEVELS 28
+#define NUM_LEVELS 1
 #define MAX_LEVEL  (NUM_LEVELS-1)
 #define MIN_LEVEL  0
 
@@ -213,6 +198,7 @@ int skipListFind(SkipList *skipList, sl_key_t key, ListNode *preds[], ListNode *
 	}
 }
 
+
 /*
  * adds key to the skiplist
  * returns 1 on success or 0 if the key was already in the skiplist.
@@ -309,42 +295,7 @@ int skipListRemove(SkipList *skipList, sl_key_t key) {
 	}
 }
 
-/*
- * finds a key in the skiplist.
- * returns 1 if the key was in the skiplist or 0 if it wasn't.
- * in any case pValue is holding this or previous key value or NULL
- */
-int skipListContains(SkipList *skipList, sl_key_t key, bucket_t **pValue, long *hash) {
-	int marked = 0, level;
-	*pValue = 0;		// initialize for the case the key is the non-existing minimal 
 
-	while (TRUE) {
-		ListNode *pred = skipList->head, *curr = NULL, *succ = NULL;
-
-		for (level = MAX_LEVEL; level >= MIN_LEVEL; level--) {
-			curr = (ListNode*)GET_REF(pred->next[level]);
-			while (TRUE) {
-				succ = (ListNode*)get_mark_and_ref(curr->next[level], &marked);
-				while (marked) {
-					curr = (ListNode*)GET_REF(curr->next[level]);
-					succ = (ListNode*)get_mark_and_ref(curr->next[level], &marked);
-				}
-				if (curr->key < key) {
-					*pValue = curr->value;
-					if(curr->value) *hash	= curr->hash;
-					pred = curr;
-					curr = succ;
-				} else {
-					break;
-				}
-			}
-
-		} // end of the for loop going over the levels
-
-		return (curr->key == key);
-	} // end of the while loop
-
-}
 
 /*Destroy the skiplist*/
 void skipListDestroy(SkipList *sl) {

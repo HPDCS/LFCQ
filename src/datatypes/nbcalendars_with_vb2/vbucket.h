@@ -77,6 +77,24 @@ long fallback;\
 
 typedef struct __node_t node_t;
 typedef struct __bucket_t bucket_t;
+typedef unsigned int sl_key_t;
+
+typedef struct listNode_t {
+	sl_key_t key;
+	int topLevel;
+	bucket_t * volatile bottom_level;
+	bucket_t * volatile value;
+	volatile long hash;
+	struct listNode_t* volatile next[];
+} ListNode;
+
+typedef struct skipList_t {
+	ListNode *head;
+	ListNode *tail;
+} SkipList;
+
+typedef ListNode* markable_ref;
+
 
 struct __node_t
 {
@@ -103,7 +121,7 @@ struct __bucket_t
 	unsigned int index;				// 16
 	unsigned int type;
 	volatile int socket;		// 24
-	unsigned long long __pad_4;       // 52
+	ListNode *inode;       // 52
 	node_t * tail;					// 32
 	volatile unsigned long long op_descriptor;
 	node_t * volatile pending_insert;		// 40

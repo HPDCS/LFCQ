@@ -104,7 +104,7 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	}
 
 	res->hashtable->index = alloc_index(MINIMUM_SIZE);
-	init_index(res->hashtable->index);
+	init_index(res->hashtable);
 	return res;
 }
 
