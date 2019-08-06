@@ -194,9 +194,9 @@ static inline bucket_t* search(bucket_t *head, bucket_t **old_left_next, bucket_
 	*right_bucket = tmp;
 	*distance = counter;
 
-	if(t_state)
+	if(t_state == 2)
 		search_en+=len;
-	else
+	if(t_state == 1)
 		search_de+=len;
 
 	return left;		

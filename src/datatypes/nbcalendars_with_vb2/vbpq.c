@@ -143,12 +143,14 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 		
 		// It is the first iteration or a node marked as MOV has been met (a resize is occurring)
 		if(res == MOV_FOUND){
+
 			// check for a resize
+			t_state = 0;
 			h = read_table(&queue->hashtable);
 			// get actual size
 			size = h->size;
 	        // read the actual epoch
-        	epoch = (h->current & MASK_EPOCH);
+	        	epoch = (h->current & MASK_EPOCH);
 			last_bw = h->bucket_width;
 			// compute the index of the virtual bucket
 			newIndex = hash(timestamp, h->bucket_width);
@@ -168,7 +170,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			goto out;
 		}
 		#endif
-
+		t_state = 2;
 		// search the two adjacent nodes that surround the new key and try to insert with a CAS 
 	    res = search_and_insert(bucket, lookup_table, newIndex, timestamp, 0, epoch, payload);
 	}
@@ -248,7 +250,9 @@ t_state = 0;
 
 begin:
 	// Get the current set table
+t_state =0;
 	h = read_table(&queue->hashtable);
+t_state =1;
 //   acquire_node(&h->socket);
 	// Get data from the table
 	size = h->size;

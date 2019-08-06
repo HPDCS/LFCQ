@@ -156,7 +156,7 @@ static int search_and_insert(bucket_t *head, SkipList *lookup_table, unsigned in
 
 	do{
 		long old_hash = 0;
-		int res = skipListContains(lookup_table, index, &lookup_res, &old_hash);
+//		int res = skipListContains(lookup_table, index, &lookup_res, &old_hash);
 
 /*		if(
 			0 &&
@@ -176,7 +176,7 @@ static int search_and_insert(bucket_t *head, SkipList *lookup_table, unsigned in
 			) 
 				return OK;
 		}
-*/		if(
+*/		if( 0 &&
 			lookup_res != NULL && 
 			lookup_res->index <= index &&
                         !is_freezed(lookup_res->extractions)    &&
@@ -230,11 +230,11 @@ static int search_and_insert(bucket_t *head, SkipList *lookup_table, unsigned in
 			if(left_next != right)	
 				connect_to_be_freed_node_list(left_next, distance);
 
-			skipListAdd(lookup_table, index, newb);
+			//skipListAdd(lookup_table, index, newb);
 			return OK;
 		}
 		if(
-		//0 && 
+		0 && 
 		left != lookup_res
 		)
 		{
