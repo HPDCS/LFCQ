@@ -2,7 +2,7 @@
 #define __H_CACHE
 
 
-#define ENABLE_CACHE 0
+#define ENABLE_CACHE 1
 
 #if ENABLE_CACHE == 1
 static unsigned int hash64shift(unsigned int a)
@@ -38,6 +38,8 @@ __thread long 	   		__cache_hash[INSERTION_CACHE_LEN];
 __thread unsigned int  	__cache_index[INSERTION_CACHE_LEN];
 __thread unsigned long long __cache_hit[INSERTION_CACHE_LEN];
 __thread unsigned long long __cache_load[INSERTION_CACHE_LEN];
+__thread void*  __cache_tblt = NULL;
+
 
 static inline void update_cache(bucket_t *bckt){
   #if ENABLE_CACHE == 1
