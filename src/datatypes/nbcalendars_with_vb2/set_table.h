@@ -84,7 +84,7 @@ struct __table
 	bucket_t b_tail;
 //	char zpad5[256-sizeof(bucket_t)];
 
-	bucket_t *array[1];			//32
+	bucket_t array[1];			//32
 
 
 };
@@ -354,7 +354,7 @@ curr
 			new_index = hash(curr->timestamp, new_h->bucket_width);
 			do{
 				// first get bucket
-				left = search(new_h->array[new_index % new_h->size], &left_next, &right, &distance, new_index);
+				left = search(&new_h->array[new_index % new_h->size], &left_next, &right, &distance, new_index);
 
 				//printf("A left: %p right:%p\n", left, right);
 				extractions = left->extractions;
@@ -521,7 +521,7 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
   	return *curr_table_ptr;
   #else
 
-	bucket_t *bucket, **array	;
+	bucket_t *bucket, *array	;
     #ifndef NDEBUG
 	bucket_t *btail;
     #endif
@@ -582,7 +582,6 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 		btail 			= &h->b_tail;	
 	    #endif
 		init_index(new_h);
-		init_table(new_h);
 		if(new_bw < 0)
 		{
 			block_table(h); 
@@ -611,7 +610,7 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 		
 		for(i = 0; i < size; i++)
 		{
-			bucket = array[((i + start) % size)];	// get the head 
+			bucket = array + ((i + start) % size);	// get the head 
 			// get the successor of the head (unmarked because heads are MOV)
 			do{
 				bucket_t *left_node2 = get_next_valid(bucket);
@@ -655,7 +654,7 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 		
 		for(i = 0; i < size; i++)
 		{
-			bucket = array[((i + start) % size)];	// get the head 
+			bucket = array + ((i + start) % size);	// get the head 
 			// get the successor of the head (unmarked because heads are MOV)
 			do{
 				bucket_t *left_node2 = get_next_valid(bucket);
