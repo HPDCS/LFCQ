@@ -113,6 +113,27 @@ __thread unsigned long long __cache_hit[INSERTION_CACHE_LEN];
 __thread unsigned long long __cache_load[INSERTION_CACHE_LEN];
 __thread table_t*  __cache_tblt = NULL;
 
+
+
+static inline bucket_t* get_next_valid(bucket_t *bckt){
+	bucket_t *res, *res_next, *bckt_next;
+	unsigned int count = -1;
+	bckt_next = res_next = bckt->next;
+
+	do{
+		res = get_unmarked(res_next);
+		execute_operation(res);
+		res_next = res->next;
+		count++;
+	}while(res->type != TAIL && is_marked(res_next, DEL));
+
+	if( count && __sync_bool_compare_and_swap(&bckt->next, bckt_next, get_marked(res, MOV)) ){
+		connect_to_be_freed_node_list(bckt_next, count);
+	}
+	return res;
+}
+
+
 static int search_and_insert(bucket_t *head, SkipList *lookup_table, unsigned int index, pkey_t timestamp, unsigned int tie_breaker, unsigned int epoch, void* payload){
 	bucket_t *left, *left_next, *right, *lookup_res;
 	unsigned int distance;
@@ -134,25 +155,52 @@ static int search_and_insert(bucket_t *head, SkipList *lookup_table, unsigned in
 	//connect_to_be_freed_node_list(left_next, distance);
 
 	do{
-		int res = skipListContains(lookup_table, index, &lookup_res);
-		if(
-	//		0 &&
+		long old_hash = 0;
+		int res = skipListContains(lookup_table, index, &lookup_res, &old_hash);
+
+/*		if(
+			0 &&
 			res &&
 			lookup_res != NULL && 
-			lookup_res->index == index && 
-			!is_freezed(lookup_res->extractions) && 
-			is_marked(lookup_res->next, VAL)
+			lookup_res->index == index &&
+			lookup_res->hash  == old_hash 
+			//!is_freezed(lookup_res->extractions) && 
+			//is_marked(lookup_res->next, VAL)
 		)
 		{
 			__cache_load[0]++;
-			if(bucket_connect(lookup_res, timestamp, tie_breaker, payload, epoch) == OK) return OK;
+			if(
+                        !is_freezed(lookup_res->extractions) 	&&
+                        is_marked(lookup_res->next, VAL)	&&
+			bucket_connect(lookup_res, timestamp, tie_breaker, payload, epoch) == OK
+			) 
+				return OK;
 		}
-		// first get bucket
-		left = search(head, &left_next, &right, &distance, index);
-		if(is_marked(left_next, VAL) && left_next != right && BOOL_CAS(&left->next, left_next, right))
-		connect_to_be_freed_node_list(left_next, distance);
-		
-		scan_list_length_en += distance;
+*/		if(
+			lookup_res != NULL && 
+			lookup_res->index <= index &&
+                        !is_freezed(lookup_res->extractions)    &&
+                        is_marked(lookup_res->next, VAL) &&
+                        lookup_res->hash  == old_hash
+		  )
+		{
+			__cache_load[0]++;
+			do{
+				left		= lookup_res;
+				left_next	= left->next;
+				lookup_res 	= right		= get_next_valid(left);
+				
+			}while(right->index <= index);
+		}
+		else
+		{
+		//	start_node = head;
+			// first get bucket
+			left = search(head, &left_next, &right, &distance, index);
+			if(is_marked(left_next, VAL) && left_next != right && BOOL_CAS(&left->next, left_next, right))
+				connect_to_be_freed_node_list(left_next, distance);
+		}
+		//scan_list_length_en += distance;
 		// if the right or the left node is MOV signal this to the caller
 		if(is_marked(left_next, MOV) ) 	return MOV_FOUND;
 
@@ -205,7 +253,7 @@ static int search_and_insert(bucket_t *head, SkipList *lookup_table, unsigned in
 }
 
 
-
+/*
 static inline bucket_t* get_next_valid(bucket_t *bckt){
 	bucket_t *res, *res_next, *bckt_next;
 	unsigned int count = -1;
@@ -223,7 +271,7 @@ static inline bucket_t* get_next_valid(bucket_t *bckt){
 	}
 	return res;
 }
-
+*/
 
 __thread void *last_bckt = NULL;
 __thread unsigned long long last_bckt_count = 0ULL;

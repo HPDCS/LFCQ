@@ -115,7 +115,8 @@ ListNode* makeNormalNode(sl_key_t key, int height, bucket_t *value) {
 	assert(newNode != NULL);
 	newNode->key = key;
 	newNode->value = value;
-	newNode->hash = value->hash;
+	if(value != NULL) newNode->hash = value->hash;
+	else newNode->hash = 0;
 
 	for (i = 0; i <= height; i++)
 		newNode->next[i] = (markable_ref)NULL;
@@ -313,7 +314,7 @@ int skipListRemove(SkipList *skipList, sl_key_t key) {
  * returns 1 if the key was in the skiplist or 0 if it wasn't.
  * in any case pValue is holding this or previous key value or NULL
  */
-int skipListContains(SkipList *skipList, sl_key_t key, bucket_t **pValue) {
+int skipListContains(SkipList *skipList, sl_key_t key, bucket_t **pValue, long *hash) {
 	int marked = 0, level;
 	*pValue = 0;		// initialize for the case the key is the non-existing minimal 
 
@@ -330,6 +331,7 @@ int skipListContains(SkipList *skipList, sl_key_t key, bucket_t **pValue) {
 				}
 				if (curr->key < key) {
 					*pValue = curr->value;
+					if(curr->value) *hash	= curr->hash;
 					pred = curr;
 					curr = succ;
 				} else {
@@ -339,7 +341,7 @@ int skipListContains(SkipList *skipList, sl_key_t key, bucket_t **pValue) {
 
 		} // end of the for loop going over the levels
 
-		return (curr->key == key && curr->hash == curr->value->hash);
+		return (curr->key == key);
 	} // end of the while loop
 
 }
