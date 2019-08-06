@@ -137,6 +137,7 @@ struct __bucket_t
 };
 
 #include "mm_vbucket.h"
+#include "cache.h"
 
 static inline void validate_bucket(bucket_t *bckt){
   #ifdef VALIDATE_BUCKETS 
@@ -256,6 +257,9 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 		suc=false;
 	}while(is_marked(old_next, VAL) && !(suc = __sync_bool_compare_and_swap(&(bckt)->next, old_next, get_marked(res, DEL))));
     atomic_bts_x64(&bckt->extractions, DEL_BIT_POS);
+
+    old_next = get_unmarked(bckt->next); 
+    if(old_next->index == bckt->index) update_cache(old_next);
 
 	if(suc) return;
 
@@ -575,12 +579,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	validate_bucket(bckt);
 //	__sync_fetch_and_add(&bckt->pad3, -1LL);
 
-	#if ENABLE_CACHE == 1
-	if(res == OK){
-	 	__cache_bckt[bckt->index % INSERTION_CACHE_LEN] = bckt;
-	 	__cache_hash[bckt->index % INSERTION_CACHE_LEN] = bckt->hash;
-	 }
-	#endif
+	update_cache(bckt);
 	return res;
 }
 

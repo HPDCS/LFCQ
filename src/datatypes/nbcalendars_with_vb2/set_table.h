@@ -21,7 +21,6 @@ extern __thread unsigned long long scan_list_length;
 extern __thread unsigned int read_table_count;
 
 
-#define ENABLE_CACHE 0
 #define MINIMUM_SIZE 1
 #define SAMPLE_SIZE 50
 
@@ -92,39 +91,6 @@ struct __table
 #include "index.h"
 #include "utils_set_table.h"
 
-#if ENABLE_CACHE == 1
-static unsigned int hash64shift(unsigned int a)
-{
-return a;
-   a = (a+0x7ed55d16) + (a<<12);
-   a = (a^0xc761c23c) ^ (a>>19);
-   a = (a+0x165667b1) + (a<<5);
-   a = (a+0xd3a2646c) ^ (a<<9);
-   a = (a+0xfd7046c5) + (a<<3);
-   a = (a^0xb55a4f09) ^ (a>>16);
-   return a;
-/*
-  key = (~key) + (key << 21); // key = (key << 21) - key - 1;
-  key = key ^ (key >> 24);
-  key = (key + (key << 3)) + (key << 8); // key * 265
-  key = key ^ (key >> 14);
-  key = (key + (key << 2)) + (key << 4); // key * 21
-  key = key ^ (key >> 28);
-  key = key + (key << 31);
-  return key;*/
-}
-#endif
-
-#define INSERTION_CACHE_LEN 65536
-
-__thread bucket_t* __cache_bckt[INSERTION_CACHE_LEN];
-__thread node_t*   __cache_node[INSERTION_CACHE_LEN];
-__thread long 	   __cache_hash[INSERTION_CACHE_LEN];
-__thread unsigned long long __cache_hit[INSERTION_CACHE_LEN];
-__thread unsigned long long __cache_load[INSERTION_CACHE_LEN];
-__thread table_t*  __cache_tblt = NULL;
-
-
 
 static inline bucket_t* get_next_valid(bucket_t *bckt){
 	bucket_t *res, *res_next, *bckt_next;
@@ -152,9 +118,16 @@ static int search_and_insert(bucket_t *head, SkipList *lookup_table, unsigned in
   #if ENABLE_CACHE == 1
 	unsigned int key = hash64shift(index) % INSERTION_CACHE_LEN;
 	__cache_load[key]++;
+
 	left = __cache_bckt[key];
 
-	if(left != NULL && left->index == index && left->hash == __cache_hash[key] && !is_freezed(left->extractions) && is_marked(left->next, VAL)){
+	if(
+		left != NULL && 
+		index == __cache_index[key] && 
+		left->index == index && 
+		left->hash == __cache_hash[key] && 
+		!is_freezed(left->extractions) && 
+		is_marked(left->next, VAL)){
 		__cache_hit[key]++;
 		if(bucket_connect(left, timestamp, tie_breaker, payload, epoch) == OK) return OK;
 		__cache_bckt[key] = NULL; 	
@@ -258,6 +231,8 @@ static int search_and_insert(bucket_t *head, SkipList *lookup_table, unsigned in
 			if(left_next != right)	
 				connect_to_be_freed_node_list(left_next, distance);
 
+			update_cache(newb);
+
 			//skipListAdd(lookup_table, index, newb);
 			return OK;
 		}
@@ -271,10 +246,7 @@ static int search_and_insert(bucket_t *head, SkipList *lookup_table, unsigned in
 			skipListAdd(lookup_table, index, left);
 		}
 */
-	  #if ENABLE_CACHE == 1
-		 	__cache_bckt[index % INSERTION_CACHE_LEN] = left;
-		 	__cache_hash[index % INSERTION_CACHE_LEN] = left->hash;
-	  #endif
+			update_cache(left);
 		 	return bucket_connect(left, timestamp, tie_breaker, payload, epoch);
 		}while(1);
 
