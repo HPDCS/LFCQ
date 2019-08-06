@@ -244,7 +244,7 @@ static void set_new_table(table_t *h, unsigned int counter)
 	if(new_size != 0) 
 	{
 		// allocate new table
-		res = posix_memalign((void**)&new_h, CACHE_LINE_SIZE, sizeof(table_t) + (new_size-1)*sizeof(bucket_t));
+		res = posix_memalign((void**)&new_h, CACHE_LINE_SIZE, sizeof(table_t) + (new_size-1)*sizeof(bucket_t*));
 		if(res != 0) {printf("No enough memory to new table structure\n"); return;}
 
 
@@ -272,6 +272,8 @@ static void set_new_table(table_t *h, unsigned int counter)
 
 		for (i = 0; i < new_size; i++)
 		{
+			new_h->array[i] = NULL;
+			/*
 			new_h->array[i].next = &new_h->b_tail;
 			new_h->array[i].tail = &new_h->n_tail;
 			new_h->array[i].type = HEAD;
@@ -279,6 +281,7 @@ static void set_new_table(table_t *h, unsigned int counter)
 			new_h->array[i].index = i;
 			new_h->array[i].socket = -1;
 			new_h->array[i].extractions = 0ULL;
+			*/
 		}
 
 		new_h->index = alloc_index(new_size);
@@ -297,12 +300,28 @@ static void set_new_table(table_t *h, unsigned int counter)
 
 
 
+static void init_table(table_t *table){
+	int i = 0;
+	bucket_t *curr = NULL;
+//	printf("INIT SKIP LIST\n");
+	for(i=0;i<table->size;i++){
+		if(table->array[i] == NULL){
+			if(curr == NULL) curr = bucket_alloc(&table->n_tail);
+			if(__sync_bool_compare_and_swap(table->array + i, NULL, curr)){
+//				printf("Setting skip list %d %p\n", i, curr);
+				 curr = NULL;
+			}
+		}
+	}
+}
+
+
 static inline void block_table(table_t *h)
 {
 	unsigned int i=0;
 	unsigned int size = h->size;
 	unsigned int counter = 0;
-	bucket_t *array = h->array;
+	bucket_t **array = h->array;
 	bucket_t *bucket;
 	bucket_t *right_node; 
 	bucket_t *left_node_next, *right_node_next;
@@ -315,7 +334,7 @@ static inline void block_table(table_t *h)
 
 	for(i = 0; i < size; i++)
 	{
-		bucket = array + ((i + start) % size);	
+		bucket = array[(i + start) % size];	
 		
 		//Try to mark the head as MOV
 		post_operation(bucket, SET_AS_MOV, 0ULL, NULL);
@@ -357,7 +376,7 @@ double compute_mean_separation_time(table_t *h,
 	unsigned int counter = 0;
 
 	table_t *new_h = h->new_table;
-	bucket_t *tmp, *left, *left_next, *right, *array = h->array;
+	bucket_t *tmp, *left, *left_next, *right, **array = h->array;
 	node_t *curr;
 	unsigned long long toskip = 0;
 
@@ -390,7 +409,7 @@ double compute_mean_separation_time(table_t *h,
 
 		for (i = 0; i < size; i++)
 		{
-			tmp = array + (index + i) % size; 	//get the head of the bucket
+			tmp = array[(index + i) % size]; 	//get the head of the bucket
 			//tmp = get_unmarked(tmp->next);		//pointer to first node
 			
 			left = search(tmp, &left_next, &right, &distance, index);

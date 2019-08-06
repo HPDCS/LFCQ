@@ -94,13 +94,14 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	res->hashtable->cached_node = NULL;
 	for (i = 0; i < MINIMUM_SIZE; i++)
 	{
-		res->hashtable->array[i].next = &res->hashtable->b_tail;
-		res->hashtable->array[i].tail = &res->hashtable->n_tail;
-		res->hashtable->array[i].type = HEAD;
-		res->hashtable->array[i].epoch = 0U;
-		res->hashtable->array[i].index = 0U;
-		res->hashtable->array[i].socket = -1;
-		res->hashtable->array[i].extractions = 0ULL;
+		res->hashtable->array[i] = bucket_alloc(&res->hashtable->n_tail);
+		res->hashtable->array[i]->next = &res->hashtable->b_tail;
+		res->hashtable->array[i]->tail = &res->hashtable->n_tail;
+		res->hashtable->array[i]->type = HEAD;
+		res->hashtable->array[i]->epoch = 0U;
+		res->hashtable->array[i]->index = 0U;
+		res->hashtable->array[i]->socket = -1;
+		res->hashtable->array[i]->extractions = 0ULL;
 	}
 
 	res->hashtable->index = alloc_index(MINIMUM_SIZE);
@@ -159,7 +160,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 
 			lookup_table = h->index->array[index];
 			// get the bucket
-			bucket = h->array + index;
+			bucket = h->array[index];
 			// read the number of executed enqueues for statistics purposes
 			con_en = h->e_counter.count;
 		}
@@ -194,7 +195,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	bucket_t *left_node, *left_node_next, *right_node;
 	drand48_r(&seedT, &rand);
 	unsigned int counter = 0;
-	left_node = search(h->array+((oldIndex + dist + (unsigned int)( ( (double)(size-dist) )*rand )) % size), &left_node_next, &right_node, &counter, 0);
+	left_node = search(h->array[((oldIndex + dist + (unsigned int)( ( (double)(size-dist) )*rand )) % size)], &left_node_next, &right_node, &counter, 0);
 	if(is_marked(left_node_next, VAL) && left_node_next != right_node && BOOL_CAS(&left_node->next, left_node_next, right_node))
 		connect_to_be_freed_node_list(left_node_next, counter);
 	#endif
@@ -232,7 +233,7 @@ t_state = 0;
 	vbpq *queue = (vbpq*)q;
 	bucket_t *min, *min_next, 
 					*left_node, *left_node_next, 
-					*array, *right_node;
+					**array, *right_node;
 	table_t * h = NULL;
 	
 	unsigned long long current, old_current, new_current;
@@ -295,7 +296,7 @@ t_state =1;
 		epoch = current & MASK_EPOCH;
 
 		// get the physical bucket
-		min = array + (index % (size));
+		min = array[(index % (size))];
 		min_next = min->next;
 
 		// a reshuffle has been detected => restart

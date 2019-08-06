@@ -17,7 +17,7 @@ static void init_index(table_t *table){
 	for(i=0;i<table->index->length;i++){
 		if(table->index->array[i] == NULL){
 			if(curr == NULL) curr = skipListInit();
-			curr->head->bottom_level = table->array + i;
+			curr->head->bottom_level = table->array[i];
 			curr->tail->bottom_level = &table->b_tail;
 			if(__sync_bool_compare_and_swap(table->index->array + i, NULL, curr)){
 //				printf("Setting skip list %d %p\n", i, curr);
