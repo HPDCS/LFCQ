@@ -157,7 +157,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			// compute the index of the physical bucket
 			index = ((unsigned int) newIndex) % size;
 
-			lookup_table = h->index->array[index];
+//			lookup_table = h->index->array[index];
 			// get the bucket
 			bucket = h->array + index;
 			// read the number of executed enqueues for statistics purposes

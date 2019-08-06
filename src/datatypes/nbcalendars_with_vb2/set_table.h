@@ -553,7 +553,7 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 	    #ifndef NDEBUG 
 		btail 			= &h->b_tail;	
 	    #endif
-		init_index(new_h);
+//		init_index(new_h);
 		if(new_bw < 0)
 		{
 			block_table(h); 
