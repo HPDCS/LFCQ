@@ -451,6 +451,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	unsigned int __status = 0;
 	unsigned int mask = 1;
 	int res = OK;
+	int level = 0;
     long long contention = 0; //__sync_fetch_and_add(&bckt->pad3, 1LL);
     acc_contention+=contention;
     cnt_contention++;
@@ -462,6 +463,12 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	new->payload	= payload;
 
 	validate_bucket(bckt);
+
+	for(i=0;i<VB_NUM_LEVELS;i++){
+		if(rand & 1) level++;
+		else break;
+	}
+
 
   begin:
   	__global_try++;
@@ -506,7 +513,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
   	}
 
 
-	if(!record){
+	if(level == 0 || !record){
 		left = curr;
 		curr = curr->next;
 		position += fetch_position(&curr, &left, timestamp, 0);
@@ -514,14 +521,8 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	}
 	else{
 		int i = 0;
-		int level = 0;
 		node_t *preds[VB_NUM_LEVELS], *succs[VB_NUM_LEVELS];
 
-		for(i=0;i<VB_NUM_LEVELS;i++){
-			if(rand & 1) level++;
-			else break;
-		}
-		
 		accelerated_searches++;
 
 		preds[VB_MAX_LEVEL] = curr;
@@ -530,7 +531,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 		
 		for(i=VB_MAX_LEVEL-1;i>0;i--){
 			preds[i] = preds[i+1];
-			succs[i] = preds[i+1]->upper_next[i];
+			succs[i] = preds[i+1]->upper_next[i-1];
 			scan_list_length_en+=fetch_position(&succs[i], &preds[i], timestamp, i);
 		}
 
