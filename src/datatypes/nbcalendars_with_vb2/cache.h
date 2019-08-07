@@ -4,11 +4,12 @@
 
 #define ENABLE_CACHE 1
 
-static unsigned int hash64shift(unsigned int a)
+
+/*static unsigned int hash64shift(unsigned int a)
 {
   return a;
 
-/* a = (a+0x7ed55d16) + (a<<12);
+ a = (a+0x7ed55d16) + (a<<12);
    a = (a^0xc761c23c) ^ (a>>19);
    a = (a+0x165667b1) + (a<<5);
    a = (a+0xd3a2646c) ^ (a<<9);
@@ -23,10 +24,18 @@ static unsigned int hash64shift(unsigned int a)
   key = (key + (key << 2)) + (key << 4); // key * 21
   key = key ^ (key >> 28);
   key = key + (key << 31);
-  return key;*/
+  return key;
 }
+*/
 
-#define INSERTION_CACHE_LEN 65536
+#define __CACHE_INSERTION_ALGN_BITS 6 
+#define __CACHE_INSERTION_SETS_MASK 1023
+#define __CACHE_INSERTION_SETS_LEN (__CACHE_INSERTION_SETS_MASK+1)
+#define __CACHE_INSERTION_WAYS 64
+
+
+
+#define INSERTION_CACHE_LEN (__CACHE_INSERTION_WAYS * __CACHE_INSERTION_SETS_LEN)
 
 
 __thread bucket_t* 		       *__cache_bckt = NULL;
@@ -39,38 +48,105 @@ __thread void*               __cache_tblt = NULL;
 __thread int                 __cache_init = 1;
 
 
+static inline unsigned int get_cache_set_idx(unsigned int index){
+  return (index >> __CACHE_INSERTION_ALGN_BITS) & __CACHE_INSERTION_SETS_MASK;
+}
+
 #if ENABLE_CACHE == 1
   static inline void update_cache(bucket_t *bckt){
-    __cache_bckt[bckt->index % INSERTION_CACHE_LEN]  = bckt;
-    __cache_hash[bckt->index % INSERTION_CACHE_LEN]  = bckt->hash;
-    __cache_indx[bckt->index % INSERTION_CACHE_LEN]  = bckt->index;
-  }
+    unsigned int set_idx, index;
+    unsigned int base_offset = 0;
+    unsigned int min_set = -1;
+    unsigned int min_idx = -1;
+    int i = 0;
 
-  static inline void invalidate_cache(unsigned int index){
-    __cache_bckt[index % INSERTION_CACHE_LEN]  = NULL;
-  }
+    index = bckt->index;
+    set_idx = get_cache_set_idx(index);
 
+    base_offset = (set_idx)*__CACHE_INSERTION_WAYS;
+
+    for(i=0;i<__CACHE_INSERTION_WAYS;i++)
+      if(__cache_indx[base_offset + i] == index) 
+        break;
+    
+
+    if(i<__CACHE_INSERTION_WAYS){
+      __cache_bckt[base_offset + i]         = bckt;
+      __cache_hash[base_offset + i]         = bckt->hash;
+      __cache_indx[base_offset + i]         = bckt->index;
+      return;
+    }
+
+    for(i=0;i<__CACHE_INSERTION_WAYS;i++){
+      if(__cache_bckt[base_offset + i] == NULL) break;
+      if(__cache_indx[base_offset + i] < min_set){
+        min_idx = i;
+        min_set = __cache_indx[base_offset + i];
+      } 
+    }
+
+    if(i<__CACHE_INSERTION_WAYS){
+      __cache_bckt[base_offset + i]         = bckt;
+      __cache_hash[base_offset + i]         = bckt->hash;
+      __cache_indx[base_offset + i]         = bckt->index;
+    }
+    else{
+      __cache_bckt[base_offset + min_idx]   = bckt;
+      __cache_hash[base_offset + min_idx]   = bckt->hash;
+      __cache_indx[base_offset + min_idx]   = bckt->index; 
+    }
+  }
 
   static inline bucket_t* load_from_cache(unsigned int index){
     bucket_t* left;
-    unsigned int key = hash64shift(index) % INSERTION_CACHE_LEN;
-    __cache_load[key]++;
-    left = __cache_bckt[key];
+    unsigned int set_idx;
+    unsigned int base_offset = 0;
+    int i = 0;
+
+    set_idx = get_cache_set_idx(index);
+    base_offset = (set_idx)*__CACHE_INSERTION_WAYS;
+
+    for(i=0;i<__CACHE_INSERTION_WAYS;i++)
+      if(__cache_indx[base_offset + i] == index) break;
+    
+
+    if(i == __CACHE_INSERTION_WAYS) return NULL;
+   
+    __cache_load[base_offset + i]++;
+    left = __cache_bckt[base_offset + i];
 
     if(
       left != NULL && 
-      index == __cache_indx[key] && 
+      index == __cache_indx[base_offset + i] && 
       left->index == index && 
-      left->hash == __cache_hash[key] && 
+      left->hash == __cache_hash[base_offset + i] && 
       !is_freezed(left->extractions) && 
       is_marked(left->next, VAL)
     )
     {
-      __cache_hits[key]++;
+      __cache_hits[base_offset + i]++;
       return left;
     }
     return NULL;
   }
+
+  static inline void invalidate_cache(unsigned int index){
+    unsigned int set_idx;
+    unsigned int base_offset = 0;
+    int i = 0;
+
+    set_idx = get_cache_set_idx(index);
+    base_offset = (set_idx)*__CACHE_INSERTION_WAYS;
+
+    for(i=0;i<__CACHE_INSERTION_WAYS;i++){
+      if(__cache_indx[base_offset + i] == index) {
+          __cache_bckt[base_offset + i] = NULL;
+          __cache_indx[base_offset + i] = 0;
+      }
+    }
+
+  }
+
 
   static inline void init_cache(){
     if(__cache_init){
