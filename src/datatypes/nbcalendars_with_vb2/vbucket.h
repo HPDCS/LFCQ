@@ -463,6 +463,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	new->payload	= payload;
 
 	validate_bucket(bckt);
+	int i = 0;
 
 	for(i=0;i<VB_NUM_LEVELS;i++){
 		if(rand & 1) level++;
@@ -520,7 +521,6 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 		scan_list_length_en+=position;
 	}
 	else{
-		int i = 0;
 		node_t *preds[VB_NUM_LEVELS], *succs[VB_NUM_LEVELS];
 
 		accelerated_searches++;
