@@ -473,7 +473,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 
   	toskip		= extracted;
 	
-  	long rand, record;  lrand48_r(&seedT, &rand);
+  	long rand, record = 0;  lrand48_r(&seedT, &rand);
   	if(extracted == 0) record = 1;
 	/*
   	position = 0;
@@ -499,7 +499,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
   	}
 
 
-	if(!record){
+	if(1 || !record){
 		left = curr;
 		curr = curr->next;
 		position += fetch_position(&curr, &left, timestamp);
@@ -532,7 +532,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 
 			    if(bckt->extractions != 0)  	{rtm_debug++;goto begin;}
 				if(preds[0]->next != succs[0])	{rtm_nested++;goto begin;}
-				if(preds[1]->next != succs[1])	{rtm_nested++;goto begin;}
+				if(preds[1]->upper_next != succs[1])	{rtm_nested++;goto begin;}
 
 				++rtm_prova;
 				__status = 0;
@@ -540,9 +540,9 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 				assert(new != NULL && preds[0]->next != NULL && succs[0] != NULL);
 				if((__status = _xbegin ()) == _XBEGIN_STARTED)
 				{
-					if(bckt->extractions != 0)  	{ TM_ABORT(0xf2);}
-					if(preds[0]->next != succs[0])	{ TM_ABORT(0xf1);}
-					if(preds[1]->next != succs[1])	{ TM_ABORT(0xf1);}
+					if(bckt->extractions != 0)  		{ TM_ABORT(0xf2);}
+					if(preds[0]->next != succs[0])		{ TM_ABORT(0xf1);}
+					if(preds[1]->upper_next != succs[1])	{ TM_ABORT(0xf1);}
 
 					preds[0]->next 			= new; 
 					preds[1]->upper_next 	= new; 
@@ -579,13 +579,13 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 			//		__sync_fetch_and_add(&bckt->pad3, -1LL);
 
 					
-			    	res = bucket_connect_fallback(bckt, new, epoch); 
-			    	if(res != OK) 	node_unsafe_free(new);
-			    	return res;
+				    	res = bucket_connect_fallback(bckt, new, epoch); 
+				    	if(res != OK) 	node_unsafe_free(new);
+				    	return res;
 				}
 
 				rtm_insertions++;
-				rtm_skip_insertion+=record;
+				rtm_skip_insertion+=1;
 			  	goto out;
 
 
