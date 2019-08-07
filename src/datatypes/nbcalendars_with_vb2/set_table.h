@@ -123,12 +123,12 @@ static int search_and_insert(bucket_t *head, SkipList *lookup_table, unsigned in
 
 	if(
 		left != NULL && 
-		index == __cache_index[key] && 
+		index == __cache_indx[key] && 
 		left->index == index && 
 		left->hash == __cache_hash[key] && 
 		!is_freezed(left->extractions) && 
 		is_marked(left->next, VAL)){
-		__cache_hit[key]++;
+		__cache_hits[key]++;
 		if(bucket_connect(left, timestamp, tie_breaker, payload, epoch) == OK) return OK;
 		__cache_bckt[key] = NULL; 	
 	}
@@ -511,6 +511,7 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 	unsigned int distance;
 	unsigned int start;		
 	unsigned int i, size = h->size;
+	init_cache();
 	
 
 	// this is used to break synchrony while invoking readtable
@@ -690,9 +691,9 @@ assert(a == b || *curr_table_ptr != h);
 			__cache_bckt[i]  = NULL;
 			__cache_node[i]  = NULL;
 			__cache_hash[i]  = 0;
-			__cache_hit[i]   = 0;
+			__cache_hits[i]   = 0;
 			__cache_load[i]  = 0;
-			__cache_index[i] = 0;
+			__cache_indx[i] = 0;
 		}
 		__cache_tblt = h;
 	}
