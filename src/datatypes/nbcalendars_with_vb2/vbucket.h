@@ -408,12 +408,15 @@ unsigned long long skip_extracted(node_t *tail, node_t **curr, unsigned long lon
 }
 
 
-unsigned long long fetch_position(node_t **curr, node_t **left, pkey_t timestamp){
+unsigned long long fetch_position(node_t **curr, node_t **left, pkey_t timestamp, int level){
 	unsigned long long position = 0;
 	  	while((*curr)->timestamp <= timestamp){
 		if(counter_last_key > 1000000ULL)	printf("L: %p-" KEY_STRING " C: %p-" KEY_STRING "\n", *left, (*left)->timestamp, *curr, (*curr)->timestamp);
   		*left = *curr;
-  		*curr = (*curr)->next;
+  		if(level) 
+  			*curr = (*curr)->upper_next[level-1];
+  		else
+  			*curr = (*curr)->next;
 		if(*curr) PREFETCH((*curr)->next, 1);
   		position++;
   	}
@@ -503,7 +506,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	if(!record){
 		left = curr;
 		curr = curr->next;
-		position += fetch_position(&curr, &left, timestamp);
+		position += fetch_position(&curr, &left, timestamp, 0);
 		scan_list_length_en+=position;
 	}
 	else{
@@ -511,15 +514,15 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 		node_t *preds[3], *succs[3];
 		preds[2] = curr;
 		succs[2] = curr->upper_next[1];
-		scan_list_length_en+=fetch_position(&succs[2], &preds[2], timestamp);
+		scan_list_length_en+=fetch_position(&succs[2], &preds[2], timestamp, 2);
 		
-		preds[1] = curr;
-		succs[1] = curr->upper_next[0];
-		scan_list_length_en+=fetch_position(&succs[1], &preds[1], timestamp);
+		preds[1] = preds[2];
+		succs[1] = preds[2]->next;
+		scan_list_length_en+=fetch_position(&succs[1], &preds[1], timestamp, 1);
 		
 		preds[0] = preds[1];
-		succs[0] = preds[0]->next;
-		scan_list_length_en+=fetch_position(&succs[0], &preds[0], timestamp);
+		succs[0] = preds[1]->next;
+		scan_list_length_en+=fetch_position(&succs[0], &preds[0], timestamp, 0);
 
 		left = preds[0];
 		curr = succs[0];
