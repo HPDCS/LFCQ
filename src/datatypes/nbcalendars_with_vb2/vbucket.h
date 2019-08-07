@@ -468,7 +468,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	for(i=0;i<VB_NUM_LEVELS-1;i++){
 		if(rand & 1) level++;
 		else break;
-		rand >> 1;
+		rand >>= 1;
 	}
 	assert(level <= VB_MAX_LEVEL);
 
