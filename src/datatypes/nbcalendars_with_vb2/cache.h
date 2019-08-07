@@ -2,7 +2,7 @@
 #define __H_CACHE
 
 
-#define ENABLE_CACHE 1
+#define ENABLE_CACHE 0
 
 
 /*static unsigned int hash64shift(unsigned int a)
@@ -28,9 +28,9 @@
 }
 */
 
-#define __CACHE_INSERTION_SETS_BITS     20
+#define __CACHE_INSERTION_SETS_BITS     24
 #define INSERTION_CACHE_LEN 		(1<<__CACHE_INSERTION_SETS_BITS)
-#define __CACHE_INSERTION_WAYS          1
+#define __CACHE_INSERTION_WAYS          4
 #define __CACHE_INSERTION_ALGN_BITS 	0
 
 #define __CACHE_INSERTION_SETS_LEN      (INSERTION_CACHE_LEN/__CACHE_INSERTION_WAYS)
