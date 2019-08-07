@@ -514,7 +514,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
   	}
 
 
-	if(level == 0 || !record){
+	if(!record){
 		left = curr;
 		curr = curr->next;
 		position += fetch_position(&curr, &left, timestamp, 0);
@@ -545,11 +545,12 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 		if(level > 0){
 				if(preds[0]->timestamp == timestamp) new->tie_breaker+= preds[0]->tie_breaker;
 				level--;
-			  	new->next 				= succs[0];
-
-			  	for(i=0;i<level;i++)
+				new->next 				= succs[0];
+				
+				for(i=0;i<level;i++)
 					new->upper_next[i] 	= succs[i+1];
-			  	for(i=0;i<VB_MAX_LEVEL;i++)
+			  	
+			  	for(;i<VB_MAX_LEVEL;i++)
 					new->upper_next[i] 	= NULL;
 
 				__local_try=0;
