@@ -395,7 +395,7 @@ curr
 			// copy node
 
 			//atomic
-			rtm_insertions++;
+			rtm_insertions2++;
 //CMB();
 //if(0)	
 bool committed = false;		

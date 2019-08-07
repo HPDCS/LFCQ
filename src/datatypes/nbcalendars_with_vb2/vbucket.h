@@ -509,11 +509,14 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 		node_t *preds[2], *succs[2];
 		preds[1] = curr;
 		succs[1] = curr->upper_next;
-		scan_list_length_en+=fetch_position(&preds[1], &succs[1], timestamp);
+		scan_list_length_en+=fetch_position(&succs[1], &preds[1], timestamp);
 		
 		preds[0] = preds[1];
 		succs[0] = preds[0]->next;
-		scan_list_length_en+=fetch_position(&preds[0], &succs[0], timestamp);
+		scan_list_length_en+=fetch_position(&succs[0], &preds[0], timestamp);
+
+		left = preds[0];
+		curr = succs[0];
 
 		if(rand & 1){
 				if(preds[0]->timestamp == timestamp) new->tie_breaker+= preds[0]->tie_breaker;
