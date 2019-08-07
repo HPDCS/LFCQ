@@ -62,7 +62,7 @@ extern __thread int nid;
 
 #define VB_NUM_LEVELS	4
 #define VB_MAX_LEVEL	(VB_NUM_LEVELS-1)		
-
+#define DISABLE_SKIPLIST 0
 
 #define MICROSLEEP_TIME 5
 #define CLUSTER_WAIT 200000
@@ -514,7 +514,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
   	}
 
 
-	if(!record){
+	if(DISABLE_SKIPLIST || !record){
 		left = curr;
 		curr = curr->next;
 		position += fetch_position(&curr, &left, timestamp, 0);
