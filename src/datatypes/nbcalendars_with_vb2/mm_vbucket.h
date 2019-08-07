@@ -84,10 +84,11 @@ static inline node_t* node_alloc(){
 /* allocate a node */
 static inline void tail_node_init(node_t* res){
 	long rand;
+	int i;
     bzero(res, sizeof(node_t));
 	res->next 				= NULL;
-	res->upper_next[0] 		= NULL;
-	res->upper_next[1] 		= NULL;
+	for(i=0;i<VB_NUM_LEVELS-1;i++)
+		res->upper_next[i] 		= NULL;
 	res->payload			= NULL;
 	res->tie_breaker		= 0;
 	res->timestamp	 		= INFTY;
@@ -101,6 +102,7 @@ static inline void tail_node_init(node_t* res){
 /* allocate a bucket */
 static inline bucket_t* bucket_alloc(node_t *tail){
 	bucket_t* res;
+	int i;
 	do{
 		res = gc_alloc(ptst, gc_aid[GC_BUCKETS]);
 	  #ifdef ENABLE_CACHE_PARTITION
@@ -139,9 +141,10 @@ static inline bucket_t* bucket_alloc(node_t *tail){
     res->head.timestamp		= MIN;
     res->head.tie_breaker	= 0U;
     res->head.next			= res->tail;
-    res->head.upper_next[0]	= res->tail;
-    res->head.upper_next[1]	= res->tail;
-	__sync_bool_compare_and_swap(&res->hash, res->hash, hash);
+    for(i=0;i<VB_NUM_LEVELS-1;i++)
+		res->head.upper_next[i]	= res->tail;
+    
+    __sync_bool_compare_and_swap(&res->hash, res->hash, hash);
     #ifndef RTM
     pthread_spin_init(&res->lock, 0);
     #endif

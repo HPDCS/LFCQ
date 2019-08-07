@@ -60,8 +60,8 @@ extern __thread int nid;
 #define	DELETE			2ULL
 #define SET_AS_MOV		3ULL
 
-#define NUM_LEVELS		4
-#define MAX_LEVEL		(NUM_LEVELS-1)		
+#define VB_NUM_LEVELS	4
+#define VB_MAX_LEVEL	(VB_NUM_LEVELS-1)		
 
 
 #define MICROSLEEP_TIME 5
@@ -109,7 +109,7 @@ struct __node_t
 	int hash;							// 24
 	node_t * volatile next;				// 32
 	void * volatile replica;			// 40
-	node_t * volatile upper_next[NUM_LEVELS-1];	// 64
+	node_t * volatile upper_next[VB_NUM_LEVELS-1];	// 64
 };
 
 /**
@@ -515,15 +515,15 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	else{
 		int i = 0;
 		int level = 0;
-		for(i=0;i<NUM_LEVELS;i++){
+		for(i=0;i<VB_NUM_LEVELS;i++){
 			if(rand & 1) level++;
 			else break;
 		}
 		
 		accelerated_searches++;
-		node_t *preds[NUM_LEVELS], *succs[NUM_LEVELS];
+		node_t *preds[VB_NUM_LEVELS], *succs[VB_NUM_LEVELS];
 
-		for(i=MAX_LEVEL;i>0;i--){
+		for(i=VB_MAX_LEVEL;i>0;i--){
 			preds[i] = curr;
 			succs[i] = curr->upper_next[i-1];
 			scan_list_length_en+=fetch_position(&succs[i], &preds[i], timestamp, i);
@@ -543,7 +543,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 
 			  	for(i=0;i<level;i++)
 					new->upper_next[i] 	= succs[i+1];
-			  	for(i=0;i<MAX_LEVEL;i++)
+			  	for(i=0;i<VB_MAX_LEVEL;i++)
 					new->upper_next[i] 	= NULL;
 
 				__local_try=0;
