@@ -115,24 +115,9 @@ static int search_and_insert(bucket_t *head, SkipList *lookup_table, unsigned in
 	bucket_t *left, *left_next, *right, *lookup_res;
 	unsigned int distance;
 
-  #if ENABLE_CACHE == 1
-	unsigned int key = hash64shift(index) % INSERTION_CACHE_LEN;
-	__cache_load[key]++;
-
-	left = __cache_bckt[key];
-
-	if(
-		left != NULL && 
-		index == __cache_indx[key] && 
-		left->index == index && 
-		left->hash == __cache_hash[key] && 
-		!is_freezed(left->extractions) && 
-		is_marked(left->next, VAL)){
-		__cache_hits[key]++;
-		if(bucket_connect(left, timestamp, tie_breaker, payload, epoch) == OK) return OK;
-		__cache_bckt[key] = NULL; 	
-	}
-  #endif
+	left = load_from_cache(index);
+	if(left != NULL && bucket_connect(left, timestamp, tie_breaker, payload, epoch) == OK) return OK;
+	invalidate_cache(index);
 
 	do{
 		long old_hash = 0;
@@ -678,7 +663,6 @@ assert(a == b || *curr_table_ptr != h);
 	}
 
 
-  #if ENABLE_CACHE == 1
 	if(h != __cache_tblt){
 		count_epoch_ops = 0ULL;
 		bckt_connect_count = 0ULL;
@@ -686,18 +670,9 @@ assert(a == b || *curr_table_ptr != h);
 		num_cas = 0ULL; 
 		num_cas_useful = 0ULL;
 		near = 0ULL;
-		int i = 0;
-		for(i=0;i<INSERTION_CACHE_LEN-1;i++){
-			__cache_bckt[i]  = NULL;
-			__cache_node[i]  = NULL;
-			__cache_hash[i]  = 0;
-			__cache_hits[i]   = 0;
-			__cache_load[i]  = 0;
-			__cache_indx[i] = 0;
-		}
 		__cache_tblt = h;
+		flush_cache();
 	}
-  #endif
 
 
 //	acquire_node(&h->socket);

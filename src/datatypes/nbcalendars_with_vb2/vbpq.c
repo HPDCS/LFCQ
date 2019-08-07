@@ -384,11 +384,10 @@ void pq_report(int TID)
 {
 
 unsigned long long cache_load = 0, cache_hit = 0;
-int h=0;
-for(h=0; h<INSERTION_CACHE_LEN-1;h++){
-       cache_load+=__cache_load[h];
-       cache_hit+=__cache_hits[h];
-}
+
+cache_load	= get_loads();
+cache_hit	= get_hits();
+
 printf("CHANGE EPOCH REQ: CHANGE_EPO_SUCC %llu - CHANGE_EPO_RQ %llu - BUCKET_CONNECT %llu - Insertion cache efficiency %f %llu %llu\n", count_epoch_ops, rq_epoch_ops, bckt_connect_count,  ((float)cache_hit/(float)cache_load), cache_hit, cache_load);
 
 printf("TID:%u NID:%u BCKT CONNECT "
