@@ -421,6 +421,7 @@ unsigned long long fetch_position(node_t **curr, node_t **left, pkey_t timestamp
   	return position;
 }
 
+__thread unsigned long long rtm_skip_insertion = 0;
 
 int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, void* payload, unsigned int epoch){
 	bckt_connect_count++;
@@ -471,6 +472,9 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
   	if(get_op_type(bckt->op_descriptor) != NOOP) 		{node_unsafe_free(new); res = ABORT; 	 goto out; 	}
 
   	toskip		= extracted;
+	
+  	long rand;  lrand48_r(&seedT, &rand);
+  	if(extracted == 0 && rand & 1) rtm_skip_insertion++;
 	/*
   	position = 0;
 	while(toskip > 0ULL && curr != tail){

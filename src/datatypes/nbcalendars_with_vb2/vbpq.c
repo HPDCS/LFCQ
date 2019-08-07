@@ -405,6 +405,7 @@ printf("TID:%u NID:%u BCKT CONNECT "
 "A %f, "
 "B %f, "
 "RTM_INSERTIONS %llu, "
+"SKIP_RTM_INSERTIONS %llu, "
 "FALL_INSERTIONS %llu, "
 "NO_RTM INSERTIONS %llu \n", 
 tid,nid,
@@ -420,6 +421,7 @@ rtm_prova,
 ((double)rtm_a)    /((double)rtm_prova),
 ((double)rtm_b)    /((double)rtm_prova),
 rtm_insertions, 
+rtm_skip_insertion,
 fallback_insertions,
 insertions-rtm_insertions);	
 
