@@ -523,10 +523,14 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 		accelerated_searches++;
 		node_t *preds[VB_NUM_LEVELS], *succs[VB_NUM_LEVELS];
 
+		preds[VB_MAX_LEVEL] = curr;
+		succs[VB_MAX_LEVEL] = curr->upper_next[VB_MAX_LEVEL-1];
+		scan_list_length_en+=fetch_position(&succs[VB_MAX_LEVEL], &preds[VB_MAX_LEVEL], timestamp, VB_MAX_LEVEL);
+		
 		for(i=VB_MAX_LEVEL;i>0;i--){
-			preds[i] = curr;
-			succs[i] = curr->upper_next[i-1];
-			scan_list_length_en+=fetch_position(&succs[i], &preds[i], timestamp, i);
+			preds[i-1] = preds[i];
+			succs[i-1] = preds[i]->upper_next[i-1];
+			scan_list_length_en+=fetch_position(&succs[i-1], &preds[i-1], timestamp, i-1);
 		}
 
 		preds[0] = preds[1];
