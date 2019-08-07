@@ -104,7 +104,7 @@ struct __node_t
 	unsigned int tie_breaker;			// 20
 	int hash;							// 24
 	node_t * volatile next;				// 32
-	bucket_t *  bucket;
+	node_t * volatile upper_next;		// 40
 	void * volatile replica;
 	volatile unsigned long long taken;
 	char __pad_2[8];
@@ -473,8 +473,8 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 
   	toskip		= extracted;
 	
-  	long rand;  lrand48_r(&seedT, &rand);
-  	if(extracted == 0 && rand & 1) rtm_skip_insertion++;
+  	long rand, record;  lrand48_r(&seedT, &rand);
+  	if(extracted == 0) record = 1;
 	/*
   	position = 0;
 	while(toskip > 0ULL && curr != tail){
@@ -498,10 +498,100 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
   		goto out;
   	}
 
-	left = curr;
-	curr = curr->next;
-	position += fetch_position(&curr, &left, timestamp);
-	scan_list_length_en+=position;
+
+	if(!record){
+		left = curr;
+		curr = curr->next;
+		position += fetch_position(&curr, &left, timestamp);
+		scan_list_length_en+=position;
+	}
+	else{
+		node_t *preds[2], *succs[2];
+		preds[1] = curr;
+		succs[1] = curr->upper_next;
+		scan_list_length_en+=fetch_position(&preds[1], &succs[1], timestamp);
+		
+		preds[0] = preds[1];
+		succs[0] = preds[0]->next;
+		scan_list_length_en+=fetch_position(&preds[0], &succs[0], timestamp);
+
+		if(rand & 1){
+				if(preds[0]->timestamp == timestamp) new->tie_breaker+= preds[0]->tie_breaker;
+			  	new->next 		= succs[0];
+				new->upper_next = succs[1];
+
+				__local_try=0;
+				__status = 0;
+				mask = 1;
+			  retry_tm2:
+
+				BACKOFF_LOOP();
+
+			    if(bckt->extractions != 0)  	{rtm_debug++;goto begin;}
+				if(preds[0]->next != succs[0])	{rtm_nested++;goto begin;}
+				if(preds[1]->next != succs[1])	{rtm_nested++;goto begin;}
+
+				++rtm_prova;
+				__status = 0;
+
+				assert(new != NULL && preds[0]->next != NULL && succs[0] != NULL);
+				if((__status = _xbegin ()) == _XBEGIN_STARTED)
+				{
+					if(bckt->extractions != 0)  	{ TM_ABORT(0xf2);}
+					if(preds[0]->next != succs[0])	{ TM_ABORT(0xf1);}
+					if(preds[1]->next != succs[1])	{ TM_ABORT(0xf1);}
+
+					preds[0]->next 			= new; 
+					preds[1]->upper_next 	= new; 
+					TM_COMMIT();
+				}
+				else
+				{
+					rtm_failed++;
+					/*  Transaction retry is possible. */
+					if(__status & _XABORT_RETRY) {DEB("RETRY\n");rtm_retry++;}
+					/*  Transaction abort due to a memory conflict with another thread */
+					if(__status & _XABORT_CONFLICT) {DEB("CONFLICT\n");rtm_conflict++;}
+					/*  Transaction abort due to the transaction using too much memory */
+					if(__status & _XABORT_CAPACITY) {DEB("CAPACITY\n");rtm_capacity++;}
+					/*  Transaction abort due to a debug trap */
+					if(__status & _XABORT_DEBUG) {DEB("DEBUG\n");rtm_debug++;}
+					/*  Transaction abort in a inner nested transaction */
+					if(__status & _XABORT_NESTED) {DEB("NESTES\n");rtm_nested++;}
+					/*  Transaction explicitely aborted with _xabort. */
+					if(__status & _XABORT_EXPLICIT){DEB("EXPLICIT\n");rtm_explicit++;}
+					if(__status == 0){DEB("Other\n");rtm_other++;}
+					if(_XABORT_CODE(__status) == 0xf2) {rtm_a++;}
+					if(_XABORT_CODE(__status) == 0xf1) {rtm_b++;}
+					if(
+						//__status & _XABORT_RETRY ||
+						__local_try++ < RTM_RETRY
+					) 
+					{
+						mask = mask | (mask <<1);
+						goto retry_tm2;
+					}
+					if(__global_try < RTM_FALLBACK || __status & _XABORT_EXPLICIT) 
+						goto begin;
+			//		__sync_fetch_and_add(&bckt->pad3, -1LL);
+
+					
+			    	res = bucket_connect_fallback(bckt, new, epoch); 
+			    	if(res != OK) 	node_unsafe_free(new);
+			    	return res;
+				}
+
+				rtm_insertions++;
+				rtm_skip_insertion+=record;
+			  	goto out;
+
+
+
+
+		}
+
+	}
+
 	/*
   	while(curr->timestamp <= timestamp){
 		if(counter_last_key > 1000000ULL)	printf("L: %p-" KEY_STRING " C: %p-" KEY_STRING "\n", left, left->timestamp, curr, curr->timestamp);
@@ -512,6 +602,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
   		position++;
   	}
 	*/ 
+	record = 0;
 	assert(curr->timestamp != INFTY || curr == tail);
 
   	if(left->timestamp == timestamp) new->tie_breaker+= left->tie_breaker;
@@ -578,6 +669,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	}
 
 	rtm_insertions++;
+	rtm_skip_insertion+=record;
   out:
 
 	validate_bucket(bckt);
