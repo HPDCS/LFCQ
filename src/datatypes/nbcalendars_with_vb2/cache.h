@@ -106,13 +106,13 @@ static inline unsigned int get_cache_set_idx(unsigned int index){
     set_idx = get_cache_set_idx(index);
     base_offset = (set_idx)*__CACHE_INSERTION_WAYS;
 
+    __cache_load[base_offset + i]++;
+
     for(i=0;i<__CACHE_INSERTION_WAYS;i++)
       if(__cache_indx[base_offset + i] == index) break;
     
-
     if(i == __CACHE_INSERTION_WAYS) return NULL;
    
-    __cache_load[base_offset + i]++;
     left = __cache_bckt[base_offset + i];
 
     if(
