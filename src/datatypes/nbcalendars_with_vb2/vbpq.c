@@ -354,13 +354,23 @@ t_state =1;
 				// increase current
 
 				num_cas++;
-				old_current = VAL_CAS( &(h->current), current, ((index << 32) | epoch) );
-				if(old_current == current){
-					current = ((index << 32) | epoch);
-					num_cas_useful++;
+				double rand, prob;
+				drand48_r(&seedT, &rand);
+				prob = (double)h->d_counter.count - (double)con_de ;
+				if(prob > 1.0) prob = 1/prob;
+				else prob = 1.0;
+
+				if(rand < prob){
+					old_current = VAL_CAS( &(h->current), current, ((index << 32) | epoch) );
+					if(old_current == current){
+						current = ((index << 32) | epoch);
+						num_cas_useful++;
+					}
+					else
+						current = old_current;
 				}
 				else
-					current = old_current;
+					current = h->current;
 			}
 		}
 		else
