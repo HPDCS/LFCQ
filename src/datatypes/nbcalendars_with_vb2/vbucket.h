@@ -413,7 +413,7 @@ unsigned long long fetch_position(node_t **curr, node_t **left, pkey_t timestamp
 	  	while((*curr)->timestamp <= timestamp){
 		if(counter_last_key > 1000000ULL)	printf("L: %p-" KEY_STRING " C: %p-" KEY_STRING "\n", *left, (*left)->timestamp, *curr, (*curr)->timestamp);
   		*left = *curr;
-  		if(level) 
+  		if(level > 0) 
   			*curr = (*curr)->upper_next[level-1];
   		else
   			*curr = (*curr)->next;
@@ -517,7 +517,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 		scan_list_length_en+=fetch_position(&succs[2], &preds[2], timestamp, 2);
 		
 		preds[1] = preds[2];
-		succs[1] = preds[2]->next;
+		succs[1] = preds[2]->upper_next[0];
 		scan_list_length_en+=fetch_position(&succs[1], &preds[1], timestamp, 1);
 		
 		preds[0] = preds[1];
