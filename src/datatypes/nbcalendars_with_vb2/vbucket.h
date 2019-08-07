@@ -464,7 +464,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 
 	validate_bucket(bckt);
 	int i = 0;
-
+	long rand, record = 0;  lrand48_r(&seedT, &rand);
 	for(i=0;i<VB_NUM_LEVELS;i++){
 		if(rand & 1) level++;
 		else break;
@@ -488,7 +488,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 
   	toskip		= extracted;
 	
-  	long rand, record = 0;  lrand48_r(&seedT, &rand);
+  	
   	if(extracted == 0) record = 1;
 	/*
   	position = 0;
