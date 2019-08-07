@@ -86,7 +86,8 @@ static inline void tail_node_init(node_t* res){
 	long rand;
     bzero(res, sizeof(node_t));
 	res->next 				= NULL;
-	res->upper_next 		= NULL;
+	res->upper_next[0] 		= NULL;
+	res->upper_next[1] 		= NULL;
 	res->payload			= NULL;
 	res->tie_breaker		= 0;
 	res->timestamp	 		= INFTY;
@@ -138,7 +139,8 @@ static inline bucket_t* bucket_alloc(node_t *tail){
     res->head.timestamp		= MIN;
     res->head.tie_breaker	= 0U;
     res->head.next			= res->tail;
-    res->head.upper_next	= res->tail;
+    res->head.upper_next[0]	= res->tail;
+    res->head.upper_next[1]	= res->tail;
 	__sync_bool_compare_and_swap(&res->hash, res->hash, hash);
     #ifndef RTM
     pthread_spin_init(&res->lock, 0);

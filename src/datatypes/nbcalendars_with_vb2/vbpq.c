@@ -404,6 +404,7 @@ printf("TID:%u NID:%u BCKT CONNECT "
 "NESTED %f, "
 "A %f, "
 "B %f, "
+"PERC_OF_SKIPSEARCH %f, "
 "RTM_INSERTIONS %llu, "
 "SKIP_RTM_INSERTIONS %llu, "
 "FALL_INSERTIONS %llu, "
@@ -420,6 +421,7 @@ rtm_prova,
 ((double)rtm_nested)	/((double)rtm_prova), 
 ((double)rtm_a)    /((double)rtm_prova),
 ((double)rtm_b)    /((double)rtm_prova),
+((double)accelerated_searches)    /((double)searches_count),
 rtm_insertions, 
 rtm_skip_insertion,
 fallback_insertions,

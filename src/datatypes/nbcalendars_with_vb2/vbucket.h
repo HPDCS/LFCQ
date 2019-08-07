@@ -104,10 +104,9 @@ struct __node_t
 	unsigned int tie_breaker;			// 20
 	int hash;							// 24
 	node_t * volatile next;				// 32
-	node_t * volatile upper_next;		// 40
+	node_t * volatile upper_next[2];		// 40
 	void * volatile replica;
 	volatile unsigned long long taken;
-	char __pad_2[8];
 };
 
 /**
@@ -422,6 +421,8 @@ unsigned long long fetch_position(node_t **curr, node_t **left, pkey_t timestamp
 }
 
 __thread unsigned long long rtm_skip_insertion = 0;
+__thread unsigned long long accelerated_searches = 0;
+__thread unsigned long long searches_count = 0;
 
 int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, void* payload, unsigned int epoch){
 	bckt_connect_count++;
@@ -490,7 +491,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	scan_list_length_en+=position;
 
 	toskip -= position;
-
+	searches_count++;
   	if(curr == tail && toskip >= 0ULL) {
 		post_operation(bckt, DELETE, 0ULL, NULL);
   		node_unsafe_free(new);
@@ -499,16 +500,21 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
   	}
 
 
-	if(1 || !record){
+	if(!record){
 		left = curr;
 		curr = curr->next;
 		position += fetch_position(&curr, &left, timestamp);
 		scan_list_length_en+=position;
 	}
 	else{
-		node_t *preds[2], *succs[2];
+		accelerated_searches++;
+		node_t *preds[3], *succs[3];
+		preds[2] = curr;
+		succs[2] = curr->upper_next[1];
+		scan_list_length_en+=fetch_position(&succs[2], &preds[2], timestamp);
+		
 		preds[1] = curr;
-		succs[1] = curr->upper_next;
+		succs[1] = curr->upper_next[0];
 		scan_list_length_en+=fetch_position(&succs[1], &preds[1], timestamp);
 		
 		preds[0] = preds[1];
@@ -520,8 +526,10 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 
 		if(rand & 1){
 				if(preds[0]->timestamp == timestamp) new->tie_breaker+= preds[0]->tie_breaker;
-			  	new->next 		= succs[0];
-				new->upper_next = succs[1];
+			  	new->next 			= succs[0];
+				new->upper_next[0] 	= succs[1];
+				if( (rand & 3) == 3)
+					new->upper_next[1] 	= succs[2];
 
 				__local_try=0;
 				__status = 0;
@@ -532,7 +540,8 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 
 			    if(bckt->extractions != 0)  	{rtm_debug++;goto begin;}
 				if(preds[0]->next != succs[0])	{rtm_nested++;goto begin;}
-				if(preds[1]->upper_next != succs[1])	{rtm_nested++;goto begin;}
+				if(preds[1]->upper_next[0] != succs[1])	{rtm_nested++;goto begin;}
+				if((rand & 3) == 3 && preds[2]->upper_next[1] != succs[2])	{rtm_nested++;goto begin;}
 
 				++rtm_prova;
 				__status = 0;
@@ -540,12 +549,15 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 				assert(new != NULL && preds[0]->next != NULL && succs[0] != NULL);
 				if((__status = _xbegin ()) == _XBEGIN_STARTED)
 				{
-					if(bckt->extractions != 0)  		{ TM_ABORT(0xf2);}
-					if(preds[0]->next != succs[0])		{ TM_ABORT(0xf1);}
-					if(preds[1]->upper_next != succs[1])	{ TM_ABORT(0xf1);}
+					if(bckt->extractions != 0)  			{ TM_ABORT(0xf2);}
+					if(preds[0]->next != succs[0])			{ TM_ABORT(0xf1);}
+					if(preds[1]->upper_next[0] != succs[1])	{ TM_ABORT(0xf1);}
+					if((rand & 3) == 3 && preds[2]->upper_next[1] != succs[2])	{ TM_ABORT(0xf1);}
 
 					preds[0]->next 			= new; 
-					preds[1]->upper_next 	= new; 
+					preds[1]->upper_next[0] 	= new; 
+					if((rand & 3) == 3)
+						preds[2]->upper_next[1] 	= new; 
 					TM_COMMIT();
 				}
 				else
