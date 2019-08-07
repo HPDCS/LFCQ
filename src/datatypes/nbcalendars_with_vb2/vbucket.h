@@ -465,11 +465,12 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	validate_bucket(bckt);
 	int i = 0;
 	long rand, record = 0;  lrand48_r(&seedT, &rand);
-	for(i=0;i<VB_NUM_LEVELS;i++){
+	for(i=0;i<VB_NUM_LEVELS-1;i++){
 		if(rand & 1) level++;
 		else break;
+		rand >> 1;
 	}
-
+	assert(level <= VB_MAX_LEVEL);
 
   begin:
   	__global_try++;
@@ -544,13 +545,12 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 
 		if(level > 0){
 				if(preds[0]->timestamp == timestamp) new->tie_breaker+= preds[0]->tie_breaker;
-				level--;
-				new->next 				= succs[0];
 				
+				new->next 				= succs[0];
 				for(i=0;i<level;i++)
 					new->upper_next[i] 	= succs[i+1];
 			  	
-			  	for(;i<VB_MAX_LEVEL;i++)
+			  	for(;i<VB_MAX_LEVEL-1;i++)
 					new->upper_next[i] 	= NULL;
 
 				__local_try=0;
