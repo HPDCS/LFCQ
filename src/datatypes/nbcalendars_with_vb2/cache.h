@@ -197,6 +197,9 @@ static inline void init_cache(){}
 static inline void flush_cache(){}
 static inline unsigned long long get_loads(){return 0;}
 static inline unsigned long long get_hits(){return 0;} 
+static inline bucket_t* load_from_cache(unsigned int index){ return NULL;}
+static inline void invalidate_cache(unsigned int index){}
+
 
 #endif
 
