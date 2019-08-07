@@ -28,14 +28,17 @@
 }
 */
 
-#define __CACHE_INSERTION_ALGN_BITS 6 
-#define __CACHE_INSERTION_SETS_MASK 1023
-#define __CACHE_INSERTION_SETS_LEN (__CACHE_INSERTION_SETS_MASK+1)
-#define __CACHE_INSERTION_WAYS 64
+#define __CACHE_INSERTION_SETS_BITS     20
+#define INSERTION_CACHE_LEN 		(1<<__CACHE_INSERTION_SETS_BITS)
+#define __CACHE_INSERTION_WAYS          1
+#define __CACHE_INSERTION_ALGN_BITS 	0
+
+#define __CACHE_INSERTION_SETS_LEN      (INSERTION_CACHE_LEN/__CACHE_INSERTION_WAYS)
+#define __CACHE_INSERTION_SETS_MASK 	(__CACHE_INSERTION_SETS_LEN-1)
 
 
-
-#define INSERTION_CACHE_LEN (__CACHE_INSERTION_WAYS * __CACHE_INSERTION_SETS_LEN)
+//#define __CACHE_INSERTION_WAYS 2
+//#define INSERTION_CACHE_LEN (__CACHE_INSERTION_WAYS * __CACHE_INSERTION_SETS_LEN)
 
 
 __thread bucket_t* 		       *__cache_bckt = NULL;
@@ -44,6 +47,7 @@ __thread long 	   		       *__cache_hash = NULL;
 __thread unsigned int  	     *__cache_indx = NULL;
 __thread unsigned long long  *__cache_hits = NULL;
 __thread unsigned long long  *__cache_load = NULL;
+__thread unsigned long long  *__cache_invs = NULL;
 __thread void*               __cache_tblt = NULL;
 __thread int                 __cache_init = 1;
 
@@ -142,6 +146,7 @@ static inline unsigned int get_cache_set_idx(unsigned int index){
       if(__cache_indx[base_offset + i] == index) {
           __cache_bckt[base_offset + i] = NULL;
           __cache_indx[base_offset + i] = 0;
+          __cache_invs[base_offset + i]++;
       }
     }
 
@@ -156,6 +161,7 @@ static inline unsigned int get_cache_set_idx(unsigned int index){
       __cache_indx =  malloc(sizeof(unsigned int        )*INSERTION_CACHE_LEN);
       __cache_hits =  malloc(sizeof(unsigned long long  )*INSERTION_CACHE_LEN);
       __cache_load =  malloc(sizeof(unsigned long long  )*INSERTION_CACHE_LEN);
+      __cache_invs =  malloc(sizeof(unsigned long long  )*INSERTION_CACHE_LEN);
       __cache_init = 0;
     }
   }
@@ -169,6 +175,7 @@ static inline unsigned int get_cache_set_idx(unsigned int index){
       __cache_hits[i]   = 0;
       __cache_load[i]  = 0;
       __cache_indx[i] = 0;
+      __cache_invs[i] = 0;
     }
   }
 
@@ -177,7 +184,6 @@ static inline unsigned int get_cache_set_idx(unsigned int index){
     unsigned long long res = 0;
     for(h=0; h<INSERTION_CACHE_LEN-1;h++){
          res+=__cache_load[h];
-         res+=__cache_hits[h];
     }
     return res;
   }
@@ -190,13 +196,22 @@ static inline unsigned int get_cache_set_idx(unsigned int index){
     }
     return res;
   }
+  static inline unsigned long long get_invs(){
+    int h=0;
+    unsigned long long res = 0;
+    for(h=0; h<INSERTION_CACHE_LEN-1;h++){
+         res+=__cache_invs[h];
+    }
+    return res;
+  }
 #else
 
 static inline void update_cache(bucket_t *bckt){}
 static inline void init_cache(){}
 static inline void flush_cache(){}
 static inline unsigned long long get_loads(){return 0;}
-static inline unsigned long long get_hits(){return 0;} 
+static inline unsigned long long get_hits(){return 0;}
+static inline unsigned long long get_invs(){return 0;}
 static inline bucket_t* load_from_cache(unsigned int index){ return NULL;}
 static inline void invalidate_cache(unsigned int index){}
 

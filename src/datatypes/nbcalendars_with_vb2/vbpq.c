@@ -383,10 +383,11 @@ __thread unsigned long long rtm_other2=0ULL, rtm_prova2=0ULL, rtm_failed2=0ULL, 
 void pq_report(int TID)
 {
 
-unsigned long long cache_load = 0, cache_hit = 0;
+unsigned long long cache_load = 0, cache_hit = 0, cache_invs = 0;
 
 cache_load	= get_loads();
 cache_hit	= get_hits();
+cache_invs	= get_invs();
 
 printf("CHANGE EPOCH REQ: CHANGE_EPO_SUCC %llu - CHANGE_EPO_RQ %llu - BUCKET_CONNECT %llu - Insertion cache efficiency %f %llu %llu\n", count_epoch_ops, rq_epoch_ops, bckt_connect_count,  ((float)cache_hit/(float)cache_load), cache_hit, cache_load);
 

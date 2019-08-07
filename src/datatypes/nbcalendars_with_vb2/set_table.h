@@ -20,6 +20,12 @@ extern __thread unsigned long long scan_list_length_en;
 extern __thread unsigned long long scan_list_length;
 extern __thread unsigned int read_table_count;
 
+extern __thread unsigned long long concurrent_enqueue;
+extern __thread unsigned long long performed_enqueue ;
+extern __thread unsigned long long concurrent_dequeue;
+extern __thread unsigned long long performed_dequeue ;
+extern __thread unsigned long long scan_list_length;
+extern __thread unsigned long long scan_list_length_en ;
 
 #define MINIMUM_SIZE 1
 #define SAMPLE_SIZE 50
@@ -664,6 +670,7 @@ assert(a == b || *curr_table_ptr != h);
 
 
 	if(h != __cache_tblt){
+
 		count_epoch_ops = 0ULL;
 		bckt_connect_count = 0ULL;
 		rq_epoch_ops = 0ULL;
@@ -671,6 +678,14 @@ assert(a == b || *curr_table_ptr != h);
 		num_cas_useful = 0ULL;
 		near = 0ULL;
 		__cache_tblt = h;
+performed_enqueue=0;
+performed_dequeue=0;
+concurrent_enqueue = 0;
+scan_list_length_en = 0;
+concurrent_dequeue = 0;
+scan_list_length = 0;   
+search_en= 0;			
+search_de = 0;
 		flush_cache();
 	}
 
