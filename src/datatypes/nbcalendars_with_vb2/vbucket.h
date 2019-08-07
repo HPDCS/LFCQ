@@ -488,9 +488,8 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
   	if(get_op_type(bckt->op_descriptor) != NOOP) 		{node_unsafe_free(new); res = ABORT; 	 goto out; 	}
 
   	toskip		= extracted;
+	record = extracted == 0;
 	
-  	
-  	if(extracted == 0) record = 1;
 	/*
   	position = 0;
 	while(toskip > 0ULL && curr != tail){
@@ -523,10 +522,30 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	}
 	else{
 		node_t *preds[VB_NUM_LEVELS], *succs[VB_NUM_LEVELS];
-
 		accelerated_searches++;
 
-		preds[VB_MAX_LEVEL] = curr;
+
+		preds[3] = curr;
+		succs[3] = curr->upper_next[2];
+		scan_list_length_en+=fetch_position(&succs[3], &preds[3], timestamp, 3);
+
+		preds[2] = curr;
+		succs[2] = curr->upper_next[1];
+		scan_list_length_en+=fetch_position(&succs[2], &preds[2], timestamp, 2);
+		
+		preds[1] = preds[2];
+		succs[1] = preds[2]->upper_next[0];
+		scan_list_length_en+=fetch_position(&succs[1], &preds[1], timestamp, 1);
+		
+		preds[0] = preds[1];
+		succs[0] = preds[1]->next;
+		scan_list_length_en+=fetch_position(&succs[0], &preds[0], timestamp, 0);
+
+		left = preds[0];
+		curr = succs[0];
+
+
+/*		preds[VB_MAX_LEVEL] = curr;
 		succs[VB_MAX_LEVEL] = curr->upper_next[VB_MAX_LEVEL-1];
 		scan_list_length_en+=fetch_position(&succs[VB_MAX_LEVEL], &preds[VB_MAX_LEVEL], timestamp, VB_MAX_LEVEL);
 		
@@ -542,17 +561,22 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 
 		left = preds[0];
 		curr = succs[0];
-
+*/
 		if(level > 0){
 				if(preds[0]->timestamp == timestamp) new->tie_breaker+= preds[0]->tie_breaker;
 				
 				new->next 				= succs[0];
+				if(level >= 1) 			new->upper_next[0] 	= succs[1];
+				if(level >= 2) 			new->upper_next[1] 	= succs[2];
+				if(level >= 3) 			new->upper_next[2] 	= succs[3];
+
+				/*
 				for(i=0;i<level;i++)
 					new->upper_next[i] 	= succs[i+1];
 			  	
-			  	for(;i<VB_MAX_LEVEL-1;i++)
-					new->upper_next[i] 	= NULL;
-
+			  	//for(;i<VB_MAX_LEVEL-1;i++)
+				//	new->upper_next[i] 	= NULL;
+*/
 				__local_try=0;
 				__status = 0;
 				mask = 1;
@@ -560,11 +584,17 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 
 				BACKOFF_LOOP();
 
-			    if(bckt->extractions != 0)  	{rtm_debug++;goto begin;}
-				if(preds[0]->next != succs[0])	{rtm_nested++;goto begin;}
+			    if(bckt->extractions != 0)  							{rtm_debug++;goto begin;}
+				if(				 preds[0]->next 	     != succs[0])	{rtm_nested++;goto begin;}
+				if(level >= 1 && preds[1]->upper_next[0] != succs[1])	{rtm_nested++;goto begin;}
+				if(level >= 2 && preds[2]->upper_next[1] != succs[2])	{rtm_nested++;goto begin;}
+				if(level >= 3 && preds[3]->upper_next[2] != succs[3])	{rtm_nested++;goto begin;}
 
+
+/*
 			  	for(i=0;i<level;i++)
 					if(preds[i+1]->upper_next[i] != succs[i+1])	{rtm_nested++;goto begin;}
+*/
 //				if((rand & 3) == 3 && preds[2]->upper_next[1] != succs[2])	{rtm_nested++;goto begin;}
 
 				++rtm_prova;
@@ -573,17 +603,30 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 				assert(new != NULL && preds[0]->next != NULL && succs[0] != NULL);
 				if((__status = _xbegin ()) == _XBEGIN_STARTED)
 				{
-					if(bckt->extractions != 0)  			{ TM_ABORT(0xf2);}
-					if(preds[0]->next != succs[0])			{ TM_ABORT(0xf1);}
-				  	for(i=0;i<level;i++)
+				    if(bckt->extractions != 0)  							{ TM_ABORT(0xf2);}
+					if(				 preds[0]->next 	     != succs[0])	{ TM_ABORT(0xf1);}
+					if(level >= 1 && preds[1]->upper_next[0] != succs[1])	{ TM_ABORT(0xf1);}
+					if(level >= 2 && preds[2]->upper_next[1] != succs[2])	{ TM_ABORT(0xf1);}
+					if(level >= 3 && preds[3]->upper_next[2] != succs[3])	{ TM_ABORT(0xf1);}
+
+
+
+									preds[0]->next 			= new;
+					if(level >= 1 ) preds[1]->upper_next[0] = new;
+					if(level >= 2 ) preds[2]->upper_next[1] = new;
+					if(level >= 3 ) preds[3]->upper_next[2] = new;
+
+/*				  	for(i=0;i<level;i++)
 						if(preds[i+1]->upper_next[i] != succs[i+1])	{ TM_ABORT(0xf1);}
-//
+*///
 //					if(preds[1]->upper_next[0] != succs[1])	{ TM_ABORT(0xf1);}
 //					if((rand & 3) == 3 && preds[2]->upper_next[1] != succs[2])	{ TM_ABORT(0xf1);}
 
+/*
 					preds[0]->next 			= new; 
 				  	for(i=0;i<level;i++)
 				  		preds[i+1]->upper_next[i] 	= new;
+*/
 //					preds[1]->upper_next[0] 	= new; 
 //					if((rand & 3) == 3)			preds[2]->upper_next[1] 	= new; 
 					TM_COMMIT();
