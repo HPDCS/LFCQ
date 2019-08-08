@@ -107,8 +107,8 @@ struct __node_t
 	char __pad_1[8-sizeof(pkey_t)];		// 16
 	unsigned int tie_breaker;			// 20
 	int hash;							// 24
-	node_t * volatile next;				// 32
 	void * volatile replica;			// 40
+	node_t * volatile next;				// 32
 	node_t * volatile upper_next[VB_NUM_LEVELS-1];	// 64
 };
 
@@ -529,8 +529,8 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 		succs[3] = curr->upper_next[2];
 		scan_list_length_en+=fetch_position(&succs[3], &preds[3], timestamp, 3);
 
-		preds[2] = curr;
-		succs[2] = curr->upper_next[1];
+		preds[2] = preds[3];
+		succs[2] = succs[3]->upper_next[1];
 		scan_list_length_en+=fetch_position(&succs[2], &preds[2], timestamp, 2);
 		
 		preds[1] = preds[2];
@@ -565,7 +565,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 		if(level > 0){
 				if(preds[0]->timestamp == timestamp) new->tie_breaker+= preds[0]->tie_breaker;
 				
-				new->next 				= succs[0];
+										new->next 			= succs[0];
 				if(level >= 1) 			new->upper_next[0] 	= succs[1];
 				if(level >= 2) 			new->upper_next[1] 	= succs[2];
 				if(level >= 3) 			new->upper_next[2] 	= succs[3];
