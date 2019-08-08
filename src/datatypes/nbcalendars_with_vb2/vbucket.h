@@ -607,18 +607,25 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 				if((__status = _xbegin ()) == _XBEGIN_STARTED)
 				{
 				    if(bckt->extractions != 0)  							{ TM_ABORT(0xf2);}
-					if(				 preds[0]->next 	     != succs[0])	{ TM_ABORT(0xf1);}
+
+                                for(i=0;i<VB_NUM_LEVELS;i++)
+                                        if(level >= i && preds[i]->upper_next[i-1] != succs[i])				{ TM_ABORT(0xf1);}
+
+/*					if(				 preds[0]->next 	     != succs[0])	{ TM_ABORT(0xf1);}
 					if(level >= 1 && preds[1]->upper_next[0] != succs[1])	{ TM_ABORT(0xf1);}
 					if(level >= 2 && preds[2]->upper_next[1] != succs[2])	{ TM_ABORT(0xf1);}
 					if(level >= 3 && preds[3]->upper_next[2] != succs[3])	{ TM_ABORT(0xf1);}
+*/
+
+				for(i=0;i<VB_NUM_LEVELS;i++)
+                                       if(level >= i) preds[i]->upper_next[i-1] = new;
 
 
-
-									preds[0]->next 			= new;
+/*					if(level >= 0 ) preds[0]->upper_next[-1]= new; //						preds[0]->next 			= new;
 					if(level >= 1 ) preds[1]->upper_next[0] = new;
 					if(level >= 2 ) preds[2]->upper_next[1] = new;
 					if(level >= 3 ) preds[3]->upper_next[2] = new;
-
+*/
 /*				  	for(i=0;i<level;i++)
 						if(preds[i+1]->upper_next[i] != succs[i+1])	{ TM_ABORT(0xf1);}
 *///
