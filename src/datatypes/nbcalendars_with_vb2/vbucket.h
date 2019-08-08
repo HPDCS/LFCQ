@@ -559,12 +559,11 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 
 		if(level > 0){
 				if(preds[0]->timestamp == timestamp) new->tie_breaker+= preds[0]->tie_breaker;
-				
-				for(i=0;i<level;i++)
+
+				for(i=0;i<VB_NUM_LEVELS;i++)
 					new->upper_next[i-1] = level >= i ? succs[i] : NULL;
 
-/*
-				if(level >= 0)			new->upper_next[-1]		= succs[0];
+/*				if(level >= 0)			new->upper_next[-1]	= succs[0];
 				if(level >= 1) 			new->upper_next[ 0] 	= succs[1];
 				if(level >= 2) 			new->upper_next[ 1] 	= succs[2];
 				if(level >= 3) 			new->upper_next[ 2] 	= succs[3];
