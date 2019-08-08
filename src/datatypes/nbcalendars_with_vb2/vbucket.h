@@ -526,22 +526,33 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 		accelerated_searches++;
 
 
+		for(i=VB_MAX_LEVEL;i>=0;i--){
+			preds[i] = curr;
+			succs[i] = curr->upper_next[i-1];
+			scan_list_length_en+=fetch_position(&succs[i], &preds[i], timestamp, i);
+			curr 	 = preds[i];
+		}
+/*
 		preds[3] = curr;
 		succs[3] = curr->upper_next[2];
 		scan_list_length_en+=fetch_position(&succs[3], &preds[3], timestamp, 3);
+		curr 	 = preds[3];
 
-		preds[2] = preds[3];
-		succs[2] = preds[3]->upper_next[1];
+		preds[2] = curr;
+		succs[2] = curr->upper_next[1];
 		scan_list_length_en+=fetch_position(&succs[2], &preds[2], timestamp, 2);
-		
-		preds[1] = preds[2];
-		succs[1] = preds[2]->upper_next[0];
-		scan_list_length_en+=fetch_position(&succs[1], &preds[1], timestamp, 1);
-		
-		preds[0] = preds[1];
-		succs[0] = preds[1]->next;
-		scan_list_length_en+=fetch_position(&succs[0], &preds[0], timestamp, 0);
+		curr	 = preds[2];
 
+		preds[1] = curr;
+		succs[1] = curr->upper_next[0];
+		scan_list_length_en+=fetch_position(&succs[1], &preds[1], timestamp, 1);
+		curr	 = preds[1];
+
+		preds[0] = curr;
+		succs[0] = curr->next;
+		scan_list_length_en+=fetch_position(&succs[0], &preds[0], timestamp, 0);
+		curr	 = preds[0];
+*/
 		left = preds[0];
 		curr = succs[0];
 
