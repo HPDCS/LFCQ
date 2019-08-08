@@ -557,38 +557,25 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 		curr = succs[0];
 
 
-/*		preds[VB_MAX_LEVEL] = curr;
-		succs[VB_MAX_LEVEL] = curr->upper_next[VB_MAX_LEVEL-1];
-		scan_list_length_en+=fetch_position(&succs[VB_MAX_LEVEL], &preds[VB_MAX_LEVEL], timestamp, VB_MAX_LEVEL);
-		
-		for(i=VB_MAX_LEVEL-1;i>0;i--){
-			preds[i] = preds[i+1];
-			succs[i] = preds[i+1]->upper_next[i-1];
-			scan_list_length_en+=fetch_position(&succs[i], &preds[i], timestamp, i);
-		}
-
-		preds[0] = preds[1];
-		succs[0] = preds[1]->next;
-		scan_list_length_en+=fetch_position(&succs[0], &preds[0], timestamp, 0);
-
-		left = preds[0];
-		curr = succs[0];
-*/
 		if(level > 0){
 				if(preds[0]->timestamp == timestamp) new->tie_breaker+= preds[0]->tie_breaker;
 				
-										new->next 			= succs[0];
+				for(i=0;i<level;i++)
+					new->upper_next[i-1] = level >= i ? succs[i] : NULL;
+
+/*
+				if(level >= 0)			new->upper_next[-1]		= succs[0];
+				if(level >= 1) 			new->upper_next[ 0] 	= succs[1];
+				if(level >= 2) 			new->upper_next[ 1] 	= succs[2];
+				if(level >= 3) 			new->upper_next[ 2] 	= succs[3];
+*/
+
+/*										new->next 			= succs[0];
 				if(level >= 1) 			new->upper_next[0] 	= succs[1];
 				if(level >= 2) 			new->upper_next[1] 	= succs[2];
 				if(level >= 3) 			new->upper_next[2] 	= succs[3];
-
-				/*
-				for(i=0;i<level;i++)
-					new->upper_next[i] 	= succs[i+1];
-			  	
-			  	//for(;i<VB_MAX_LEVEL-1;i++)
-				//	new->upper_next[i] 	= NULL;
 */
+
 				__local_try=0;
 				__status = 0;
 				mask = 1;
