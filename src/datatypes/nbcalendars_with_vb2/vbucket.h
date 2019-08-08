@@ -583,11 +583,16 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 				BACKOFF_LOOP();
 
 			    if(bckt->extractions != 0)  							{rtm_debug++;goto begin;}
+
+				for(i=0;i<VB_NUM_LEVELS;i++)
+					if(level >= i && preds[i]->upper_next[i-1] != succs[i])	{rtm_nested++;goto begin;}
+
+/*			    
 				if(				 preds[0]->next 	     != succs[0])	{rtm_nested++;goto begin;}
 				if(level >= 1 && preds[1]->upper_next[0] != succs[1])	{rtm_nested++;goto begin;}
 				if(level >= 2 && preds[2]->upper_next[1] != succs[2])	{rtm_nested++;goto begin;}
 				if(level >= 3 && preds[3]->upper_next[2] != succs[3])	{rtm_nested++;goto begin;}
-
+*/
 
 /*
 			  	for(i=0;i<level;i++)
