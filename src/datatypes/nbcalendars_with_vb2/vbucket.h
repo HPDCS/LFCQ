@@ -489,6 +489,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 
   	toskip		= extracted;
 	record = extracted == 0;
+	if(!record) level  = 0;
 	
 	/*
   	position = 0;
@@ -530,7 +531,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 		scan_list_length_en+=fetch_position(&succs[3], &preds[3], timestamp, 3);
 
 		preds[2] = preds[3];
-		succs[2] = succs[3]->upper_next[1];
+		succs[2] = preds[3]->upper_next[1];
 		scan_list_length_en+=fetch_position(&succs[2], &preds[2], timestamp, 2);
 		
 		preds[1] = preds[2];
