@@ -155,7 +155,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			// compute the index of the virtual bucket
 			newIndex = hash(timestamp, h->bucket_width);
 			// compute the index of the physical bucket
-			index = ((unsigned int) newIndex) % size;
+			index = virtual_to_physical(((unsigned int) newIndex), size);
 
 //			lookup_table = h->index->array[index];
 			// get the bucket
@@ -295,7 +295,7 @@ t_state =1;
 		epoch = current & MASK_EPOCH;
 
 		// get the physical bucket
-		min = array + (index % (size));
+		min = array + virtual_to_physical(index, size);
 		min_next = min->next;
 
 		// a reshuffle has been detected => restart

@@ -5,6 +5,12 @@
 #include "vbucket.h"
 
 
+static inline unsigned int virtual_to_physical(unsigned int index, unsigned int size){
+	return index % size;
+}
+
+
+
 /**
  * This function computes the index of the destination bucket in the hashtable
  *
@@ -390,7 +396,7 @@ double compute_mean_separation_time(table_t *h,
 
 		for (i = 0; i < size; i++)
 		{
-			tmp = array + (index + i) % size; 	//get the head of the bucket
+			tmp = array + virtual_to_physical(index + i, size); //get the head of the bucket
 			//tmp = get_unmarked(tmp->next);		//pointer to first node
 			
 			left = search(tmp, &left_next, &right, &distance, index);
