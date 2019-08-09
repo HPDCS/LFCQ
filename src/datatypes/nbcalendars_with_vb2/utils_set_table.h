@@ -6,6 +6,8 @@
 
 
 static inline unsigned int virtual_to_physical(unsigned int index, unsigned int size){
+	//printf("index %u new index %u size %u\n", index, (index >> 1 ) % size, size);
+	//return (index >> 1 ) % size;
 	return index % size;
 }
 
@@ -396,14 +398,14 @@ double compute_mean_separation_time(table_t *h,
 
 		for (i = 0; i < size; i++)
 		{
-			tmp = array + virtual_to_physical(index + i, size); //get the head of the bucket
+			tmp = array + virtual_to_physical(index, size); //get the head of the bucket
 			//tmp = get_unmarked(tmp->next);		//pointer to first node
-			
+//			printf("Searching index %u into %u bucket\n", index, virtual_to_physical(index + i, size));
 			left = search(tmp, &left_next, &right, &distance, index);
 
 			// the bucket is not empty
-			if(left->index == index && left->type != HEAD){
-//				if(tid == 1)LOG("%d- INDEX: %u\n",tid, index);
+			if(left->index == index  && left->type != HEAD){
+//				if(tid == 1)	LOG("%d- INDEX: %u COUNTER %u SAMPLESIZE %u\n",tid, index, counter, sample_size);
 				curr = &left->head;
 				toskip = left->extractions;
 				if(is_freezed(toskip)) toskip = get_cleaned_extractions(left->extractions);
@@ -429,10 +431,12 @@ double compute_mean_separation_time(table_t *h,
 
 
 			if(right->type != TAIL) new_min_index = new_min_index < right->index ? new_min_index : right->index;
-		
+			index++;
+			if(counter == sample_size) break;
 		}
+//		printf("COUNTER %u SAMPLE %u\n", counter, sample_size);
 		//if the calendar has no more elements I will go out
-		if(new_min_index == -1)
+		if(new_min_index == -1 || counter == sample_size)
 			break;
 		//otherwise I will restart from the next good bucket
 		index = new_min_index;

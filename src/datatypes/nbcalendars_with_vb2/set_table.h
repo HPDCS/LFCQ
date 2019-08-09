@@ -28,7 +28,7 @@ extern __thread unsigned long long scan_list_length;
 extern __thread unsigned long long scan_list_length_en ;
 
 #define MINIMUM_SIZE 1
-#define SAMPLE_SIZE 50
+#define SAMPLE_SIZE 25
 
 #define ENABLE_EXPANSION 1
 #define READTABLE_PERIOD 64
