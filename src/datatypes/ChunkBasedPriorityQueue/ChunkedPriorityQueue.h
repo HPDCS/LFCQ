@@ -258,6 +258,10 @@ public:
 				"CHUNK_SIZE=%d) ***************\n",
 				first, second, MAX_IDX, MAX_VAL, CHUNK_SIZE);
 		_assert(res1 && res2);
+
+                int i =0;
+                for(i=0;i< ALLOCCACHE/4;i++)
+                        memset(arr+i, 0, sizeof(Chunk));
 	}
 
 	~ChunkedPriorityQueue(){							// ChunkedPriorityQueue destructor	
