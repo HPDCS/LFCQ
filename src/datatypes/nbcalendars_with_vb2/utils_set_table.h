@@ -4,11 +4,12 @@
 
 #include "vbucket.h"
 
-
+#define BUCKET_ASSOCIATIVITY 	0
+#define EXP_MAX_SIZE		25
 static inline unsigned int virtual_to_physical(unsigned int index, unsigned int size){
 	//printf("index %u new index %u size %u\n", index, (index >> 1 ) % size, size);
-	//return (index >> 1 ) % size;
-	return index % size;
+	return (index >> BUCKET_ASSOCIATIVITY ) % size;
+	//return index % size;
 }
 
 
@@ -241,13 +242,15 @@ static void set_new_table(table_t *h, unsigned int counter)
 	else if(size == thp2 && counter < h->threshold)
 		new_size = 1;
 	
-	
+	new_size = new_size > (1 << EXP_MAX_SIZE) ? 0 : new_size;	
+
 	// is time for periodic resize?
 	if(new_size == 0 && (h->e_counter.count + h->d_counter.count) > RESIZE_PERIOD && h->resize_count/log_size < PERC_RESIZE_COUNT)
 		new_size = h->size;
+	
 	// the num of items is doubled/halved but it is not enough for change size
-	//if(new_size == 0 && h->last_resize_count != 0 && (counter >  h->last_resize_count*2 || counter < h->last_resize_count/2 ) )
-	//	new_size = h->size;
+	if(new_size == 0 && h->last_resize_count != 0 && (counter >  h->last_resize_count*2 || counter < h->last_resize_count/2 ) )
+		new_size = h->size;
 
 	if(new_size != 0) 
 	{
@@ -396,7 +399,7 @@ double compute_mean_separation_time(table_t *h,
 	while(counter != sample_size && new_h->bucket_width == -1.0)
 	{   
 
-		for (i = 0; i < size; i++)
+		for (i = 0; i < (size << BUCKET_ASSOCIATIVITY); i++)
 		{
 			tmp = array + virtual_to_physical(index, size); //get the head of the bucket
 			//tmp = get_unmarked(tmp->next);		//pointer to first node
@@ -429,7 +432,7 @@ double compute_mean_separation_time(table_t *h,
 				}
 			}
 
-
+			if(index == new_min_index) new_min_index = -1;
 			if(right->type != TAIL) new_min_index = new_min_index < right->index ? new_min_index : right->index;
 			index++;
 			if(counter == sample_size) break;
