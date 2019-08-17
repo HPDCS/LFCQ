@@ -29,7 +29,12 @@
 
 #include "common_nb_calqueue.h"
 
-#define USE_TASK_QUEUE
+//OP macros
+//#define USE_TASK_QUEUE
+#ifdef USE_TASK_QUEUE
+#define USE_TASK_STEAL
+#endif
+
 #define NODE_HASH(bucket_id) ((bucket_id >> 2ull) % _NUMA_NODES)
 
 /* 
@@ -1072,7 +1077,15 @@ static inline pkey_t single_step_pq_dequeue(table* h, nb_calqueue *queue, void**
 			if(left_ts >= right_limit || left_node == tail) break;
 			
 			// the node is a good candidate for extraction! lets try for it
-			int res = atomic_test_and_set_x64(UNION_CAST(&left_node->next, unsigned long long*));
+			//int res = atomic_test_and_set_x64(UNION_CAST(&left_node->next, unsigned long long*)); //use widecas here
+			wideptr lnn;
+			lnn.next = left_node_next;
+			lnn.op_id = 0;
+			wideptr new;
+			new.next = ((unsigned long) left_node_next) | DEL;
+			new.op_id = 0; //add our id
+			
+			int res = __sync_bool_compare_and_swap(&left_node->widenext, lnn.widenext, new.widenext);
 
 			// the extraction is failed
 			if(!res) left_node_next = left_node->next;

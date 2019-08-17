@@ -143,6 +143,8 @@ struct __op_load
 	int response;		// -1 waiting for resp | 1 responsed
 	void* payload;		// paylod to enqueue | dequeued payload
 	pkey_t timestamp;	// ts of node to enqueue | lower ts of bucket to dequeue | returned ts
+
+	// need of candidate node
 };
 
 /**
@@ -150,6 +152,15 @@ struct __op_load
  */ 
 
 typedef struct __bucket_node nbc_bucket_node;
+
+typedef union {
+	volatile __uint128_t widenext;
+	struct {
+		nbc_bucket_node * volatile next;
+		volatile unsigned long op_id;
+	};
+} wideptr; // used for assignement
+
 struct __bucket_node
 {
 	void *payload;  				// general payload
@@ -161,7 +172,16 @@ struct __bucket_node
 	unsigned int nid; 				// used to resolve the conflict with same timestamp using a FIFO policy
 	//32
 	nbc_bucket_node * tail;
-	nbc_bucket_node * volatile next;	// pointer to the successor
+	// nbc_bucket_node * volatile next; // pointer to the successor
+	// union that holds a wideptr (fields can be accesse without changing the whole code ^_^)
+	union {
+		volatile __uint128_t widenext;
+		struct 
+		{
+			nbc_bucket_node * volatile next;
+			volatile unsigned long op_id;
+		};
+	}; // pointer to the successor, can use wide cas
 	//48
 	nbc_bucket_node * volatile replica;	// pointer to the replica
 	//nbc_bucket_node * volatile next_next;
@@ -297,8 +317,9 @@ static inline nbc_bucket_node* numa_node_malloc(void *payload, pkey_t timestamp,
 	res->replica = NULL;
 	res->payload = payload;
 	res->epoch = 0;
+	res->op_id = 0;
 	res->timestamp = timestamp;
-
+	
 	return res;
 }
 
