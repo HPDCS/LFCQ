@@ -137,7 +137,9 @@ extern int gc_hid[];
 typedef struct __op_load op_node; //maybe a union is better?
 struct __op_load 
 {
+	unsigned long op_id; //global identifier for the operation
 	unsigned int type;	// ENQ | DEQ
+
 	int response;		// -1 waiting for resp | 1 responsed
 	void* payload;		// paylod to enqueue | dequeued payload
 	pkey_t timestamp;	// ts of node to enqueue | lower ts of bucket to dequeue | returned ts
@@ -162,7 +164,7 @@ struct __bucket_node
 	nbc_bucket_node * volatile next;	// pointer to the successor
 	//48
 	nbc_bucket_node * volatile replica;	// pointer to the replica
-	nbc_bucket_node * volatile next_next;
+	//nbc_bucket_node * volatile next_next;
 	//64
 };
 
@@ -204,7 +206,6 @@ struct nb_calqueue
 	table * volatile hashtable;
 	//char pad[24];
 	// 64
-	task_queue op_queue[_NUMA_NODES]; // (!new) per numa node queue
 };
 
 

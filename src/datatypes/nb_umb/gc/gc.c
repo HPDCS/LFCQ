@@ -324,23 +324,6 @@ static chunk_t *node_get_filled_chunks(int n, int sz, unsigned int numa_node)
     h = p = node_get_empty_chunks(n, numa_node);
 
     check = node+page_size;
-    //node += sizeof(unsigned long);
-
-    /*
-    do {
-        p->i = BLKS_PER_CHUNK;
-        i = 0;
-        do {
-            p->blk[i++] = node;
-            node = node + sz;
-            if (node + sz >= check) {
-                node = check;
-                check = node+page_size;
-                node += sizeof(unsigned long);
-            }
-        } while(i < BLKS_PER_CHUNK);
-    } while((p = p->next) != h);
-    */
     
     p->i = BLKS_PER_CHUNK;
     i = 0;
@@ -498,7 +481,7 @@ static void gc_reclaim(ptst_t * our_ptst)
                 next_t = t->next;
                 
                 // @TODO try to improve this, maybe we can reduce the number of accesses to gc_global
-                add_chunks_to_list(t, gc_global.free_chunks[k]); //this is heavy since we are adding one chunk at a time
+                add_chunks_to_list(t, gc_global.free_chunks[k]);
                     
             } while ( next_t != ch );
 
@@ -818,15 +801,13 @@ void _init_gc_subsystem(void)
     int i;
     memset(&gc_global, 0, sizeof(gc_global));
 
-    gc_global.page_size   = (unsigned int)sysconf(_SC_PAGESIZE); //maybe move it to a macro
-    gc_global.numa_nodes = (unsigned int) numa_num_configured_nodes(); // count number of numa nodes
+    gc_global.page_size   = (unsigned int)sysconf(_SC_PAGESIZE); 
+    gc_global.numa_nodes = (unsigned int) numa_num_configured_nodes();
 
     for (i=0; i<gc_global.numa_nodes; i++) {
         gc_global.free_chunks[i] = node_alloc_more_chunks(i);
     }
     
-    //gc_global.free_chunks = alloc_more_chunks();
-
     gc_global.nr_hooks = 0;
     gc_global.nr_sizes = 0;
 }

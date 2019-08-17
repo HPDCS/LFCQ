@@ -29,7 +29,7 @@
 
 #include "common_nb_calqueue.h"
 
-//#define USE_TASK_QUEUE
+#define USE_TASK_QUEUE
 #define NODE_HASH(bucket_id) ((bucket_id >> 2ull) % _NUMA_NODES)
 
 /* 
@@ -44,6 +44,9 @@
 
 int gc_aid[32];
 int gc_hid[4];
+
+unsigned long op_counter = 1;
+task_queue op_queue[_NUMA_NODES]; // (!new) per numa node queue
 
 //unsigned int ACTIVE_NUMA_NODES;
 
@@ -683,7 +686,7 @@ void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 	int res = 0;
 	
 	//Create a new node to be inserted in the new table as as INValid
-	replica = numa_node_malloc(right_node->payload, right_node->timestamp,  right_node->counter, hash(right_node->timestamp, new_h->bucket_width)%_NUMA_NODES);
+	replica = numa_node_malloc(right_node->payload, right_node->timestamp,  right_node->counter, NODE_HASH(hash(right_node->timestamp, new_h->bucket_width)));
 	
 	new_node 			= &replica;
 	new_node_pointer 	= (*new_node);
@@ -956,7 +959,7 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	// (!new) initialize numa queues 
 	for (i = 0; i < _NUMA_NODES; i++ ) 
 	{
-		init_tq(&(res->op_queue[i]), i);
+		init_tq(&op_queue[i], i);
 	}
 
 	res->hashtable->bucket_width = 1.0;
@@ -1149,7 +1152,7 @@ static inline int single_step_pq_enqueue(table* h, pkey_t timestamp, void* paylo
 	newIndex = hash(timestamp, h->bucket_width);
 	
 	// allocate node on right NUMA NODE
-	new_node = numa_node_malloc(payload, timestamp, 0, newIndex%_NUMA_NODES);
+	new_node = numa_node_malloc(payload, timestamp, 0, NODE_HASH(newIndex));
 	
 	// read actual epoch
 	new_node->epoch = (h->current & MASK_EPOCH);
@@ -1244,7 +1247,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			requested_op = operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
 			// se avviene una resize e il nodo di destinazione cambia non peggioro la situazione?
 
-			//@TODO The structure must be reshuffled to be handled correctly 
+			//@TODO The structure must be reshuffled to be handled correctly
+			requested_op->op_id = __sync_fetch_and_add(&op_counter, 1);
 			requested_op->type = OP_PQ_ENQ;
 			requested_op->timestamp = ts;
 			requested_op->payload = payload; //DEADBEEF
@@ -1254,7 +1258,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 #ifdef USE_TASK_QUEUE
 		if (operation != NULL) 
 		{
-			tq_enqueue(&(queue->op_queue[dest_node]), (void*) operation, dest_node);
+			tq_enqueue(&op_queue[dest_node], (void*) operation, dest_node);
 		}
 		op_node* extracted_op = NULL;
 		unsigned int node, i;
@@ -1276,7 +1280,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 		// extract from one queue
 		i = node = NID;
 		do {
-			if (tq_dequeue(&(queue->op_queue[i]), &extracted_op)) {
+			if (tq_dequeue(&op_queue[i], &extracted_op)) {
 				break;
 			}
 			i = (i + 1) % _NUMA_NODES;
@@ -1371,6 +1375,7 @@ pkey_t pq_dequeue(void *q, void** result)
 
 			requested_op = operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
 			
+			requested_op->op_id = __sync_fetch_and_add(&op_counter, 1);
 			requested_op->type = OP_PQ_DEQ;
 			requested_op->timestamp = ts; 
 			requested_op->payload = NULL;
@@ -1381,7 +1386,7 @@ pkey_t pq_dequeue(void *q, void** result)
 
 #ifdef USE_TASK_QUEUE
 		if (operation != NULL)
-			tq_enqueue(&(queue->op_queue[dest_node]), (void*) operation, dest_node);
+			tq_enqueue(&op_queue[dest_node], (void*) operation, dest_node);
 		op_node* extracted_op = NULL;
 		unsigned int node, i;
 #endif
@@ -1406,7 +1411,7 @@ pkey_t pq_dequeue(void *q, void** result)
 			// extract from one queue
 		i = node = NID;
 		do {
-			if (tq_dequeue(&(queue->op_queue[i]), &extracted_op))
+			if (tq_dequeue(&op_queue[i], &extracted_op))
 				break;
 			i = (i + 1) % _NUMA_NODES;
 		} while(i != node);
