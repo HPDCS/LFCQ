@@ -30,7 +30,7 @@
 #include "common_nb_calqueue.h"
 
 //OP macros
-//#define USE_TASK_QUEUE
+#define USE_TASK_QUEUE
 #ifdef USE_TASK_QUEUE
 #define USE_TASK_STEAL
 #endif
@@ -989,7 +989,7 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 }
 
 /* (!new) single step dequeuq*/
-static inline pkey_t single_step_pq_dequeue(table* h, nb_calqueue *queue, void** result)
+static inline pkey_t single_step_pq_dequeue(table* h, nb_calqueue *queue, void** result, unsigned long op_id)
 {
 	nbc_bucket_node *min, *min_next, 
 					*left_node, *left_node_next, 
@@ -1081,9 +1081,10 @@ static inline pkey_t single_step_pq_dequeue(table* h, nb_calqueue *queue, void**
 			wideptr lnn;
 			lnn.next = left_node_next;
 			lnn.op_id = 0;
+			
 			wideptr new;
 			new.next = ((unsigned long) left_node_next) | DEL;
-			new.op_id = 0; //add our id
+			new.op_id = op_id; //add our id
 			
 			int res = __sync_bool_compare_and_swap(&left_node->widenext, lnn.widenext, new.widenext);
 
@@ -1321,7 +1322,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 		else if (handling_op->type == OP_PQ_DEQ)
 		{
 			/* table* h, nb_calqueue *queue, void** result */
-			ret_ts =  single_step_pq_dequeue(h, queue, &new_payload);
+			ret_ts =  single_step_pq_dequeue(h, queue, &new_payload, requested_op->op_id);
 			if (ret_ts != -1) //dequeue succesful
 			{
 				performed_dequeue++;
@@ -1454,7 +1455,7 @@ pkey_t pq_dequeue(void *q, void** result)
 		else if (handling_op->type == OP_PQ_DEQ)
 		{
 			/* table* h, nb_calqueue *queue, void** result */
-			ret_ts =  single_step_pq_dequeue(h, queue, &new_payload);
+			ret_ts =  single_step_pq_dequeue(h, queue, &new_payload, requested_op->op_id);
 			if (ret_ts != -1) { //dequeue failed
 				performed_dequeue++;
 				handling_op->payload = new_payload;
