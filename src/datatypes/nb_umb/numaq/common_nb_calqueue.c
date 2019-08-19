@@ -24,6 +24,11 @@
  *  Author: Romolo Marotta
  */
 
+
+/*
+ * @TODO move update of queue from single step to wrapper
+ * */
+
 #include <stdlib.h>
 #include <limits.h>
 
@@ -989,16 +994,19 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 }
 
 /* (!new) single step dequeuq*/
-static inline pkey_t single_step_pq_dequeue(table* h, nb_calqueue *queue, void** result, unsigned long op_id)
+static inline pkey_t single_step_pq_dequeue(table* h, nb_calqueue *queue, void** result, unsigned long op_id, nbc_bucket_node** candidate)
 {
 	nbc_bucket_node *min, *min_next, 
 					*left_node, *left_node_next, 
-					*tail, *array;
+					*tail, *array,
+					*current_candidate;
 	
 	unsigned long long current, old_current, new_current;
 	unsigned long long index;
 	unsigned long long epoch;
 	
+	unsigned long left_node_op_id;
+
 	unsigned int size, attempts = 0;
 	unsigned int counter;
 	pkey_t left_ts;
@@ -1018,7 +1026,7 @@ static inline pkey_t single_step_pq_dequeue(table* h, nb_calqueue *queue, void**
 
 	do
 	{	
-		// To many attempts: there is some problem? recheck the table
+		// Too many attempts: is there some problem? recheck the table
 		if( h->read_table_period == attempts){
 			*result = NULL;
 			return -1; //return error
@@ -1059,6 +1067,7 @@ static inline pkey_t single_step_pq_dequeue(table* h, nb_calqueue *queue, void**
 			
 			// get data from the current node	
 			left_node_next = left_node->next;
+			left_node_op_id = left_node->op_id;
 			left_ts = left_node->timestamp;
 
 			// increase count of traversed deleted items
@@ -1077,30 +1086,69 @@ static inline pkey_t single_step_pq_dequeue(table* h, nb_calqueue *queue, void**
 			if(left_ts >= right_limit || left_node == tail) break;
 			
 			// the node is a good candidate for extraction! lets try for it
-			//int res = atomic_test_and_set_x64(UNION_CAST(&left_node->next, unsigned long long*)); //use widecas here
+			//int res = atomic_test_and_set_x64(UNION_CAST(&left_node->next, unsigned long long*));
+
+			current_candidate = *candidate;
+			if (current_candidate == NULL) {
+				// try to set the candidate with the current node
+				__sync_bool_compare_and_swap(candidate, NULL, left_node);
+				current_candidate = *candidate;
+			}
+			if (current_candidate == 1) {
+				// someone returned the empty node
+				*result = NULL;
+				return INFTY;
+			}
+			else if (current_candidate != left_node) {
+				//printf("Diffenrent candidate: %p, %p\n", current_candidate, left_node);
+				// 	someone extracted the candidate
+				if (is_marked(current_candidate->next, DEL)) {
+					if (current_candidate->op_id == op_id) {
+						*result = current_candidate->payload;
+						return current_candidate->timestamp;
+					}
+					else {
+						__sync_bool_compare_and_swap(candidate, current_candidate, NULL);
+						*result = NULL;
+						return -1;
+					}	
+				}  
+			}
+
 			wideptr lnn;
 			lnn.next = left_node_next;
 			lnn.op_id = 0;
-			
+
 			wideptr new;
 			new.next = ((unsigned long) left_node_next) | DEL;
 			new.op_id = op_id; //add our id
 			
-			int res = __sync_bool_compare_and_swap(&left_node->widenext, lnn.widenext, new.widenext);
+			int res = __sync_bool_compare_and_swap(&left_node->widenext, lnn.widenext, new.widenext); // this will change also the candidate
 
 			// the extraction is failed
-			if(!res) left_node_next = left_node->next;
+			if(!res) {
+				left_node_next = left_node->next;
+				left_node_op_id = left_node->op_id;
+			}
+			/* the extraction failed, why?
+			 * Someone stole my op
+			 * Someone returned the node
+			 * A migration is happening
+			 * */
 
 			//left_node_next = FETCH_AND_OR(&left_node->next, DEL);
 			
 			// the node cannot be extracted && is marked as MOV	=> restart
 			if(is_marked(left_node_next, MOV)) {
+				// try reset the candidate
+				__sync_bool_compare_and_swap(candidate, current_candidate, NULL);
 				*result = NULL;
 				return -1; // return error
 			}	
 
-			// the node cannot be extracted && is marked as DEL => skip
-			if(is_marked(left_node_next, DEL))	continue;
+			// the node cannot be extracted && is marked as DEL
+			// check who extracted it, in case skip
+			if(is_marked(left_node_next, DEL) && left_node_op_id != op_id)	continue;
 			
 			// the node has been extracted
 
@@ -1117,10 +1165,14 @@ static inline pkey_t single_step_pq_dequeue(table* h, nb_calqueue *queue, void**
 		
 
 		// if i'm here it means that the virtual bucket was empty. Check for queue emptyness
-		if(left_node == tail && size == 1 && !is_marked(min->next, MOV))
+		// how to avoid a dequeue which lose update? Try set the current atomicallly, in case of failure someone has found a minimum
+		if(left_node == tail && size == 1 && !is_marked(min->next, MOV) && *candidate == NULL)
 		{
-			*result = NULL;
-			return INFTY;
+			if (__sync_bool_compare_and_swap(candidate, NULL, 1)) {
+				*result = NULL;
+				return INFTY;
+			}
+			// someone could change the candidate in the meanwile, losing the result
 		}
 				
 		new_current = h->current;
@@ -1322,7 +1374,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 		else if (handling_op->type == OP_PQ_DEQ)
 		{
 			/* table* h, nb_calqueue *queue, void** result */
-			ret_ts =  single_step_pq_dequeue(h, queue, &new_payload, requested_op->op_id);
+			ret_ts =  single_step_pq_dequeue(h, queue, &new_payload, requested_op->op_id, &requested_op->candidate);
 			if (ret_ts != -1) //dequeue succesful
 			{
 				performed_dequeue++;
@@ -1393,19 +1445,16 @@ pkey_t pq_dequeue(void *q, void** result)
 			requested_op->type = OP_PQ_DEQ;
 			requested_op->timestamp = ts; 
 			requested_op->payload = NULL;
+			requested_op->candidate = NULL;			
 			requested_op->response = -1;
 		}
-
-		//assertf(operation == NULL, "DEQ - No operation%s\n","");
 
 #ifdef USE_TASK_QUEUE
 		if (operation != NULL)
 			tq_enqueue(&op_queue[dest_node], (void*) operation, dest_node);
 		op_node* extracted_op = NULL;
 		unsigned int node, i;
-#endif
-
-#ifndef USE_TASK_QUEUE
+#else
 		op_node* extracted_op = operation;
 #endif
 
@@ -1422,7 +1471,7 @@ pkey_t pq_dequeue(void *q, void** result)
 
 
 #ifdef USE_TASK_QUEUE
-			// extract from one queue
+		// extract from one queue
 		i = node = NID;
 		do {
 			if (tq_dequeue(&op_queue[i], &extracted_op))
@@ -1436,6 +1485,11 @@ pkey_t pq_dequeue(void *q, void** result)
 			//@TODO how to handle this case?
 			continue;
 		}
+
+		/*
+		 * If local queue is empty, execute directly my op.
+		 * Do not enqueue it again, but execute it till success
+		 * */
 
 #endif
 
@@ -1455,7 +1509,7 @@ pkey_t pq_dequeue(void *q, void** result)
 		else if (handling_op->type == OP_PQ_DEQ)
 		{
 			/* table* h, nb_calqueue *queue, void** result */
-			ret_ts =  single_step_pq_dequeue(h, queue, &new_payload, requested_op->op_id);
+			ret_ts =  single_step_pq_dequeue(h, queue, &new_payload, requested_op->op_id, &requested_op->candidate);
 			if (ret_ts != -1) { //dequeue failed
 				performed_dequeue++;
 				handling_op->payload = new_payload;

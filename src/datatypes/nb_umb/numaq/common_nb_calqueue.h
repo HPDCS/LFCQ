@@ -134,33 +134,12 @@ extern int gc_hid[];
 /* (!new) OP load and struct */
 #define OP_PQ_ENQ 0x0
 #define OP_PQ_DEQ 0x2
-typedef struct __op_load op_node; //maybe a union is better?
-struct __op_load 
-{
-	unsigned long op_id; //global identifier for the operation
-	unsigned int type;	// ENQ | DEQ
-
-	int response;		// -1 waiting for resp | 1 responsed
-	void* payload;		// paylod to enqueue | dequeued payload
-	pkey_t timestamp;	// ts of node to enqueue | lower ts of bucket to dequeue | returned ts
-
-	// need of candidate node
-};
 
 /**
  *  Struct that define a node in a bucket
  */ 
 
 typedef struct __bucket_node nbc_bucket_node;
-
-typedef union {
-	volatile __uint128_t widenext;
-	struct {
-		nbc_bucket_node * volatile next;
-		volatile unsigned long op_id;
-	};
-} wideptr; // used for assignement
-
 struct __bucket_node
 {
 	void *payload;  				// general payload
@@ -187,6 +166,28 @@ struct __bucket_node
 	//nbc_bucket_node * volatile next_next;
 	//64
 };
+
+
+
+typedef struct __op_load op_node; //maybe a union is better?
+struct __op_load 
+{
+	unsigned long op_id; 		//global identifier for the operation
+	unsigned int type;			// ENQ | DEQ
+
+	int response;				// -1 waiting for resp | 1 responsed
+	void* payload;				// paylod to enqueue | dequeued payload
+	pkey_t timestamp;			// ts of node to enqueue | lower ts of bucket to dequeue | returned ts
+	nbc_bucket_node* candidate;	// need of candidate node
+};
+
+typedef union {
+	volatile __uint128_t widenext;
+	struct {
+		nbc_bucket_node * volatile next;
+		volatile unsigned long op_id;
+	};
+} wideptr; // used for assignement
 
 
 //extern nbc_bucket_node *g_tail;
