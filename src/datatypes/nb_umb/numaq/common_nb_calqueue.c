@@ -25,10 +25,6 @@
  */
 
 
-/*
- * @TODO move update of queue from single step to wrapper
- * */
-
 #include <stdlib.h>
 #include <limits.h>
 
@@ -44,7 +40,8 @@
 
 /* 
  * @TODO improve op node definition
- * @TODO move queue to non blocking (Use LCRQ?)
+ * @TODO move update of queue from single step to wrapper
+ * @TODO use only active numa nodes
  *  */
 
 
@@ -1415,6 +1412,8 @@ pkey_t pq_dequeue(void *q, void** result)
 	unsigned int epb = queue->elem_per_bucket;
 	unsigned int th = queue->threshold;
 
+	unsigned int node = NID, i = 0;
+
 	unsigned long long vb_index;
 	unsigned int dest_node = NID;
 
@@ -1453,7 +1452,7 @@ pkey_t pq_dequeue(void *q, void** result)
 		if (operation != NULL)
 			tq_enqueue(&op_queue[dest_node], (void*) operation, dest_node);
 		op_node* extracted_op = NULL;
-		unsigned int node, i;
+
 #else
 		op_node* extracted_op = operation;
 #endif
@@ -1471,6 +1470,7 @@ pkey_t pq_dequeue(void *q, void** result)
 
 
 #ifdef USE_TASK_QUEUE
+		/*
 		// extract from one queue
 		i = node = NID;
 		do {
@@ -1485,6 +1485,13 @@ pkey_t pq_dequeue(void *q, void** result)
 			//@TODO how to handle this case?
 			continue;
 		}
+		*/
+		node = NID;
+		if (!tq_dequeue(&op_queue[node], &extracted_op)) {
+			extracted_op = requested_op;
+			i = 1;
+		}
+			
 
 		/*
 		 * If local queue is empty, execute directly my op.
@@ -1523,9 +1530,12 @@ pkey_t pq_dequeue(void *q, void** result)
 		// @TODO in case of failure update ts of vb if dequeue
 		//op failed
 #ifdef USE_TASK_QUEUE
-		handling_op = NULL;
-		operation = extracted_op;
-		ts = operation->timestamp;
+		if (i==0) {
+			handling_op = NULL;
+			operation = extracted_op;
+			ts = operation->timestamp;
+		}
+		i = 0;
 #endif
 	} while(true);
 }
