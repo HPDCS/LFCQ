@@ -113,7 +113,7 @@ CPP_DEPS		:= $(patsubst %, $(OBJS_DIR)/%, $(subst .opp,.d, $(CPP_OBJS)))
 REAL_TARGETS := $(patsubst %, $(OBJS_DIR)/%-test, $(TARGETS))
 UNIT_TARGETS := $(patsubst %, $(OBJS_DIR)/%-resize-unit-test, $(TARGETS))
 
-FLAGS=-mcx16
+FLAGS=-mcx16 -g
 
 RM := rm -rf
 
