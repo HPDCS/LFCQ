@@ -1314,7 +1314,7 @@ static inline pkey_t single_step_pq_dequeue(table *h, nb_calqueue *queue, void *
 }
 
 /* (!new) new enqueue*/
-static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *payload)
+static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *payload, nbc_bucket_node ** candidate)
 {
 	nbc_bucket_node *bucket, *new_node;
 
@@ -1327,7 +1327,7 @@ static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *paylo
 	size = h->size;
 	// compute virtual bucket index
 	newIndex = hash(timestamp, h->bucket_width);
-
+	
 	// allocate node on right NUMA NODE
 	new_node = numa_node_malloc(payload, timestamp, 0, NODE_HASH(newIndex));
 
@@ -1438,6 +1438,7 @@ int pq_enqueue(void *q, pkey_t timestamp, void *payload)
 			requested_op->timestamp = ts;
 			requested_op->payload = payload; //DEADBEEF
 			requested_op->response = -1;
+			requested_op->candidate = NULL;
 		}
 
 #ifdef USE_TASK_QUEUE
@@ -1457,6 +1458,7 @@ int pq_enqueue(void *q, pkey_t timestamp, void *payload)
 			return ret; // someone did my op, we can return
 		}
 #ifdef USE_TASK_QUEUE
+#ifndef USE_TASK_STEAL
 		// extract from one queue
 		i = node = NID;
 		do
@@ -1474,12 +1476,20 @@ int pq_enqueue(void *q, pkey_t timestamp, void *payload)
 			//@TODO how to handle this case?
 			continue;
 		}
+#else
+		node = NID;
+		if (!tq_dequeue(&op_queue[node], &extracted_op))
+		{
+			extracted_op = requested_op;
+			i = 1;
+		}
+#endif
 #endif
 		//extracted op, executing
 		handling_op = extracted_op;
 		if (handling_op->type == OP_PQ_ENQ)
 		{
-			ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->payload);
+			ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->payload, &handling_op->candidate);
 			if (ret != -1) //enqueue succesful
 			{
 				__sync_bool_compare_and_swap(&(handling_op->response), -1, ret);
@@ -1506,10 +1516,18 @@ int pq_enqueue(void *q, pkey_t timestamp, void *payload)
 		//op failed
 
 #ifdef USE_TASK_QUEUE
+#ifdef USE_TASK_STEAL
+		if (i == 0)
+		{
+#endif
 			handling_op = NULL;
 			operation = extracted_op;
 			ts = operation->timestamp;
+#ifdef USE_TASK_STEAL
+		}
+		i = 0;
 #endif
+#endif 
 	} while (true);
 	//critical_exit()
 	//return code
@@ -1627,7 +1645,7 @@ pkey_t pq_dequeue(void *q, void **result)
 		handling_op = extracted_op;
 		if (handling_op->type == OP_PQ_ENQ)
 		{
-			ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->payload);
+			ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->payload, &handling_op->candidate);
 			if (ret != -1) //enqueue succesful
 			{
 				__sync_bool_compare_and_swap(&(handling_op->response), -1, ret); /* Is this an overkill? */
