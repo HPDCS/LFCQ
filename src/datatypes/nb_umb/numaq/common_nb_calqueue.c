@@ -51,7 +51,7 @@
 int gc_aid[32];
 int gc_hid[4];
 
-unsigned long op_counter = 1;
+unsigned long op_counter = 2;
 task_queue op_queue[_NUMA_NODES]; // (!new) per numa node queue
 
 //unsigned int ACTIVE_NUMA_NODES;
@@ -800,6 +800,7 @@ void migrate_node(nbc_bucket_node *right_node, table *new_h)
 
 	//Create a new node to be inserted in the new table as as INValid
 	replica = numa_node_malloc(right_node->payload, right_node->timestamp, right_node->counter, NODE_HASH(hash(right_node->timestamp, new_h->bucket_width)));
+	replica->op_id = right_node->op_id;
 
 	new_node = &replica;
 	new_node_pointer = (*new_node);
@@ -1330,7 +1331,7 @@ static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *paylo
 	
 	// allocate node on right NUMA NODE
 	new_node = numa_node_malloc(payload, timestamp, 0, NODE_HASH(newIndex));
-
+	new_node->op_id = 1; // (!new) now nodes cannot be dequeued until resize
 	// read actual epoch
 	new_node->epoch = (h->current & MASK_EPOCH);
 
@@ -1353,11 +1354,13 @@ static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *paylo
 
 	if (res == MOV_FOUND)
 	{
+		// no allocation done
 		node_free(new_node);
 		return -1;
 	}
 
 #if KEY_TYPE != DOUBLE
+	// se uno torna present, può accadere che il secondo thread torni un valore differente
 	if (res == PRESENT)
 	{
 		return 0;
@@ -1366,7 +1369,40 @@ static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *paylo
 
 	if (res == OK)
 	{
+		wideptr curr_state;
+		wideptr new_state;
+		nbc_bucket_node *tmp;
 		// the CAS succeeds, thus we want to ensure that the insertion becomes visible
+		// il nodo è stato inserito, possibilmente più volte da operazioni parallele - non può essere ancora rimosso
+		// provo a settare il mio nodo come candidato, finchè non c'è qualcosa.
+		tmp = __sync_val_compare_and_swap(candidate, NULL, new_node);
+		if (tmp == NULL) {
+			tmp = new_node;
+		}
+		else {
+			// marco il mio nodo come DEL | 0 se non l'ho inserito.
+			
+			do {
+				
+				curr_state.next = new_node->next;
+				curr_state.op_id = new_node->op_id;
+
+				new_state.next = ( (unsigned long) new_node->next) | DEL;
+				new_state.op_id = 0;
+
+			} while(!__sync_bool_compare_and_swap(&new_node->widenext, curr_state.widenext, new_state.widenext));
+		}
+
+		// leggo il candidato e provo a sbloccarlo
+		// curr_state.next = tmp->next;
+		// curr_state.op_id = tmp->op_id;
+		// new_state.next = tmp->next;
+		// new_state.op_id = 0;
+
+		tmp->op_id = 0; // sblocca il nodo.
+
+		// @TODO muovere questa parte prima della return del wrapper
+		new_node->op_id = 0; // il nodo può essere estratto
 		flush_current(h, newIndex, new_node);
 		performed_enqueue++;
 
@@ -1433,7 +1469,7 @@ int pq_enqueue(void *q, pkey_t timestamp, void *payload)
 			// se avviene una resize e il nodo di destinazione cambia non peggioro la situazione?
 
 			//@TODO The structure must be reshuffled to be handled correctly
-			requested_op->op_id = __sync_fetch_and_add(&op_counter, 1);
+			requested_op->op_id = 1;//__sync_fetch_and_add(&op_counter, 1);
 			requested_op->type = OP_PQ_ENQ;
 			requested_op->timestamp = ts;
 			requested_op->payload = payload; //DEADBEEF

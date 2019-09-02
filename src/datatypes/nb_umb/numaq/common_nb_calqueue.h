@@ -102,10 +102,11 @@ extern int gc_hid[];
 #define DEL (1ULL)
 #define INV (2ULL)
 #define MOV (3ULL)
+#define INS (4ULL)
 
-#define MASK_PTR ((unsigned long long)(-4LL))
-#define MASK_MRK (3ULL)
-#define MASK_DEL ((unsigned long long)(-3LL))
+#define MASK_PTR ((unsigned long long)(-8LL))
+#define MASK_MRK (7ULL)
+#define MASK_DEL ((unsigned long long)(-7LL))
 
 #define MAX_UINT (0xffffffffU)
 #define MASK_EPOCH (0x00000000ffffffffULL)
@@ -125,7 +126,7 @@ extern int gc_hid[];
 
 /* (!new) OP load and struct */
 #define OP_PQ_ENQ 0x0
-#define OP_PQ_DEQ 0x2
+#define OP_PQ_DEQ 0x1
 
 /**
  *  Struct that define a node in a bucket
