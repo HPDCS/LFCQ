@@ -1399,10 +1399,10 @@ static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *paylo
 		// new_state.next = tmp->next;
 		// new_state.op_id = 0;
 
-		tmp->op_id = 0; // sblocca il nodo.
-
+		// must be executed once
 		// @TODO muovere questa parte prima della return del wrapper
-		new_node->op_id = 0; // il nodo può essere estratto
+		tmp->op_id = 0; // il nodo ora può essere estratto
+		
 		flush_current(h, newIndex, new_node);
 		performed_enqueue++;
 
