@@ -1391,6 +1391,7 @@ static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *paylo
 				new_state.op_id = 0;
 
 			} while(!__sync_bool_compare_and_swap(&new_node->widenext, curr_state.widenext, new_state.widenext));
+			return 1; // @TODO remove this
 		}
 
 		// leggo il candidato e provo a sbloccarlo
@@ -1403,6 +1404,7 @@ static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *paylo
 		// @TODO muovere questa parte prima della return del wrapper
 		tmp->op_id = 0; // il nodo ora può essere estratto
 		
+		// must be done once
 		flush_current(h, newIndex, new_node);
 		performed_enqueue++;
 
