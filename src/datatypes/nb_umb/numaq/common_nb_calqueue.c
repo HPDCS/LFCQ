@@ -399,136 +399,6 @@ int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, unsigned int tie_
 	} while (1);
 }
 
-
-int search_and_insert_NUMAQ(nbc_bucket_node *head, pkey_t timestamp, unsigned int tie_breaker,
-					  int flag, nbc_bucket_node *new_node_pointer, nbc_bucket_node **new_node)
-{
-	nbc_bucket_node *left, *left_next, *tmp, *tmp_next, *tail;
-	unsigned int counter;
-	unsigned int left_tie_breaker, tmp_tie_breaker;
-	unsigned int len;
-	pkey_t left_timestamp, tmp_timestamp;
-	double rand;
-	bool marked, ts_equal, tie_lower, go_to_next;
-	bool is_new_key = flag == REMOVE_DEL_INV;
-	drand48_r(&seedT, &rand);
-
-	// clean the heading zone of the bucket
-	nbc_bucket_node *lnode, *rnode;
-	search(head, -1.0, 0, &lnode, &rnode, flag);
-	
-	// read tail from head (this is done for avoiding an additional cache miss)
-	tail = head->tail;
-	do
-	{
-		len = 0;
-		/// Fetch the head and its next node
-		left = tmp = head;
-		// read all data from the head (hopefully only the first access is a cache miss)
-		left_next = tmp_next = tmp->next;
-
-		// since such head does not change, probably we can cache such data with a local copy
-		left_tie_breaker = tmp_tie_breaker = tmp->counter;
-		left_timestamp = tmp_timestamp = tmp->timestamp;
-
-		// SANITY CHECKS
-		assertf(head == NULL, "PANIC %s\n", "");
-		assertf(tmp_next == NULL, "PANIC1 %s\n", "");
-		assertf(is_marked_for_search(left_next, flag), "PANIC2 %s\n", "");
-
-		// init variables useful during iterations
-		counter = 0;
-		marked = is_marked_for_search(tmp_next, flag);
-
-		do
-		{
-			len++;
-			//Find the left node compatible with value of 'flag'
-			// potentially this if can be removed
-			if (!marked)
-			{
-				left = tmp;
-				left_next = tmp_next;
-				left_tie_breaker = tmp_tie_breaker;
-				left_timestamp = tmp_timestamp;
-				counter = 0;
-			}
-
-			// increase the count of marked nodes met during scan
-			counter += marked;
-
-			// get an unmarked reference to the tmp node
-			tmp = get_unmarked(tmp_next);
-
-			// Retrieve timestamp and next field from the current node (tmp)
-			tmp_next = tmp->next;
-			tmp_timestamp = tmp->timestamp;
-			tmp_tie_breaker = tmp->counter;
-
-			// Check if the right node is marked
-			marked = is_marked_for_search(tmp_next, flag);
-
-			// Check if the right node timestamp and tie_breaker satisfies the conditions
-			go_to_next = LESS(tmp_timestamp, timestamp);
-			ts_equal = D_EQUAL(tmp_timestamp, timestamp);
-			tie_lower = (is_new_key ||
-						 (!is_new_key && tmp_tie_breaker <= tie_breaker));
-			go_to_next = go_to_next || (ts_equal && tie_lower);
-
-			// Exit if tmp is a tail or its timestamp is > of the searched key
-		} while (tmp != tail &&
-				 (marked ||
-				  go_to_next));
-
-		// if the right or the left node is MOV signal this to the caller
-		if (is_marked(tmp, MOV) || is_marked(left_next, MOV))
-			return MOV_FOUND;
-
-		// mark the to-be.inserted node as INV if flag == REMOVE_DEL
-		new_node_pointer->next = get_marked(tmp, INV & (-(!is_new_key)));
-
-		// set the tie_breaker to:
-		// 1+T1 		IF K1 == timestamp AND flag == REMOVE_DEL_INV
-		// 1			IF K1 != timestamp AND flag == REMOVE_DEL_INV
-		// UNCHANGED 	IF flag != REMOVE_DEL_INV
-		new_node_pointer->counter = (((unsigned int)(-(is_new_key))) & (1 + (((unsigned int)-D_EQUAL(timestamp, left_timestamp)) & left_tie_breaker))) +
-									(~((unsigned int)(-(is_new_key))) & tie_breaker);
-
-		// node already exists
-		if (!is_new_key && D_EQUAL(timestamp, left_timestamp) && left_tie_breaker == tie_breaker)
-		{
-			node_free(new_node_pointer);
-			*new_node = left;
-			return OK;
-		}
-
-#if KEY_TYPE != DOUBLE
-		if (is_new_key && D_EQUAL(timestamp, left_timestamp))
-		{
-			node_free(new_node_pointer);
-			*new_node = left;
-			return PRESENT;
-		}
-#endif
-
-		// copy left node mark
-		if (BOOL_CAS(&(left->next), left_next, get_marked(new_node_pointer, get_mark(left_next))))
-		{
-			if (is_new_key)
-			{
-				scan_list_length_en += len;
-			}
-			if (counter > 0)
-				connect_to_be_freed_node_list(left_next, counter);
-			return OK;
-		}
-
-		// this could be avoided
-		return ABORT;
-
-	} while (1);
-}
-
 void set_new_table(table *h, unsigned int threshold, double pub, unsigned int epb, unsigned int counter)
 {
 	//double pub_per_epb = pub*epb;
@@ -1058,7 +928,7 @@ void *pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	res->elem_per_bucket = elem_per_bucket;
 	res->pub_per_epb = perc_used_bucket * elem_per_bucket;
 	res->read_table_period = READTABLE_PERIOD;
-	res->tail = node_malloc(NULL, INFTY, 0);
+	res->tail = numa_node_malloc(NULL, INFTY, 0, 0);
 	res->tail->next = NULL;
 
 	// (!new) initialize numa queues
@@ -1088,7 +958,7 @@ void *pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	return res;
 }
 
-/* (!new) single step dequeuq*/
+/* (!new) single step dequee*/
 static inline pkey_t single_step_pq_dequeue(table *h, nb_calqueue *queue, void **result, unsigned long op_id, nbc_bucket_node ** candidate)
 {
 	nbc_bucket_node *min, *min_next,
@@ -1348,7 +1218,7 @@ static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *paylo
 
 	do
 	{
-		res = search_and_insert_NUMAQ(bucket, timestamp, 0, REMOVE_DEL_INV, new_node, &new_node);
+		res = search_and_insert(bucket, timestamp, 0, REMOVE_DEL_INV, new_node, &new_node);
 		/* Can return MOV_FOUND, OK, PRESENT, ABORT */
 	} while (res == ABORT); // @TODO must be handled in a different way?
 
@@ -1380,8 +1250,7 @@ static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *paylo
 			tmp = new_node;
 		}
 		else {
-			// marco il mio nodo come DEL | 0 se non l'ho inserito.
-			
+			// il mio nodo non è candidato, lo marco per l'eliminazione (così puà essere estratto)
 			do {
 				
 				curr_state.next = new_node->next;
@@ -1393,12 +1262,6 @@ static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *paylo
 			} while(!__sync_bool_compare_and_swap(&new_node->widenext, curr_state.widenext, new_state.widenext));
 			return 1; // @TODO remove this
 		}
-
-		// leggo il candidato e provo a sbloccarlo
-		// curr_state.next = tmp->next;
-		// curr_state.op_id = tmp->op_id;
-		// new_state.next = tmp->next;
-		// new_state.op_id = 0;
 
 		// must be executed once
 		// @TODO muovere questa parte prima della return del wrapper

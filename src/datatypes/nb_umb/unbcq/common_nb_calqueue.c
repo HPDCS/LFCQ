@@ -931,7 +931,7 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	res->elem_per_bucket = elem_per_bucket;
 	res->pub_per_epb = perc_used_bucket * elem_per_bucket;
 	res->read_table_period = READTABLE_PERIOD;
-	res->tail = node_malloc(NULL, INFTY, 0);
+	res->tail = numa_node_malloc(NULL, INFTY, 0, 0);
 	res->tail->next = NULL;
 
 	res->hashtable->bucket_width = 1.0;
@@ -972,7 +972,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	nb_calqueue* queue = (nb_calqueue*) q; 	
 	critical_enter();
 
-	nbc_bucket_node *bucket, *new_node = node_malloc(payload, timestamp, 0);
+	nbc_bucket_node *bucket, *new_node = numa_node_malloc(payload, timestamp, 0, NID);
 	table * h = NULL;		
 	unsigned int index, size;
 	unsigned long long newIndex = 0;

@@ -106,7 +106,7 @@
  * and means that node locations don't need to be brought into the cache 
  * (most architectures have a non-temporal store instruction).
  */
-#define BLKS_PER_CHUNK 71//100
+#define BLKS_PER_CHUNK 100
 typedef struct chunk_st chunk_t;
 struct chunk_st
 {
@@ -211,7 +211,7 @@ static chunk_t* node_alloc_more_chunks(unsigned int node)
     char *mem_area, *end, *next_page;
 
     chunk_t *h, *p;
-    size_t alloc_size = page_size * 150; //1050 chnunks
+    size_t alloc_size = page_size * 150; //1050 chunks
 
     /* I care which is the numa node of this area of memory because of hooks*/
     mem_area = numa_alloc_onnode(alloc_size, node);
