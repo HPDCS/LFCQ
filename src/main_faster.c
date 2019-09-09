@@ -348,7 +348,7 @@ void* process(void *arg)
 	long long n_enqueue = 0; 
 	struct drand48_data seed;
 	struct drand48_data seed2    ;
-//	cpu_set_t cpuset;
+	cpu_set_t cpuset;
 	double timestamp;
 
 	my_id =  *((int*)(arg));
@@ -359,9 +359,9 @@ void* process(void *arg)
     srand48_r(my_id+254, &seedT);
     
 
-//	CPU_ZERO(&cpuset);
-//	CPU_SET((unsigned int)my_id, &cpuset);
-//	pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+	CPU_ZERO(&cpuset);
+	CPU_SET((unsigned int)my_id, &cpuset);
+	pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
 
 
     __sync_fetch_and_add(&BARRIER, 1);

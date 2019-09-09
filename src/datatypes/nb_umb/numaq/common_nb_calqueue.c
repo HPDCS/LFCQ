@@ -1229,22 +1229,28 @@ static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *paylo
 		return -1;
 	}
 
+	nbc_bucket_node *tmp;
+	wideptr curr_state;
+	wideptr new_state;
+
 #if KEY_TYPE != DOUBLE
-	// se uno torna present, può accadere che il secondo thread torni un valore differente
 	if (res == PRESENT)
 	{
-		return 0;
+		tmp = __sync_val_compare_and_swap(candidate, NULL, 1);
+		if (tmp == 1 || tmp == NULL)
+			return 0;
+		else
+			return 1;
 	}
 #endif
 
 	if (res == OK)
 	{
-		wideptr curr_state;
-		wideptr new_state;
-		nbc_bucket_node *tmp;
+		
+		
 		// the CAS succeeds, thus we want to ensure that the insertion becomes visible
 		// il nodo è stato inserito, possibilmente più volte da operazioni parallele - non può essere ancora rimosso
-		// provo a settare il mio nodo come candidato, finchè non c'è qualcosa.
+		// provo a settare il mio nodo come candidato, se non c'è qualcosa.
 		tmp = __sync_val_compare_and_swap(candidate, NULL, new_node);
 		if (tmp == NULL) {
 			tmp = new_node;
