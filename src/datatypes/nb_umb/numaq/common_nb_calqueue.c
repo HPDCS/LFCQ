@@ -959,7 +959,7 @@ void *pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 }
 
 /* (!new) single step dequee*/
-static inline pkey_t single_step_pq_dequeue(table *h, nb_calqueue *queue, void **result, unsigned long op_id, nbc_bucket_node ** candidate)
+static inline pkey_t single_step_pq_dequeue(table *h, nb_calqueue *queue, void **result, unsigned long op_id, nbc_bucket_node**candidate)
 {
 	nbc_bucket_node *min, *min_next,
 		*left_node, *left_node_next,
@@ -1247,7 +1247,6 @@ static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *paylo
 	if (res == OK)
 	{
 		
-		
 		// the CAS succeeds, thus we want to ensure that the insertion becomes visible
 		// il nodo è stato inserito, possibilmente più volte da operazioni parallele - non può essere ancora rimosso
 		// provo a settare il mio nodo come candidato, se non c'è qualcosa.
@@ -1269,10 +1268,23 @@ static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *paylo
 			return 1; // @TODO remove this
 		}
 
+		// HOW TO HANDLE CONCURRENT RESIZE(?)	
+		// che succede se c'è resize che viene terminata mentre sto in questo punto?
+
 		// must be executed once
-		// @TODO muovere questa parte prima della return del wrapper
 		tmp->op_id = 0; // il nodo ora può essere estratto
+
+		/* Se il nodo è marcato forse c'è stata una resize concorrente*/
+		// never happens (mumble)
 		
+		if (is_marked(tmp->next)) {
+			printf("GOTCHA0\n");
+			if (tmp->replica != NULL) {
+				printf("GOTCHA\n");
+				tmp->replica->op_id = 0;
+			}
+		}
+
 		// must be done once
 		flush_current(h, newIndex, new_node);
 		performed_enqueue++;

@@ -322,11 +322,11 @@ bool _lcrq_dequeue(LCRQ *queue, int64_t* item) {
 }
 
 void init_lcrq(LCRQ *queue, unsigned int numa_node) {
-    return lcrq_init(queue, numa_node);
+    lcrq_init(queue, numa_node);
 }
 
 void lcrq_enqueue(LCRQ *queue, void* payload, unsigned int numa_node) {
-    return _lcrq_enqueue(queue, payload, numa_node);
+    _lcrq_enqueue(queue, payload, numa_node);
 }
 
 bool lcrq_dequeue(LCRQ *queue, void* *result) {

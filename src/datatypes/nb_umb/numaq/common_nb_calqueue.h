@@ -169,7 +169,7 @@ struct __op_load
 	int response;				// -1 waiting for resp | 1 responsed
 	void *payload;				// paylod to enqueue | dequeued payload
 	pkey_t timestamp;			// ts of node to enqueue | lower ts of bucket to dequeue | returned ts
-	volatile nbc_bucket_node *candidate; // need of candidate node
+	nbc_bucket_node *candidate; // need of candidate node
 };
 
 typedef union {
