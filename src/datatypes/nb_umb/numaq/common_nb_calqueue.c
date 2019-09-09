@@ -29,11 +29,20 @@
 
 #include "common_nb_calqueue.h"
 
-//OP macros
-#define USE_TASK_QUEUE
-#ifdef USE_TASK_QUEUE
-#define USE_TASK_STEAL
-#endif
+/*
+ * MACROS TO ACTIVATE OPS
+ * */
+
+//#define USE_STD_ENQ
+#define USE_TQ_ENQ
+#define USE_ST_ENQ
+
+#define USE_STD_DEQ
+#define USE_TQ_DEQ
+#define USE_ST_DEQ
+
+// END MACROS TO ACTIVATE OPS
+
 
 #define NODE_HASH(bucket_id) ((bucket_id >> 2ull) % _NUMA_NODES)
 
@@ -958,10 +967,396 @@ void *pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	return res;
 }
 
-/* (!new) single step dequee*/
+#ifdef USE_STD_ENQ
+int pq_enqueue(void* q, pkey_t timestamp, void* payload)
+{
+	assertf(timestamp < MIN || timestamp >= INFTY, "Key out of range %s\n", "");
+
+	nb_calqueue* queue = (nb_calqueue*) q; 	
+	critical_enter();
+
+	nbc_bucket_node *bucket, *new_node = numa_node_malloc(payload, timestamp, 0, NID);
+	table * h = NULL;		
+	unsigned int index, size;
+	unsigned long long newIndex = 0;
+	
+	
+	// get configuration of the queue
+	double pub = queue->perc_used_bucket;
+	unsigned int epb = queue->elem_per_bucket;
+	unsigned int th = queue->threshold;
+	
+	int res, con_en = 0;
+	
+
+	//init the result
+	res = MOV_FOUND;
+	
+	//repeat until a successful insert
+	while(res != OK){
+		
+		// It is the first iteration or a node marked as MOV has been met (a resize is occurring)
+		if(res == MOV_FOUND){
+			
+			//free the old node
+			node_free(new_node);
+			
+			// check for a resize
+			h = read_table(&queue->hashtable, th, epb, pub);
+			// get actual size
+			size = h->size;
+	        // read the actual epoch
+        	//new_node->epoch = (h->current & MASK_EPOCH);
+			// compute the index of the virtual bucket
+			newIndex = hash(timestamp, h->bucket_width);
+			
+			// allocate a new node on numa node
+			new_node = numa_node_malloc(payload, timestamp, 0, newIndex%_NUMA_NODES);
+			new_node->op_id = 0;
+			new_node->epoch = (h->current & MASK_EPOCH);
+
+			// compute the index of the physical bucket
+			index = ((unsigned int) newIndex) % size;			
+			// get the bucket
+			bucket = h->array + index;
+			// read the number of executed enqueues for statistics purposes
+			con_en = h->e_counter.count;
+		}
+
+
+		#if KEY_TYPE != DOUBLE
+		if(res == PRESENT){
+			res = 0;
+			goto out;
+		}
+		#endif
+
+		// search the two adjacent nodes that surround the new key and try to insert with a CAS 
+	    res = search_and_insert(bucket, timestamp, 0, REMOVE_DEL_INV, new_node, &new_node);
+	}
+
+	//LOG("ENQ - inserted node %p, with ts %ld and %p|%ld\n", new_node, new_node->timestamp, new_node->next, new_node->op_id);
+
+	// the CAS succeeds, thus we want to ensure that the insertion becomes visible
+	flush_current(h, newIndex, new_node);
+	performed_enqueue++;
+	res=1;
+	
+	// updates for statistics
+	
+	concurrent_enqueue += (unsigned long long) (__sync_fetch_and_add(&h->e_counter.count, 1) - con_en);
+	
+	#if COMPACT_RANDOM_ENQUEUE == 1
+	// clean a random bucket
+	unsigned long long oldCur = h->current;
+	unsigned long long oldIndex = oldCur >> 32;
+	unsigned long long dist = 1;
+	double rand;
+	nbc_bucket_node *left_node, *right_node;
+	drand48_r(&seedT, &rand);
+	search(h->array+((oldIndex + dist + (unsigned int)( ( (double)(size-dist) )*rand )) % size), -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
+	#endif
+
+  #if KEY_TYPE != DOUBLE
+  out:
+  #endif
+	critical_exit();
+	return res;
+
+}
+
+#else
+
+static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *payload, nbc_bucket_node ** candidate)
+{
+	nbc_bucket_node *bucket, *new_node;
+
+	unsigned int index, size;
+	unsigned long long newIndex = 0;
+
+	int res, con_en = 0;
+
+	// get actual size
+	size = h->size;
+	// compute virtual bucket index
+	newIndex = hash(timestamp, h->bucket_width);
+	
+	// allocate node on right NUMA NODE
+	new_node = numa_node_malloc(payload, timestamp, 0, NODE_HASH(newIndex));
+	new_node->op_id = 0x1ull; // (!new) now nodes cannot be dequeued until resize
+	// read actual epoch
+	new_node->epoch = (h->current & MASK_EPOCH);
+
+	// compute the index of physical bucket
+	index = ((unsigned int)newIndex) % size;
+
+	// get the bucket
+	bucket = h->array + index;
+
+	//read the number of executed enqueues for statistical purposes
+	con_en = h->e_counter.count;
+
+	res = ABORT;
+
+	do
+	{
+		res = search_and_insert(bucket, timestamp, 0, REMOVE_DEL_INV, new_node, &new_node);
+		/* Can return MOV_FOUND, OK, PRESENT, ABORT */
+	} while (res == ABORT); // @TODO must be handled in a different way?
+
+	if (res == MOV_FOUND)
+	{
+		// no allocation done
+		node_free(new_node);
+		return -1;
+	}
+
+	nbc_bucket_node *tmp;
+	wideptr curr_state;
+	wideptr new_state;
+
+#if KEY_TYPE != DOUBLE
+	if (res == PRESENT)
+	{
+		tmp = __sync_val_compare_and_swap(candidate, NULL, 1);
+		if (tmp == 1 || tmp == NULL)
+			return 0;
+		else
+			return 1;
+	}
+#endif
+
+	if (res == OK)
+	{
+		// the CAS succeeds, thus we want to ensure that the insertion becomes visible
+		// il nodo è stato inserito, possibilmente più volte da operazioni parallele - non può essere ancora rimosso
+		// provo a settare il mio nodo come candidato, se non c'è qualcosa.
+		if (!__sync_bool_compare_and_swap(candidate, NULL, new_node)) {
+			// il mio nodo non è candidato, lo marco per l'eliminazione (così puà essere estratto)
+			do {
+				
+				curr_state.next = new_node->next;
+				curr_state.op_id = new_node->op_id;
+
+				new_state.next = ((unsigned long) new_node->next) | DEL;
+				new_state.op_id = 0;
+
+			} while(!__sync_bool_compare_and_swap(&new_node->widenext, curr_state.widenext, new_state.widenext));
+			return 1; // @TODO remove this
+		}
+
+		// HOW TO HANDLE CONCURRENT RESIZE(?)	
+		// che succede se c'è resize che viene terminata mentre sto in questo punto?
+
+		// must be executed once
+		new_node->op_id = 0; // il nodo ora può essere estratto
+	
+		/* Se il nodo è marcato forse c'è stata una resize concorrente*/
+		// never happens (mumble)
+		/*
+		if (is_marked(tmp->next)) {
+			printf("GOTCHA0\n");
+		
+			if (tmp->replica != NULL) {
+				printf("GOTCHA\n");
+				tmp->replica->op_id = 0;
+			}
+		}*/
+		
+
+		// must be done once
+		flush_current(h, newIndex, new_node);
+		performed_enqueue++;
+
+		// updates for statistics
+		concurrent_enqueue += (unsigned long long)(__sync_fetch_and_add(&h->e_counter.count, 1) - con_en);
+
+#if COMPACT_RANDOM_ENQUEUE == 1
+		// clean a random bucket
+		unsigned long long oldCur = h->current;
+		unsigned long long oldIndex = oldCur >> 32;
+		unsigned long long dist = 1;
+		double rand;
+		nbc_bucket_node *left_node, *right_node;
+		drand48_r(&seedT, &rand);
+		search(h->array + ((oldIndex + dist + (unsigned int)(((double)(size - dist)) * rand)) % size), -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
+#endif
+
+		return 1;
+	}
+
+	return res;
+}
+
+#endif
+
+#ifdef USE_STD_DEQ
+
+pkey_t pq_dequeue(void *q, void** result)
+{
+	nb_calqueue *queue = (nb_calqueue*)q;
+	nbc_bucket_node *min, *min_next, 
+					*left_node, *left_node_next, 
+					*tail, *array;
+	table * h = NULL;
+	
+	unsigned long long current, old_current, new_current;
+	unsigned long long index;
+	unsigned long long epoch;
+	
+	unsigned int size, attempts = 0;
+	unsigned int counter;
+	pkey_t left_ts;
+	double bucket_width, left_limit, right_limit;
+
+	double pub = queue->perc_used_bucket;
+	unsigned int epb = queue->elem_per_bucket;
+	unsigned int th = queue->threshold;
+	unsigned int ep = 0;
+	int con_de = 0;
+	bool prob_overflow = false;
+	tail = queue->tail;
+	performed_dequeue++;
+	
+	critical_enter();
+
+begin:
+	// Get the current set table
+	h = read_table(&queue->hashtable, th, epb, pub);
+
+	// Get data from the table
+	size = h->size;
+	array = h->array;
+	bucket_width = h->bucket_width;
+	current = h->current;
+	con_de = h->d_counter.count;
+	attempts = 0;
+
+	do
+	{	
+		// To many attempts: there is some problem? recheck the table
+		if( h->read_table_period == attempts){
+			goto begin;
+		}
+		attempts++;
+
+		// get fields from current
+		index = current >> 32;
+		epoch = current & MASK_EPOCH;
+
+
+		// get the physical bucket
+		min = array + (index % (size));
+		left_node = min_next = min->next;
+		
+		// get the left limit
+		left_limit = ((double)index)*bucket_width;
+
+		index++;
+
+		// get the right limit
+		right_limit = ((double)index)*bucket_width;
+		// check for a possible overflow
+		prob_overflow = (index > MASK_EPOCH);
+		
+		// reset variables for a new scan
+		counter = ep = 0;
+		
+		// a reshuffle has been detected => restart
+		if(is_marked(min_next, MOV)) goto begin;
+		
+		do
+		{
+			
+			// get data from the current node	
+			left_node_next = left_node->next;
+			left_ts = left_node->timestamp;
+
+			// increase count of traversed deleted items
+			counter++;
+
+			// Skip marked nodes, invalid nodes and nodes with timestamp out of range
+			if(is_marked(left_node_next, DEL) || is_marked(left_node_next, INV) || (left_ts < left_limit && left_node != tail)) continue;
+			
+			// Abort the operation since there is a resize or a possible insert in the past
+			if(is_marked(left_node_next, MOV) || left_node->epoch > epoch) goto begin;
+			
+			// The virtual bucket is empty
+			if(left_ts >= right_limit || left_node == tail) break;
+			
+			// the node is a good candidate for extraction! lets try for it
+			int res = atomic_test_and_set_x64(UNION_CAST(&left_node->next, unsigned long long*));
+
+			// the extraction is failed
+			if(!res) left_node_next = left_node->next;
+
+			//left_node_next = FETCH_AND_OR(&left_node->next, DEL);
+			
+			// the node cannot be extracted && is marked as MOV	=> restart
+			if(is_marked(left_node_next, MOV))	goto begin;
+
+			// the node cannot be extracted && is marked as DEL => skip
+			if(is_marked(left_node_next, DEL))	continue;
+			
+			// the node has been extracted
+
+			//LOG("DEQ - Removed node %p with ts %ld, %p|%ld\n", left_node, left_ts, left_node_next, left_node->op_id);
+
+			// use it for count the average number of traversed node per dequeue
+			scan_list_length += counter;
+			// use it for count the average of completed extractions
+			concurrent_dequeue += (unsigned long long) (__sync_fetch_and_add(&h->d_counter.count, 1) - con_de);
+
+			*result = left_node->payload;
+				
+			critical_exit();
+
+			return left_ts;
+										
+		}while( (left_node = get_unmarked(left_node_next)));
+		
+
+		// if i'm here it means that the virtual bucket was empty. Check for queue emptyness
+		if(left_node == tail && size == 1 && !is_marked(min->next, MOV))
+		{
+			critical_exit();
+			*result = NULL;
+			return INFTY;
+		}
+				
+		new_current = h->current;
+		if(new_current == current){
+
+			if(prob_overflow && h->e_counter.count == 0) goto begin;
+			
+
+
+			assertf(prob_overflow, "\nOVERFLOW INDEX:%llu" "BW:%.10f"  "SIZE:%u TAIL:%p TABLE:%p\n", index, bucket_width, size, tail, h);
+			//assertf((index - (last_curr >> 32) -1) <= dist, "%s\n", "PROVA");
+
+			num_cas++;
+			old_current = VAL_CAS( &(h->current), current, ((index << 32) | epoch) );
+			if(old_current == current){
+				current = ((index << 32) | epoch);
+				num_cas_useful++;
+			}
+			else
+				current = old_current;
+		}
+		else
+			current = new_current;
+		
+	}while(1);
+	
+	return INFTY;
+}
+
+#else
+
 static inline pkey_t single_step_pq_dequeue(table *h, nb_calqueue *queue, void **result, unsigned long op_id, nbc_bucket_node**candidate)
 {
-	nbc_bucket_node *min, *min_next,
+
+nbc_bucket_node *min, *min_next,
 		*left_node, *left_node_next,
 		*tail, *array,
 		*current_candidate;
@@ -1049,6 +1444,8 @@ static inline pkey_t single_step_pq_dequeue(table *h, nb_calqueue *queue, void *
 				return -1; //return error
 			}
 
+			//LOG("DEQ - Current node is: %p, with %p|%ld and ts %ld\n", left_node, left_node_next, left_node_op_id, left_ts);
+
 			// The virtual bucket is empty
 			if (left_ts >= right_limit || left_node == tail)
 				break;
@@ -1060,35 +1457,36 @@ static inline pkey_t single_step_pq_dequeue(table *h, nb_calqueue *queue, void *
 			if (current_candidate == NULL)
 				current_candidate = left_node;
 
+			// someone changed the candidate
 			if (current_candidate != left_node)
 			{
-				//printf("Diffenrent candidate: %p, %p\n", current_candidate, left_node);
-				// 	someone extracted the candidate
+				if (current_candidate == 1)
+				{	
+					// someone returned empty
+					*result = NULL;
+					return INFTY;
+				}
+				// 	check someone extracted the candidate
 				if (is_marked(current_candidate->next, DEL))
 				{
+					// was for my operation?
 					if (current_candidate->op_id == op_id)
 					{
+						// yes, return it
 						*result = current_candidate->payload;
 						return current_candidate->timestamp;
 					}
 					else
 					{
+						// no, reset the candidate and restart
 						__sync_bool_compare_and_swap(candidate, current_candidate, NULL);
 						*result = NULL;
 						return -1;
 					}
 				}
 			}
-
-			//	printf("\n%p", current_candidate);
-			else if (current_candidate == 1)
-			{
-				// someone returned empty
-				*result = NULL;
-				return INFTY;
-			}
-			
-
+		
+			// try to extract the node
 			wideptr lnn;
 			lnn.next = left_node_next;
 			lnn.op_id = 0;
@@ -1105,12 +1503,7 @@ static inline pkey_t single_step_pq_dequeue(table *h, nb_calqueue *queue, void *
 				left_node_next = left_node->next;
 				left_node_op_id = left_node->op_id;
 			}
-			/* the extraction failed, why?
-			 * Someone stole my op
-			 * Someone returned the node
-			 * A migration is happening
-			 * */
-
+			
 			//left_node_next = FETCH_AND_OR(&left_node->next, DEL);
 
 			// the node cannot be extracted && is marked as MOV	=> restart
@@ -1127,7 +1520,7 @@ static inline pkey_t single_step_pq_dequeue(table *h, nb_calqueue *queue, void *
 			if (is_marked(left_node_next, DEL) && left_node_op_id != op_id)
 				continue;
 
-			// the node has been extracted
+			// the node has been extracted either by me or someone with my operation
 
 			// use it for count the average number of traversed node per dequeue
 			scan_list_length += counter;
@@ -1144,6 +1537,7 @@ static inline pkey_t single_step_pq_dequeue(table *h, nb_calqueue *queue, void *
 		// how to avoid a dequeue which lose update? Try set the current atomically, in case of failure someone has found a minimum
 		if (left_node == tail && size == 1 && !is_marked(min->next, MOV) && *candidate == NULL)
 		{
+			// the queue is empty and (possibly) nobody has set the candidate
 			if (__sync_bool_compare_and_swap(candidate, NULL, 1))
 			{
 				*result = NULL;
@@ -1184,134 +1578,9 @@ static inline pkey_t single_step_pq_dequeue(table *h, nb_calqueue *queue, void *
 	return INFTY;
 }
 
-/* (!new) new enqueue*/
-static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *payload, nbc_bucket_node ** candidate)
-{
-	nbc_bucket_node *bucket, *new_node;
-
-	unsigned int index, size;
-	unsigned long long newIndex = 0;
-
-	int res, con_en = 0;
-
-	// get actual size
-	size = h->size;
-	// compute virtual bucket index
-	newIndex = hash(timestamp, h->bucket_width);
-	
-	// allocate node on right NUMA NODE
-	new_node = numa_node_malloc(payload, timestamp, 0, NODE_HASH(newIndex));
-	new_node->op_id = 1; // (!new) now nodes cannot be dequeued until resize
-	// read actual epoch
-	new_node->epoch = (h->current & MASK_EPOCH);
-
-	// compute the index of physical bucket
-	index = ((unsigned int)newIndex) % size;
-
-	// get the bucket
-	bucket = h->array + index;
-
-	//read the number of executed enqueues for statistical purposes
-	con_en = h->e_counter.count;
-
-	res = ABORT;
-
-	do
-	{
-		res = search_and_insert(bucket, timestamp, 0, REMOVE_DEL_INV, new_node, &new_node);
-		/* Can return MOV_FOUND, OK, PRESENT, ABORT */
-	} while (res == ABORT); // @TODO must be handled in a different way?
-
-	if (res == MOV_FOUND)
-	{
-		// no allocation done
-		node_free(new_node);
-		return -1;
-	}
-
-	nbc_bucket_node *tmp;
-	wideptr curr_state;
-	wideptr new_state;
-
-#if KEY_TYPE != DOUBLE
-	if (res == PRESENT)
-	{
-		tmp = __sync_val_compare_and_swap(candidate, NULL, 1);
-		if (tmp == 1 || tmp == NULL)
-			return 0;
-		else
-			return 1;
-	}
 #endif
 
-	if (res == OK)
-	{
-		
-		// the CAS succeeds, thus we want to ensure that the insertion becomes visible
-		// il nodo è stato inserito, possibilmente più volte da operazioni parallele - non può essere ancora rimosso
-		// provo a settare il mio nodo come candidato, se non c'è qualcosa.
-		tmp = __sync_val_compare_and_swap(candidate, NULL, new_node);
-		if (tmp == NULL) {
-			tmp = new_node;
-		}
-		else {
-			// il mio nodo non è candidato, lo marco per l'eliminazione (così puà essere estratto)
-			do {
-				
-				curr_state.next = new_node->next;
-				curr_state.op_id = new_node->op_id;
-
-				new_state.next = ( (unsigned long) new_node->next) | DEL;
-				new_state.op_id = 0;
-
-			} while(!__sync_bool_compare_and_swap(&new_node->widenext, curr_state.widenext, new_state.widenext));
-			return 1; // @TODO remove this
-		}
-
-		// HOW TO HANDLE CONCURRENT RESIZE(?)	
-		// che succede se c'è resize che viene terminata mentre sto in questo punto?
-
-		// must be executed once
-		tmp->op_id = 0; // il nodo ora può essere estratto
-
-		/* Se il nodo è marcato forse c'è stata una resize concorrente*/
-		// never happens (mumble)
-		
-		if (is_marked(tmp->next)) {
-			printf("GOTCHA0\n");
-			if (tmp->replica != NULL) {
-				printf("GOTCHA\n");
-				tmp->replica->op_id = 0;
-			}
-		}
-
-		// must be done once
-		flush_current(h, newIndex, new_node);
-		performed_enqueue++;
-
-		// updates for statistics
-		concurrent_enqueue += (unsigned long long)(__sync_fetch_and_add(&h->e_counter.count, 1) - con_en);
-
-#if COMPACT_RANDOM_ENQUEUE == 1
-		// clean a random bucket
-		unsigned long long oldCur = h->current;
-		unsigned long long oldIndex = oldCur >> 32;
-		unsigned long long dist = 1;
-		double rand;
-		nbc_bucket_node *left_node, *right_node;
-		drand48_r(&seedT, &rand);
-		search(h->array + ((oldIndex + dist + (unsigned int)(((double)(size - dist)) * rand)) % size), -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
-#endif
-
-		return 1;
-	}
-
-	return res;
-}
-
-/* (!new) new enqueue*/
-// @TODO Improve path in case of compilation with queues not active
-
+#ifndef USE_STD_ENQ
 int pq_enqueue(void *q, pkey_t timestamp, void *payload)
 {
 	assertf(timestamp < MIN || timestamp >= INFTY, "Key out of range %s\n", "");
@@ -1360,7 +1629,7 @@ int pq_enqueue(void *q, pkey_t timestamp, void *payload)
 			requested_op->candidate = NULL;
 		}
 
-#ifdef USE_TASK_QUEUE
+#ifdef USE_TQ_ENQ
 		if (operation != NULL)
 			tq_enqueue(&op_queue[dest_node], (void *)operation, dest_node);
 		op_node *extracted_op = NULL;
@@ -1376,8 +1645,8 @@ int pq_enqueue(void *q, pkey_t timestamp, void *payload)
 			// dovrebbe essere come se il thread fosse stato deschedulato prima della return
 			return ret; // someone did my op, we can return
 		}
-#ifdef USE_TASK_QUEUE
-#ifndef USE_TASK_STEAL
+#ifdef USE_TQ_ENQ
+#ifndef USE_ST_ENQ
 		// extract from one queue
 		i = node = NID;
 		do
@@ -1418,6 +1687,7 @@ int pq_enqueue(void *q, pkey_t timestamp, void *payload)
 		}
 		else if (handling_op->type == OP_PQ_DEQ)
 		{
+#ifndef USE_STD_DEQ
 			// table* h, nb_calqueue *queue, void** result
 			ret_ts = single_step_pq_dequeue(h, queue, &new_payload, handling_op->op_id, &handling_op->candidate);
 			if (ret_ts != -1) //dequeue succesful
@@ -1429,20 +1699,21 @@ int pq_enqueue(void *q, pkey_t timestamp, void *payload)
 				operation = NULL;
 				continue;
 			}
+#endif
 		}
 
 		// @TODO in case of failure update ts of vb
 		//op failed
 
-#ifdef USE_TASK_QUEUE
-#ifdef USE_TASK_STEAL
+#ifdef USE_TQ_ENQ
+#ifdef USE_ST_ENQ
 		if (i == 0)
 		{
 #endif
 			handling_op = NULL;
 			operation = extracted_op;
 			ts = operation->timestamp;
-#ifdef USE_TASK_STEAL
+#ifdef USE_ST_ENQ
 		}
 		i = 0;
 #endif
@@ -1451,9 +1722,9 @@ int pq_enqueue(void *q, pkey_t timestamp, void *payload)
 	//critical_exit()
 	//return code
 }
+#endif
 
-/* !(new) dequeue */
-// @TODO Improve path in case of compilation with queues not active
+#ifndef USE_STD_DEQ
 pkey_t pq_dequeue(void *q, void **result)
 {
 	nb_calqueue *queue = (nb_calqueue *)q;
@@ -1506,7 +1777,7 @@ pkey_t pq_dequeue(void *q, void **result)
 			requested_op->response = -1;
 		}
 
-#ifdef USE_TASK_QUEUE
+#ifdef USE_TQ_DEQ
 		if (operation != NULL)
 			tq_enqueue(&op_queue[dest_node], (void *)operation, dest_node);
 		op_node *extracted_op = NULL;
@@ -1526,8 +1797,8 @@ pkey_t pq_dequeue(void *q, void **result)
 			return ret_ts;
 		}
 
-#ifdef USE_TASK_QUEUE
-#ifndef USE_TASK_STEAL
+#ifdef USE_TQ_DEQ
+#ifndef USE_ST_DEQ
 		// extract from one queue
 		i = node = NID;
 		do
@@ -1564,6 +1835,7 @@ pkey_t pq_dequeue(void *q, void **result)
 		handling_op = extracted_op;
 		if (handling_op->type == OP_PQ_ENQ)
 		{
+#ifndef USE_STD_ENQ
 			ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->payload, &handling_op->candidate);
 			if (ret != -1) //enqueue succesful
 			{
@@ -1571,6 +1843,9 @@ pkey_t pq_dequeue(void *q, void **result)
 				operation = NULL;
 				continue;
 			}
+#else
+		abort();
+#endif
 		}
 		else if (handling_op->type == OP_PQ_DEQ)
 		{
@@ -1589,21 +1864,23 @@ pkey_t pq_dequeue(void *q, void **result)
 
 		// @TODO in case of failure update ts of vb if dequeue
 		//op failed
-#ifdef USE_TASK_QUEUE
-#ifdef USE_TASK_STEAL
+#ifdef USE_TQ_DEQ
+#ifdef USE_ST_DEQ
 		if (i == 0)
 		{
 #endif
 			handling_op = NULL;
 			operation = extracted_op;
 			ts = operation->timestamp;
-#ifdef USE_TASK_STEAL
+#ifdef USE_ST_DEQ
 		}
 		i = 0;
 #endif
 #endif
 	} while (true);
 }
+
+#endif
 
 void pq_report(int TID)
 {
