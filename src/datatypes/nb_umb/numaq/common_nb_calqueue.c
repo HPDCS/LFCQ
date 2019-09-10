@@ -37,7 +37,7 @@
 #define USE_TQ_ENQ
 #define USE_ST_ENQ
 
-#define USE_STD_DEQ
+//#define USE_STD_DEQ
 #define USE_TQ_DEQ
 #define USE_ST_DEQ
 
@@ -1457,7 +1457,7 @@ nbc_bucket_node *min, *min_next,
 			if (current_candidate == NULL)
 				current_candidate = left_node;
 
-			// someone changed the candidate
+			// someone already set the candidate
 			if (current_candidate != left_node)
 			{
 				if (current_candidate == 1)
@@ -1485,7 +1485,9 @@ nbc_bucket_node *min, *min_next,
 					}
 				}
 			}
-		
+
+			// here left node is the current candidate
+
 			// try to extract the node
 			wideptr lnn;
 			lnn.next = left_node_next;
@@ -1500,6 +1502,7 @@ nbc_bucket_node *min, *min_next,
 			// the extraction is failed
 			if (!res)
 			{
+				//read again left
 				left_node_next = left_node->next;
 				left_node_op_id = left_node->op_id;
 			}
@@ -1510,6 +1513,7 @@ nbc_bucket_node *min, *min_next,
 			if (is_marked(left_node_next, MOV))
 			{
 				// try reset the candidate
+				//*candidate = NULL;
 				__sync_bool_compare_and_swap(candidate, current_candidate, NULL);
 				*result = NULL;
 				return -1; // return error
@@ -1517,11 +1521,26 @@ nbc_bucket_node *min, *min_next,
 
 			// the node cannot be extracted && is marked as DEL
 			// check who extracted it, in case skip
-			if (is_marked(left_node_next, DEL) && left_node_op_id != op_id)
+			if (is_marked(left_node_next, DEL)) 
+			{
+				if (left_node_op_id != op_id) 
+				{
+				__sync_bool_compare_and_swap(candidate, current_candidate, NULL);
 				continue;
+				}
+				else
+				{
+					*result = left_node->payload;
+					return left_ts;
+				}
+			}
+
+			 
+			
+			//even if the node has been extracted, it has been extracted by someone with my same op_id
 
 			// the node has been extracted either by me or someone with my operation
-
+			
 			// use it for count the average number of traversed node per dequeue
 			scan_list_length += counter;
 			// use it for count the average of completed extractions
