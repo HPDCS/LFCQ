@@ -29,6 +29,7 @@
 
 #include "common_nb_calqueue.h"
 
+#define NODE_HASH(bucket_id) ((bucket_id >> 2ull) % _NUMA_NODES)
 
 /*************************************
  * GLOBAL VARIABLES					 *
@@ -671,7 +672,7 @@ void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 	int res = 0;
 	
 	//Create a new node to be inserted in the new table as as INValid
-	replica = numa_node_malloc(right_node->payload, right_node->timestamp,  right_node->counter, hash(right_node->timestamp, new_h->bucket_width)%_NUMA_NODES);
+	replica = numa_node_malloc(right_node->payload, right_node->timestamp,  right_node->counter, NODE_HASH(hash(right_node->timestamp, new_h->bucket_width)));
 	
 	new_node 			= &replica;
 	new_node_pointer 	= (*new_node);
@@ -1008,7 +1009,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			newIndex = hash(timestamp, h->bucket_width);
 			
 			// allocate a new node on numa node
-			new_node = numa_node_malloc(payload, timestamp, 0, newIndex%_NUMA_NODES);
+			new_node = numa_node_malloc(payload, timestamp, 0, NODE_HASH(newIndex));
 			new_node->epoch = (h->current & MASK_EPOCH);
 
 			// compute the index of the physical bucket

@@ -46,13 +46,6 @@
 
 #define NODE_HASH(bucket_id) ((bucket_id >> 2ull) % _NUMA_NODES)
 
-/* 
- * @TODO improve op node definition
- * @TODO move update of queue from single step to wrapper
- * @TODO refactor of wrappers
- * @TODO use only active numa nodes
- *  */
-
 /*************************************
  * GLOBAL VARIABLES					 *
  ************************************/
@@ -1444,8 +1437,6 @@ nbc_bucket_node *min, *min_next,
 				return -1; //return error
 			}
 
-			//LOG("DEQ - Current node is: %p, with %p|%ld and ts %ld\n", left_node, left_node_next, left_node_op_id, left_ts);
-
 			// The virtual bucket is empty
 			if (left_ts >= right_limit || left_node == tail)
 				break;
@@ -1472,7 +1463,6 @@ nbc_bucket_node *min, *min_next,
 					// was for my operation?
 					if (current_candidate->op_id == op_id)
 					{
-						// yes, return it
 						*result = current_candidate->payload;
 						return current_candidate->timestamp;
 					}
@@ -1530,17 +1520,14 @@ nbc_bucket_node *min, *min_next,
 				}
 				else
 				{
+					// the node has been already extracted by someone with my op
 					*result = left_node->payload;
 					return left_ts;
 				}
 			}
 
-			 
-			
-			//even if the node has been extracted, it has been extracted by someone with my same op_id
+			// we have extracted the node, so we do the update of the stats
 
-			// the node has been extracted either by me or someone with my operation
-			
 			// use it for count the average number of traversed node per dequeue
 			scan_list_length += counter;
 			// use it for count the average of completed extractions

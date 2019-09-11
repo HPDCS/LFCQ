@@ -163,11 +163,10 @@ struct __bucket_node
 typedef struct __op_load op_node; //maybe a union is better?
 struct __op_load
 {
-	unsigned long op_id; //global identifier for the operation
+	unsigned long op_id; //global identifier for the operation 
 	unsigned int type;   // ENQ | DEQ
-
 	int response;				// -1 waiting for resp | 1 responsed
-	void *payload;				// paylod to enqueue | dequeued payload
+ 	void *payload;				// paylod to enqueue | dequeued payload
 	pkey_t timestamp;			// ts of node to enqueue | lower ts of bucket to dequeue | returned ts
 	nbc_bucket_node *candidate; // need of candidate node
 };
