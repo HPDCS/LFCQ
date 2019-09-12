@@ -1682,6 +1682,10 @@ int pq_enqueue(void *q, pkey_t timestamp, void *payload)
 #endif
 		//extracted op, executing
 		handling_op = extracted_op;
+		if (handling_op->response != -1) {
+			operation = NULL;
+			continue;
+		}
 		if (handling_op->type == OP_PQ_ENQ)
 		{
 			ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->payload, &handling_op->candidate);
@@ -1840,6 +1844,11 @@ pkey_t pq_dequeue(void *q, void **result)
 
 		//extracted op, executing
 		handling_op = extracted_op;
+		if (handling_op->response != -1) {
+			operation = NULL;
+			continue;
+		}
+		
 		if (handling_op->type == OP_PQ_ENQ)
 		{
 #ifndef USE_STD_ENQ
