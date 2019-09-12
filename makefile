@@ -9,8 +9,7 @@ EXECUTABLES :=
 USER_OBJS :=
 LIBS := -lpthread -lm -lnuma -lrt -mrtm
 SRC_DIR := src
-TARGETS := NBCQ LIND MARO CBCQ SLCQ NBVB 2CAS NRTM VBPQ UNBCQ NUMAQ #V2CQ NUMA WORK
-
+TARGETS := NBCQ LIND MARO CBCQ SLCQ NBVB 2CAS NRTM VBPQ UNBCQ NUMAQ NUMAFK #V2CQ NUMA WORK
 
 UTIL_value := src/utils/common.o src/utils/hpdcs_math.o 
 GACO_value := src/gc/gc.o src/gc/ptst.o
@@ -21,6 +20,9 @@ NGACO_value := src/datatypes/nb_umb/gc/gc.o src/datatypes/nb_umb/gc/ptst.o
 
 NUMAQ_value := src/datatypes/nb_umb/numaq/msq.o src/datatypes/nb_umb/numaq/stack.o src/datatypes/nb_umb/numaq/lcrq.o src/datatypes/nb_umb/numaq/common_nb_calqueue.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMAQ_link := gcc
+
+NUMAFK_value := src/datatypes/nb_umb/numafk/msq.o src/datatypes/nb_umb/numafk/stack.o src/datatypes/nb_umb/numafk/lcrq.o src/datatypes/nb_umb/numafk/common_nb_calqueue.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMAFK_link := gcc
 
 UNBCQ_value := src/datatypes/nb_umb/unbcq/nb_calqueue.o src/datatypes/nb_umb/unbcq/common_nb_calqueue.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 UNBCQ_link := gcc
@@ -97,7 +99,7 @@ else ifeq ($(OBJS_DIR), GProf)
 	DEBUG+=-pg
 endif
 
-C_SUBDIRS 		:= src src/datatypes/nbcalendars src/datatypes/nbcalendars_with_vb src/datatypes/nbcalendars_with_vb2 src/datatypes/nbcalendars_with_vb_rtm src/datatypes/nbcalendars_with_vb_2CAS  src/datatypes/nbskiplists src/datatypes/slcalqueue  src/arch src/gc src/utils src/datatypes/nb_umb/unbcq src/datatypes/nb_umb/numaq src/datatypes/nb_umb/gc
+C_SUBDIRS 		:= src src/datatypes/nbcalendars src/datatypes/nbcalendars_with_vb src/datatypes/nbcalendars_with_vb2 src/datatypes/nbcalendars_with_vb_rtm src/datatypes/nbcalendars_with_vb_2CAS  src/datatypes/nbskiplists src/datatypes/slcalqueue  src/arch src/gc src/utils src/datatypes/nb_umb/unbcq src/datatypes/nb_umb/numaq src/datatypes/nb_umb/numafk src/datatypes/nb_umb/gc
 C_SRCS			:= $(shell ls   $(patsubst %, %/*.c, $(C_SUBDIRS)) )
 C_SRCS 			:= $(filter-out $(FILTER_OUT_C_SRC), $(C_SRCS))
 C_OBJS			:= $(strip $(subst .c,.o, $(C_SRCS)))

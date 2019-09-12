@@ -44,16 +44,8 @@
 #include "gc/gc.h"
 
 
-
-  
-
-
 #define NID nid
 #define TID tid
-
-
-
-
 
 
 struct payload
@@ -112,11 +104,6 @@ volatile unsigned int end_phase_2 = 0;
 volatile unsigned int end_phase_3 = 0;
 volatile unsigned int end_test = 0;
 volatile long long final_ops = 0;
-
-
-
-
-
 
 
 void classic_hold(
