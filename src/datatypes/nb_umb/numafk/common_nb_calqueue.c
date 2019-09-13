@@ -982,7 +982,6 @@ static inline pkey_t single_step_pq_dequeue(table *h, nb_calqueue *queue, void *
 	} while (i % 100 != 0);
 	*result = NULL;
 	*/
-	printf("DEQ - TID %d - %d\n", TID,  h->current>>32);
 	performed_dequeue++;
 	return TID;
 }
@@ -1081,6 +1080,9 @@ int pq_enqueue(void *q, pkey_t timestamp, void *payload)
 #endif
 		//extracted op, executing
 		handling_op = extracted_op;
+		printf("ENQ - %d|%d, extracted %s from %d\n", TID, NID,
+		handling_op->type == OP_PQ_ENQ?"ENQ":"DEQ"
+		, i);
 		if (handling_op->response != -1) {
 			operation = NULL;
 			continue;
@@ -1241,6 +1243,9 @@ pkey_t pq_dequeue(void *q, void **result)
 
 		//extracted op, executing
 		handling_op = extracted_op;
+		printf("ENQ - %d|%d, extracted %s from %d\n", TID, NID,
+		handling_op->type == OP_PQ_ENQ?"ENQ":"DEQ"
+		, i);
 		if (handling_op->response != -1) {
 			operation = NULL;
 			continue;
