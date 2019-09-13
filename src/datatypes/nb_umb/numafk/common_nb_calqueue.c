@@ -34,10 +34,10 @@
  * */
 
 #define USE_TQ_ENQ
-//#define USE_ST_ENQ
+#define USE_ST_ENQ
 
 #define USE_TQ_DEQ
-//#define USE_ST_DEQ
+#define USE_ST_DEQ
 
 // END MACROS TO ACTIVATE OPS
 
@@ -1080,9 +1080,6 @@ int pq_enqueue(void *q, pkey_t timestamp, void *payload)
 #endif
 		//extracted op, executing
 		handling_op = extracted_op;
-		printf("ENQ - %d|%d, extracted %s from %d\n", TID, NID,
-		handling_op->type == OP_PQ_ENQ?"ENQ":"DEQ"
-		, i);
 		if (handling_op->response != -1) {
 			operation = NULL;
 			continue;
@@ -1164,7 +1161,7 @@ pkey_t pq_dequeue(void *q, void **result)
 
 		// first iteration are dummy
 		vb_index = hash(ts, h->bucket_width);
-		dest_node = NODE_HASH(vb_index);
+		dest_node = NID;//NODE_HASH(vb_index);
 
 		if (requested_op == NULL && operation == NULL)
 		{
@@ -1243,9 +1240,6 @@ pkey_t pq_dequeue(void *q, void **result)
 
 		//extracted op, executing
 		handling_op = extracted_op;
-		printf("ENQ - %d|%d, extracted %s from %d\n", TID, NID,
-		handling_op->type == OP_PQ_ENQ?"ENQ":"DEQ"
-		, i);
 		if (handling_op->response != -1) {
 			operation = NULL;
 			continue;
