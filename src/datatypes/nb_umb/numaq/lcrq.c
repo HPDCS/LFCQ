@@ -106,7 +106,7 @@ static inline int crq_is_closed(uint64_t t) {
 
 void _init_gc_lcrq() 
 {
-    printf("Ring Node size: %ld, Ring Queue size: %ld\n", sizeof(RingNode), sizeof(RingQueue));
+    printf("#########\nRing Node size: %ld, Ring Queue size: %ld\n##########\n", sizeof(RingNode), sizeof(RingQueue));
     gc_aid[GC_RING_QUEUE] = gc_add_allocator(sizeof(RingQueue));
 }
 

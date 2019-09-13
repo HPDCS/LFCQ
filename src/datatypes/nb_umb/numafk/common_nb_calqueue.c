@@ -54,7 +54,8 @@ int gc_hid[4];
 unsigned long op_counter = 2;
 task_queue op_queue[_NUMA_NODES]; // (!new) per numa node queue
 
-//unsigned int ACTIVE_NUMA_NODES;
+unsigned int ACTIVE_NUMA_NODES;
+#define NODE_HASH(bucket_id) ((bucket_id >> 2ull) % ACTIVE_NUMA_NODES)
 
 /*************************************
  * THREAD LOCAL VARIABLES			 *
@@ -892,11 +893,11 @@ void std_free_hook(ptst_t *p, void *ptr) { free(ptr); }
 void *pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket)
 {
 	//ceil(a / b) = (a / b) + ((a % b) != 0);
-	/*
+	
 	ACTIVE_NUMA_NODES = (((THREADS * _NUMA_NODES)) / NUM_CPUS) + ((((THREADS * _NUMA_NODES)) % NUM_CPUS) != 0); // (!new) compute the number of active numa nodes 
 	ACTIVE_NUMA_NODES = ACTIVE_NUMA_NODES < _NUMA_NODES? ACTIVE_NUMA_NODES:_NUMA_NODES;
-	printf("\n#######\nt %d, nn %d, cpu %d, ann%d\n########\n", THREADS, _NUMA_NODES, NUM_CPUS, ACTIVE_NUMA_NODES);
-	*/
+	printf("\n#######\nThreads %d, NUMA Nodes %d, CPUs %d, ACTIVE NUMA NODES%d\n########\n", THREADS, _NUMA_NODES, NUM_CPUS, ACTIVE_NUMA_NODES);
+	
 	unsigned int i = 0;
 	int res_mem_posix = 0;
 	nb_calqueue *res = NULL;
@@ -961,22 +962,29 @@ void *pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *payload, nbc_bucket_node ** candidate)
 {
 	// do busy loop
+	/*
 	unsigned long long i = 0;
 	do {
 		i++;
-	} while (i % 1000 != 0);
+	} while (i % 100 != 0);
+	*/
+	performed_enqueue++;
 	return 1;
 }
 
 static inline pkey_t single_step_pq_dequeue(table *h, nb_calqueue *queue, void **result, unsigned long op_id, nbc_bucket_node**candidate)
 {
 	// do busy loop
+	/*
 	unsigned long long i = 0;
 	do {
 		i++;
-	} while (i % 1000 != 0);
-	*result = 0x1;
-	return 1;
+	} while (i % 100 != 0);
+	*result = NULL;
+	*/
+	printf("DEQ - TID %d - %d\n", TID,  h->current>>32);
+	performed_dequeue++;
+	return TID;
 }
 
 int pq_enqueue(void *q, pkey_t timestamp, void *payload)

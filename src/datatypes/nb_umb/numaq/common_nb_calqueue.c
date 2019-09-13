@@ -44,7 +44,7 @@
 // END MACROS TO ACTIVATE OPS
 
 
-#define NODE_HASH(bucket_id) ((bucket_id >> 2ull) % _NUMA_NODES)
+
 
 /*************************************
  * GLOBAL VARIABLES					 *
@@ -56,7 +56,9 @@ int gc_hid[4];
 unsigned long op_counter = 2;
 task_queue op_queue[_NUMA_NODES]; // (!new) per numa node queue
 
-//unsigned int ACTIVE_NUMA_NODES;
+unsigned int ACTIVE_NUMA_NODES;
+
+#define NODE_HASH(bucket_id) ((bucket_id >> 2ull) % ACTIVE_NUMA_NODES)
 
 /*************************************
  * THREAD LOCAL VARIABLES			 *
@@ -893,12 +895,11 @@ void std_free_hook(ptst_t *p, void *ptr) { free(ptr); }
  */
 void *pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket)
 {
-	//ceil(a / b) = (a / b) + ((a % b) != 0);
-	/*
+
 	ACTIVE_NUMA_NODES = (((THREADS * _NUMA_NODES)) / NUM_CPUS) + ((((THREADS * _NUMA_NODES)) % NUM_CPUS) != 0); // (!new) compute the number of active numa nodes 
 	ACTIVE_NUMA_NODES = ACTIVE_NUMA_NODES < _NUMA_NODES? ACTIVE_NUMA_NODES:_NUMA_NODES;
-	printf("\n#######\nt %d, nn %d, cpu %d, ann%d\n########\n", THREADS, _NUMA_NODES, NUM_CPUS, ACTIVE_NUMA_NODES);
-	*/
+	printf("\n#######\nThreads %d, NUMA Nodes %d, CPUS %d, ACTIVE NUMA Nodes%d\n########\n", THREADS, _NUMA_NODES, NUM_CPUS, ACTIVE_NUMA_NODES);
+
 	unsigned int i = 0;
 	int res_mem_posix = 0;
 	nb_calqueue *res = NULL;
@@ -1437,6 +1438,9 @@ nbc_bucket_node *min, *min_next,
 				*result = NULL;
 				return -1; //return error
 			}
+
+			if (left_node_op_id == 1)
+				continue;
 
 			// The virtual bucket is empty
 			if (left_ts >= right_limit || left_node == tail)
