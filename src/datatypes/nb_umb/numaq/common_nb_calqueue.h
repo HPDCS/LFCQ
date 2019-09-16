@@ -169,6 +169,7 @@ struct __op_load
  	void *payload;				// paylod to enqueue | dequeued payload
 	pkey_t timestamp;			// ts of node to enqueue | lower ts of bucket to dequeue | returned ts
 	nbc_bucket_node *candidate; // need of candidate node
+	op_node ** requestor;
 };
 
 typedef union {
