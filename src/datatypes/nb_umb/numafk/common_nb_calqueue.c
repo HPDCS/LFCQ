@@ -962,13 +962,13 @@ void *pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *payload, nbc_bucket_node ** candidate)
 {
 	// do busy loop
-	/*
+	
 	unsigned long long i = 0;
 	
 	do {
 		i++;
 	} while (i % 100 != 0);
-	*/
+	
 	performed_enqueue++;
 	return 1;
 }
@@ -976,13 +976,13 @@ static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *paylo
 static inline pkey_t single_step_pq_dequeue(table *h, nb_calqueue *queue, void **result, unsigned long op_id, nbc_bucket_node**candidate)
 {
 	// do busy loop
-	/*
+	
 	unsigned long long i = 0;
 	do {
 		i++;
 	} while (i % 100 != 0);
 	*result = NULL;
-	*/
+	
 	performed_dequeue++;
 	return TID;
 }
@@ -1129,7 +1129,7 @@ int pq_enqueue(void *q, pkey_t timestamp, void *payload)
 
 pkey_t pq_dequeue(void *q, void **result)
 {
-		nb_calqueue *queue = (nb_calqueue *) q;
+	nb_calqueue *queue = (nb_calqueue *) q;
 	table *h = NULL;
 	op_node *operation, *new_operation, *extracted_op = NULL;
 
