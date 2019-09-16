@@ -128,6 +128,8 @@ extern int gc_hid[];
 #define OP_PQ_ENQ 0x0
 #define OP_PQ_DEQ 0x1
 
+
+typedef struct __op_load op_node; //maybe a union is better?
 /**
  *  Struct that define a node in a bucket
  */
@@ -158,9 +160,10 @@ struct __bucket_node
 	nbc_bucket_node *volatile replica; // pointer to the replica
 									   //nbc_bucket_node * volatile next_next;
 									   //64
+	op_node ** requestor;
 };
 
-typedef struct __op_load op_node; //maybe a union is better?
+
 struct __op_load
 {
 	unsigned long op_id; //global identifier for the operation 

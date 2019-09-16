@@ -669,9 +669,16 @@ void migrate_node(nbc_bucket_node *right_node, table *new_h)
 
 	int res = 0;
 
+	//se il nodo non merita di essere validato, marcalo e basta
+	if (right_node->op_id == 1) {
+		// il nodo è in inserimento
+		printf("MIGRATION %p\n", (*(right_node->requestor)));
+	}
+
 	//Create a new node to be inserted in the new table as as INValid
 	replica = numa_node_malloc(right_node->payload, right_node->timestamp, right_node->counter, NODE_HASH(hash(right_node->timestamp, new_h->bucket_width)));
 	replica->op_id = right_node->op_id;
+	replica->requestor = right_node->requestor;
 
 	new_node = &replica;
 	new_node_pointer = (*new_node);
@@ -1058,9 +1065,9 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 
 #else
 
-static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *payload, nbc_bucket_node ** candidate)
+static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *payload, nbc_bucket_node ** candidate, op_node *operation)
 {
-	nbc_bucket_node *bucket, *new_node;
+	nbc_bucket_node *bucket, *new_node, *ins_node;
 
 	unsigned int index, size;
 	unsigned long long newIndex = 0;
@@ -1075,6 +1082,7 @@ static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *paylo
 	// allocate node on right NUMA NODE
 	new_node = numa_node_malloc(payload, timestamp, 0, NODE_HASH(newIndex));
 	new_node->op_id = 0x1ull; // (!new) now nodes cannot be dequeued until resize
+	new_node->requestor = operation->requestor; // who requested the insertion?;
 	// read actual epoch
 	new_node->epoch = (h->current & MASK_EPOCH);
 
@@ -1121,9 +1129,15 @@ static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *paylo
 	{
 		// the CAS succeeds, thus we want to ensure that the insertion becomes visible
 		// il nodo è stato inserito, possibilmente più volte da operazioni parallele - non può essere ancora rimosso
-		// provo a settare il mio nodo come candidato, se non c'è qualcosa.
-		if (!__sync_bool_compare_and_swap(candidate, NULL, new_node)) {
-			// il mio nodo non è candidato, lo marco per l'eliminazione (così puà essere estratto)
+		// provo a settare il mio nodo come candidato, se non c'è già qualcosa.
+		
+		ins_node = __sync_val_compare_and_swap(candidate, NULL, new_node);
+		if (ins_node != NULL && ins_node != 1) {
+			// tenta di validare il nodo
+			__sync_bool_compare_and_swap(&(ins_node->op_id), 1, 0);
+
+			// la CAS per il candidato ha fallito
+			// marco il mio nodo come del
 			do {
 				
 				curr_state.next = new_node->next;
@@ -1133,16 +1147,14 @@ static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *paylo
 				new_state.op_id = 0;
 
 			} while(!__sync_bool_compare_and_swap(&new_node->widenext, curr_state.widenext, new_state.widenext));
-			return 1; // @TODO remove this
+
+			// esci, solo chi ha validato il nodo aggiornerà la tabella
+			return 1;
 		}
+		// prova a marcare il nodo (se non lo è già)
+		__sync_bool_compare_and_swap(&(new_node->op_id), 1, 0);
 
-		// HOW TO HANDLE CONCURRENT RESIZE(?)	
-		// che succede se c'è resize che viene terminata mentre sto in questo punto?
-
-		// must be executed once
-		new_node->op_id = 0; // il nodo ora può essere estratto
-	
-		/* Se il nodo è marcato forse c'è stata una resize concorrente*/
+		// Se il nodo è marcato forse c'è stata una resize concorrente
 		// never happens (mumble)
 		/*
 		if (is_marked(tmp->next)) {
@@ -1698,7 +1710,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 		
 		if (handling_op->type == OP_PQ_ENQ)
 		{
-			ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->payload, &handling_op->candidate);
+			ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->payload, &handling_op->candidate, handling_op);
 			if (ret != -1) //enqueue succesful
 			{
 				__sync_bool_compare_and_swap(&(handling_op->response), -1, ret); /* Is this an overkill? */
@@ -1722,6 +1734,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 
 		if (i == 0) 
 		{
+			handling_op = NULL;
 			operation = extracted_op;
 		}
 		i = 0;
@@ -1834,7 +1847,7 @@ int pq_enqueue_2(void *q, pkey_t timestamp, void *payload)
 		}
 		if (handling_op->type == OP_PQ_ENQ)
 		{
-			ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->payload, &handling_op->candidate);
+			ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->payload, &handling_op->candidate, handling_op);
 			if (ret != -1) //enqueue succesful
 			{
 				__sync_bool_compare_and_swap(&(handling_op->response), -1, ret);
@@ -1990,7 +2003,7 @@ pkey_t pq_dequeue(void *q, void **result)
 		
 		if (handling_op->type == OP_PQ_ENQ)
 		{
-			ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->payload, &handling_op->candidate);
+			ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->payload, &handling_op->candidate, handling_op);
 			if (ret != -1) //enqueue succesful
 			{
 				__sync_bool_compare_and_swap(&(handling_op->response), -1, ret); /* Is this an overkill? */
@@ -2014,6 +2027,7 @@ pkey_t pq_dequeue(void *q, void **result)
 
 		if (i == 0) 
 		{
+			handling_op=NULL;
 			operation = extracted_op;
 		}
 		i = 0;
@@ -2137,7 +2151,7 @@ pkey_t pq_dequeue_2(void *q, void **result)
 		if (handling_op->type == OP_PQ_ENQ)
 		{
 #ifndef USE_STD_ENQ
-			ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->payload, &handling_op->candidate);
+			ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->payload, &handling_op->candidate, handling_op);
 			if (ret != -1) //enqueue succesful
 			{
 				__sync_bool_compare_and_swap(&(handling_op->response), -1, ret); /* Is this an overkill? */
