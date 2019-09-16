@@ -1644,7 +1644,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 		// read table
 		h = read_table(&queue->hashtable, th, epb, pub);
 
-		if (unlikely(requested_op == NULL)) // maybe is not a really smart idea
+		if (unlikely(requested_op == NULL && operation == NULL)) // maybe is not a really smart idea
 		{
 			// first iteration - publish my op
 			vb_index  = hash(timestamp, h->bucket_width);
@@ -1928,12 +1928,13 @@ pkey_t pq_dequeue(void *q, void **result)
 	unsigned int th = queue->threshold;
 	
 	requested_op = NULL;
+	operation = new_operation = extracted_op = NULL;
 
 	do {
 		// read table
 		h = read_table(&queue->hashtable, th, epb, pub);
 
-		if (unlikely(requested_op == NULL)) // maybe is not a really smart idea
+		if (unlikely(requested_op == NULL && operation == NULL)) // maybe is not a really smart idea
 		{
 			// first iteration - publish my op
 			vb_index  = (h->current) >> 32;
@@ -2038,7 +2039,7 @@ pkey_t pq_dequeue(void *q, void **result)
 
 		if (i == 0) 
 		{
-			handling_op=NULL;
+			handling_op = NULL;
 			operation = extracted_op;
 		}
 		i = 0;
