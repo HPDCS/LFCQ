@@ -672,7 +672,18 @@ void migrate_node(nbc_bucket_node *right_node, table *new_h)
 	//se il nodo non merita di essere validato, marcalo e basta
 	if (right_node->op_id == 1) {
 		// il nodo è in inserimento
+		//perchè non succede?
 		printf("MIGRATION %p\n", (*(right_node->requestor)));
+		op_node * op = *(right_node->requestor);
+		if (op == NULL) {
+			abort();
+		}
+		else if (op->candidate == NULL) {
+			// the node has to be validated
+			abort();
+		}
+		else if (op->candidate != right_node)
+			return;
 	}
 
 	//Create a new node to be inserted in the new table as as INValid

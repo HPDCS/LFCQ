@@ -128,6 +128,8 @@ extern int gc_hid[];
 #define OP_PQ_ENQ 0x0
 #define OP_PQ_DEQ 0x1
 
+typedef struct __op_load op_node; //maybe a union is better?
+
 /**
  *  Struct that define a node in a bucket
  */
@@ -169,6 +171,7 @@ struct __op_load
  	void *payload;				// paylod to enqueue | dequeued payload
 	pkey_t timestamp;			// ts of node to enqueue | lower ts of bucket to dequeue | returned ts
 	nbc_bucket_node *candidate; // need of candidate node
+	op_node ** requestor;
 };
 
 typedef union {
