@@ -1596,7 +1596,9 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 
 	nb_calqueue *queue = (nb_calqueue *) q;
 	table *h = NULL;
-	op_node *operation, *new_operation, *extracted_op = NULL;
+	op_node *operation, *new_operation, *extracted_op;
+	
+	pkey_t ret_ts;
 
 	unsigned long long vb_index;
 	unsigned int dest_node;	 
@@ -1613,7 +1615,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	unsigned int th = queue->threshold;
 	
 	requested_op = NULL;
-
+	operation = new_operation = extracted_op = NULL;
+	
 	do {
 		// read table
 		h = read_table(&queue->hashtable, th, epb, pub);
@@ -1640,10 +1643,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 			op_type = operation->type;
 			if (op_type == OP_PQ_ENQ) 
 			{
-
 				vb_index  = hash(operation->timestamp, h->bucket_width);
-				dest_node = NODE_HASH(vb_index);
-				
+				dest_node = NODE_HASH(vb_index);	
 			}
 			else 
 			{
@@ -1653,20 +1654,20 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 			// need to move to another queue?
 			if (dest_node != NID) 
 			{
-					// The node has been extracted from a non optimal queue
-					new_operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
-					new_operation->op_id = operation->op_id;
-					new_operation->type = operation->type;
-					new_operation->timestamp = operation->timestamp;
-					new_operation->payload = operation->payload;
-					new_operation->response = operation->response;
-					new_operation->candidate = operation->candidate;
-					new_operation->requestor = operation->requestor;
+				// The node has been extracted from a non optimal queue
+				new_operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
+				new_operation->op_id = operation->op_id;
+				new_operation->type = operation->type;
+				new_operation->timestamp = operation->timestamp;
+				new_operation->payload = operation->payload;
+				new_operation->response = operation->response;
+				new_operation->candidate = operation->candidate;
+				new_operation->requestor = operation->requestor;
 					
-					*(new_operation->requestor) = new_operation;
-					gc_free(ptst, operation, gc_aid[GC_OPNODE]);
+				*(new_operation->requestor) = new_operation;
+				gc_free(ptst, operation, gc_aid[GC_OPNODE]);
 
-					operation = new_operation;
+				operation = new_operation;
 			}
 			// publish op on right queue
 			tq_enqueue(&op_queue[dest_node], (void *)operation, dest_node);
@@ -1688,33 +1689,32 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 			extracted_op = requested_op;
 			i = 1;
 		}
-			
 		
-		// execute op
-		if (extracted_op->response != -1) {
-			// operation has been executed by someone
+		handling_op = extracted_op;
+		if (handling_op->response != -1) {
 			operation = NULL;
 			continue;
 		}
-		if (extracted_op->type == OP_PQ_ENQ) 
+		
+		if (handling_op->type == OP_PQ_ENQ)
 		{
-			ret = single_step_pq_enqueue(h, extracted_op->timestamp, extracted_op->payload, &extracted_op->candidate);
-			if (ret != -1)
+			ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->payload, &handling_op->candidate);
+			if (ret != -1) //enqueue succesful
 			{
-				__sync_bool_compare_and_swap(&(extracted_op->response), -1, ret);
+				__sync_bool_compare_and_swap(&(handling_op->response), -1, ret); /* Is this an overkill? */
 				operation = NULL;
 				continue;
 			}
 		}
 		else 
 		{
-			ret = single_step_pq_dequeue(h, queue, &new_payload, extracted_op->op_id, &extracted_op->candidate);
-			if (ret != -1) //dequeue succesful
-			{
+			ret_ts = single_step_pq_dequeue(h, queue, &new_payload, handling_op->op_id, &handling_op->candidate);
+			if (ret_ts != -1)
+			{ //dequeue failed
 				performed_dequeue++;
-				extracted_op->payload = new_payload;
-				extracted_op->timestamp = ret;
-				__sync_bool_compare_and_swap(&(extracted_op->response), -1, 1);
+				handling_op->payload = new_payload;
+				handling_op->timestamp = ret_ts;
+				__sync_bool_compare_and_swap(&(handling_op->response), -1, 1); /* Is this an overkill? */
 				operation = NULL;
 				continue;
 			}
@@ -1893,7 +1893,7 @@ pkey_t pq_dequeue(void *q, void **result)
 	unsigned int dest_node;	 
 	unsigned int op_type;
 	int ret, i;
-
+	pkey_t ret_ts;
 	void* new_payload;
 
 	critical_enter();
@@ -1982,30 +1982,31 @@ pkey_t pq_dequeue(void *q, void **result)
 			
 		
 		// execute op
-		if (extracted_op->response != -1) {
-			// operation has been executed by someone
+		handling_op = extracted_op;
+		if (handling_op->response != -1) {
 			operation = NULL;
 			continue;
 		}
-		if (extracted_op->type == OP_PQ_ENQ) 
+		
+		if (handling_op->type == OP_PQ_ENQ)
 		{
-			ret = single_step_pq_enqueue(h, extracted_op->timestamp, extracted_op->payload, &extracted_op->candidate);
-			if (ret != -1)
+			ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->payload, &handling_op->candidate);
+			if (ret != -1) //enqueue succesful
 			{
-				__sync_bool_compare_and_swap(&(extracted_op->response), -1, ret);
+				__sync_bool_compare_and_swap(&(handling_op->response), -1, ret); /* Is this an overkill? */
 				operation = NULL;
 				continue;
 			}
 		}
 		else 
 		{
-			ret = single_step_pq_dequeue(h, queue, &new_payload, extracted_op->op_id, &extracted_op->candidate);
-			if (ret != -1) //dequeue succesful
-			{
+			ret_ts = single_step_pq_dequeue(h, queue, &new_payload, handling_op->op_id, &handling_op->candidate);
+			if (ret_ts != -1)
+			{ //dequeue failed
 				performed_dequeue++;
-				extracted_op->payload = new_payload;
-				extracted_op->timestamp = ret;
-				__sync_bool_compare_and_swap(&(extracted_op->response), -1, 1);
+				handling_op->payload = new_payload;
+				handling_op->timestamp = ret_ts;
+				__sync_bool_compare_and_swap(&(handling_op->response), -1, 1); /* Is this an overkill? */
 				operation = NULL;
 				continue;
 			}
