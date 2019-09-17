@@ -28,6 +28,7 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <numa.h>
+#include <numaif.h>
 
 #include "primitives.h"
 #include "lcrq.h"
@@ -109,7 +110,11 @@ static inline int crq_is_closed(uint64_t t) {
 
 void _lcrq_free_hook(ptst_t *p, void *ptr) 
 { 
-    numa_free(ptr);
+    int node = -1, ret;
+    ret = get_mempolicy(&node, NULL, 0, (void*)ptr, MPOL_F_NODE | MPOL_F_ADDR);
+    if (ret != 0)
+        abort();
+    numa_free(ptr, node);
     //free(ptr); 
 }
 
