@@ -109,8 +109,8 @@ static inline int crq_is_closed(uint64_t t) {
 
 void _lcrq_free_hook(ptst_t *p, void *ptr) 
 { 
-    //numa_free(ptr);
-    free(ptr); 
+    numa_free(ptr);
+    //free(ptr); 
 }
 
 void _init_gc_lcrq() 
@@ -152,7 +152,7 @@ static inline void fixState(RingQueue *rq) {
 
 // SHARED_OBJECT_INIT
 void lcrq_init(LCRQ *queue, unsigned int numa_node) {
-    RingQueue *rq = malloc(sizeof(RingQueue));//gc_alloc_node(ptst, gc_aid[GC_RING_QUEUE], numa_node);
+    RingQueue *rq = numa_alloc_onnode(sizeof(RingQueue),numa_node);//malloc(sizeof(RingQueue));//gc_alloc_node(ptst, gc_aid[GC_RING_QUEUE], numa_node);
     init_ring(rq);
     queue->head = queue->tail = rq;
 }
@@ -211,7 +211,7 @@ bool _lcrq_enqueue(LCRQ *queue, uint64_t arg, unsigned int numa_node) {
         if (crq_is_closed(t)) {
 alloc:
             if (nrq == null) {
-                nrq = (RingQueue*) malloc(sizeof(RingQueue));//gc_alloc_node(ptst, gc_aid[GC_RING_QUEUE], numa_node);
+                nrq = (RingQueue*) numa_alloc_onnode(sizeof(RingQueue), numa_node);//malloc(sizeof(RingQueue));//gc_alloc_node(ptst, gc_aid[GC_RING_QUEUE], numa_node);
                 init_ring(nrq);
             }
 
@@ -237,7 +237,7 @@ alloc:
                 if ((likely(!node_unsafe(idx)) || rq->head < t) && CAS2((uint64_t*)cell, -1, idx, arg, t)) {
                     if (nrq != null) {
                         //gc_free(ptst, nrq, gc_aid[GC_RING_QUEUE]); // to avoid use per thread variable
-                        gc_add_ptr_to_hook_list(ptst, nrq, gc_hid[3]);
+                        node_gc_add_ptr_to_hook_list(ptst, nrq, gc_hid[3], numa_node);
                     }
                     return true;
                 }
