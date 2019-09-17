@@ -27,6 +27,9 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#include <numa.h>
+#include <numaif.h>
+
 #include "primitives.h"
 #include "lcrq.h"
 
@@ -104,10 +107,22 @@ static inline int crq_is_closed(uint64_t t) {
     return (t & (1ull << 63)) != 0;
 }
 
+
+void _lcrq_free_hook(ptst_t *p, void *ptr) 
+{ 
+    int node = -1, ret;
+    ret = get_mempolicy(&node, NULL, 0, (void*)ptr, MPOL_F_NODE | MPOL_F_ADDR);
+    if (ret != 0)
+        abort();
+    numa_free(ptr, node);
+    //free(ptr); 
+}
+
 void _init_gc_lcrq() 
 {
-    printf("#########\nRing Node size: %ld, Ring Queue size: %ld\n##########\n", sizeof(RingNode), sizeof(RingQueue));
-    gc_aid[GC_RING_QUEUE] = gc_add_allocator(sizeof(RingQueue));
+    printf("\n########\nRing Node size Bytes: %ld, Ring Queue Size Bytes: %ld\n#########\n", sizeof(RingNode), sizeof(RingQueue));
+    //gc_aid[GC_RING_QUEUE] = gc_add_allocator(sizeof(RingQueue));
+    gc_hid[3] = gc_add_hook(_lcrq_free_hook);
 }
 
 
@@ -142,7 +157,7 @@ static inline void fixState(RingQueue *rq) {
 
 // SHARED_OBJECT_INIT
 void lcrq_init(LCRQ *queue, unsigned int numa_node) {
-    RingQueue *rq = gc_alloc_node(ptst, gc_aid[GC_RING_QUEUE], numa_node);
+    RingQueue *rq = numa_alloc_onnode(sizeof(RingQueue),numa_node);//malloc(sizeof(RingQueue));//gc_alloc_node(ptst, gc_aid[GC_RING_QUEUE], numa_node);
     init_ring(rq);
     queue->head = queue->tail = rq;
 }
@@ -201,7 +216,7 @@ bool _lcrq_enqueue(LCRQ *queue, uint64_t arg, unsigned int numa_node) {
         if (crq_is_closed(t)) {
 alloc:
             if (nrq == null) {
-                nrq = (RingQueue*) gc_alloc_node(ptst, gc_aid[GC_RING_QUEUE], numa_node);
+                nrq = (RingQueue*) numa_alloc_onnode(sizeof(RingQueue), numa_node);//malloc(sizeof(RingQueue));//gc_alloc_node(ptst, gc_aid[GC_RING_QUEUE], numa_node);
                 init_ring(nrq);
             }
 
@@ -226,7 +241,8 @@ alloc:
             if (likely(node_index(idx) <= t)) {
                 if ((likely(!node_unsafe(idx)) || rq->head < t) && CAS2((uint64_t*)cell, -1, idx, arg, t)) {
                     if (nrq != null) {
-                        gc_free(ptst, nrq, gc_aid[GC_RING_QUEUE]); // to avoid use per thread variable
+                        //gc_free(ptst, nrq, gc_aid[GC_RING_QUEUE]); // to avoid use per thread variable
+                        node_gc_add_ptr_to_hook_list(ptst, nrq, gc_hid[3], numa_node);
                     }
                     return true;
                 }
@@ -315,8 +331,11 @@ bool _lcrq_dequeue(LCRQ *queue, int64_t* item) {
             if (next == null)
                 return false;
             if (tail_index(rq->tail) <= h + 1)
-                if (CASPTR(&queue->head, rq, next)) 
-                    gc_free(ptst, rq, gc_aid[GC_RING_QUEUE]);
+                if (CASPTR(&queue->head, rq, next))
+                { 
+                    //gc_free(ptst, rq, gc_aid[GC_RING_QUEUE]);
+                    gc_add_ptr_to_hook_list(ptst, rq, gc_hid[3]);
+                }
         }
     }
 }
