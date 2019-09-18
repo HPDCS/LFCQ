@@ -10,10 +10,10 @@ TIME=10
 ##############################
 
 data_types="NBCQ"
-threads="32 28 24 20 16 12 8 4"
+threads="32 28 24 20 16 12 8 4 1"
 iterations="1 2" # 3 4 5" # 6 7 8 9 10"
 distributions="E" # U T N C"
-queue_sizes="256 2560 25600" #256000 2560000"
+queue_sizes="2560 25600" #256000 2560000"
 usage_factor="0.33333333333333333333333"
 results="Results/NBCQ-Baseline"
 
