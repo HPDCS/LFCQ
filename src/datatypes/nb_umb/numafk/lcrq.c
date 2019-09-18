@@ -122,7 +122,7 @@ void _lcrq_free_hook(ptst_t *p, void *ptr)
 
 void _init_gc_lcrq() 
 {
-    printf("\n########\nRing Node size Bytes: %ld, Ring Queue Size Bytes: %ld\n#########\n", sizeof(RingNode), sizeof(RingQueue));
+    printf("\n########\nRing Pow: %ld, Ring Node size Bytes: %ld, Ring Queue Size Bytes: %ld\n#########\n", RING_SIZE,sizeof(RingNode), sizeof(RingQueue));
     //gc_aid[GC_RING_QUEUE] = gc_add_allocator(sizeof(RingQueue));
     gc_hid[3] = gc_add_hook(_lcrq_free_hook);
 }

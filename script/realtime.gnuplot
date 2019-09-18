@@ -51,14 +51,14 @@ set style line 11 dt 10 lc rgb "#000000"
 set style line 12 dt 11 lc rgb "#000000"
 
 	
-set yrange [0:7000]
-set xrange [1:50]
+set yrange [0:18000]
+set xrange [1:9]
 set offset 2,2,1,1
 
 maxitems=56
 
 start=2
-end=5
+end=10
 outfile=out.'/Real-'.queue.'.eps'
 
 set output outfile
