@@ -1253,14 +1253,12 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	dest_node = NODE_HASH(hash(timestamp, h->bucket_width));
 	
 	// if NID execute
-	/*
 	if (dest_node == NID)
 	{
 		int ret = do_pq_enqueue(q, timestamp, payload);
 		critical_exit();
 		return ret;
 	}
-	*/
 
 	// posting the operation
 	from_me = get_request_slot_to_node(dest_node);
@@ -1312,14 +1310,11 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 			}
 		}
 
-		
-		// @TODO
 		// check response
-		// if done break and return
-		// else continue
-		break;
-	
-	} while(1);
+		ret = resp->ret_value;
+		status = __sync_fetch_and_add(&(resp->response),1); // only I read this
+			
+	} while(status != 0);
 	// do other op until someone answer
 
 	//printf("ENQ - dest is %d\n", dest_node);
