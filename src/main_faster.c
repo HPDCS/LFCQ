@@ -46,7 +46,7 @@
 
 #define NID nid
 #define TID tid
-
+#define LTID ltid
 
 struct payload
 {
@@ -91,6 +91,8 @@ volatile unsigned int lock = 1;
 __thread int TID;
 __thread int NID;
 __thread unsigned int num_op=0;
+
+__thread int LTID;
 
 int NUMA_NODES;
 
@@ -346,6 +348,7 @@ void* process(void *arg)
 	(TID) 		= my_id;
 	int cpu 	= numa_mapping[my_id];
 	(NID) 		= numa_node_of_cpu(cpu);
+	LTID		= my_id % num_cpus_per_node;
 	srand48_r(my_id+157, &seed2);
     srand48_r(my_id+359, &seed);
     srand48_r(my_id+254, &seedT);

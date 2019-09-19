@@ -41,9 +41,6 @@
 
 // END MACROS TO ACTIVATE OPS
 
-
-#define NODE_HASH(bucket_id) ((bucket_id >> 2ull) % _NUMA_NODES)
-
 /*************************************
  * GLOBAL VARIABLES					 *
  ************************************/
@@ -893,7 +890,7 @@ void std_free_hook(ptst_t *p, void *ptr) { free(ptr); }
 void *pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket)
 {
 	//ceil(a / b) = (a / b) + ((a % b) != 0);
-	
+
 	ACTIVE_NUMA_NODES = (((THREADS * _NUMA_NODES)) / NUM_CPUS) + ((((THREADS * _NUMA_NODES)) % NUM_CPUS) != 0); // (!new) compute the number of active numa nodes 
 	ACTIVE_NUMA_NODES = ACTIVE_NUMA_NODES < _NUMA_NODES? ACTIVE_NUMA_NODES:_NUMA_NODES;
 	printf("\n#######\nThreads %d, NUMA Nodes %d, CPUs %d, ACTIVE NUMA NODES%d\n########\n", THREADS, _NUMA_NODES, NUM_CPUS, ACTIVE_NUMA_NODES);

@@ -162,7 +162,6 @@ struct __bucket_node
 									   //64
 };
 
-typedef struct __op_load op_node; //maybe a union is better?
 struct __op_load
 {
 	unsigned long op_id; //global identifier for the operation 

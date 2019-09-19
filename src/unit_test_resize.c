@@ -45,7 +45,7 @@
 
 #define NID nid
 #define TID tid
-
+#define LTID ltid
 
 
 
@@ -91,6 +91,7 @@ volatile unsigned int lock = 1;
 
 __thread int TID;
 __thread int NID;
+__thread int LTID;
 __thread unsigned int num_op=0;
 
 int NUMA_NODES;
@@ -109,6 +110,12 @@ volatile long long final_ops = 0;
 #define QSIZE 250
 
 __thread unsigned int stopforcheck = 0;
+
+int *numa_mapping;
+int num_numa_nodes;
+int num_cpus;
+int num_cpus_per_node;
+
 
 void* process(void *arg)
 {
