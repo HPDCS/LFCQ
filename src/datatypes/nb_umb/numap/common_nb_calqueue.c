@@ -913,7 +913,8 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	nb_calqueue* res = NULL;
 
 	init_mapping();
-	// init fraser garbage collector/allocator 
+
+	// init fraser garbage collector/allocator //maybe using basic allocator will be better
 	_init_gc_subsystem();
 	// add allocator of nbc_bucket_node
 	gc_aid[0] = gc_add_allocator(sizeof(nbc_bucket_node));
@@ -1229,6 +1230,11 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	assertf(timestamp < MIN || timestamp >= INFTY, "Key out of range %s\n", "");
 	nb_calqueue* queue = (nb_calqueue*) q;
 
+	int i;
+	op_node *resp,		// pointer to slot on which someone will post a response 
+			*to_me,		// pointer to slot on which someome will post an omeration I have to handle
+			*from_me;	// pointer to slot on which I will post my operation or my response
+
 	critical_enter();
 
 	table * h = NULL;
@@ -1247,20 +1253,78 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	dest_node = NODE_HASH(hash(timestamp, h->bucket_width));
 	
 	// if NID execute
+	/*
 	if (dest_node == NID)
 	{
 		int ret = do_pq_enqueue(q, timestamp, payload);
 		critical_exit();
 		return ret;
 	}
+	*/
 
-	printf("ENQ - dest is %d\n", dest_node);
-	int ret = do_pq_enqueue(q, timestamp, payload);
-	critical_exit();
-	return ret;
+	// posting the operation
+	from_me = get_request_slot_to_node(dest_node);
+	if (__sync_fetch_and_add(&(from_me->response),0) == 0) 
+	{
+		printf("ENQ - TID %d Cannot post operation on node %d\n", TID, dest_node);
+		abort();
+	}
+	else 
+	{
+		from_me->type = OP_PQ_ENQ;
+		from_me->timestamp = timestamp;
+		from_me->payload = payload;
+		from_me->response = 0; // must be done atomically
+	}
 
+	resp = get_response_slot(NID);
 
+	int status, ret;
+	pkey_t ret_ts;
+	op_node tmp;
+
+	do {
+		// do all ops
+		for (i = NID+1; i%ACTIVE_NUMA_NODES != NID; i++)
+		{
+			to_me 	= get_request_slot_from_node(i);
+			from_me = get_response_slot(i);
+
+			memcpy(&tmp, to_me, sizeof(op_node));
+			status = __sync_fetch_and_add(&(to_me->response),1);
+
+			if ( status == 0 )
+			{
+				if (tmp.type == OP_PQ_ENQ) 
+				{
+					ret = do_pq_enqueue(q, tmp.timestamp, tmp.payload);
+					
+					from_me->ret_value = ret;
+					from_me->response = 0;
+				}
+				else 
+				{
+					ret_ts = do_pq_dequeue(q, &tmp.payload);
+
+					from_me->timestamp = ret_ts;
+					from_me->response = 0;
+				}
+			}
+		}
+
+		
+		// @TODO
+		// check response
+		// if done break and return
+		// else continue
+		break;
 	
+	} while(1);
+	// do other op until someone answer
+
+	//printf("ENQ - dest is %d\n", dest_node);
+	critical_exit();
+	return ret;	
 }
 
 pkey_t pq_dequeue(void *q, void** result)

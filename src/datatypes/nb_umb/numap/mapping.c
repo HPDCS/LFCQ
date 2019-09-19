@@ -42,16 +42,21 @@ static inline void init_local_mapping()
     for (i = 0; i < ACTIVE_NUMA_NODES; ++i)
     {
         res_mapping[i]      = &mapping[i][j];
+        res_mapping[i]->response = -1;
+
         req_out_mapping[i]  = &mapping[i][TID];
+        req_out_mapping[i]->response = -1;
+
         req_in_mapping[i]   = &mapping[NID][j];
+        req_in_mapping[i]->response = -1;
 
         j += num_cpus_per_node;
     }
     #ifdef MAP_DEBUG
-    printf("TID %d with LTID %d\n", TID, LID);
-    for (i = 0; i<ACTIVE_NODES; ++i) 
+    printf("TID %d with LTID %d\n", TID, LTID);
+    for (i = 0; i<ACTIVE_NUMA_NODES; ++i) 
     {
-        printf("TID %d - LID %d - NODE %d - %p\n", TID, LID, i, thread_mapping[i]);
+        printf("TID %d - LID %d - NODE %d - %p - %p - %p\n", TID, LTID, i, res_mapping[i], req_out_mapping[i], req_in_mapping[i]);
     } 
     #endif
 }
