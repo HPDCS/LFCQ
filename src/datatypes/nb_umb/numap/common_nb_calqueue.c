@@ -1262,7 +1262,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 
 	// posting the operation
 	from_me = get_request_slot_to_node(dest_node);
-	if (__sync_fetch_and_add(&(from_me->response),0) == 0) 
+	if (from_me->response == 0) 
 	{
 		printf("ENQ - TID %d Cannot post operation on node %d\n", TID, dest_node);
 		abort();
@@ -1272,7 +1272,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 		from_me->type = OP_PQ_ENQ;
 		from_me->timestamp = timestamp;
 		from_me->payload = payload;
-		from_me->response = 0; // must be done atomically
+		from_me->response = 0;
 	}
 
 	resp = get_response_slot(NID);
@@ -1316,9 +1316,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 		status = __sync_fetch_and_add(&(resp->response),1); // only I read this
 			
 	} while(status != 0);
-	// do other op until someone answer
 
-	//printf("ENQ - dest is %d\n", dest_node);
 	critical_exit();
 	return ret;	
 }
@@ -1359,7 +1357,7 @@ pkey_t pq_dequeue(void *q, void** result)
 
 	// posting the operation
 	from_me = get_request_slot_to_node(dest_node);
-	if (__sync_fetch_and_add(&(from_me->response),0) == 0) 
+	if (from_me->response == 0) 
 	{
 		printf("DEQ - TID %d Cannot post operation on node %d\n", TID, dest_node);
 		abort();
@@ -1367,7 +1365,7 @@ pkey_t pq_dequeue(void *q, void** result)
 	else 
 	{
 		from_me->type = OP_PQ_DEQ;
-		from_me->response = 0; // must be done atomically
+		from_me->response = 0;
 	}
 
 	resp = get_response_slot(NID);
@@ -1412,9 +1410,7 @@ pkey_t pq_dequeue(void *q, void** result)
 		status = __sync_fetch_and_add(&(resp->response),1); // only I read this
 			
 	} while(status != 0);
-	// do other op until someone answer
 
-	//printf("DEQ - dest is %d\n", dest_node);
 	critical_exit();
 	return ret_ts;
 }
