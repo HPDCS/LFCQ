@@ -1305,6 +1305,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 					ret_ts = do_pq_dequeue(q, &tmp.payload);
 
 					from_me->timestamp = ret_ts;
+					from_me->payload = tmp.payload;
 					from_me->response = 0;
 				}
 			}
@@ -1326,6 +1327,12 @@ pkey_t pq_dequeue(void *q, void** result)
 {
 	// read table
 	nb_calqueue* queue = (nb_calqueue*) q;
+
+	int i;
+	op_node *resp,		// pointer to slot on which someone will post a response 
+			*to_me,		// pointer to slot on which someome will post an omeration I have to handle
+			*from_me;	// pointer to slot on which I will post my operation or my response
+
 
 	critical_enter();
 	table * h = NULL;
@@ -1349,11 +1356,67 @@ pkey_t pq_dequeue(void *q, void** result)
 		return ret;
 	}
 	
-	printf("DEQ - dest is %d\n",dest_node);
 
-	pkey_t ret = do_pq_dequeue(q, result);
+	// posting the operation
+	from_me = get_request_slot_to_node(dest_node);
+	if (__sync_fetch_and_add(&(from_me->response),0) == 0) 
+	{
+		printf("DEQ - TID %d Cannot post operation on node %d\n", TID, dest_node);
+		abort();
+	}
+	else 
+	{
+		from_me->type = OP_PQ_DEQ;
+		from_me->response = 0; // must be done atomically
+	}
+
+	resp = get_response_slot(NID);
+
+	int status, ret;
+	pkey_t ret_ts;
+	op_node tmp;
+
+	do {
+		// do all ops
+		for (i = NID+1; i%ACTIVE_NUMA_NODES != NID; i++)
+		{
+			to_me 	= get_request_slot_from_node(i);
+			from_me = get_response_slot(i);
+
+			memcpy(&tmp, to_me, sizeof(op_node));
+			status = __sync_fetch_and_add(&(to_me->response),1);
+
+			if ( status == 0 )
+			{
+				if (tmp.type == OP_PQ_ENQ) 
+				{
+					ret = do_pq_enqueue(q, tmp.timestamp, tmp.payload);
+					
+					from_me->ret_value = ret;
+					from_me->response = 0;
+				}
+				else 
+				{
+					ret_ts = do_pq_dequeue(q, &tmp.payload);
+
+					from_me->timestamp = ret_ts;
+					from_me->payload = tmp.payload;
+					from_me->response = 0;
+				}
+			}
+		}
+
+		// check response
+		ret_ts = resp->timestamp;
+		*result = resp->payload;
+		status = __sync_fetch_and_add(&(resp->response),1); // only I read this
+			
+	} while(status != 0);
+	// do other op until someone answer
+
+	//printf("DEQ - dest is %d\n", dest_node);
 	critical_exit();
-	return ret;
+	return ret_ts;
 }
 
 void pq_report(int TID)
