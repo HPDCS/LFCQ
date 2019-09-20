@@ -3,7 +3,7 @@
 
 #include "mapping.h"
 
-#define MAP_DEBUG
+//#define MAP_DEBUG
 __thread op_node** res_mapping      = NULL; // slot per "postare" la risposta su nodi diversi [NID] è la risposta che sto aspettando
 __thread op_node** req_out_mapping  = NULL; // slot per "postare" la richiesta su altri nodi
 __thread op_node** req_in_mapping   = NULL; // slot per "leggere" la richiesta da altri nodi
@@ -56,7 +56,7 @@ static inline void init_local_mapping()
     printf("TID %d with LTID %d\n", TID, LTID);
     for (i = 0; i<ACTIVE_NUMA_NODES; ++i) 
     {
-        printf("TID %d - LID %d - NODE %d - %p - %p - %p\n", TID, LTID, i, res_mapping[i], req_out_mapping[i], req_in_mapping[i]);
+        printf("TID %d - LID %d - NODE %d - res %p - out %p - in %p\n", TID, LTID, i, res_mapping[i], req_out_mapping[i], req_in_mapping[i]);
     } 
     #endif
 }

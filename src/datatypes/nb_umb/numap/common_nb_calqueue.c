@@ -1261,12 +1261,14 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	dest_node = NODE_HASH(hash(timestamp, h->bucket_width));
 	
 	// if NID execute
+	
 	if (dest_node == NID)
 	{
 		int ret = do_pq_enqueue(q, timestamp, payload);
 		critical_exit();
 		return ret;
 	}
+	
 
 	// posting the operation
 	from_me = get_request_slot_to_node(dest_node);
@@ -1289,6 +1291,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 		// do all ops
 		for (i = NID+1; i%ACTIVE_NUMA_NODES != NID; i++)
 		{
+			i = i%ACTIVE_NUMA_NODES;
 			to_me 	= get_request_slot_from_node(i);
 			from_me = get_response_slot(i);
 
@@ -1362,6 +1365,7 @@ pkey_t pq_dequeue(void *q, void** result)
 	dest_node = NODE_HASH(((h->current)>>32));
 	
 	// if NID execute
+	
 	if (dest_node == NID) {
 		pkey_t ret = do_pq_dequeue(q, result);
 		critical_exit();
@@ -1388,6 +1392,7 @@ pkey_t pq_dequeue(void *q, void** result)
 		// do all ops
 		for (i = NID+1; i%ACTIVE_NUMA_NODES != NID; i++)
 		{
+			i = i%ACTIVE_NUMA_NODES;
 			to_me 	= get_request_slot_from_node(i);
 			from_me = get_response_slot(i);
 
