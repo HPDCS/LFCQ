@@ -138,8 +138,9 @@ struct __op_load
 	int ret_value;
 	pkey_t timestamp;			// ts of node to enqueue
  	void *payload;				// paylod to enqueue | dequeued payload
+	unsigned int rtid;
 	//24
-	char pad[40];
+	char pad[36];
 };
 
 /**
