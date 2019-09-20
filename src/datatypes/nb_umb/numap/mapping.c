@@ -3,7 +3,7 @@
 
 #include "mapping.h"
 
-//#define MAP_DEBUG
+#define MAP_DEBUG
 __thread op_node** res_mapping      = NULL; // slot per "postare" la risposta su nodi diversi [NID] è la risposta che sto aspettando
 __thread op_node** req_out_mapping  = NULL; // slot per "postare" la richiesta su altri nodi
 __thread op_node** req_in_mapping   = NULL; // slot per "leggere" la richiesta da altri nodi
@@ -18,12 +18,12 @@ void init_mapping()
     #ifdef MAP_DEBUG
     
     int j;
-    for (i = 0; i < ACTIVE_NUMA_NODES; ++i)
+    for (i = 0; i < THREADS; ++i)
     {
-        printf("NODE %d \t", i);
-        for (j = 0; j < THREADS; ++j)
+        printf("THREAD %d \t", i);
+        for (j = 0; j < ACTIVE_NUMA_NODES; ++j)
         {
-            printf("%p\t", &mapping[i][j]);
+            printf("%p\t", &mapping[j][i]);
         } 
         printf("\n");
     }

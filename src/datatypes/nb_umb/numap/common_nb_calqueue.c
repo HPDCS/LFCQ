@@ -1288,7 +1288,10 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 			to_me 	= get_request_slot_from_node(i);
 			from_me = get_response_slot(i);
 
-			memcpy(&tmp, to_me, sizeof(op_node));
+			tmp.type = to_me->type;
+			tmp.payload = to_me->payload;
+			tmp.timestamp = to_me->timestamp;
+
 			status = __sync_fetch_and_add(&(to_me->response),1);
 
 			if ( status == 0 )
@@ -1381,7 +1384,10 @@ pkey_t pq_dequeue(void *q, void** result)
 			to_me 	= get_request_slot_from_node(i);
 			from_me = get_response_slot(i);
 
-			memcpy(&tmp, to_me, sizeof(op_node));
+			tmp.type = to_me->type;
+			tmp.payload = to_me->payload;
+			tmp.timestamp = to_me->timestamp;
+
 			status = __sync_fetch_and_add(&(to_me->response),1);
 
 			if ( status == 0 )
