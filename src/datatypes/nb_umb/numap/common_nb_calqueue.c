@@ -1230,10 +1230,18 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	assertf(timestamp < MIN || timestamp >= INFTY, "Key out of range %s\n", "");
 	nb_calqueue* queue = (nb_calqueue*) q;
 
-	int i;
 	op_node *resp,		// pointer to slot on which someone will post a response 
 			*to_me,		// pointer to slot on which someome will post an omeration I have to handle
 			*from_me;	// pointer to slot on which I will post my operation or my response
+
+	int i,
+		ret,
+		type,
+		status;
+
+	pkey_t	ts,
+			ret_ts;
+	void* pld;
 
 	critical_enter();
 
@@ -1271,15 +1279,11 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	{
 		from_me->type = OP_PQ_ENQ;
 		from_me->timestamp = timestamp;
-		from_me->payload = payload;
+		from_me->payload = pld;
 		from_me->response = 0;
 	}
 
 	resp = get_response_slot(NID);
-
-	int status, ret;
-	pkey_t ret_ts;
-	op_node tmp;
 
 	do {
 		// do all ops
@@ -1288,27 +1292,27 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 			to_me 	= get_request_slot_from_node(i);
 			from_me = get_response_slot(i);
 
-			tmp.type = to_me->type;
-			tmp.payload = to_me->payload;
-			tmp.timestamp = to_me->timestamp;
+			type = to_me->type;
+			pld = to_me->payload;
+			ts = to_me->timestamp;
 
 			status = __sync_fetch_and_add(&(to_me->response),1);
 
 			if ( status == 0 )
 			{
-				if (tmp.type == OP_PQ_ENQ) 
+				if (type == OP_PQ_ENQ) 
 				{
-					ret = do_pq_enqueue(q, tmp.timestamp, tmp.payload);
+					ret = do_pq_enqueue(q, ts, pld);
 					
 					from_me->ret_value = ret;
 					from_me->response = 0;
 				}
 				else 
 				{
-					ret_ts = do_pq_dequeue(q, &tmp.payload);
+					ret_ts = do_pq_dequeue(q, &pld);
 
 					from_me->timestamp = ret_ts;
-					from_me->payload = tmp.payload;
+					from_me->payload = pld;
 					from_me->response = 0;
 				}
 			}
@@ -1329,11 +1333,18 @@ pkey_t pq_dequeue(void *q, void** result)
 	// read table
 	nb_calqueue* queue = (nb_calqueue*) q;
 
-	int i;
 	op_node *resp,		// pointer to slot on which someone will post a response 
 			*to_me,		// pointer to slot on which someome will post an omeration I have to handle
 			*from_me;	// pointer to slot on which I will post my operation or my response
 
+	int i,
+		ret,
+		type,
+		status;
+
+	pkey_t	ts,
+			ret_ts;
+	void* pld;
 
 	critical_enter();
 	table * h = NULL;
@@ -1373,10 +1384,6 @@ pkey_t pq_dequeue(void *q, void** result)
 
 	resp = get_response_slot(NID);
 
-	int status, ret;
-	pkey_t ret_ts;
-	op_node tmp;
-
 	do {
 		// do all ops
 		for (i = NID+1; i%ACTIVE_NUMA_NODES != NID; i++)
@@ -1384,27 +1391,27 @@ pkey_t pq_dequeue(void *q, void** result)
 			to_me 	= get_request_slot_from_node(i);
 			from_me = get_response_slot(i);
 
-			tmp.type = to_me->type;
-			tmp.payload = to_me->payload;
-			tmp.timestamp = to_me->timestamp;
+			type = to_me->type;
+			pld = to_me->payload;
+			ts = to_me->timestamp;
 
 			status = __sync_fetch_and_add(&(to_me->response),1);
 
 			if ( status == 0 )
 			{
-				if (tmp.type == OP_PQ_ENQ) 
+				if (type == OP_PQ_ENQ) 
 				{
-					ret = do_pq_enqueue(q, tmp.timestamp, tmp.payload);
+					ret = do_pq_enqueue(q, ts, pld);
 					
 					from_me->ret_value = ret;
 					from_me->response = 0;
 				}
 				else 
 				{
-					ret_ts = do_pq_dequeue(q, &tmp.payload);
+					ret_ts = do_pq_dequeue(q, &pld);
 
 					from_me->timestamp = ret_ts;
-					from_me->payload = tmp.payload;
+					from_me->payload = pld;
 					from_me->response = 0;
 				}
 			}
