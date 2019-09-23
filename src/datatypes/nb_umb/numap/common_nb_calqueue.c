@@ -1260,6 +1260,40 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	// check destination
 	dest_node = NODE_HASH(hash(timestamp, h->bucket_width));
 	
+	//
+	for (i = NID+1; i%ACTIVE_NUMA_NODES != NID; i++)
+	{
+		i = i%ACTIVE_NUMA_NODES;
+		to_me 	= get_request_slot_from_node(i);
+		from_me = get_response_slot(i);
+
+		type = to_me->type;
+		pld = to_me->payload;
+		ts = to_me->timestamp;
+
+		status = __sync_fetch_and_add(&(to_me->response),1);
+
+		if ( status == 0 )
+		{
+			if (type == OP_PQ_ENQ) 
+			{
+				ret = do_pq_enqueue(q, ts, pld);
+				
+				from_me->ret_value = ret;
+				from_me->response = 0;
+			}
+			else 
+			{
+				ret_ts = do_pq_dequeue(q, &pld);
+
+				from_me->timestamp = ret_ts;
+				from_me->payload = pld;
+				from_me->response = 0;
+			}
+		}
+	}
+	//
+
 	// if NID execute
 	if (dest_node == NID)
 	{
@@ -1364,7 +1398,38 @@ pkey_t pq_dequeue(void *q, void** result)
 	dest_node = NODE_HASH(((h->current)>>32));
 	
 	// if NID execute
-	
+	for (i = NID+1; i%ACTIVE_NUMA_NODES != NID; i++)
+	{
+		i = i%ACTIVE_NUMA_NODES;
+		to_me 	= get_request_slot_from_node(i);
+		from_me = get_response_slot(i);
+
+		type = to_me->type;
+		pld = to_me->payload;
+		ts = to_me->timestamp;
+
+		status = __sync_fetch_and_add(&(to_me->response),1);
+
+		if ( status == 0 )
+		{
+			if (type == OP_PQ_ENQ) 
+			{
+				ret = do_pq_enqueue(q, ts, pld);
+				
+				from_me->ret_value = ret;
+				from_me->response = 0;
+			}
+			else 
+			{
+				ret_ts = do_pq_dequeue(q, &pld);
+
+				from_me->timestamp = ret_ts;
+				from_me->payload = pld;
+				from_me->response = 0;
+			}
+		}
+	}
+
 	if (dest_node == NID) {
 		pkey_t ret = do_pq_dequeue(q, result);
 		critical_exit();
