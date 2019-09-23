@@ -1253,13 +1253,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	unsigned int th = queue->threshold;
 	
 	unsigned int dest_node;
-	
-	// read table
-	h = read_table(&queue->hashtable, th, epb, pub);
-	
-	// check destination
-	dest_node = NODE_HASH(hash(timestamp, h->bucket_width));
-	
+		
 	//
 	for (i = NID+1; i%ACTIVE_NUMA_NODES != NID; i++)
 	{
@@ -1293,6 +1287,12 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 		}
 	}
 	//
+
+	// read table
+	h = read_table(&queue->hashtable, th, epb, pub);
+	
+	// check destination
+	dest_node = NODE_HASH(hash(timestamp, h->bucket_width));
 
 	// if NID execute
 	if (dest_node == NID)
@@ -1391,11 +1391,6 @@ pkey_t pq_dequeue(void *q, void** result)
 	
 	unsigned int dest_node;
 	
-	// read table
-	h = read_table(&queue->hashtable, th, epb, pub);
-	// check destination
-	dest_node = NODE_HASH(((h->current)>>32));
-	
 	// if NID execute
 	for (i = NID+1; i%ACTIVE_NUMA_NODES != NID; i++)
 	{
@@ -1429,6 +1424,11 @@ pkey_t pq_dequeue(void *q, void** result)
 		}
 	}
 	
+	// read table
+	h = read_table(&queue->hashtable, th, epb, pub);
+	// check destination
+	dest_node = NODE_HASH(((h->current)>>32));
+
 	if (dest_node == NID) {
 		pkey_t ret = do_pq_dequeue(q, result);
 		critical_exit();
