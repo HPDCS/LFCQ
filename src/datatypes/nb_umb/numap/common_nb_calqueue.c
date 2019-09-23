@@ -1304,7 +1304,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 
 	// posting the operation
 	from_me = get_request_slot_to_node(dest_node);
-	if (__sync_fetch_and_add(&(resp->response),0) == 0) 
+	if (__sync_fetch_and_add(&(from_me->response),0) == 0) 
 	{
 		printf("ENQ - TID %d Cannot post operation on node %d, busy by %d\n", TID, dest_node, from_me->rtid);
 		abort();
@@ -1429,17 +1429,16 @@ pkey_t pq_dequeue(void *q, void** result)
 			}
 		}
 	}
-
+	
 	if (dest_node == NID) {
 		pkey_t ret = do_pq_dequeue(q, result);
 		critical_exit();
 		return ret;
 	}
 	
-
 	// posting the operation
 	from_me = get_request_slot_to_node(dest_node);
-	if (__sync_fetch_and_add(&(resp->response),0) == 0) 
+	if (__sync_fetch_and_add(&(from_me->response),0) == 0) 
 	{
 		printf("DEQ - TID %d Cannot post operation on node %d\n", TID, dest_node);
 		abort();

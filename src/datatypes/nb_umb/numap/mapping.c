@@ -42,13 +42,13 @@ static inline void init_local_mapping()
     for (i = 0; i < ACTIVE_NUMA_NODES; ++i)
     {
         res_mapping[i]      = &mapping[i][j];
-        res_mapping[i]->response = -1;
+        res_mapping[i]->response = 1;
 
         req_out_mapping[i]  = &mapping[i][TID];
-        req_out_mapping[i]->response = -1;
+        req_out_mapping[i]->response = 1;
 
         req_in_mapping[i]   = &mapping[NID][j];
-        req_in_mapping[i]->response = -1;
+        req_in_mapping[i]->response = 1;
 
         j += num_cpus_per_node;
     }
