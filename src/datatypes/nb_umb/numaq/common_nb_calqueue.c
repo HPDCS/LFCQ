@@ -675,12 +675,10 @@ void migrate_node(nbc_bucket_node *right_node, table *new_h)
 		//perchè non succede?
 		printf("MIGRATION %p\n", (*(right_node->requestor)));
 		op_node * op = *(right_node->requestor);
-		if (op == NULL) {
-			abort();
-		}
-		else if (op->candidate == NULL) {
+		if (op->candidate == NULL) {
 			// the node has to be validated
-			abort();
+			if (!__sync_bool_compare_and_swap(&(op->candidate), NULL, right_node))
+				return;
 		}
 		else if (op->candidate != right_node)
 			return;
@@ -688,7 +686,7 @@ void migrate_node(nbc_bucket_node *right_node, table *new_h)
 
 	//Create a new node to be inserted in the new table as as INValid
 	replica = numa_node_malloc(right_node->payload, right_node->timestamp, right_node->counter, NODE_HASH(hash(right_node->timestamp, new_h->bucket_width)));
-	replica->op_id = right_node->op_id;
+	//replica->op_id = right_node->op_id;
 	replica->requestor = right_node->requestor;
 
 	new_node = &replica;
@@ -913,7 +911,7 @@ void *pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 
 	ACTIVE_NUMA_NODES = (((THREADS * _NUMA_NODES)) / NUM_CPUS) + ((((THREADS * _NUMA_NODES)) % NUM_CPUS) != 0); // (!new) compute the number of active numa nodes 
 	ACTIVE_NUMA_NODES = ACTIVE_NUMA_NODES < _NUMA_NODES? ACTIVE_NUMA_NODES:_NUMA_NODES;
-	printf("\n#######\nThreads %d, NUMA Nodes %d, CPUS %d, ACTIVE NUMA Nodes%d\n########\n", THREADS, _NUMA_NODES, NUM_CPUS, ACTIVE_NUMA_NODES);
+	printf("\n#######\nThreads %d, NUMA Nodes %d, CPUS %d, ACTIVE NUMA Nodes %d\n########\n", THREADS, _NUMA_NODES, NUM_CPUS, ACTIVE_NUMA_NODES);
 
 	unsigned int i = 0;
 	int res_mem_posix = 0;

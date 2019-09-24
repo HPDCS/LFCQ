@@ -1239,6 +1239,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 		type,
 		status;
 
+	unsigned long attempts;
+
 	pkey_t	ts,
 			ret_ts;
 	void* pld;
@@ -1265,25 +1267,22 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 		pld = to_me->payload;
 		ts = to_me->timestamp;
 
-		status = __sync_fetch_and_add(&(to_me->response),1);
+		status = __sync_fetch_and_or(&(to_me->response),1);
 
 		if ( status == 0 )
 		{
 			if (type == OP_PQ_ENQ) 
 			{
 				ret = do_pq_enqueue(q, ts, pld);
-				
 				from_me->ret_value = ret;
-				from_me->response = 0;
 			}
 			else 
 			{
 				ret_ts = do_pq_dequeue(q, &pld);
-
 				from_me->timestamp = ret_ts;
 				from_me->payload = pld;
-				from_me->response = 0;
 			}
+			__sync_fetch_and_and(&(from_me->response), 0);
 		}
 	}
 	//
@@ -1314,12 +1313,21 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 		from_me->type = OP_PQ_ENQ;
 		from_me->timestamp = timestamp;
 		from_me->payload = pld;
-		from_me->response = 0;
+		__sync_fetch_and_and(&(from_me->response), 0);
 	}
 
 	resp = get_response_slot(NID);
 
+	attempts = 0;
 	do {
+
+		// if too many attempts with no op, exit and do mine
+		if (attempts > 100)
+		{
+			printf("HELP");
+			abort();
+		}
+
 		// do all ops
 		for (i = NID+1; i%ACTIVE_NUMA_NODES != NID; i++)
 		{
@@ -1331,32 +1339,32 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 			pld = to_me->payload;
 			ts = to_me->timestamp;
 
-			status = __sync_fetch_and_add(&(to_me->response),1);
+			status = __sync_fetch_and_or(&(to_me->response),1);
 
 			if ( status == 0 )
 			{
 				if (type == OP_PQ_ENQ) 
 				{
-					ret = do_pq_enqueue(q, ts, pld);
-					
+					ret = do_pq_enqueue(q, ts, pld);	
 					from_me->ret_value = ret;
-					from_me->response = 0;
 				}
 				else 
 				{
 					ret_ts = do_pq_dequeue(q, &pld);
-
 					from_me->timestamp = ret_ts;
 					from_me->payload = pld;
-					from_me->response = 0;
 				}
+				__sync_fetch_and_and(&(from_me->response), 0);
+				attempts = 0;
 			}
 		}
 
 		// check response
 		ret = resp->ret_value;
-		status = __sync_fetch_and_add(&(resp->response),1); // only I read this
-			
+		status = __sync_fetch_and_or(&(resp->response),1); // only I read this
+
+		attempts++;
+	
 	} while(status != 0);
 
 	critical_exit();
@@ -1376,6 +1384,8 @@ pkey_t pq_dequeue(void *q, void** result)
 		ret,
 		type,
 		status;
+
+	unsigned long attempts;
 
 	pkey_t	ts,
 			ret_ts;
@@ -1402,7 +1412,7 @@ pkey_t pq_dequeue(void *q, void** result)
 		pld = to_me->payload;
 		ts = to_me->timestamp;
 
-		status = __sync_fetch_and_add(&(to_me->response),1);
+		status = __sync_fetch_and_or(&(to_me->response),1);
 
 		if ( status == 0 )
 		{
@@ -1411,7 +1421,6 @@ pkey_t pq_dequeue(void *q, void** result)
 				ret = do_pq_enqueue(q, ts, pld);
 				
 				from_me->ret_value = ret;
-				from_me->response = 0;
 			}
 			else 
 			{
@@ -1419,8 +1428,8 @@ pkey_t pq_dequeue(void *q, void** result)
 
 				from_me->timestamp = ret_ts;
 				from_me->payload = pld;
-				from_me->response = 0;
 			}
+			__sync_fetch_and_and(&(from_me->response), 0);
 		}
 	}
 	
@@ -1450,7 +1459,16 @@ pkey_t pq_dequeue(void *q, void** result)
 
 	resp = get_response_slot(NID);
 
+	attempts = 0;
+
 	do {
+
+		// if too many attempts with no op, exit and do mine
+		if (attempts > 100)
+		{
+			printf("HELP");
+			abort();
+		}
 		// do all ops
 		for (i = NID+1; i%ACTIVE_NUMA_NODES != NID; i++)
 		{
@@ -1462,16 +1480,14 @@ pkey_t pq_dequeue(void *q, void** result)
 			pld = to_me->payload;
 			ts = to_me->timestamp;
 
-			status = __sync_fetch_and_add(&(to_me->response),1);
+			status = __sync_fetch_and_or(&(to_me->response),1);
 
 			if ( status == 0 )
 			{
 				if (type == OP_PQ_ENQ) 
 				{
 					ret = do_pq_enqueue(q, ts, pld);
-					
 					from_me->ret_value = ret;
-					from_me->response = 0;
 				}
 				else 
 				{
@@ -1479,16 +1495,19 @@ pkey_t pq_dequeue(void *q, void** result)
 
 					from_me->timestamp = ret_ts;
 					from_me->payload = pld;
-					from_me->response = 0;
 				}
+				__sync_fetch_and_and(&(from_me->response), 0);
+				attempts = 0;
 			}
 		}
 
 		// check response
 		ret_ts = resp->timestamp;
 		*result = resp->payload;
-		status = __sync_fetch_and_add(&(resp->response),1); // only I read this
-			
+		status = __sync_fetch_and_or(&(resp->response),1); // only I read this
+
+		attempts++;
+	
 	} while(status != 0);
 
 	critical_exit();
