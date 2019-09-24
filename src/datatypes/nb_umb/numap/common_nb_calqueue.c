@@ -39,6 +39,8 @@ int gc_hid[1];
 unsigned int ACTIVE_NUMA_NODES;
 #define NODE_HASH(bucket_id) ((bucket_id >> 2ull) % ACTIVE_NUMA_NODES)
 
+#define MAX_WAIT_ATTEMPTS 100
+
 /*************************************
  * THREAD LOCAL VARIABLES			 *
  ************************************/
@@ -1322,10 +1324,17 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	do {
 
 		// if too many attempts with no op, exit and do mine
-		if (attempts > 100)
+		if (attempts > MAX_WAIT_ATTEMPTS)
 		{
-			printf("HELP");
-			abort();
+			printf("HELP\n");
+			from_me = get_request_slot_to_node(dest_node);
+			// ruba l'operazione precedentemente pubblicata
+			if (__sync_fetch_and_or(&(from_me->response), 1) == 0) {
+				ret = do_pq_enqueue(q, timestamp, payload);
+				break;
+			}
+			// qualcuno ha letto -> qualcuno sta gestendo 
+			attempts = 0;
 		}
 
 		// do all ops
@@ -1454,7 +1463,7 @@ pkey_t pq_dequeue(void *q, void** result)
 	else 
 	{
 		from_me->type = OP_PQ_DEQ;
-		from_me->response = 0;
+		__sync_fetch_and_and(&(from_me->response), 0);
 	}
 
 	resp = get_response_slot(NID);
@@ -1464,10 +1473,17 @@ pkey_t pq_dequeue(void *q, void** result)
 	do {
 
 		// if too many attempts with no op, exit and do mine
-		if (attempts > 100)
+		if (attempts > MAX_WAIT_ATTEMPTS)
 		{
-			printf("HELP");
-			abort();
+			printf("PLEH\n");
+			from_me = get_request_slot_to_node(dest_node);
+			// ruba l'operazione precedentemente pubblicata
+			if (__sync_fetch_and_or(&(from_me->response), 1) == 0) {
+				ret_ts = do_pq_dequeue(q, result);
+				break;
+			}
+			// qualcuno ha letto -> qualcuno sta gestendo 
+			attempts = 0;
 		}
 		// do all ops
 		for (i = NID+1; i%ACTIVE_NUMA_NODES != NID; i++)
