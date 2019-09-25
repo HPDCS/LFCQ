@@ -33,6 +33,8 @@
  * MACROS TO ACTIVATE OPS
  * */
 
+#define NOWS
+
 #define USE_TQ_ENQ
 #define USE_ST_ENQ
 
@@ -1066,6 +1068,12 @@ int pq_enqueue(void *q, pkey_t timestamp, void *payload)
 			// publish op on right queue
 			tq_enqueue(&op_queue[dest_node], (void *)operation, dest_node);
 		}
+
+		#ifdef NOWS
+			performed_enqueue++;
+			return timestamp;
+		#else
+
 		extracted_op = NULL;
 
 		// check if my op was done 
@@ -1120,8 +1128,9 @@ int pq_enqueue(void *q, pkey_t timestamp, void *payload)
 			operation = extracted_op;
 		}
 		i = 0;
-
+	#endif
 	} while(1);
+	
 }
 
 pkey_t pq_dequeue(void *q, void **result)
@@ -1150,6 +1159,7 @@ pkey_t pq_dequeue(void *q, void **result)
 		// read table
 		h = read_table(&queue->hashtable, th, epb, pub);
 
+		#ifndef NOWS
 		if (unlikely(requested_op == NULL)) // maybe is not a really smart idea
 		{
 			// first iteration - publish my op
@@ -1214,13 +1224,12 @@ pkey_t pq_dequeue(void *q, void **result)
 			// dovrebbe essere come se il thread fosse stato deschedulato prima della return
 			return ret; // someone did my op, we can return
 		}
-
+		
 		// dequeue one op
 		if (!tq_dequeue(&op_queue[NID], &extracted_op)) {
 			extracted_op = requested_op;
 			i = 1;
 		}
-			
 		
 		// execute op
 		handling_op = extracted_op;
@@ -1259,6 +1268,13 @@ pkey_t pq_dequeue(void *q, void **result)
 			operation = extracted_op;
 		}
 		i = 0;
+
+		#else
+			i = NID;
+			tq_dequeue(&op_queue[i], &extracted_op);
+			performed_dequeue++;
+			return TID;
+		#endif	
 
 	} while(1);
 }

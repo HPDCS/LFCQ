@@ -10,7 +10,7 @@
 // --------------------
 // The LCRQ's ring size will be 2^{RING_POW}.
 #ifndef RING_POW
-#define RING_POW        (17) //(17) //find a way to use a size of at least 6
+#define RING_POW        (6) //(17) //find a way to use a size of at least 6
 #endif
 #define RING_SIZE       (1ull << RING_POW)
 
