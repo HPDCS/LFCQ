@@ -5,8 +5,6 @@
 
 typedef struct __op_load op_node;
 
-op_node *mapping[_NUMA_NODES];
-
 void init_mapping();
 
 /* Get a pointer to the operation posted by twin thread on numa node
@@ -23,5 +21,9 @@ op_node* get_request_slot_to_node(unsigned int numa_node);
  * */
 op_node* get_response_slot(unsigned int numa_node);
 
+
+bool read_slot(op_node* slot, unsigned int* type, int *ret_value, pkey_t *timestamp, void** payload);
+
+bool write_slot(op_node* slot, unsigned int type, int ret_value, pkey_t timestamp, void* payload);
 
 #endif /* _NUMA_MAPPING */

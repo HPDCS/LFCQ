@@ -3,6 +3,8 @@
 
 #include "mapping.h"
 
+op_node *mapping[_NUMA_NODES];
+
 //#define MAP_DEBUG
 __thread op_node** res_mapping      = NULL; // slot per "postare" la risposta su nodi diversi [NID] è la risposta che sto aspettando
 __thread op_node** req_out_mapping  = NULL; // slot per "postare" la richiesta su altri nodi
@@ -42,12 +44,15 @@ static inline void init_local_mapping()
     for (i = 0; i < ACTIVE_NUMA_NODES; ++i)
     {
         res_mapping[i]      = &mapping[i][j];
+        spinlock_init(&(res_mapping[i]->spin));
         res_mapping[i]->response = 1;
 
         req_out_mapping[i]  = &mapping[i][TID];
+        spinlock_init(&(req_out_mapping[i]->spin));
         req_out_mapping[i]->response = 1;
 
         req_in_mapping[i]   = &mapping[NID][j];
+        spinlock_init(&(req_in_mapping[i]->spin));
         req_in_mapping[i]->response = 1;
 
         j += num_cpus_per_node;
@@ -84,5 +89,55 @@ op_node* get_response_slot(unsigned int numa_node)
         init_local_mapping();
 
     return res_mapping[numa_node];
+}
+
+bool read_slot(op_node* slot, 
+    unsigned int* type, 
+    int *ret_value, 
+    pkey_t *timestamp, 
+    void** payload) 
+{
+    
+    int val;
+
+    if (!spin_trylock_x86(&(slot->spin)))
+        return false;
+    
+    *type = slot->type;
+    *ret_value = slot->ret_value;
+    *timestamp = slot->timestamp; 
+    *payload = slot->payload;
+
+    val = slot->response++;
+    
+    spin_unlock_x86(&(slot->spin));
+    
+    if (val == 0)
+        return true;
+    else 
+        return false;
+    
+
+}
+
+bool write_slot(op_node* slot, 
+    unsigned int type, 
+    int ret_value, 
+    pkey_t timestamp, 
+    void* payload)
+{
+
+    spin_lock_x86(&(slot->spin));
+
+    slot->type = type;
+    slot->ret_value = ret_value;
+    slot->timestamp = timestamp; 
+    slot->payload = payload;
+
+    slot->response = 0;
+
+    spin_unlock_x86(&(slot->spin));
+    
+    return true;
 }
 

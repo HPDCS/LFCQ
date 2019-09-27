@@ -1259,32 +1259,25 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	unsigned int dest_node;
 		
 	//
-	for (i = NID+1; i%ACTIVE_NUMA_NODES != NID; i++)
+	for (i = NID+1; i % ACTIVE_NUMA_NODES != NID; i++)
 	{
-		i = i%ACTIVE_NUMA_NODES;
+		i = i % ACTIVE_NUMA_NODES;
+	
 		to_me 	= get_request_slot_from_node(i);
-		from_me = get_response_slot(i);
 
-		type = to_me->type;
-		pld = to_me->payload;
-		ts = to_me->timestamp;
-
-		status = __sync_fetch_and_or(&(to_me->response),1);
-
-		if ( status == 0 )
+		if (read_slot(to_me, &type, &ret, &ts, &pld))
 		{
+			from_me = get_response_slot(i);
+
 			if (type == OP_PQ_ENQ) 
-			{
 				ret = do_pq_enqueue(q, ts, pld);
-				from_me->ret_value = ret;
-			}
 			else 
+				ts = do_pq_dequeue(q, &pld);
+			
+			if (!write_slot(from_me, type, ret, ts, pld))
 			{
-				ret_ts = do_pq_dequeue(q, &pld);
-				from_me->timestamp = ret_ts;
-				from_me->payload = pld;
+				abort_line();
 			}
-			__sync_fetch_and_and(&(from_me->response), 0);
 		}
 	}
 	//
@@ -1305,76 +1298,51 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 
 	// posting the operation
 	from_me = get_request_slot_to_node(dest_node);
-	if (__sync_fetch_and_add(&(from_me->response),0) == 0) 
-	{
-		printf("ENQ - TID %d Cannot post operation on node %d\n", TID, dest_node);
-		abort();
-	}
-	else 
-	{
-		from_me->type = OP_PQ_ENQ;
-		from_me->timestamp = timestamp;
-		from_me->payload = pld;
-		__sync_fetch_and_and(&(from_me->response), 0);
-	}
-
 	resp = get_response_slot(NID);
+	read_slot(resp, &type, &ret, &ts, &pld);
+	
+	if (!write_slot(from_me, OP_PQ_ENQ, 0, timestamp, payload))
+	{
+		abort_line();
+	}
 
 	attempts = 0;
 	do {
 
-		// if too many attempts with no op, exit and do mine
-		if (attempts > MAX_WAIT_ATTEMPTS)
+		if (attempts > MAX_WAIT_ATTEMPTS) 
 		{
-			printf("HELP\n");
-			from_me = get_request_slot_to_node(dest_node);
-			// ruba l'operazione precedentemente pubblicata
-			if (__sync_fetch_and_or(&(from_me->response), 1) == 0) {
-				ret = do_pq_enqueue(q, timestamp, payload);
-				break;
-			}
-			// qualcuno ha letto -> qualcuno sta gestendo 
-			attempts = 0;
+			ret = do_pq_enqueue(q, timestamp, payload);
+			break;
 		}
-
+ 
 		// do all ops
 		for (i = NID+1; i%ACTIVE_NUMA_NODES != NID; i++)
 		{
 			i = i%ACTIVE_NUMA_NODES;
 			to_me 	= get_request_slot_from_node(i);
-			from_me = get_response_slot(i);
 
-			type = to_me->type;
-			pld = to_me->payload;
-			ts = to_me->timestamp;
-
-			status = __sync_fetch_and_or(&(to_me->response),1);
-
-			if ( status == 0 )
+			if (read_slot(to_me, &type, &ret, &ts, &pld))
 			{
+				from_me = get_response_slot(i);
+
 				if (type == OP_PQ_ENQ) 
-				{
-					ret = do_pq_enqueue(q, ts, pld);	
-					from_me->ret_value = ret;
-				}
+					ret = do_pq_enqueue(q, ts, pld);
 				else 
+					ts = do_pq_dequeue(q, &pld);
+			
+				if (!write_slot(from_me, type, ret, ts, pld))
 				{
-					ret_ts = do_pq_dequeue(q, &pld);
-					from_me->timestamp = ret_ts;
-					from_me->payload = pld;
+					abort_line();
 				}
-				__sync_fetch_and_and(&(from_me->response), 0);
 				attempts = 0;
 			}
 		}
 
 		// check response
-		ret = resp->ret_value;
-		status = __sync_fetch_and_or(&(resp->response),1); // only I read this
-
+		if (read_slot(resp, &type, &ret, &ts, &pld))
+			break;
 		attempts++;
-	
-	} while(status != 0);
+	} while(1);
 
 	critical_exit();
 	return ret;	
@@ -1411,34 +1379,25 @@ pkey_t pq_dequeue(void *q, void** result)
 	unsigned int dest_node;
 	
 	// if NID execute
-	for (i = NID+1; i%ACTIVE_NUMA_NODES != NID; i++)
+	for (i = NID+1; i % ACTIVE_NUMA_NODES != NID; i++)
 	{
-		i = i%ACTIVE_NUMA_NODES;
+		i = i % ACTIVE_NUMA_NODES;
+	
 		to_me 	= get_request_slot_from_node(i);
-		from_me = get_response_slot(i);
 
-		type = to_me->type;
-		pld = to_me->payload;
-		ts = to_me->timestamp;
-
-		status = __sync_fetch_and_or(&(to_me->response),1);
-
-		if ( status == 0 )
+		if (read_slot(to_me, &type, &ret, &ts, &pld))
 		{
-			if (type == OP_PQ_ENQ) 
-			{
-				ret = do_pq_enqueue(q, ts, pld);
-				
-				from_me->ret_value = ret;
-			}
-			else 
-			{
-				ret_ts = do_pq_dequeue(q, &pld);
+			from_me = get_response_slot(i);
 
-				from_me->timestamp = ret_ts;
-				from_me->payload = pld;
+			if (type == OP_PQ_ENQ) 
+				ret = do_pq_enqueue(q, ts, pld);
+			else 
+				ts = do_pq_dequeue(q, &pld);
+			
+			if (!write_slot(from_me, type, ret, ts, pld))
+			{
+				abort_line();
 			}
-			__sync_fetch_and_and(&(from_me->response), 0);
 		}
 	}
 	
@@ -1455,79 +1414,59 @@ pkey_t pq_dequeue(void *q, void** result)
 	
 	// posting the operation
 	from_me = get_request_slot_to_node(dest_node);
-	if (__sync_fetch_and_add(&(from_me->response),0) == 0) 
+	resp = get_response_slot(NID);
+	read_slot(resp, &type, &ret, &ts, &pld);
+
+	if (!write_slot(from_me, OP_PQ_DEQ, 0, 0, 0))
 	{
-		printf("DEQ - TID %d Cannot post operation on node %d\n", TID, dest_node);
-		abort();
-	}
-	else 
-	{
-		from_me->type = OP_PQ_DEQ;
-		__sync_fetch_and_and(&(from_me->response), 0);
+		abort_line();
 	}
 
-	resp = get_response_slot(NID);
 
 	attempts = 0;
 
 	do {
-
-		// if too many attempts with no op, exit and do mine
-		if (attempts > MAX_WAIT_ATTEMPTS)
+		
+		if (attempts > MAX_WAIT_ATTEMPTS) 
 		{
-			printf("PLEH\n");
-			from_me = get_request_slot_to_node(dest_node);
-			// ruba l'operazione precedentemente pubblicata
-			if (__sync_fetch_and_or(&(from_me->response), 1) == 0) {
-				ret_ts = do_pq_dequeue(q, result);
-				break;
-			}
-			// qualcuno ha letto -> qualcuno sta gestendo 
-			attempts = 0;
+
+				read_slot(resp, &type, &ret, &ts, &pld);
+				ts = do_pq_dequeue(q, result);
+				break;			
 		}
+
 		// do all ops
 		for (i = NID+1; i%ACTIVE_NUMA_NODES != NID; i++)
 		{
 			i = i%ACTIVE_NUMA_NODES;
 			to_me 	= get_request_slot_from_node(i);
-			from_me = get_response_slot(i);
 
-			type = to_me->type;
-			pld = to_me->payload;
-			ts = to_me->timestamp;
-
-			status = __sync_fetch_and_or(&(to_me->response),1);
-
-			if ( status == 0 )
+			if (read_slot(to_me, &type, &ret, &ts, &pld))
 			{
+				from_me = get_response_slot(i);
 				if (type == OP_PQ_ENQ) 
-				{
 					ret = do_pq_enqueue(q, ts, pld);
-					from_me->ret_value = ret;
-				}
 				else 
+					ts = do_pq_dequeue(q, &pld);
+			
+				if (!write_slot(from_me, type, ret, ts, pld))
 				{
-					ret_ts = do_pq_dequeue(q, &pld);
-
-					from_me->timestamp = ret_ts;
-					from_me->payload = pld;
+					abort_line();
 				}
-				__sync_fetch_and_and(&(from_me->response), 0);
 				attempts = 0;
 			}
 		}
-
+		
 		// check response
-		ret_ts = resp->timestamp;
-		*result = resp->payload;
-		status = __sync_fetch_and_or(&(resp->response),1); // only I read this
-
+		if (read_slot(resp, &type, &ret, &ts, &pld))
+			break;
+		
 		attempts++;
-	
-	} while(status != 0);
+	} while(1);
 
+	*result = pld;
 	critical_exit();
-	return ret_ts;
+	return ts;
 }
 
 void pq_report(int TID)

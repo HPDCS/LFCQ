@@ -133,6 +133,7 @@ extern int gc_hid[];
 typedef struct __op_load op_node;
 struct __op_load
 {
+	spinlock_t spin;
 	unsigned int type;			// ENQ | DEQ
 	int response; 				// -1 clean entry; 0 posted/wait to be executed; >=1 read/executed;
 	int ret_value;

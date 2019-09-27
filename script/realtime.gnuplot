@@ -52,7 +52,7 @@ set style line 12 dt 11 lc rgb "#000000"
 
 	
 set yrange [0:6000]
-set xrange [1:33]
+set xrange [1:49]
 set offset 2,2,1,1
 
 maxitems=56
