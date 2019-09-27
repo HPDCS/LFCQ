@@ -41,6 +41,11 @@ unsigned int ACTIVE_NUMA_NODES;
 
 #define MAX_WAIT_ATTEMPTS 100
 
+#define abort_line() do{\
+	printf("Aborting @Line %d\n", __LINE__);\
+	abort();\
+	}while (0)
+
 /*************************************
  * THREAD LOCAL VARIABLES			 *
  ************************************/
@@ -1238,13 +1243,11 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 
 	int i,
 		ret,
-		type,
-		status;
+		type;
 
 	unsigned long attempts;
 
-	pkey_t	ts,
-			ret_ts;
+	pkey_t	ts;
 	void* pld;
 
 	critical_enter();
@@ -1359,13 +1362,11 @@ pkey_t pq_dequeue(void *q, void** result)
 
 	int i,
 		ret,
-		type,
-		status;
+		type;
 
 	unsigned long attempts;
 
-	pkey_t	ts,
-			ret_ts;
+	pkey_t	ts;
 	void* pld;
 
 	critical_enter();
