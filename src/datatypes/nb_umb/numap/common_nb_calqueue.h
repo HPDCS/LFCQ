@@ -127,22 +127,6 @@ extern int gc_hid[];
 #define get_marked(pointer, mark)	(UNION_CAST((UNION_CAST(pointer, unsigned long long)|(mark)), void *))
 #define get_mark(pointer)			(UNION_CAST((UNION_CAST(pointer, unsigned long long) & MASK_MRK), unsigned long long))
 
-#define OP_PQ_ENQ 0x0
-#define OP_PQ_DEQ 0x1
-
-typedef struct __op_load op_node;
-struct __op_load
-{
-	spinlock_t spin;
-	unsigned int type;			// ENQ | DEQ
-	int response; 				// -1 clean entry; 0 posted/wait to be executed; >=1 read/executed;
-	int ret_value;
-	pkey_t timestamp;			// ts of node to enqueue
- 	void *payload;				// paylod to enqueue | dequeued payload
-	//24
-	char pad[40];
-};
-
 /**
  *  Struct that define a node in a bucket
  */ 

@@ -12,9 +12,16 @@ __thread op_node** req_in_mapping   = NULL; // slot per "leggere" la richiesta d
 
 void init_mapping() 
 {
-    int i;
-    for (i = 0; i < ACTIVE_NUMA_NODES; ++i)
+    int i, j;
+    for (i = 0; i < ACTIVE_NUMA_NODES; ++i) 
+    {
         mapping[i] = numa_alloc_onnode(sizeof(op_node)*THREADS, i);
+        for (j = 0; j < THREADS; ++j) 
+        {
+            spinlock_init(&(mapping[i][j].spin));
+            mapping[i][j].response = 1;
+        }
+    }
 
     //printf("TID %d with LTID %d\n", TID, LTID);
     #ifdef MAP_DEBUG
@@ -44,16 +51,10 @@ static inline void init_local_mapping()
     for (i = 0; i < ACTIVE_NUMA_NODES; ++i)
     {
         res_mapping[i]      = &mapping[i][j];
-        spinlock_init(&(res_mapping[i]->spin));
-        res_mapping[i]->response = 1;
 
         req_out_mapping[i]  = &mapping[i][TID];
-        spinlock_init(&(req_out_mapping[i]->spin));
-        req_out_mapping[i]->response = 1;
 
         req_in_mapping[i]   = &mapping[NID][j];
-        spinlock_init(&(req_in_mapping[i]->spin));
-        req_in_mapping[i]->response = 1;
 
         j += num_cpus_per_node;
     }
@@ -66,7 +67,7 @@ static inline void init_local_mapping()
     #endif
 }
 
-op_node* get_request_slot_from_node(unsigned int numa_node)
+op_node* get_req_slot_from_node(unsigned int numa_node)
 {
     if (unlikely(req_in_mapping==NULL))
         init_local_mapping();
@@ -75,7 +76,7 @@ op_node* get_request_slot_from_node(unsigned int numa_node)
 
 }
 
-op_node* get_request_slot_to_node(unsigned int numa_node)
+op_node* get_req_slot_to_node(unsigned int numa_node)
 {
     if (unlikely(req_out_mapping==NULL))
         init_local_mapping();
@@ -83,7 +84,7 @@ op_node* get_request_slot_to_node(unsigned int numa_node)
     return req_out_mapping[numa_node];
 }
 
-op_node* get_response_slot(unsigned int numa_node)
+op_node* get_res_slot(unsigned int numa_node)
 {
     if (unlikely(res_mapping==NULL))
         init_local_mapping();
