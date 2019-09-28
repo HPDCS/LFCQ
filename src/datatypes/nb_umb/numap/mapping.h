@@ -3,15 +3,21 @@
 
 #include "common_nb_calqueue.h"
 
+//#define USE_LOCK
+
 #define OP_PQ_ENQ 0x0
 #define OP_PQ_DEQ 0x1
 
 typedef struct __op_load op_node;
 struct __op_load
 {
+    #ifdef USE_LOCK
 	spinlock_t spin;
-	unsigned int type;			// ENQ | DEQ
-	int response; 				// -1 clean entry; 0 posted/wait to be executed; >=1 read/executed;
+	#else
+    volatile unsigned int busy; // avoid concurrent read and write
+    #endif
+    unsigned int type;			// ENQ | DEQ
+	volatile int response; 		// -1 clean entry; 0 posted/wait to be executed; >=1 read/executed;
 	int ret_value;
 	pkey_t timestamp;			// ts of node to enqueue
  	void *payload;				// paylod to enqueue | dequeued payload

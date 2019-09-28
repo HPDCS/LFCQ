@@ -1256,8 +1256,12 @@ static inline int handle_ops(void* q)
 
 			if (type == OP_PQ_ENQ) 
 				ret = do_pq_enqueue(q, ts, pld);
-			else 
+			else if (type == OP_PQ_DEQ)
 				ts = do_pq_dequeue(q, &pld);
+			else
+			{
+				abort_line();
+			}
 			
 			if (!write_slot(from_me, type, ret, ts, pld))
 			{

@@ -22,11 +22,17 @@ void init_mapping()
         
         for (j = 0; j < THREADS; ++j) 
         {
-            spinlock_init(&(req_mapping[i][j].spin));
             req_mapping[i][j].response = 1;
-
-            spinlock_init(&(res_mapping[i][j].spin));
             res_mapping[i][j].response = 1;
+
+            #ifdef USE_LOCK
+            spinlock_init(&(req_mapping[i][j].spin));
+            spinlock_init(&(res_mapping[i][j].spin));
+            #else
+            req_mapping[i][j].busy = 0;
+            res_mapping[i][j].busy = 0;
+
+            #endif
         }
     }
 }
@@ -98,18 +104,22 @@ bool read_slot(op_node* slot,
     
     int val;
 
+    #ifdef USE_LOCK
     if (!spin_trylock_x86(&(slot->spin)))
         return false;
-    
+    #endif
+
     *type = slot->type;
     *ret_value = slot->ret_value;
     *timestamp = slot->timestamp; 
     *payload = slot->payload;
 
-    val = slot->response++;
+    val = __sync_fetch_and_add(&(slot->response),1);
     
+    #ifdef USE_LOCK
     spin_unlock_x86(&(slot->spin));
-    
+    #endif
+
     if (val == 0)
         return true;
     else 
@@ -125,17 +135,29 @@ bool write_slot(op_node* slot,
     void* payload)
 {
 
+    int val;
+
+    #ifdef USE_LOCK
     spin_lock_x86(&(slot->spin));
+    #else
+    if (!__sync_bool_compare_and_swap(&(slot->busy), 0, 1))
+        return false;
+    #endif
 
     slot->type = type;
     slot->ret_value = ret_value;
     slot->timestamp = timestamp; 
     slot->payload = payload;
 
-    slot->response = 0;
-
+    #ifdef USE_LOCK
     spin_unlock_x86(&(slot->spin));
-    
+    #else
+    val = __sync_fetch_and_and(&(slot->response),0);
+    slot->busy = 0;
+    if (val == 0)
+        return false;
+    #endif
+
     return true;
 }
 
