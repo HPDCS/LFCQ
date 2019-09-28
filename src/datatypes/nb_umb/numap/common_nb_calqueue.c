@@ -1252,7 +1252,7 @@ static inline int handle_ops(void* q)
 
 		if (read_slot(to_me, &type, &ret, &ts, &pld))
 		{
-			from_me = get_res_slot(i);
+			from_me = get_res_slot_to_node(i);
 
 			if (type == OP_PQ_ENQ) 
 				ret = do_pq_enqueue(q, ts, pld);
@@ -1317,7 +1317,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 
 	// posting the operation
 	from_me = get_req_slot_to_node(dest_node);
-	resp = get_res_slot(NID);
+	resp = get_res_slot_from_node(dest_node);
 	//read_slot(resp, &type, &ret, &ts, &pld);
 	
 	if (!write_slot(from_me, OP_PQ_ENQ, 0, timestamp, payload))
@@ -1362,12 +1362,11 @@ pkey_t pq_dequeue(void *q, void** result)
 	nb_calqueue* queue = (nb_calqueue*) q;
 
 	op_node *resp,		// pointer to slot on which someone will post a response 
-			*to_me,		// pointer to slot on which someome will post an omeration I have to handle
 			*from_me;	// pointer to slot on which I will post my operation or my response
 
-	int i,
-		ret,
-		type;
+	int ret;
+
+	unsigned int	type;
 
 	unsigned long attempts, count;
 
@@ -1399,7 +1398,7 @@ pkey_t pq_dequeue(void *q, void** result)
 	
 	// posting the operation
 	from_me = get_req_slot_to_node(dest_node);
-	resp = get_res_slot(NID);
+	resp = get_res_slot_from_node(dest_node);
 	//read_slot(resp, &type, &ret, &ts, &pld);
 
 	if (!write_slot(from_me, OP_PQ_DEQ, 0, 0, 0))
@@ -1416,7 +1415,7 @@ pkey_t pq_dequeue(void *q, void** result)
 			from_me = get_req_slot_to_node(dest_node);
 			if (read_slot(from_me, &type, &ret, &ts, &pld))
 			{
-				ts = do_pq_dequeue(q, pld);
+				ts = do_pq_dequeue(q, &pld);
 				break;
 			}
 			attempts = 0;
