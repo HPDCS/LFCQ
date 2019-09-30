@@ -46,6 +46,10 @@ unsigned int ACTIVE_NUMA_NODES;
 	abort();\
 	}while (0)
 
+#define DO_NOOP
+#define DO_BLOOP
+#define LOOP_COUNT 1000 //check with looper
+
 /*************************************
  * THREAD LOCAL VARIABLES			 *
  ************************************/
@@ -981,6 +985,23 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
  */
 int do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
 {
+
+	#ifdef DO_NOOP
+
+	#ifdef DO_BLOOP
+	
+	unsigned int var = 0;
+	
+	do {
+		var++;
+	} while(var < LOOP_COUNT);
+	
+	#endif
+
+	performed_enqueue++;
+	return 1;
+
+	#else
 	nb_calqueue* queue = (nb_calqueue*) q; 	
 
 	nbc_bucket_node *bucket, *new_node = numa_node_malloc(payload, timestamp, 0, NID);
@@ -1067,7 +1088,7 @@ int do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
   out:
   #endif
 	return res;
-
+#endif
 }
 
 /**
@@ -1081,6 +1102,23 @@ int do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
  */
 pkey_t do_pq_dequeue(void *q, void** result)
 {
+
+	#ifdef DO_NOOP
+
+	#ifdef DO_BLOOP
+	unsigned int var = 0;
+	
+	do {
+		var++;
+	} while(var < LOOP_COUNT);
+	
+	#endif
+	
+	*result = (void*) 0x1;
+	performed_dequeue++;
+	return TID;
+	
+	#else
 	nb_calqueue *queue = (nb_calqueue*)q;
 	nbc_bucket_node *min, *min_next, 
 					*left_node, *left_node_next, 
@@ -1230,6 +1268,7 @@ begin:
 	}while(1);
 	
 	return INFTY;
+	#endif
 }
 
 static inline int handle_ops(void* q) 
