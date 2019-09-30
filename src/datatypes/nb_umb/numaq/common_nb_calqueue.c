@@ -1497,6 +1497,7 @@ nbc_bucket_node *min, *min_next,
 						return -1;
 					}
 				}
+				//che succede se è stato marcato come mov o non è stato marcato?
 			}
 
 			// here left node is the current candidate

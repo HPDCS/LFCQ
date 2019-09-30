@@ -113,8 +113,11 @@ bool read_slot(op_node* slot,
     if (!spin_trylock_x86(&(slot->spin)))
         return false;
     #else
-    val = __sync_val_compare_and_swap(&(slot->busy), L_FREE, R_BUSY);
+    /*val = __sync_val_compare_and_swap(&(slot->busy), L_FREE, R_BUSY);
     if (val == W_BUSY)
+        return false;
+    */
+    if (!__sync_bool_compare_and_swap(&(slot->busy), L_FREE, R_BUSY))
         return false;
     #endif
 
@@ -128,7 +131,8 @@ bool read_slot(op_node* slot,
     #ifdef _NM_USE_SPINLOCK
     spin_unlock_x86(&(slot->spin));
     #else
-    __sync_bool_compare_and_swap(&(slot->busy), R_BUSY, L_FREE);
+    //__sync_bool_compare_and_swap(&(slot->busy), R_BUSY, L_FREE);
+    slot->busy = L_FREE;
     #endif
 
     if (val == 0)
