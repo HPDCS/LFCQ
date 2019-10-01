@@ -39,7 +39,13 @@ int gc_hid[1];
 unsigned int ACTIVE_NUMA_NODES;
 #define NODE_HASH(bucket_id) ((bucket_id >> 2ull) % ACTIVE_NUMA_NODES)
 
-#define MAX_WAIT_ATTEMPTS 100
+#ifndef ENQ_MAX_WAIT_ATTEMPTS
+#define ENQ_MAX_WAIT_ATTEMPTS 100
+#endif
+ 
+#ifndef DEQ_MAX_WAIT_ATTEMPTS
+#define DEQ_MAX_WAIT_ATTEMPTS 100
+#endif
 
 #define abort_line() do{\
 	printf("Aborting @Line %d\n", __LINE__);\
@@ -48,7 +54,7 @@ unsigned int ACTIVE_NUMA_NODES;
 
 //#define DO_NOOP
 //#define DO_BLOOP
-//#define LOOP_COUNT 1000 //check with looper
+#define LOOP_COUNT 1000 //check with looper
 
 /*************************************
  * THREAD LOCAL VARIABLES			 *
@@ -1372,7 +1378,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	attempts = 0;
 	do {
 
-		if (attempts > MAX_WAIT_ATTEMPTS) 
+		if (attempts > ENQ_MAX_WAIT_ATTEMPTS) 
 		{
 			enq_steal_attempt++;
 			from_me = get_req_slot_to_node(dest_node);
@@ -1456,7 +1462,7 @@ pkey_t pq_dequeue(void *q, void** result)
 	attempts = 0;
 	do {
 		
-		if (attempts > MAX_WAIT_ATTEMPTS) 
+		if (attempts > DEQ_MAX_WAIT_ATTEMPTS) 
 		{
 			deq_steal_attempt++;
 			from_me = get_req_slot_to_node(dest_node);

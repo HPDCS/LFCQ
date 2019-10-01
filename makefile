@@ -9,7 +9,7 @@ EXECUTABLES :=
 USER_OBJS :=
 LIBS := -lpthread -lm -lnuma -lrt -mrtm
 SRC_DIR := src
-TARGETS := NBCQ LIND MARO CBCQ SLCQ NBVB 2CAS NRTM VBPQ UNBCQ NUMAQ NUMAFK NUMAP #V2CQ NUMA WORK
+TARGETS := NUMAP NBCQ UNBCQ NUMAPNOP NUMAPBL#LIND MARO CBCQ SLCQ NBVB 2CAS NRTM VBPQ UNBCQ NUMAQ NUMAFK NUMAP #V2CQ NUMA WORK
 
 UTIL_value := src/utils/common.o src/utils/hpdcs_math.o 
 GACO_value := src/gc/gc.o src/gc/ptst.o
@@ -29,6 +29,15 @@ UNBCQ_link := gcc
 
 NUMAP_value := src/datatypes/nb_umb/numap/common_nb_calqueue.o src/datatypes/nb_umb/numap/mapping.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMAP_link := gcc
+
+NUMAP_value := src/datatypes/nb_umb/numap/common_nb_calqueue.o src/datatypes/nb_umb/numap/mapping.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMAP_link := gcc
+
+NUMAPNOP_value := src/datatypes/nb_umb/numap/common_nb_calqueue.o src/datatypes/nb_umb/numap/mapping.o $(UTIL_value) $(ARCH_value) $(NGACO_value) 
+NUMAPNOP_link := gcc -DDO_NOOP
+
+NUMAPBL_value := src/datatypes/nb_umb/numap/common_nb_calqueue.o src/datatypes/nb_umb/numap/mapping.o $(UTIL_value) $(ARCH_value) $(NGACO_value) 
+NUMAPBL_link := gcc -DDO_NOOP -DDOL_BLOOP
 
 SLCQ_value := src/datatypes/slcalqueue/calqueue.o  $(UTIL_value)
 
