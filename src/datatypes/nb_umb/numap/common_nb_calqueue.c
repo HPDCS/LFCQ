@@ -46,9 +46,9 @@ unsigned int ACTIVE_NUMA_NODES;
 	abort();\
 	}while (0)
 
-#define DO_NOOP
-#define DO_BLOOP
-#define LOOP_COUNT 1000 //check with looper
+//#define DO_NOOP
+//#define DO_BLOOP
+//#define LOOP_COUNT 1000 //check with looper
 
 /*************************************
  * THREAD LOCAL VARIABLES			 *
@@ -66,6 +66,11 @@ __thread unsigned long long num_cas_useful = 0ULL;
 __thread unsigned long long near = 0;
 __thread unsigned int 		acc = 0;
 __thread unsigned int 		acc_counter = 0;
+
+__thread unsigned long long enq_steal_done = 0ULL;
+__thread unsigned long long enq_steal_attempt = 0ULL;
+__thread unsigned long long deq_steal_done = 0ULL;
+__thread unsigned long long deq_steal_attempt = 0ULL;
 
 /**
  * This function commits a value in the current field of a queue. It retries until the timestamp
@@ -1369,9 +1374,11 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 
 		if (attempts > MAX_WAIT_ATTEMPTS) 
 		{
+			enq_steal_attempt++;
 			from_me = get_req_slot_to_node(dest_node);
 			if (read_slot(from_me, &type, &ret, &ts, &pld))
 			{
+				enq_steal_done++;
 				ret = do_pq_enqueue(q, timestamp, payload);
 				break;
 			}
@@ -1451,9 +1458,11 @@ pkey_t pq_dequeue(void *q, void** result)
 		
 		if (attempts > MAX_WAIT_ATTEMPTS) 
 		{
+			deq_steal_attempt++;
 			from_me = get_req_slot_to_node(dest_node);
 			if (read_slot(from_me, &type, &ret, &ts, &pld))
 			{
+				deq_steal_done++;
 				ts = do_pq_dequeue(q, &pld);
 				break;
 			}
@@ -1482,16 +1491,18 @@ void pq_report(int TID)
 {
 	
 	printf("%d- "
-	"Enqueue: %.10f LEN: %.10f ### "
-	"Dequeue: %.10f LEN: %.10f NUMCAS: %llu : %llu ### "
+	"Enqueue: %.10f LEN: %.10f ST: %llu : %llu ### "
+	"Dequeue: %.10f LEN: %.10f NUMCAS: %llu : %llu ST: %llu : %llu ### "
 	"NEAR: %llu "
-	"RTC:%d,M:%lld\n",
+	"RTC:%d,M:%lld \n",
 			TID,
 			((float)concurrent_enqueue) /((float)performed_enqueue),
 			((float)scan_list_length_en)/((float)performed_enqueue),
+			enq_steal_attempt, enq_steal_done,
 			((float)concurrent_dequeue) /((float)performed_dequeue),
 			((float)scan_list_length)   /((float)performed_dequeue),
 			num_cas, num_cas_useful,
+			deq_steal_attempt, deq_steal_done,
 			near,
 			read_table_count	  ,
 			malloc_count);
