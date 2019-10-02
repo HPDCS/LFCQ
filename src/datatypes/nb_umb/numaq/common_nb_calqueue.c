@@ -670,18 +670,37 @@ void migrate_node(nbc_bucket_node *right_node, table *new_h)
 	int res = 0;
 
 	//se il nodo non merita di essere validato, marcalo e basta
+	
+	//if (right_node->op_id == 1) {
+	//	// il nodo è in inserimento
+	//	printf("MIGRATION %p\n", (*(right_node->requestor)));
+	//	op_node * op = *(right_node->requestor);
+	//	if (op->candidate == NULL) {
+	//		// the node has to be validated
+	//		if (!__sync_bool_compare_and_swap(&(op->candidate), NULL, right_node))
+	//			return;
+	//	}
+	//	else if (op->candidate != right_node)
+	//		return;
+	//}
+	
 	if (right_node->op_id == 1) {
-		// il nodo è in inserimento
-		//perchè non succede?
-		printf("MIGRATION %p\n", (*(right_node->requestor)));
 		op_node * op = *(right_node->requestor);
-		if (op->candidate == NULL) {
-			// the node has to be validated
-			if (!__sync_bool_compare_and_swap(&(op->candidate), NULL, right_node))
-				return;
-		}
-		else if (op->candidate != right_node)
+		if (!__sync_bool_compare_and_swap(&(op->candidate), NULL, right_node))
+		{
+			wideptr curr_state, new_state;
+			// someone has already set up the right candidate - we must delete the node
+			do {
+				curr_state.next = right_node->next;
+				curr_state.op_id = right_node->op_id;
+
+				new_state.next = ((unsigned long) right_node->next) | DEL;
+				new_state.op_id = 0;
+			} while(__sync_val_compare_and_swap(&right_node->widenext, curr_state.widenext, new_state.widenext) != curr_state.widenext);
+			
 			return;
+		}
+
 	}
 
 	//Create a new node to be inserted in the new table as as INValid
@@ -1141,12 +1160,20 @@ static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *paylo
 		// provo a settare il mio nodo come candidato, se non c'è già qualcosa.
 		
 		ins_node = __sync_val_compare_and_swap(candidate, NULL, new_node);
-		if (ins_node != NULL && ins_node != 1) {
-			// tenta di validare il nodo
-			__sync_bool_compare_and_swap(&(ins_node->op_id), 1, 0);
-
+		if (ins_node != NULL) {
+			
 			// la CAS per il candidato ha fallito
 			// marco il mio nodo come del
+			// do {
+				
+			// 	curr_state.next = new_node->next;
+			// 	curr_state.op_id = new_node->op_id;
+
+			// 	new_state.next = ((unsigned long) new_node->next) | DEL;
+			// 	new_state.op_id = 0;
+
+			// } while(!__sync_bool_compare_and_swap(&new_node->widenext, curr_state.widenext, new_state.widenext));
+
 			do {
 				
 				curr_state.next = new_node->next;
@@ -1155,27 +1182,16 @@ static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *paylo
 				new_state.next = ((unsigned long) new_node->next) | DEL;
 				new_state.op_id = 0;
 
-			} while(!__sync_bool_compare_and_swap(&new_node->widenext, curr_state.widenext, new_state.widenext));
-
-			// esci, solo chi ha validato il nodo aggiornerà la tabella
-			return 1;
+			} while(__sync_val_compare_and_swap(&new_node->widenext, curr_state.widenext, new_state.widenext) != curr_state.widenext);
 		}
-		// prova a marcare il nodo (se non lo è già)
-		__sync_bool_compare_and_swap(&(new_node->op_id), 1, 0);
-
-		// Se il nodo è marcato forse c'è stata una resize concorrente
-		// never happens (mumble)
-		/*
-		if (is_marked(tmp->next)) {
-			printf("GOTCHA0\n");
-		
-			if (tmp->replica != NULL) {
-				printf("GOTCHA\n");
-				tmp->replica->op_id = 0;
-			}
-			//un nodo potrebbe essere validato più volte
-		}*/
-		
+		// leggi il candidato 
+		ins_node = *candidate;
+		if (ins_node == 1)
+			return 0;
+			
+		// prova a valdiare il nodo (se non lo è già)
+		if (!__sync_bool_compare_and_swap(&(ins_node->op_id), 1, 0))
+			return -1;
 
 		// must be done once
 		flush_current(h, newIndex, new_node);

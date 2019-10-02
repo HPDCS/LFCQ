@@ -121,12 +121,19 @@ bool read_slot(op_node* slot,
         return false;
     #endif
 
+    val = __sync_fetch_and_add(&(slot->response), 1);
+    if (val == 0)
+    {
+        slot->busy = L_FREE;
+        return false;
+    }
+
     *type = slot->type;
     *ret_value = slot->ret_value;
     *timestamp = slot->timestamp; 
     *payload = slot->payload;
 
-    val = __sync_fetch_and_add(&(slot->response), 1);
+    
     
     #ifdef _NM_USE_SPINLOCK
     spin_unlock_x86(&(slot->spin));
@@ -135,12 +142,7 @@ bool read_slot(op_node* slot,
     slot->busy = L_FREE;
     #endif
 
-    if (val == 0)
-        return true;
-    else 
-        return false;
-    
-
+    return true;
 }
 
 bool write_slot(op_node* slot, 
@@ -149,6 +151,8 @@ bool write_slot(op_node* slot,
     pkey_t timestamp, 
     void* payload)
 {
+
+    int val;
 
     #ifdef _NM_USE_SPINLOCK
     spin_lock_x86(&(slot->spin));
@@ -161,14 +165,16 @@ bool write_slot(op_node* slot,
     slot->timestamp = timestamp; 
     slot->payload = payload;
 
-    slot->response = 0;
+    val = __sync_fetch_and_and(&(slot->response), );
 
     #ifdef _NM_USE_SPINLOCK
     spin_unlock_x86(&(slot->spin));
     #else
     slot->busy = L_FREE;
     #endif
-    
-    return true;
+    if (val != 0)
+        return true;
+    else 
+        return false;
 }
 
