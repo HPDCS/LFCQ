@@ -52,8 +52,8 @@ unsigned int ACTIVE_NUMA_NODES;
 	abort();\
 	}while (0)
 
-//#define DO_NOOP
-//#define DO_BLOOP
+#define DO_NOOP
+#define DO_BLOOP
 
 #ifdef DO_NOOP
 #warning "NO Operation will be done"
@@ -1006,14 +1006,14 @@ int do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
 
 	#ifdef DO_BLOOP
 	
-	unsigned int var = 0;
+	volatile unsigned int var = 0;
 	
 	do {
 		var++;
 	} while(var < LOOP_COUNT);
-	
+	timestamp ^= var;
 	#endif
-
+	
 	performed_enqueue++;
 	return 1;
 
@@ -1122,7 +1122,7 @@ pkey_t do_pq_dequeue(void *q, void** result)
 	#ifdef DO_NOOP
 
 	#ifdef DO_BLOOP
-	unsigned int var = 0;
+	volatile unsigned int var = 0;
 	
 	do {
 		var++;
