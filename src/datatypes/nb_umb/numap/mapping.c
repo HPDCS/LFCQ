@@ -122,7 +122,7 @@ bool read_slot(op_node* slot,
     #endif
 
     val = __sync_fetch_and_add(&(slot->response), 1);
-    if (val == 0)
+    if (val != 0)
     {
         slot->busy = L_FREE;
         return false;
@@ -165,7 +165,7 @@ bool write_slot(op_node* slot,
     slot->timestamp = timestamp; 
     slot->payload = payload;
 
-    val = __sync_fetch_and_and(&(slot->response), );
+    val = __sync_fetch_and_and(&(slot->response), 0);
 
     #ifdef _NM_USE_SPINLOCK
     spin_unlock_x86(&(slot->spin));
