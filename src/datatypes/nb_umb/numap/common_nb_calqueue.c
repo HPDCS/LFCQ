@@ -55,6 +55,10 @@ unsigned int ACTIVE_NUMA_NODES;
 //#define DO_NOOP
 //#define DO_BLOOP
 
+#ifdef DO_NOOP
+#warning "NO Operation will be done"
+#endif
+
 #define LOOP_COUNT 1200 //check with looper
 
 /*************************************

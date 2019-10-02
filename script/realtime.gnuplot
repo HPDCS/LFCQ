@@ -51,7 +51,7 @@ set style line 11 dt 10 lc rgb "#000000"
 set style line 12 dt 11 lc rgb "#000000"
 
 	
-set yrange [0:10000]
+set yrange [0:12000]
 set xrange [1:49]
 set offset 2,2,1,1
 
