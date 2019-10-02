@@ -55,11 +55,7 @@ unsigned int ACTIVE_NUMA_NODES;
 #define DO_NOOP
 #define DO_BLOOP
 
-#ifdef DO_NOOP
-#warning "NO Operation will be done"
-#endif
-
-#define LOOP_COUNT 1200 //check with looper
+#define LOOP_COUNT 1200 //10 us
 
 /*************************************
  * THREAD LOCAL VARIABLES			 *
@@ -990,6 +986,20 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 }
 
 
+#ifdef DO_BLOOP
+volatile int bloop() 
+{
+	unsigned int var = 0;
+	int i;
+
+	for (i = 0; i < LOOP_COUNT; i++)
+	{var += var^i;}
+
+	return var;
+
+}
+#endif 
+
 /**
  * This function implements the enqueue interface of the NBCQ.
  * Cost O(1) when succeeds
@@ -1006,16 +1016,12 @@ int do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
 
 	#ifdef DO_BLOOP
 	
-	volatile unsigned int var = 0;
-	
-	do {
-		var++;
-	} while(var < LOOP_COUNT);
-	timestamp ^= var;
+	unsigned long x = bloop();
+
 	#endif
 	
 	performed_enqueue++;
-	return 1;
+	return 1+x;
 
 	#else
 	nb_calqueue* queue = (nb_calqueue*) q; 	
@@ -1124,15 +1130,13 @@ pkey_t do_pq_dequeue(void *q, void** result)
 	#ifdef DO_BLOOP
 	volatile unsigned int var = 0;
 	
-	do {
-		var++;
-	} while(var < LOOP_COUNT);
+	unsigned long x = bloop();
 	
 	#endif
 	
 	*result = (void*) 0x1;
 	performed_dequeue++;
-	return TID;
+	return TID+x;
 	
 	#else
 	nb_calqueue *queue = (nb_calqueue*)q;
