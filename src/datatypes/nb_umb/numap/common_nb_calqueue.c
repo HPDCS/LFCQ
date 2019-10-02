@@ -54,7 +54,8 @@ unsigned int ACTIVE_NUMA_NODES;
 
 //#define DO_NOOP
 //#define DO_BLOOP
-#define LOOP_COUNT 1000 //check with looper
+
+#define LOOP_COUNT 1200 //check with looper
 
 /*************************************
  * THREAD LOCAL VARIABLES			 *
