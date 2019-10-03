@@ -45,8 +45,12 @@ void loops_to_time() {
 	while (tmpruns--) {
 		struct timeval start, end;
 		size_t l = loops;
+		size_t x = loops;			
 		gettimeofday(&start, NULL);
-		while (l--);
+		for (; l > 0; l--)
+		{
+			x += 1^l; 	
+		}
 		gettimeofday(&end, NULL);
 		
 		meanTime += ((end.tv_sec * 1000000.0 + end.tv_usec) - (start.tv_sec * 1000000.0 + start.tv_usec));

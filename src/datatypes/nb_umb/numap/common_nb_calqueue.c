@@ -986,20 +986,6 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 }
 
 
-#ifdef DO_BLOOP
-int __attribute__((optimize("O0"))) bloop(unsigned int var) 
-{
-
-	do {
-		var--;
-	}
-	while(var > 0);
-
-	return var;
-
-}
-#endif 
-
 /**
  * This function implements the enqueue interface of the NBCQ.
  * Cost O(1) when succeeds
@@ -1016,8 +1002,12 @@ int do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
 
 	#ifdef DO_BLOOP
 	
-	unsigned x = bloop(LOOP_COUNT);
+	unsigned long x, y;
+	x = LOOP_COUNT;
+	y = LOOP_COUNT;
 
+	for (; y > 0; y--)
+		x -= 1 ^ y;
 	#endif
 	
 	performed_enqueue++;
@@ -1128,9 +1118,12 @@ pkey_t do_pq_dequeue(void *q, void** result)
 	#ifdef DO_NOOP
 
 	#ifdef DO_BLOOP
-	volatile unsigned int var = 0;
-	
-	unsigned x = bloop(LOOP_COUNT);
+		unsigned long x, y;
+	x = LOOP_COUNT;
+	y = LOOP_COUNT;
+
+	for (; y > 0; y--)
+		x -= 1 ^ y;
 	
 	#endif
 	
