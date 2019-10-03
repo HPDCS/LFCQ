@@ -539,7 +539,7 @@ int main(int argc, char **argv)
 
 	elapsed = timediff(start, end);
     dt = (double)elapsed.tv_sec + (double)elapsed.tv_nsec / 1000000000.0;
-	printf("Time to setup queue %f\n", dt);
+	printf("\nTime to setup queue %f\n", dt);
 		gettime(&start);
 		sleep(TIME);
 		__sync_bool_compare_and_swap(&end_test, 0, 1);
@@ -569,7 +569,7 @@ int main(int argc, char **argv)
 	printf("SUM OP:%lld,", sum);
 	if(TEST_MODE == 'T'){
 		printf("TIME:%.8f,", dt);
-		printf("THROUGHPUT:%.3f,", (double)sum*2.0/dt/1000.0);
+		printf("\nTHROUGHPUT:%.3f\n,", (double)sum*2.0/dt/1000.0);
 	}
 	printf("MIN OP:%lld,", min);
 	printf("MAX OP:%lld,", max);
