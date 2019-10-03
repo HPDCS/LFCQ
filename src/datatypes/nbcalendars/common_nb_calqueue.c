@@ -439,7 +439,7 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 	
 	
 	// is time for periodic resize?
-	if(new_size == 0 && (h->e_counter.count + h->d_counter.count) > RESIZE_PERIOD && h->resize_count/log_size < 0.75)
+	if(new_size == 0 && (h->e_counter.count + h->d_counter.count) > RESIZE_PERIOD && h->resize_count/log_size < 0.25)
 		new_size = h->size;
 	// the num of items is doubled/halved but it is not enough for change size
 	//if(new_size == 0 && h->last_resize_count != 0 && (counter >  h->last_resize_count*2 || counter < h->last_resize_count/2 ) )
