@@ -55,7 +55,7 @@ unsigned int ACTIVE_NUMA_NODES;
 #define DO_NOOP
 #define DO_BLOOP
 
-#define LOOP_COUNT 1200 //10 us
+#define LOOP_COUNT 100 //10 us
 
 /*************************************
  * THREAD LOCAL VARIABLES			 *
@@ -987,13 +987,13 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 
 
 #ifdef DO_BLOOP
-volatile int bloop() 
+int __attribute__((optimize("O0"))) bloop(unsigned int var) 
 {
-	unsigned int var = 0;
-	int i;
 
-	for (i = 0; i < LOOP_COUNT; i++)
-	{var += var^i;}
+	do {
+		var--;
+	}
+	while(var > 0);
 
 	return var;
 
@@ -1016,7 +1016,7 @@ int do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
 
 	#ifdef DO_BLOOP
 	
-	unsigned long x = bloop();
+	unsigned x = bloop(LOOP_COUNT);
 
 	#endif
 	
@@ -1130,7 +1130,7 @@ pkey_t do_pq_dequeue(void *q, void** result)
 	#ifdef DO_BLOOP
 	volatile unsigned int var = 0;
 	
-	unsigned long x = bloop();
+	unsigned x = bloop(LOOP_COUNT);
 	
 	#endif
 	
