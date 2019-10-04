@@ -464,8 +464,10 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 		new_h->resize_count = h->resize_count+1;
 		new_h->current 		 = ((unsigned long long)-1) << 32;
 		new_h->read_table_period = h->read_table_period;
-		new_h->pad = 3.5*(((double)concurrent_dequeue+concurrent_enqueue) / ((double)performed_enqueue+performed_dequeue));
-
+		new_h->pad = ((double)concurrent_dequeue)/((double)performed_dequeue) + ((double)concurrent_enqueue)/((double)performed_enqueue);
+		new_h->pad = new_h->pad < 1 ? 1 : new_h->pad;
+		new_h->pad *= 4;
+		//printf("%f %f %u\n", ((double)concurrent_dequeue)/((double)performed_dequeue), ((double)concurrent_enqueue)/((double)performed_enqueue), new_h->pad);
 		for (i = 0; i < new_size; i++)
 		{
 			new_h->array[i].next = tail;
@@ -481,8 +483,10 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 			free(new_h->array);
 			free(new_h);
 		}
-		else
+		else{
 			LOG("%u - CHANGE SIZE from %u to %u, items %u OLD_TABLE:%p NEW_TABLE:%p\n", TID, size, new_size, counter, h, new_h);
+			printf("%f %f %u\n", ((double)concurrent_dequeue)/((double)performed_dequeue), ((double)concurrent_enqueue)/((double)performed_enqueue), new_h->pad);
+		}
 	}
 }
 
@@ -645,7 +649,7 @@ double compute_mean_separation_time(table* h,
 
     double epb = h->pad;
     newaverage = (newaverage / j) * epb; //elem_per_bucket; /* this is the new width */
-	printf("OLD %f NEW %f\n", (double)elem_per_bucket, (double)epb );    
+	//printf("OLD %f NEW %f\n", (double)elem_per_bucket, (double)epb );    
 	// Compute new width
 	//newaverage = (newaverage / j) * (concurrent_enqueue+concurrent_dequeue) *3.5; //elem_per_bucket;	/* this is the new width */
 	//	LOG("%d- my new bucket %.10f for %p\n", TID, newaverage, h);   
