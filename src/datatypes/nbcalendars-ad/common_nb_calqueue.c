@@ -413,7 +413,7 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 
 	nbc_bucket_node *tail;
 	table *new_h = NULL;
-	double current_num_items = pub*epb*h->size;
+	double current_num_items = pub*h->pad*h->size;
 	int res = 0;
 	unsigned int i = 0;
 	unsigned int size = h->size;
@@ -464,6 +464,7 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 		new_h->resize_count = h->resize_count+1;
 		new_h->current 		 = ((unsigned long long)-1) << 32;
 		new_h->read_table_period = h->read_table_period;
+		new_h->pad = 3.5*(((double)concurrent_dequeue+concurrent_enqueue) / ((double)performed_enqueue+performed_dequeue));
 
 		for (i = 0; i < new_size; i++)
 		{
@@ -641,9 +642,12 @@ double compute_mean_separation_time(table* h,
 			j++;
 		}
 	}
-    
+
+    double epb = h->pad;
+    newaverage = (newaverage / j) * epb; //elem_per_bucket; /* this is the new width */
+	printf("OLD %f NEW %f\n", (double)elem_per_bucket, (double)epb );    
 	// Compute new width
-	newaverage = (newaverage / j) * (concurrent_enqueue+concurrent_dequeue) *3.5; //elem_per_bucket;	/* this is the new width */
+	//newaverage = (newaverage / j) * (concurrent_enqueue+concurrent_dequeue) *3.5; //elem_per_bucket;	/* this is the new width */
 	//	LOG("%d- my new bucket %.10f for %p\n", TID, newaverage, h);   
 
 	if(newaverage <= 0.0)
@@ -945,7 +949,8 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	res->hashtable->e_counter.count = 0;
 	res->hashtable->d_counter.count = 0;
     res->hashtable->read_table_period = res->read_table_period;	
-	
+	res->hashtable->pad = 3;
+
 	for (i = 0; i < MINIMUM_SIZE; i++)
 	{
 		res->hashtable->array[i].next = res->tail;
