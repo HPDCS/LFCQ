@@ -1,16 +1,17 @@
+#!/bin/bash
 source $1
 
 
-MAX_RETRY=5
+MAX_RETRY=1
 OPS=0
 PRUNE=0
 MODE=T
-
+TIMEOUT=$((150))
 count=0
 
 results=$results/dat
 mkdir -p $results
-
+echo $results
 ./estimate_runtime.sh $1
 
 for i in $iterations; do
@@ -32,10 +33,10 @@ for i in $iterations; do
 							N=0 
 							while [[ $(grep -c "THROUGHPUT" $file) -eq 0 ]]
 							do
-								#/usr/bin/time -f R:%e,U:%U,S:%S $cmd_line &> $file
-								{ timeout $((TIME * 2)) /usr/bin/time -f R:%e,U:%U,S:%S $cmd_line; } &> $file
-
-								if test $N -ge $MAX_RETRY ; then echo break; break; fi
+								#echo $cmd_line
+								{ timeout $TIMEOUT /usr/bin/time -f R:%e,U:%U,S:%S $cmd_line; } &> $file
+								echo $t `cat $file | grep THROUGH`
+								if test $N -ge $MAX_RETRY ; then echo $cmd_line break; break; fi
 								N=$(( N+1 ))
 							done  
 						done
