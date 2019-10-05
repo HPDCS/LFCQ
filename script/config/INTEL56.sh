@@ -10,8 +10,7 @@ TIME=10
 ##############################
 
 data_types="NBCQ MARO ACRCQ"
-threads="48 42 36 30 24 18 12 6 3 1"
-threads="1 3 6 12 18 24 30 36 42 48"
+threads="1 4 8 16 24 32 40 48 56"
 iterations="1 2 3" # 4 5" # 6 7 8 9 10"
 distributions="E U T N C"
 queue_sizes="2560 25600 256000 2560000" #256"
