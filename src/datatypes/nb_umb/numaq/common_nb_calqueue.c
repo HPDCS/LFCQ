@@ -1404,6 +1404,10 @@ nbc_bucket_node *min, *min_next,
 	unsigned int ep = 0;
 	int con_de = 0;
 	bool prob_overflow = false;
+
+	wideptr lnn, new;
+	int res;	
+	
 	tail = queue->tail;
 
 	size = h->size;
@@ -1496,7 +1500,16 @@ nbc_bucket_node *min, *min_next,
 					*result = NULL;
 					return INFTY;
 				}
-				// 	check someone extracted the candidate
+				// try to extract the candidate then 
+				lnn.next = current_candidate->next;
+				lnn.op_id = 0;
+
+				new.next = ((unsigned long) current_candidate->next) | DEL;
+				new.op_id = op_id; //add our id
+
+				BOOL_CAS(&current_candidate->widenext, lnn.widenext, new.widenext);
+
+				// check if someone extracted the candidate
 				if (is_marked(current_candidate->next, DEL))
 				{
 					// was for my operation?
@@ -1519,15 +1532,30 @@ nbc_bucket_node *min, *min_next,
 			// here left node is the current candidate
 
 			// try to extract the node
-			wideptr lnn;
-			lnn.next = left_node_next;
-			lnn.op_id = 0;
+			//wideptr lnn;
+			//lnn.next = left_node_next;
+			//lnn.op_id = 0;
 
-			wideptr new;
-			new.next = ((unsigned long)left_node_next) | DEL;
-			new.op_id = op_id; //add our id
+			//wideptr new;
+			//new.next = ((unsigned long)left_node_next) | DEL;
+			//new.op_id = op_id; //add our id
 
-			int res = __sync_bool_compare_and_swap(&left_node->widenext, lnn.widenext, new.widenext); // this will change also the candidate
+			//int res = __sync_bool_compare_and_swap(&left_node->widenext, lnn.widenext, new.widenext); // this will change also the candidate
+			
+			do {
+				lnn.next = left_node->next;
+				lnn.op_id = 0;
+
+				if (is_marked(lnn.next, DEL))
+				{
+					res = 0;
+					break;
+				}
+
+				new.next = ((unsigned long)left_node_next) | DEL;
+				new.op_id = op_id; //add our id
+			} while(!(res = BOOL_CAS(&left_node->widenext, lnn.widenext, new.widenext)));
+			
 
 			// the extraction is failed
 			if (!res)
