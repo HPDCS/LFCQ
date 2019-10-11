@@ -286,8 +286,6 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	//dest_node = NODE_HASH(hash(timestamp, h->bucket_width) % h->size);
 	dest_node = NODE_HASH((unsigned int) timestamp);
 
-	printf("ENQ - of ts %d, on numa node %d\n", timestamp, dest_node);
-
 	// if NID execute
 	if (dest_node == NID)
 	{
@@ -374,8 +372,6 @@ pkey_t pq_dequeue(void *q, void** result)
 	h = read_table(&queue->hashtable, th, epb, pub);
 	// check destination
 	dest_node = NODE_HASH(next_node_deq++);
-
-	printf("DEQ - from numa node %d\n", dest_node);
 
 	if (dest_node == NID) {
 		pkey_t ret = do_pq_dequeue(q, result);
