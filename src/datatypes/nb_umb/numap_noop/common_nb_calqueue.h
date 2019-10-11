@@ -44,7 +44,7 @@ extern int gc_hid[];
 #define SAMPLE_SIZE 25
 #define HEAD_ID 0
 //#define MAXIMUM_SIZE 1048576 //524288 //262144 //131072 //65536 //32768
-#define MINIMUM_SIZE 8 // 1
+#define MINIMUM_SIZE 128 // 1
 #define MAX_NUMA_NODES 16
 
 #define ENABLE_EXPANSION 1
