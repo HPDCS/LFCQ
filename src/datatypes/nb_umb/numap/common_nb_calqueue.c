@@ -524,7 +524,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	h = read_table(&queue->hashtable, th, epb, pub);
 	
 	// check destination
-	dest_node = NODE_HASH(hash(timestamp, h->bucket_width) % h->size);
+	dest_node = NODE_HASH(hash(timestamp, h->bucket_width) % (h->size));
 
 	// if NID execute
 	if (dest_node == NID)
@@ -609,7 +609,7 @@ pkey_t pq_dequeue(void *q, void** result)
 	// read table
 	h = read_table(&queue->hashtable, th, epb, pub);
 	// check destination
-	dest_node = NODE_HASH(((h->current)>>32)%h->size);
+	dest_node = NODE_HASH(((h->current)>>32)%(h->size));
 
 	if (dest_node == NID) {
 		pkey_t ret = do_pq_dequeue(q, result);

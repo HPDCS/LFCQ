@@ -150,7 +150,7 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	return res;
 }
 
-
+__thread pkey_t last_ts;
 /**
  * This function implements the enqueue interface of the NBCQ.
  * Cost O(1) when succeeds
@@ -164,7 +164,9 @@ int do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
 {
 
 	#ifdef DO_BLOOP
-	
+
+	last_ts = timestamp;
+
 	unsigned long x, y;
 	x = LOOP_COUNT;
 	y = LOOP_COUNT;
@@ -204,7 +206,7 @@ pkey_t do_pq_dequeue(void *q, void** result)
 	
 	*result = (void*) 0x1;
 	performed_dequeue++;
-	return TID+x;
+	return last_ts;
 	
 }
 
@@ -281,7 +283,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	h = read_table(&queue->hashtable, th, epb, pub);
 	
 	// check destination
-	dest_node = NODE_HASH(hash(timestamp, h->bucket_width) % h->size);
+	//dest_node = NODE_HASH(hash(timestamp, h->bucket_width) % h->size);
+	dest_node = NODE_HASH((unsigned int) timestamp);
 
 	printf("ENQ - of ts %d, on numa node %d\n", timestamp, dest_node);
 
@@ -336,6 +339,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	return ret;	
 }
 
+__thread unsigned int next_node_deq;
+
 pkey_t pq_dequeue(void *q, void** result)
 {
 	// read table
@@ -368,7 +373,7 @@ pkey_t pq_dequeue(void *q, void** result)
 	// read table
 	h = read_table(&queue->hashtable, th, epb, pub);
 	// check destination
-	dest_node = NODE_HASH(((h->current)>>32)%h->size);
+	dest_node = NODE_HASH(next_node_deq++);
 
 	printf("DEQ - from numa node %d\n", dest_node);
 
