@@ -78,6 +78,11 @@ __thread unsigned long long enq_steal_attempt = 0ULL;
 __thread unsigned long long deq_steal_done = 0ULL;
 __thread unsigned long long deq_steal_attempt = 0ULL;
 
+__thread unsigned long long local_enq = 0ULL;
+__thread unsigned long long local_deq = 0ULL;
+__thread unsigned long long remote_enq = 0ULL;
+__thread unsigned long long remote_deq = 0ULL;
+
 void std_free_hook(ptst_t *p, void *ptr){	free(ptr); }
 
 
@@ -233,10 +238,15 @@ static inline int handle_ops(void* q)
 			from_me = get_res_slot_to_node(i);
 
 			if (type == OP_PQ_ENQ) 
+			{
+				local_enq++;
 				ret = do_pq_enqueue(q, ts, pld);
-			else 
+			}
+			else
+			{ 
+				local_deq++;
 				ts = do_pq_dequeue(q, &pld);
-			
+			}
 			if (!write_slot(from_me, type, ret, ts, pld))
 			{
 				abort_line();
@@ -289,6 +299,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	// if NID execute
 	if (dest_node == NID)
 	{
+		local_enq++;
 		int ret = do_pq_enqueue(q, timestamp, payload);
 		critical_exit();
 		return ret;
@@ -313,6 +324,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 			from_me = get_req_slot_to_node(dest_node);
 			if (read_slot(from_me, &type, &ret, &ts, &pld))
 			{
+				remote_enq++;
 				enq_steal_done++;
 				ret = do_pq_enqueue(q, timestamp, payload);
 				break;
@@ -374,6 +386,7 @@ pkey_t pq_dequeue(void *q, void** result)
 	dest_node = NODE_HASH(next_node_deq++);
 
 	if (dest_node == NID) {
+		local_deq++;
 		pkey_t ret = do_pq_dequeue(q, result);
 		critical_exit();
 		return ret;
@@ -401,6 +414,7 @@ pkey_t pq_dequeue(void *q, void** result)
 			{
 				deq_steal_done++;
 				ts = do_pq_dequeue(q, &pld);
+				remote_deq++;
 				break;
 			}
 			attempts = 0;
@@ -431,7 +445,8 @@ void pq_report(int TID)
 	"Enqueue: %.10f LEN: %.10f ST: %llu : %llu ### "
 	"Dequeue: %.10f LEN: %.10f NUMCAS: %llu : %llu ST: %llu : %llu ### "
 	"NEAR: %llu "
-	"RTC:%d,M:%lld \n",
+	"RTC:%d, M:%lld, "
+	"Local ENQ: %lld DEQ: %lld, Remote ENQ: %lld DEQ: %lld\n",
 			TID,
 			((float)concurrent_enqueue) /((float)performed_enqueue),
 			((float)scan_list_length_en)/((float)performed_enqueue),
@@ -442,7 +457,8 @@ void pq_report(int TID)
 			deq_steal_attempt, deq_steal_done,
 			near,
 			read_table_count	  ,
-			malloc_count);
+			malloc_count,
+			local_enq, local_deq, remote_enq, remote_deq);
 }
 
 void pq_reset_statistics(){

@@ -9,8 +9,7 @@ TIME=10
 # cmd parameters
 ##############################
 
-
-data_types= "NUMAP NUMAPNOP" #"NBCQ UNBCQ NUMAP NUMAPNOP NUMAPBL" #"NBCQ UNBCQ NUMAQ NUMAFK"
+data_types="NUMAP NUMAPNOP UNBCQ NBCQ" #"NBCQ UNBCQ NUMAP NUMAPNOP NUMAPBL" #"NBCQ UNBCQ NUMAQ NUMAFK"
 #threads="48 42 36 30 24 18 12 6 3 1"
 threads="48 42 36 30 24 18 12 6 3 1"
 iterations="1 2" # 3 4 5" # 6 7 8 9 10"

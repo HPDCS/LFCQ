@@ -79,6 +79,11 @@ __thread unsigned long long enq_steal_attempt = 0ULL;
 __thread unsigned long long deq_steal_done = 0ULL;
 __thread unsigned long long deq_steal_attempt = 0ULL;
 
+__thread unsigned long long local_enq = 0ULL;
+__thread unsigned long long local_deq = 0ULL;
+__thread unsigned long long remote_enq = 0ULL;
+__thread unsigned long long remote_deq = 0ULL;
+
 void std_free_hook(ptst_t *p, void *ptr){	free(ptr); }
 
 
@@ -266,6 +271,13 @@ int do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
   #if KEY_TYPE != DOUBLE
   out:
   #endif
+
+	if (NODE_HASH(index) == NID)
+		local_enq++;
+	else
+		remote_enq++;
+	// check if local or not
+
 	return res;
 #endif
 }
@@ -310,7 +322,7 @@ pkey_t do_pq_dequeue(void *q, void** result)
 	unsigned long long epoch;
 	
 	unsigned int size, attempts = 0;
-	unsigned int counter;
+	unsigned int counter, dest_node;
 	pkey_t left_ts;
 	double bucket_width, left_limit, right_limit;
 
@@ -352,6 +364,8 @@ begin:
 		min = array + (index % (size));
 		left_node = min_next = min->next;
 		
+		dest_node = NODE_HASH(index % (size));
+
 		// get the left limit
 		left_limit = ((double)index)*bucket_width;
 
@@ -410,6 +424,11 @@ begin:
 
 			*result = left_node->payload;
 				
+			// check if local or not
+			if (dest_node == NID)
+				local_deq++;
+			else
+				remote_deq++;
 
 			return left_ts;
 										
@@ -669,7 +688,8 @@ void pq_report(int TID)
 	"Enqueue: %.10f LEN: %.10f ST: %llu : %llu ### "
 	"Dequeue: %.10f LEN: %.10f NUMCAS: %llu : %llu ST: %llu : %llu ### "
 	"NEAR: %llu "
-	"RTC:%d,M:%lld \n",
+	"RTC:%d, M:%lld, "
+	"Local ENQ: %lld DEQ: %lld, Remote ENQ: %lld DEQ: %lld\n",
 			TID,
 			((float)concurrent_enqueue) /((float)performed_enqueue),
 			((float)scan_list_length_en)/((float)performed_enqueue),
@@ -680,7 +700,8 @@ void pq_report(int TID)
 			deq_steal_attempt, deq_steal_done,
 			near,
 			read_table_count	  ,
-			malloc_count);
+			malloc_count,
+			local_enq, local_deq, remote_enq, remote_deq);
 }
 
 void pq_reset_statistics(){

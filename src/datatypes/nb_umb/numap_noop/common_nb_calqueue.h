@@ -47,7 +47,7 @@ extern int gc_hid[];
 #define MINIMUM_SIZE 128 // 1
 #define MAX_NUMA_NODES 16
 
-#define ENABLE_EXPANSION 1
+#define ENABLE_EXPANSION 0
 #define READTABLE_PERIOD 63
 #define COMPACT_RANDOM_ENQUEUE 1
 
