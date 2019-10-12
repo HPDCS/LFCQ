@@ -570,6 +570,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 					ret = do_pq_enqueue(q, timestamp, payload);
 					break;
 				}
+				dest_node = new_dest_node;
 
 				// posting the operation
 				from_me = get_req_slot_to_node(dest_node);
@@ -579,7 +580,6 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 				{
 					abort_line();
 				}
-				dest_node = new_dest_node;
 			}
 			attempts = 0;
 		}
@@ -663,7 +663,7 @@ pkey_t pq_dequeue(void *q, void** result)
 			{
 				deq_steal_done++;
 
-				h = read_table(&queue->hashtable, th, epb, pub); // possibly trigger resize changing the dest node
+				h = read_table(&queue->hashtable, th, epb, pub);
 				new_dest_node = NODE_HASH(((h->current)>>32)%(h->size));
 
 				// if the dest node is mine or is unchanged
@@ -673,6 +673,8 @@ pkey_t pq_dequeue(void *q, void** result)
 					break;
 				}
 
+				dest_node = new_dest_node;
+
 				from_me = get_req_slot_to_node(dest_node);
 				resp = get_res_slot_from_node(dest_node);
 
@@ -680,8 +682,7 @@ pkey_t pq_dequeue(void *q, void** result)
 				{			
 					abort_line();
 				}	
-
-				dest_node = new_dest_node;			
+			
 			}
 			attempts = 0;
 		}
