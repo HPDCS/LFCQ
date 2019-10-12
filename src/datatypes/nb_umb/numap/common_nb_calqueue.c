@@ -565,7 +565,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 				h = read_table(&queue->hashtable, th, epb, pub);
 				new_dest_node =  NODE_HASH(hash(timestamp, h->bucket_width) % (h->size));
 
-				if (new_dest_node == dest_node)
+				if (new_dest_node == dest_node || new_dest_node == NID)
 				{
 					ret = do_pq_enqueue(q, timestamp, payload);
 					break;
@@ -666,7 +666,8 @@ pkey_t pq_dequeue(void *q, void** result)
 				h = read_table(&queue->hashtable, th, epb, pub); // possibly trigger resize changing the dest node
 				new_dest_node = NODE_HASH(((h->current)>>32)%(h->size));
 
-				if (new_dest_node == NID)
+				// if the dest node is mine or is unchanged
+				if (new_dest_node == NID || new_dest_node == dest_node)
 				{
 					ts = do_pq_dequeue(q, &pld);
 					break;
