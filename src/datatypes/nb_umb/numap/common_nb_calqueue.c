@@ -52,10 +52,6 @@ unsigned int ACTIVE_NUMA_NODES;
 	abort();\
 	}while (0)
 
-//#define DO_NOOP
-//#define DO_BLOOP
-
-#define LOOP_COUNT 100 //10 us
 
 /*************************************
  * THREAD LOCAL VARIABLES			 *
@@ -169,22 +165,6 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 int do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
 {
 
-	#ifdef DO_NOOP
-
-	#ifdef DO_BLOOP
-	
-	unsigned long x, y;
-	x = LOOP_COUNT;
-	y = LOOP_COUNT;
-
-	for (; y > 0; y--)
-		x -= 1 ^ y;
-	#endif
-	
-	performed_enqueue++;
-	return 1+x;
-
-	#else
 	nb_calqueue* queue = (nb_calqueue*) q; 	
 
 	nbc_bucket_node *bucket, *new_node = numa_node_malloc(payload, timestamp, 0, NID);
@@ -198,6 +178,10 @@ int do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	unsigned int epb = queue->elem_per_bucket;
 	unsigned int th = queue->threshold;
 	
+	int old_dest_node = -1;
+	int dest_node;
+	bool changed = false; // tells whether the enqueue touched a remote node
+
 	int res, con_en = 0;
 	
 
@@ -225,8 +209,19 @@ int do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			// compute the index of the physical bucket
 			index = ((unsigned int) newIndex) % size;	
 
+			dest_node = NODE_HASH(index);
+			if (unlikely(old_dest_node == -1))
+		{
+			old_dest_node = dest_node;
+		}
+		if (dest_node != old_dest_node && old_dest_node != -1)
+		{
+			changed = true;
+			old_dest_node = dest_node;
+		}
+
 			// allocate a new node on numa node
-			new_node = numa_node_malloc(payload, timestamp, 0, NODE_HASH(index));
+			new_node = numa_node_malloc(payload, timestamp, 0, dest_node);
 			new_node->epoch = (h->current & MASK_EPOCH);
 	
 			// get the bucket
@@ -272,14 +267,13 @@ int do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
   out:
   #endif
 
-	if (NODE_HASH(index) == NID)
+	if (!changed && dest_node == NID)
 		local_enq++;
 	else
 		remote_enq++;
 	// check if local or not
 
 	return res;
-#endif
 }
 
 /**
@@ -294,23 +288,6 @@ int do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
 pkey_t do_pq_dequeue(void *q, void** result)
 {
 
-	#ifdef DO_NOOP
-
-	#ifdef DO_BLOOP
-		unsigned long x, y;
-	x = LOOP_COUNT;
-	y = LOOP_COUNT;
-
-	for (; y > 0; y--)
-		x -= 1 ^ y;
-	
-	#endif
-	
-	*result = (void*) 0x1;
-	performed_dequeue++;
-	return TID+x;
-	
-	#else
 	nb_calqueue *queue = (nb_calqueue*)q;
 	nbc_bucket_node *min, *min_next, 
 					*left_node, *left_node_next, 
@@ -335,6 +312,9 @@ pkey_t do_pq_dequeue(void *q, void** result)
 	tail = queue->tail;
 	performed_dequeue++;
 	
+	int old_dest_node = -1;
+	bool changed = false;
+
 begin:
 	// Get the current set table
 	h = read_table(&queue->hashtable, th, epb, pub);
@@ -365,6 +345,15 @@ begin:
 		left_node = min_next = min->next;
 		
 		dest_node = NODE_HASH(index % (size));
+		if (unlikely(old_dest_node == -1))
+		{
+			old_dest_node = dest_node;
+		}
+		if (dest_node != old_dest_node && old_dest_node != -1)
+		{
+			changed = true;
+			old_dest_node = dest_node;
+		}
 
 		// get the left limit
 		left_limit = ((double)index)*bucket_width;
@@ -425,7 +414,7 @@ begin:
 			*result = left_node->payload;
 				
 			// check if local or not
-			if (dest_node == NID)
+			if (dest_node == NID && !changed)
 				local_deq++;
 			else
 				remote_deq++;
@@ -467,7 +456,6 @@ begin:
 	}while(1);
 	
 	return INFTY;
-	#endif
 }
 
 static inline int handle_ops(void* q) 
