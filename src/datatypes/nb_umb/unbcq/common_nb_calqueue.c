@@ -1013,7 +1013,16 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			// compute the index of the virtual bucket
 			newIndex = hash(timestamp, h->bucket_width);
 			
-			dest_node = NODE_HASH(newIndex);
+			// allocate a new node on numa node
+			new_node = numa_node_malloc(payload, timestamp, 0, dest_node);
+			new_node->epoch = (h->current & MASK_EPOCH);
+
+			// compute the index of the physical bucket
+			index = ((unsigned int) newIndex) % size;			
+			// get the bucket
+			bucket = h->array + index;
+			
+			dest_node = NODE_HASH(index);
 			if (unlikely(old_dest_node == -1))
 			{
 				old_dest_node = dest_node;
@@ -1023,15 +1032,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 				changed = true;
 				old_dest_node = dest_node;
 			}
-
-			// allocate a new node on numa node
-			new_node = numa_node_malloc(payload, timestamp, 0, dest_node);
-			new_node->epoch = (h->current & MASK_EPOCH);
-
-			// compute the index of the physical bucket
-			index = ((unsigned int) newIndex) % size;			
-			// get the bucket
-			bucket = h->array + index;
+			
 			// read the number of executed enqueues for statistics purposes
 			con_en = h->e_counter.count;
 		}
