@@ -267,11 +267,12 @@ int do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
   out:
   #endif
 
+	// check if local or not
 	if (!changed && dest_node == NID)
 		local_enq++;
 	else
 		remote_enq++;
-	// check if local or not
+	
 
 	return res;
 }
