@@ -39,6 +39,7 @@ extern __thread ptst_t *ptst;
 extern int gc_aid[];
 extern int gc_hid[];
 
+#define NODE_HASH(bucket_id) ((bucket_id >> 2ull) % _NUMA_NODES)
 
 #define SAMPLE_SIZE 25
 #define HEAD_ID 0
@@ -210,6 +211,10 @@ extern __thread unsigned long long num_cas;
 extern __thread unsigned long long num_cas_useful;
 extern __thread unsigned long long dist;
 
+extern __thread unsigned long long local_enq;
+extern __thread unsigned long long local_deq;
+extern __thread unsigned long long remote_enq;
+extern __thread unsigned long long remote_deq;
 
 extern void set_new_table(table* h, unsigned int threshold, double pub, unsigned int epb, unsigned int counter);
 extern table* read_table(table * volatile *hashtable, unsigned int threshold, unsigned int elem_per_bucket, double perc_used_bucket);

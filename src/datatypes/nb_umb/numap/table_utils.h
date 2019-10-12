@@ -615,16 +615,17 @@ static inline void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 	
 	int res = 0;
 	
+	new_node_timestamp = right_node->timestamp;
+	index = hash(new_node_timestamp, new_h->bucket_width);
+
 	//Create a new node to be inserted in the new table as as INValid
-	replica = numa_node_malloc(right_node->payload, right_node->timestamp,  right_node->counter, NODE_HASH(hash(right_node->timestamp, new_h->bucket_width)%new_h->size));
+	replica = numa_node_malloc(right_node->payload, new_node_timestamp,  right_node->counter, NODE_HASH(index%new_h->size));
 	
 	new_node 			= &replica;
 	new_node_pointer 	= (*new_node);
 	new_node_counter 	= new_node_pointer->counter;
-	new_node_timestamp 	= new_node_pointer->timestamp;
+	//new_node_timestamp 	= new_node_pointer->timestamp;
 	
-	index = hash(new_node_timestamp, new_h->bucket_width);
-
 	// node to be added in the hashtable
 	bucket = new_h->array + (index % new_h->size);
 	         

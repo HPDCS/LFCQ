@@ -211,14 +211,14 @@ int do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
 
 			dest_node = NODE_HASH(index);
 			if (unlikely(old_dest_node == -1))
-		{
-			old_dest_node = dest_node;
-		}
-		if (dest_node != old_dest_node && old_dest_node != -1)
-		{
-			changed = true;
-			old_dest_node = dest_node;
-		}
+			{
+				old_dest_node = dest_node;
+			}
+			if (dest_node != old_dest_node && old_dest_node != -1)
+			{
+				changed = true;
+				old_dest_node = dest_node;
+			}
 
 			// allocate a new node on numa node
 			new_node = numa_node_malloc(payload, timestamp, 0, dest_node);
@@ -523,7 +523,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	unsigned int epb = queue->elem_per_bucket;
 	unsigned int th = queue->threshold;
 	
-	unsigned int dest_node;
+	unsigned int dest_node, new_dest_node;
 
 	count = handle_ops(q);	
 
@@ -561,8 +561,25 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 			if (read_slot(from_me, &type, &ret, &ts, &pld))
 			{
 				enq_steal_done++;
-				ret = do_pq_enqueue(q, timestamp, payload);
-				break;
+
+				h = read_table(&queue->hashtable, th, epb, pub);
+				new_dest_node =  NODE_HASH(hash(timestamp, h->bucket_width) % (h->size));
+
+				if (new_dest_node == dest_node)
+				{
+					ret = do_pq_enqueue(q, timestamp, payload);
+					break;
+				}
+
+				// posting the operation
+				from_me = get_req_slot_to_node(dest_node);
+				resp = get_res_slot_from_node(dest_node);
+				
+				if (!write_slot(from_me, OP_PQ_ENQ, 0, timestamp, payload))
+				{
+					abort_line();
+				}
+				dest_node = new_dest_node;
 			}
 			attempts = 0;
 		}
@@ -609,7 +626,7 @@ pkey_t pq_dequeue(void *q, void** result)
 	unsigned int epb = queue->elem_per_bucket;
 	unsigned int th = queue->threshold;
 	
-	unsigned int dest_node;
+	unsigned int dest_node, new_dest_node;
 	
 	count = handle_ops(q);
 	
@@ -645,8 +662,25 @@ pkey_t pq_dequeue(void *q, void** result)
 			if (read_slot(from_me, &type, &ret, &ts, &pld))
 			{
 				deq_steal_done++;
-				ts = do_pq_dequeue(q, &pld);
-				break;
+
+				h = read_table(&queue->hashtable, th, epb, pub); // possibly trigger resize changing the dest node
+				new_dest_node = NODE_HASH(((h->current)>>32)%(h->size));
+
+				if (new_dest_node == NID)
+				{
+					ts = do_pq_dequeue(q, &pld);
+					break;
+				}
+
+				from_me = get_req_slot_to_node(dest_node);
+				resp = get_res_slot_from_node(dest_node);
+
+				if (!write_slot(from_me, OP_PQ_DEQ, 0, 0, 0))
+				{			
+					abort_line();
+				}	
+
+				dest_node = new_dest_node;			
 			}
 			attempts = 0;
 		}

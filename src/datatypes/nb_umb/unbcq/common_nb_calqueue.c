@@ -29,8 +29,6 @@
 
 #include "common_nb_calqueue.h"
 
-#define NODE_HASH(bucket_id) ((bucket_id >> 2ull) % _NUMA_NODES)
-
 /*************************************
  * GLOBAL VARIABLES					 *
  ************************************/
@@ -55,7 +53,11 @@ __thread unsigned long long near = 0;
 __thread unsigned int 		acc = 0;
 __thread unsigned int 		acc_counter = 0;
 
-
+// vars for stats
+__thread unsigned long long local_enq = 0ULL;
+__thread unsigned long long local_deq = 0ULL;
+__thread unsigned long long remote_enq = 0ULL;
+__thread unsigned long long remote_deq = 0ULL;
 
 /**
  * This function commits a value in the current field of a queue. It retries until the timestamp
@@ -986,6 +988,9 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	
 	int res, con_en = 0;
 	
+	int old_dest_node = -1;
+	int dest_node;
+	bool changed = false; // tells whether the enqueue touched a remote node
 
 	//init the result
 	res = MOV_FOUND;
@@ -1008,8 +1013,19 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			// compute the index of the virtual bucket
 			newIndex = hash(timestamp, h->bucket_width);
 			
+			dest_node = NODE_HASH(newIndex);
+			if (unlikely(old_dest_node == -1))
+			{
+				old_dest_node = dest_node;
+			}
+			if (dest_node != old_dest_node && old_dest_node != -1)
+			{
+				changed = true;
+				old_dest_node = dest_node;
+			}
+
 			// allocate a new node on numa node
-			new_node = numa_node_malloc(payload, timestamp, 0, NODE_HASH(newIndex));
+			new_node = numa_node_malloc(payload, timestamp, 0, dest_node);
 			new_node->epoch = (h->current & MASK_EPOCH);
 
 			// compute the index of the physical bucket
@@ -1056,6 +1072,12 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
   #if KEY_TYPE != DOUBLE
   out:
   #endif
+	
+	if (!changed && dest_node == NID)
+		local_enq++;
+	else
+		remote_enq++;
+	
 	critical_exit();
 	return res;
 
@@ -1069,10 +1091,11 @@ void pq_report(int TID)
 {
 	
 	printf("%d- "
-	"Enqueue: %.10f LEN: %.10f ### "
+	"Enqueue: %.10f LEN: %.10f"
 	"Dequeue: %.10f LEN: %.10f NUMCAS: %llu : %llu ### "
 	"NEAR: %llu "
-	"RTC:%d,M:%lld\n",
+	"RTC:%d, M:%lld, "
+	"Local ENQ: %lld DEQ: %lld, Remote ENQ: %lld DEQ: %lld\n",
 			TID,
 			((float)concurrent_enqueue) /((float)performed_enqueue),
 			((float)scan_list_length_en)/((float)performed_enqueue),
@@ -1081,7 +1104,8 @@ void pq_report(int TID)
 			num_cas, num_cas_useful,
 			near,
 			read_table_count	  ,
-			malloc_count);
+			malloc_count,
+			local_enq, local_deq, remote_enq, remote_deq);
 }
 
 void pq_reset_statistics(){

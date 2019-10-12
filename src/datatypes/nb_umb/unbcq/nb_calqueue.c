@@ -68,6 +68,9 @@ pkey_t pq_dequeue(void *q, void** result)
 	tail = queue->tail;
 	performed_dequeue++;
 	
+	int dest_node, old_dest_node = -1;
+	bool changed = false;
+
 	critical_enter();
 
 begin:
@@ -99,6 +102,17 @@ begin:
 		min = array + (index % (size));
 		left_node = min_next = min->next;
 		
+		dest_node = NODE_HASH(index % (size));
+		if (unlikely(old_dest_node == -1))
+		{
+			old_dest_node = dest_node;
+		}
+		if (dest_node != old_dest_node && old_dest_node != -1)
+		{
+			changed = true;
+			old_dest_node = dest_node;
+		}
+
 		// get the left limit
 		left_limit = ((double)index)*bucket_width;
 
@@ -158,6 +172,11 @@ begin:
 			*result = left_node->payload;
 				
 			critical_exit();
+
+			if (dest_node == NID && !changed)
+				local_deq++;
+			else
+				remote_deq++;
 
 			return left_ts;
 										
