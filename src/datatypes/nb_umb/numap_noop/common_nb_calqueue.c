@@ -168,9 +168,9 @@ __thread pkey_t last_ts;
 int do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
 {
 
+	last_ts = timestamp;
 	#ifdef DO_BLOOP
 
-	last_ts = timestamp;
 
 	unsigned long x, y;
 	x = LOOP_COUNT;
@@ -197,10 +197,8 @@ int do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
 pkey_t do_pq_dequeue(void *q, void** result)
 {
 
-	unsigned x = 0;
-
 	#ifdef DO_BLOOP
-		unsigned long x, y;
+	unsigned long x, y;
 	x = LOOP_COUNT;
 	y = LOOP_COUNT;
 
@@ -335,7 +333,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 						local_enq++;
 					else
 						remote_enq++;
-						
+
 					ret = do_pq_enqueue(q, timestamp, payload);
 					break;
 				}
@@ -444,7 +442,7 @@ pkey_t pq_dequeue(void *q, void** result)
 					if (new_dest_node == NID)
 						local_deq++;
 					else
-						remote_deq--;
+						remote_deq++;
 					ts = do_pq_dequeue(q, &pld);
 					break;
 				}
@@ -489,7 +487,7 @@ void pq_report(int TID)
 	"Dequeue: %.10f LEN: %.10f NUMCAS: %llu : %llu ST: %llu : %llu ### "
 	"NEAR: %llu "
 	"RTC:%d, M:%lld, "
-	"Local ENQ: %lld DEQ: %lld, Remote ENQ: %lld DEQ: %lld\n",
+	"Local ENQ: %llu DEQ: %llu, Remote ENQ: %llu DEQ: %llu\n",
 			TID,
 			((float)concurrent_enqueue) /((float)performed_enqueue),
 			((float)scan_list_length_en)/((float)performed_enqueue),

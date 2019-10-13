@@ -988,9 +988,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	
 	int res, con_en = 0;
 	
-	int old_dest_node = -1;
 	int dest_node;
-	bool changed = false; // tells whether the enqueue touched a remote node
+	bool remote = false; // tells whether the enqueue touched a remote node
 
 	//init the result
 	res = MOV_FOUND;
@@ -1016,15 +1015,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			index = ((unsigned int) newIndex) % size;	
 
 			dest_node = NODE_HASH(index);
-			if (unlikely(old_dest_node == -1))
-			{
-				old_dest_node = dest_node;
-			}
-			if (dest_node != old_dest_node && old_dest_node != -1)
-			{
-				changed = true;
-				old_dest_node = dest_node;
-			}
+			if (dest_node != NID)
+				remote = true;
 
 			// allocate a new node on numa node
 			new_node = numa_node_malloc(payload, timestamp, 0, dest_node);
@@ -1074,7 +1066,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
   out:
   #endif
 	
-	if (!changed && dest_node == NID)
+	if (!remote)
 		local_enq++;
 	else
 		remote_enq++;
@@ -1096,7 +1088,7 @@ void pq_report(int TID)
 	"Dequeue: %.10f LEN: %.10f NUMCAS: %llu : %llu ### "
 	"NEAR: %llu "
 	"RTC:%d, M:%lld, "
-	"Local ENQ: %lld DEQ: %lld, Remote ENQ: %lld DEQ: %lld\n",
+	"Local ENQ: %llu DEQ: %llu, Remote ENQ: %llu DEQ: %llu\n",
 			TID,
 			((float)concurrent_enqueue) /((float)performed_enqueue),
 			((float)scan_list_length_en)/((float)performed_enqueue),
