@@ -659,13 +659,13 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 				break;
 			
 			// execute my op
-			if (handling_op->type == OP_PQ_ENQ)
+			if (handling_op->type == OP_PQ_ENQ && handling_op->response==-1)
 			{
 				ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->timestamp, &(handling_op->candidate), handling_op);
 				if (ret != -1)
 					break;
 			}
-			else 
+			else if (handling_op->type == OP_PQ_DEQ && handling_op->response==-1)
 			{
 				ret_ts = single_step_pq_dequeue(h, queue, &new_payload, handling_op->op_id, &(handling_op->candidate));
 				if (ret_ts != -1)
@@ -836,9 +836,9 @@ pkey_t pq_dequeue(void *q, void **result)
 				break;
 			}
 			
-			if (handling_op->type == OP_PQ_ENQ)
+			if (handling_op->type == OP_PQ_ENQ && handling_op->response==-1)
 				ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->payload, &handling_op->candidate, handling_op);
-			else
+			else if (handling_op->type == OP_PQ_DEQ && handling_op->response==-1)
 				ret_ts = single_step_pq_dequeue(h, queue, &new_payload, handling_op->op_id, &handling_op->candidate);
 		
 		} while(ret == -1 && ret_ts == -1);
