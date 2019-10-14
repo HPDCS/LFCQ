@@ -539,7 +539,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 
 	nb_calqueue *queue = (nb_calqueue *) q;
 	table *h = NULL;
-	op_node *operation, *new_operation, *extracted_op,
+	op_node *new_operation, *extracted_op,
 		*requested_op, *handling_op;
 	
 	pkey_t ret_ts;
@@ -568,7 +568,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	if (dest_node == NID)
 	{
 		// allocate op
-		requested_op = operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
+		requested_op = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
 		requested_op->op_id = 1;//__sync_fetch_and_add(&op_counter, 1);
 		requested_op->type = OP_PQ_ENQ;
 		requested_op->timestamp = timestamp;
@@ -587,7 +587,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 			if (dest_node != NID)
 				break;
 
-			ret = single_step_pq_enqueue(h, timestamp, payload, &operation->candidate, operation);
+			ret = single_step_pq_enqueue(h, timestamp, payload, &requested_op->candidate, requested_op);
 		} while(ret < 0);
 
 		if (ret >= 0)
@@ -599,12 +599,11 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 
 		gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
 		requested_op = NULL;
-		operation = NULL;
 	}
 
 	// dest node is not NID -> allocate new op
 	// allocate op
-	requested_op = operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
+	requested_op = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
 	requested_op->op_id = 1;//__sync_fetch_and_add(&op_counter, 1);
 	requested_op->type = OP_PQ_ENQ;
 	requested_op->timestamp = timestamp;
@@ -614,23 +613,23 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	requested_op->requestor = &requested_op;
 
 	// post operation
-	tq_enqueue(&op_queue[dest_node], (void *)operation, dest_node);
+	tq_enqueue(&op_queue[dest_node], (void *)requested_op, dest_node);
 	
-	extracted_op = NULL;
 	do {
+
+		extracted_op = NULL;
 		mine = false;
-		// check if my op was done 
+
+		// check if my op is done 
 		if ((ret = __sync_fetch_and_add(&(requested_op->response), 0)) != -1)
 		{
 			gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
 			critical_exit();
 			requested_op = NULL;
-			// dovrebbe essere come se il thread fosse stato deschedulato prima della return
-			// someone did my op, we can return
 			return ret; 
 		}
 
-		// extract op from one queue
+		// extract op from local queue
 		if (!tq_dequeue(&op_queue[NID], &extracted_op))
 		{
 			extracted_op = requested_op;
@@ -651,14 +650,17 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 				vb_index = hash(handling_op->timestamp, h->bucket_width);
 			else
 				vb_index = (h->current) >> 32;
+
 			new_dest = NODE_HASH(vb_index % h->size);
-			if ((!mine && new_dest != NID) || (mine && new_dest != dest_node)) // recheck this condition
+			
+			if (!mine && new_dest != NID) // extracted from non optimal queue
 			{
 				ret = -1;
 				ret_ts = -1;
 				break;
 			}
-			
+
+			// execute my op or op extracted from local queue
 			if (handling_op->type == OP_PQ_ENQ)
 				ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->payload, &handling_op->candidate, handling_op);
 			else
@@ -667,29 +669,26 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 		} while(ret < 0 && ret_ts < 0);
 
 		// check if returned 
-		if (ret != -1 || ret_ts != -1)
+		if (handling_op->type == OP_PQ_ENQ && ret != -1)
 		{
-			if (handling_op->type == OP_PQ_ENQ)
-			{
-				__sync_bool_compare_and_swap(&(handling_op->response), -1, ret); /* Is this an overkill? */
-			}
-			else 
-			{
-				performed_dequeue++;
-				handling_op->payload = new_payload;
-				handling_op->timestamp = ret_ts;
-				__sync_bool_compare_and_swap(&(handling_op->response), -1, 1); /* Is this an overkill? */
-			}
-			operation = NULL;
-				continue;
+			__sync_bool_compare_and_swap(&(handling_op->response), -1, ret); /* Is this an overkill? */
+			continue;
 		}
-
-		// If I'm here the operation has changed destination
-		// repost operation
+		else if (handling_op->type == OP_PQ_DEQ && ret_ts != -1)
+		{
+			performed_dequeue++;
+			handling_op->payload = new_payload;
+			handling_op->timestamp = ret_ts;
+			__sync_bool_compare_and_swap(&(handling_op->response), -1, 1); /* Is this an overkill? */
+			continue;
+		}
+			
+		
+		// If operation was mine i will check the return value next iteration
 		if (mine)
 			continue;
 		
-		new_operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
+		new_operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], new_dest);
 		new_operation->op_id = extracted_op->op_id;
 		new_operation->type = extracted_op->type;
 		new_operation->timestamp = extracted_op->timestamp;
@@ -702,7 +701,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 		gc_free(ptst, extracted_op, gc_aid[GC_OPNODE]);
 		
 		// publish op on right queue
-		tq_enqueue(&op_queue[dest_node], (void *)new_operation, dest_node);
+		tq_enqueue(&op_queue[new_dest], (void *)new_operation, new_dest);
 	} while(1);
 }
 
@@ -710,7 +709,7 @@ pkey_t pq_dequeue(void *q, void **result)
 {
 	nb_calqueue *queue = (nb_calqueue *) q;
 	table *h = NULL;
-	op_node *operation, *new_operation, *extracted_op,
+	op_node *new_operation, *extracted_op,
 		*requested_op, *handling_op;
 
 	unsigned long long vb_index, index;
@@ -737,7 +736,7 @@ pkey_t pq_dequeue(void *q, void **result)
 	if (dest_node == NID)
 	{
 		// allocate op
-		requested_op = operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
+		requested_op = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
 		requested_op->op_id = __sync_fetch_and_add(&op_counter, 1);
 		requested_op->type = OP_PQ_DEQ;
 		requested_op->timestamp = -1;
@@ -755,10 +754,12 @@ pkey_t pq_dequeue(void *q, void **result)
 
 			if (dest_node != NID)
 				break;
+			
 			ret_ts = single_step_pq_dequeue(h, queue, &new_payload, requested_op->op_id, &requested_op->candidate);
+
 		} while(ret_ts < 0);
 
-		if (ret_ts >= 0)
+		if (ret_ts != -1)
 		{
 			performed_dequeue++;
 			gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
@@ -769,12 +770,11 @@ pkey_t pq_dequeue(void *q, void **result)
 
 		gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
 		requested_op = NULL;
-		operation = NULL;
 	}
 
 	// dest node is not NID -> allocate new op
 	// allocate op
-	requested_op = operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
+	requested_op = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
 	requested_op->op_id = __sync_fetch_and_add(&op_counter, 1);
 	requested_op->type = OP_PQ_DEQ;
 	requested_op->timestamp = -1;
@@ -784,7 +784,7 @@ pkey_t pq_dequeue(void *q, void **result)
 	requested_op->requestor = &requested_op;
 
 	// post operation
-	tq_enqueue(&op_queue[dest_node], (void *)operation, dest_node);
+	tq_enqueue(&op_queue[dest_node], (void *)requested_op, dest_node);
 	
 	extracted_op = NULL;
 	do {
@@ -821,8 +821,9 @@ pkey_t pq_dequeue(void *q, void **result)
 				vb_index = hash(handling_op->timestamp, h->bucket_width);
 			else
 				vb_index = (h->current) >> 32;
+
 			new_dest = NODE_HASH(vb_index % h->size);
-			if ((!mine && new_dest != NID) || (mine && new_dest != dest_node)) // recheck this
+			if (!mine && new_dest != NID)
 			{
 				ret = -1;
 				ret_ts = -1;
@@ -837,29 +838,26 @@ pkey_t pq_dequeue(void *q, void **result)
 		} while(ret < 0 && ret_ts < 0);
 
 		// check if returned 
-		if (ret != -1 || ret_ts != -1)
+		if (handling_op->type == OP_PQ_ENQ && ret != -1)
 		{
-			if (handling_op->type == OP_PQ_ENQ)
-			{
-				__sync_bool_compare_and_swap(&(handling_op->response), -1, ret); /* Is this an overkill? */
-			}
-			else 
-			{
-				performed_dequeue++;
-				handling_op->payload = new_payload;
-				handling_op->timestamp = ret_ts;
-				__sync_bool_compare_and_swap(&(handling_op->response), -1, 1); /* Is this an overkill? */
-			}
-			operation = NULL;
-				continue;
+			__sync_bool_compare_and_swap(&(handling_op->response), -1, ret); /* Is this an overkill? */
+			continue;
+		}
+		else if (handling_op->type == OP_PQ_DEQ && ret_ts != -1)
+		{
+			performed_dequeue++;
+			handling_op->payload = new_payload;
+			handling_op->timestamp = ret_ts;
+			__sync_bool_compare_and_swap(&(handling_op->response), -1, 1); /* Is this an overkill? */
+			continue;
 		}
 
 		// If I'm here the operation has changed destination
-		// repost operation
 		if (mine)
 			continue;
-		
-		new_operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
+
+		// repost operation
+		new_operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], new_dest);
 		new_operation->op_id = extracted_op->op_id;
 		new_operation->type = extracted_op->type;
 		new_operation->timestamp = extracted_op->timestamp;
@@ -872,7 +870,7 @@ pkey_t pq_dequeue(void *q, void **result)
 		gc_free(ptst, extracted_op, gc_aid[GC_OPNODE]);
 		
 		// publish op on right queue
-		tq_enqueue(&op_queue[dest_node], (void *)new_operation, dest_node);
+		tq_enqueue(&op_queue[new_dest], (void *)new_operation, new_dest);
 	} while(1);
 }
 
