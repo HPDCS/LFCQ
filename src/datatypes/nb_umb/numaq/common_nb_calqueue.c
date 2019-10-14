@@ -604,7 +604,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 
 	// dest node is not NID -> allocate new op
 	// allocate op
-	requested_op = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
+	requested_op = operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
 	requested_op->op_id = 1;//__sync_fetch_and_add(&op_counter, 1);
 	requested_op->type = OP_PQ_ENQ;
 	requested_op->timestamp = timestamp;
@@ -614,7 +614,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	requested_op->requestor = &requested_op;
 
 	// post operation
-	tq_enqueue(&op_queue[dest_node], (void *)requested_op, dest_node);
+	tq_enqueue(&op_queue[dest_node], (void *)operation, dest_node);
 	
 	do {
 
@@ -706,7 +706,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 			handling_op = NULL;
 
 			// publish op on right queue
-			tq_enqueue(&op_queue[new_dest], (void *)new_operation, new_dest);
+			tq_enqueue(&op_queue[dest_node], (void *)new_operation, dest_node);
 		}
 
 	} while(1);
@@ -756,17 +756,14 @@ pkey_t pq_dequeue(void *q, void **result)
 		// try to execute op till dest node changes
 		
 		do {
+			ret_ts = single_step_pq_dequeue(h, queue, &new_payload, requested_op->op_id, &requested_op->candidate);
+			
 			h = read_table(&queue->hashtable, th, epb, pub);
 			vb_index = (h->current) >> 32;
 			index = vb_index % h->size;
 			dest_node = NODE_HASH(index);
 
-			if (dest_node != NID)
-				break;
-			
-			ret_ts = single_step_pq_dequeue(h, queue, &new_payload, requested_op->op_id, &requested_op->candidate);
-
-		} while(ret_ts == -1);
+		} while(ret_ts == -1 && dest_node == NID);
 
 		if (ret_ts != -1)
 		{

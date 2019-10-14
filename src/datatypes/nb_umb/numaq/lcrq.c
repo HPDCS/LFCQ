@@ -341,7 +341,7 @@ bool _lcrq_dequeue(LCRQ *queue, int64_t* item) {
         }
     }
 }
-
+  
 void init_lcrq(LCRQ *queue, unsigned int numa_node) {
     lcrq_init(queue, numa_node);
 }
