@@ -640,12 +640,15 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 		handling_op = extracted_op;
 
 		// check if someone already did the Operation I extracted
-		if (handling_op->response != -1) {
-			operation = NULL;
-			continue;
-		}
 
 		do { 
+			
+			if (__sync_fetch_and_add(&(handling_op->response), 0) != -1) 
+			{
+				handling_op = NULL;
+				break;
+			}
+
 			h = read_table(&queue->hashtable, th, epb, pub);
 
 			if (handling_op->type == OP_PQ_ENQ)
@@ -659,19 +662,22 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 				break;
 			
 			// execute my op
-			if (handling_op->type == OP_PQ_ENQ && handling_op->response==-1)
+			if (handling_op->type == OP_PQ_ENQ)
 			{
 				ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->timestamp, &(handling_op->candidate), handling_op);
 				if (ret != -1)
 					break;
 			}
-			else if (handling_op->type == OP_PQ_DEQ && handling_op->response==-1)
+			else if (handling_op->type == OP_PQ_DEQ)
 			{
 				ret_ts = single_step_pq_dequeue(h, queue, &new_payload, handling_op->op_id, &(handling_op->candidate));
 				if (ret_ts != -1)
 					break;
 			}
 		} while(1);
+
+		if (handling_op == NULL)
+			continue;
 
 		// check if returned 
 		if (handling_op->type == OP_PQ_ENQ && ret != -1)
@@ -815,12 +821,14 @@ pkey_t pq_dequeue(void *q, void **result)
 
 		handling_op = extracted_op;
 
-		// check if someone already did the Operation I extracted
-		if (handling_op->response != -1) {
-			continue;
-		}
-
 		do { 
+			// check if someone already did the Operation I extracted
+			if (__sync_fetch_and_add(&(handling_op->response), 0) != -1) 
+			{
+				handling_op = NULL;
+				break;
+			}
+
 			h = read_table(&queue->hashtable, th, epb, pub);
 
 			if (handling_op->type == OP_PQ_ENQ)
@@ -836,12 +844,15 @@ pkey_t pq_dequeue(void *q, void **result)
 				break;
 			}
 			
-			if (handling_op->type == OP_PQ_ENQ && handling_op->response==-1)
+			if (handling_op->type == OP_PQ_ENQ)
 				ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->payload, &handling_op->candidate, handling_op);
-			else if (handling_op->type == OP_PQ_DEQ && handling_op->response==-1)
+			else if (handling_op->type == OP_PQ_DEQ)
 				ret_ts = single_step_pq_dequeue(h, queue, &new_payload, handling_op->op_id, &handling_op->candidate);
 		
 		} while(ret == -1 && ret_ts == -1);
+
+		if (handling_op == NULL)
+			continue;
 
 		// check if returned 
 		if (handling_op->type == OP_PQ_ENQ && ret != -1)
