@@ -652,7 +652,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 			else
 				vb_index = (h->current) >> 32;
 			new_dest = NODE_HASH(vb_index % h->size);
-			if (new_dest != NID || (mine && new_dest != dest_node))
+			if ((!mine && new_dest != NID) || (mine && new_dest != dest_node)) // recheck this condition
 			{
 				ret = -1;
 				ret_ts = -1;
@@ -822,7 +822,7 @@ pkey_t pq_dequeue(void *q, void **result)
 			else
 				vb_index = (h->current) >> 32;
 			new_dest = NODE_HASH(vb_index % h->size);
-			if (new_dest != NID || (mine && new_dest != dest_node))
+			if ((!mine && new_dest != NID) || (mine && new_dest != dest_node)) // recheck this
 			{
 				ret = -1;
 				ret_ts = -1;
