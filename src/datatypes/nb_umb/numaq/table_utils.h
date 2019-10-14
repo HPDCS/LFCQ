@@ -341,7 +341,7 @@ static inline void set_new_table(table *h, unsigned int threshold, double pub, u
 	unsigned int i = 0;
 	unsigned int size = h->size;
 	unsigned int new_size = 0;
-	unsigned int thp2 = 1;
+	unsigned long thp2 = 1;
 	double log_size = 1.0;
 
 	i = size;

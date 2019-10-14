@@ -174,7 +174,7 @@ static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *paylo
 	{
 		res = search_and_insert(bucket, timestamp, 0, REMOVE_DEL_INV, new_node, &new_node);
 		/* Can return MOV_FOUND, OK, PRESENT, ABORT */
-	} while (res == ABORT); // @TODO must be handled in a different way?
+	} while (res == ABORT);
 
 	if (res == MOV_FOUND)
 	{
@@ -217,7 +217,7 @@ static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *paylo
 			// 	new_state.next = ((unsigned long) new_node->next) | DEL;
 			// 	new_state.op_id = 0;
 
-			// } while(!__sync_bool_compare_and_swap(&new_node->widenext, curr_state.widenext, new_state.widenext));
+			// } while(!__sync_intbool_compare_and_swap(&new_node->widenext, curr_state.widenext, new_state.widenext));
 
 			do {
 				
@@ -588,12 +588,13 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 				break;
 
 			ret = single_step_pq_enqueue(h, timestamp, payload, &requested_op->candidate, requested_op);
-		} while(ret < 0);
+		} while(ret == -1);
 
-		if (ret >= 0)
+		if (ret != -1)
 		{
 			gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
 			critical_exit();
+			requested_op = NULL;
 			return ret;
 		}
 
@@ -660,13 +661,13 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 				break;
 			}
 
-			// execute my op or op extracted from local queue
+			// execute my op
 			if (handling_op->type == OP_PQ_ENQ)
 				ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->payload, &handling_op->candidate, handling_op);
 			else
 				ret_ts = single_step_pq_dequeue(h, queue, &new_payload, handling_op->op_id, &handling_op->candidate);
 		
-		} while(ret < 0 && ret_ts < 0);
+		} while(ret == -1 && ret_ts == -1);
 
 		// check if returned 
 		if (handling_op->type == OP_PQ_ENQ && ret != -1)
@@ -682,24 +683,24 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 			__sync_bool_compare_and_swap(&(handling_op->response), -1, 1); /* Is this an overkill? */
 			continue;
 		}
-			
-		
+
 		// If operation was mine i will check the return value next iteration
 		if (mine)
 			continue;
 		
 		new_operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], new_dest);
-		new_operation->op_id = extracted_op->op_id;
-		new_operation->type = extracted_op->type;
-		new_operation->timestamp = extracted_op->timestamp;
-		new_operation->payload = extracted_op->payload;
-		new_operation->response = extracted_op->response;
-		new_operation->candidate = extracted_op->candidate;
-		new_operation->requestor = extracted_op->requestor;
+		new_operation->op_id = handling_op->op_id;
+		new_operation->type = handling_op->type;
+		new_operation->timestamp = handling_op->timestamp;
+		new_operation->payload = handling_op->payload;
+		new_operation->response = handling_op->response;
+		new_operation->candidate = handling_op->candidate;
+		new_operation->requestor = handling_op->requestor;
 					
 		*(new_operation->requestor) = new_operation;
-		gc_free(ptst, extracted_op, gc_aid[GC_OPNODE]);
-		
+		gc_free(ptst, handling_op, gc_aid[GC_OPNODE]);
+		handling_op = NULL;
+
 		// publish op on right queue
 		tq_enqueue(&op_queue[new_dest], (void *)new_operation, new_dest);
 	} while(1);
@@ -786,9 +787,9 @@ pkey_t pq_dequeue(void *q, void **result)
 	// post operation
 	tq_enqueue(&op_queue[dest_node], (void *)requested_op, dest_node);
 	
-	extracted_op = NULL;
 	do {
 		mine = false;
+		extracted_op = NULL;
 		// check if my op was done 
 		if ((ret = __sync_fetch_and_add(&(requested_op->response), 0)) != -1)
 		{
@@ -835,7 +836,7 @@ pkey_t pq_dequeue(void *q, void **result)
 			else
 				ret_ts = single_step_pq_dequeue(h, queue, &new_payload, handling_op->op_id, &handling_op->candidate);
 		
-		} while(ret < 0 && ret_ts < 0);
+		} while(ret == -1 && ret_ts == -1);
 
 		// check if returned 
 		if (handling_op->type == OP_PQ_ENQ && ret != -1)
@@ -858,16 +859,17 @@ pkey_t pq_dequeue(void *q, void **result)
 
 		// repost operation
 		new_operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], new_dest);
-		new_operation->op_id = extracted_op->op_id;
-		new_operation->type = extracted_op->type;
-		new_operation->timestamp = extracted_op->timestamp;
-		new_operation->payload = extracted_op->payload;
-		new_operation->response = extracted_op->response;
-		new_operation->candidate = extracted_op->candidate;
-		new_operation->requestor = extracted_op->requestor;
+		new_operation->op_id = handling_op->op_id;
+		new_operation->type = handling_op->type;
+		new_operation->timestamp = handling_op->timestamp;
+		new_operation->payload = handling_op->payload;
+		new_operation->response = handling_op->response;
+		new_operation->candidate = handling_op->candidate;
+		new_operation->requestor = handling_op->requestor;
 					
 		*(new_operation->requestor) = new_operation;
-		gc_free(ptst, extracted_op, gc_aid[GC_OPNODE]);
+		gc_free(ptst, handling_op, gc_aid[GC_OPNODE]);
+		handling_op = NULL;
 		
 		// publish op on right queue
 		tq_enqueue(&op_queue[new_dest], (void *)new_operation, new_dest);
