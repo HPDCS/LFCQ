@@ -641,7 +641,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 
 		// check if someone already did the Operation I extracted
 
-		while (__sync_fetch_and_add(&(handling_op->response), 0) == -1) // operation done
+		while ((ret = __sync_fetch_and_add(&(handling_op->response), 0)) == -1) // operation done
 		{
 			h = read_table(&queue->hashtable, th, epb, pub);
 
@@ -680,10 +680,13 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 			}
 		}
 		
-		// if operation undone realloc 
-		// @TODO
-		
+		// if operation do take another op 
+		if (ret != -1)
+			continue;
+
 		// If operation was mine i will check the return value next iteration
+
+		// if op undone and operation was not mine
 		if (!mine)
 		{	
 			new_operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
