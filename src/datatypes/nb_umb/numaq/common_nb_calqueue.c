@@ -28,20 +28,11 @@
 #include <limits.h>
 
 #include "common_nb_calqueue.h"
-
+#include "table_utils.h"
 /*
  * MACROS TO ACTIVATE OPS
  * */
 
-//#define USE_STD_ENQ
-#define USE_TQ_ENQ
-#define USE_ST_ENQ
-
-//#define USE_STD_DEQ
-#define USE_TQ_DEQ
-#define USE_ST_DEQ
-
-// END MACROS TO ACTIVATE OPS
 
 /*************************************
  * GLOBAL VARIABLES					 *
@@ -52,10 +43,6 @@ int gc_hid[4];
 
 unsigned long op_counter = 2;
 task_queue op_queue[_NUMA_NODES]; // (!new) per numa node queue
-
-unsigned int ACTIVE_NUMA_NODES;
-
-#define NODE_HASH(bucket_id) ((bucket_id >> 2ull) % ACTIVE_NUMA_NODES)
 
 /*************************************
  * THREAD LOCAL VARIABLES			 *
@@ -73,847 +60,6 @@ __thread unsigned long long num_cas_useful = 0ULL;
 __thread unsigned long long near = 0;
 __thread unsigned int acc = 0;
 __thread unsigned int acc_counter = 0;
-
-// (!new) new fields
-__thread op_node *requested_op;
-__thread op_node *handling_op;
-
-/**
- * This function commits a value in the current field of a queue. It retries until the timestamp
- * associated with current is strictly less than the value that has to be committed
- *
- * @param h: the interested set table
- * @param newIndex: index of the bucket where the new node belongs
- * @param node: pointer to the new item
- */
-void flush_current(table *h, unsigned long long newIndex, nbc_bucket_node *node)
-{
-	unsigned long long oldCur, oldIndex, oldEpoch;
-	unsigned long long newCur, tmpCur = ULONG_MAX;
-	bool mark = false; // <----------------------------------------
-
-	// Retrieve the old index and compute the new one
-	oldCur = h->current;
-	oldEpoch = oldCur & MASK_EPOCH;
-	oldIndex = oldCur >> 32;
-
-	newCur = newIndex << 32;
-
-	// Try to update the current if it need
-	if (
-		// if the new item falls into a subsequent bucket of current we can return
-		newIndex > oldIndex
-		// if the new item has been marked as MOV or DEL we can complete (INV cannot be reached here)
-		|| is_marked(node->next)
-		// if we do not fall in the previous cases we try to update current and return if we succeed
-		|| oldCur == (tmpCur = VAL_CAS(
-						  &(h->current),
-						  oldCur,
-						  (newCur | (oldEpoch + 1)))))
-	{
-		// collect statistics
-		if (tmpCur != ULONG_MAX)
-			near++;
-		return;
-	}
-
-	//At this point someone else has updated the current from the begin of this function (Failed CAS)
-	do
-	{
-		// get old data from the previous failed CAS
-		oldCur = tmpCur;
-		oldEpoch = oldCur & MASK_EPOCH;
-		oldIndex = oldCur >> 32;
-
-		// keep statistics
-		near += mark;
-		mark = false;
-	} while (
-		// retry
-		// if the item is in a previous bucket of current and
-		newIndex < oldIndex
-		// if the item is still valid and
-		&& is_marked(node->next, VAL) && (mark = true)
-		// if the cas has failed
-		&& oldCur != (tmpCur = VAL_CAS(
-						  &(h->current),
-						  oldCur,
-						  (newCur | (oldEpoch + 1)))));
-}
-
-/**
- * This function implements the search of a node that contains a given timestamp t. It finds two adjacent nodes,
- * left and right, such that: left.timestamp <= t and right.timestamp > t.
- *
- * Based on the code by Timothy L. Harris. For further information see:
- * Timothy L. Harris, "A Pragmatic Implementation of Non-Blocking Linked-Lists"
- * Proceedings of the 15th International Symposium on Distributed Computing, 2001
- *
- * @author Romolo Marotta
- *
- * @param head: the head of the list in which we have to perform the search
- * @param timestamp: the value to be found
- * @param tie_breaker: tie breaker of the key (if 0 means left_ts <= timestamp < right_ts, otherwise left_ts < timestamp <= right_ts
- * @param left_node: a pointer to a pointer used to return the left node
- * @param left_node_next: a pointer to a pointer used to return the next field of the left node 
- *
- */
-void search(nbc_bucket_node *head, pkey_t timestamp, unsigned int tie_breaker,
-			nbc_bucket_node **left_node, nbc_bucket_node **right_node, int flag)
-{
-	nbc_bucket_node *left, *right, *left_next, *tmp, *tmp_next, *tail;
-	unsigned int counter;
-	unsigned int tmp_tie_breaker;
-	pkey_t tmp_timestamp;
-	bool marked, ts_equal, tie_lower, go_to_next;
-
-	do
-	{
-		/// Fetch the head and its next node
-		left = tmp = head;
-		left_next = tmp_next = tmp->next;
-		tail = tmp->tail;
-		assertf(head == NULL, "PANIC %s\n", "");
-		//assertf(flag == REMOVE_DEL_INV && is_marked_for_search(left_next, flag), "PANIC2 %s\n", "");
-		counter = 0;
-		marked = is_marked_for_search(tmp_next, flag);
-
-		do
-		{
-
-			//Find the first unmarked node that is <= timestamp
-			if (!marked)
-			{
-				left = tmp;
-				left_next = tmp_next;
-				counter = 0;
-			}
-			counter += marked;
-
-			// Retrieve timestamp and next field from the current node (tmp)
-
-			tmp = get_unmarked(tmp_next);
-			tmp_next = tmp->next;
-			tmp_timestamp = tmp->timestamp;
-			tmp_tie_breaker = tmp->counter;
-
-			// Check if the node is marked
-			marked = is_marked_for_search(tmp_next, flag);
-			// Check timestamp
-			go_to_next = LESS(tmp_timestamp, timestamp);
-			ts_equal = D_EQUAL(tmp_timestamp, timestamp);
-			// Check tie breaker
-			tie_lower = (tie_breaker == 0 ||
-						 (tie_breaker != 0 && tmp_tie_breaker <= tie_breaker));
-			go_to_next = go_to_next || (ts_equal && tie_lower);
-
-			// Exit if tmp is a tail or its timestamp is > of the searched key
-		} while (tmp != tail &&
-				 (marked ||
-				  go_to_next));
-
-		// Set right node and copy the mark of left node
-		right = get_marked(tmp, get_mark(left_next));
-
-		//left node and right node have to be adjacent. If not try with CAS
-		if (!is_marked_for_search(left_next, flag) && left_next != right)
-		//if (left_next != right)
-		{
-			// if CAS succeeds connect the removed nodes to to_be_freed_list
-			if (!BOOL_CAS(&(left->next), left_next, right))
-				continue;
-			connect_to_be_freed_node_list(left_next, counter);
-		}
-
-		// at this point they are adjacent
-		*left_node = left;
-		*right_node = right;
-
-		return;
-
-	} while (1);
-}
-
-/**
- * This function implements the search of a node needed for inserting a new item.
- * 
- * It runs in two modes according to the value of the parameter 'flag':
- * 
- * REMOVE_DEL_INV:
- * 		With this value of 'flag', the routine searches for 2 subsequent (not necessarily adjacent)
- * 		key K1 and K2 such that: K1 <= timestamp < K2
- * 		The algorithm tries to insert the new key with a single cas on the next field of the node containing K1
- * 		If K1 == timestamp it sets the tie_breaker of the new node as T1+1, where T1 is the tie_breaker of K1
- * 		If the CAS succeeds it collects the disconnected nodes making the 3 nodes adjacent
- * 
- * REMOVE_DEL:
- * 		This value of flag is used during a resize operation. 
- * 		It searches for 2 subsequent (not necessarily adjacent)
- * 		key K1 and K2 such that: K1 <= timestamp < K2
- * 		and T1 <= tie_breaker < T2
- * 		If <K1, T1> != <timestamp, tie_breaker> 
- * 			insert the node (which was previously inserted in the previous set table> with a cas
- * 		If <K1, T1> == <timestamp, tie_breaker> 
- * 			it follows that a replica of the interested key has been already inserted, thus is exchanges the parameter node with the found one
- * 			 and frees the node passed as parameter 
- * 		
- *
- * Based on the code by Timothy L. Harris. For further information see:
- * Timothy L. Harris, "A Pragmatic Implementation of Non-Blocking Linked-Lists"
- * Proceedings of the 15th International Symposium on Distributed Computing, 2001
- *
- * @author Romolo Marotta
- *
- * @param head: the head of the list in which we have to perform the search
- * @param timestamp: the value to be found
- * @param tie_breaker: tie breaker of the key 
- * @param left_node a pointer to a pointer used to return the left node
- * @param left_node_next a pointer to a pointer used to return the next field of the left node 
- *
- */
-int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, unsigned int tie_breaker,
-					  int flag, nbc_bucket_node *new_node_pointer, nbc_bucket_node **new_node)
-{
-	nbc_bucket_node *left, *left_next, *tmp, *tmp_next, *tail;
-	unsigned int counter;
-	unsigned int left_tie_breaker, tmp_tie_breaker;
-	unsigned int len;
-	pkey_t left_timestamp, tmp_timestamp;
-	double rand;
-	bool marked, ts_equal, tie_lower, go_to_next;
-	bool is_new_key = flag == REMOVE_DEL_INV;
-	drand48_r(&seedT, &rand);
-
-	// clean the heading zone of the bucket
-	nbc_bucket_node *lnode, *rnode;
-	search(head, -1.0, 0, &lnode, &rnode, flag);
-
-	// read tail from head (this is done for avoiding an additional cache miss)
-	tail = head->tail;
-	do
-	{
-		len = 0;
-		/// Fetch the head and its next node
-		left = tmp = head;
-		// read all data from the head (hopefully only the first access is a cache miss)
-		left_next = tmp_next = tmp->next;
-
-		// since such head does not change, probably we can cache such data with a local copy
-		left_tie_breaker = tmp_tie_breaker = tmp->counter;
-		left_timestamp = tmp_timestamp = tmp->timestamp;
-
-		// SANITY CHECKS
-		assertf(head == NULL, "PANIC %s\n", "");
-		assertf(tmp_next == NULL, "PANIC1 %s\n", "");
-		assertf(is_marked_for_search(left_next, flag), "PANIC2 %s\n", "");
-
-		// init variables useful during iterations
-		counter = 0;
-		marked = is_marked_for_search(tmp_next, flag);
-
-		do
-		{
-			len++;
-			//Find the left node compatible with value of 'flag'
-			// potentially this if can be removed
-			if (!marked)
-			{
-				left = tmp;
-				left_next = tmp_next;
-				left_tie_breaker = tmp_tie_breaker;
-				left_timestamp = tmp_timestamp;
-				counter = 0;
-			}
-
-			// increase the count of marked nodes met during scan
-			counter += marked;
-
-			// get an unmarked reference to the tmp node
-			tmp = get_unmarked(tmp_next);
-
-			// Retrieve timestamp and next field from the current node (tmp)
-			tmp_next = tmp->next;
-			tmp_timestamp = tmp->timestamp;
-			tmp_tie_breaker = tmp->counter;
-
-			// Check if the right node is marked
-			marked = is_marked_for_search(tmp_next, flag);
-
-			// Check if the right node timestamp and tie_breaker satisfies the conditions
-			go_to_next = LESS(tmp_timestamp, timestamp);
-			ts_equal = D_EQUAL(tmp_timestamp, timestamp);
-			tie_lower = (is_new_key ||
-						 (!is_new_key && tmp_tie_breaker <= tie_breaker));
-			go_to_next = go_to_next || (ts_equal && tie_lower);
-
-			// Exit if tmp is a tail or its timestamp is > of the searched key
-		} while (tmp != tail &&
-				 (marked ||
-				  go_to_next));
-
-		// if the right or the left node is MOV signal this to the caller
-		if (is_marked(tmp, MOV) || is_marked(left_next, MOV))
-			return MOV_FOUND;
-
-		// mark the to-be.inserted node as INV if flag == REMOVE_DEL
-		new_node_pointer->next = get_marked(tmp, INV & (-(!is_new_key)));
-
-		// set the tie_breaker to:
-		// 1+T1 		IF K1 == timestamp AND flag == REMOVE_DEL_INV
-		// 1			IF K1 != timestamp AND flag == REMOVE_DEL_INV
-		// UNCHANGED 	IF flag != REMOVE_DEL_INV
-		new_node_pointer->counter = (((unsigned int)(-(is_new_key))) & (1 + (((unsigned int)-D_EQUAL(timestamp, left_timestamp)) & left_tie_breaker))) +
-									(~((unsigned int)(-(is_new_key))) & tie_breaker);
-
-		// node already exists
-		if (!is_new_key && D_EQUAL(timestamp, left_timestamp) && left_tie_breaker == tie_breaker)
-		{
-			node_free(new_node_pointer);
-			*new_node = left;
-			return OK;
-		}
-
-#if KEY_TYPE != DOUBLE
-		if (is_new_key && D_EQUAL(timestamp, left_timestamp))
-		{
-			node_free(new_node_pointer);
-			*new_node = left;
-			return PRESENT;
-		}
-#endif
-
-		// copy left node mark
-		if (BOOL_CAS(&(left->next), left_next, get_marked(new_node_pointer, get_mark(left_next))))
-		{
-			if (is_new_key)
-			{
-				scan_list_length_en += len;
-			}
-			if (counter > 0)
-				connect_to_be_freed_node_list(left_next, counter);
-			return OK;
-		}
-
-		// this could be avoided
-		return ABORT;
-
-	} while (1);
-}
-
-void set_new_table(table *h, unsigned int threshold, double pub, unsigned int epb, unsigned int counter)
-{
-	//double pub_per_epb = pub*epb;
-	//new_size += ((unsigned int)(-(size >= thp2 && counter > 2   * pub_per_epb * (size))  ))	&(size <<1 );
-	//new_size += ((unsigned int)(-(size >  thp2 && counter < 0.5 * pub_per_epb * (size))  ))	&(size >>1);
-	//new_size += ((unsigned int)(-(size == 1    && counter > thp2) 					     ))	& thp2;
-	//new_size += ((unsigned int)(-(size == thp2 && counter < threshold)				     ))	& 1;
-
-	nbc_bucket_node *tail;
-	table *new_h = NULL;
-	double current_num_items = pub * epb * h->size;
-	int res = 0;
-	unsigned int i = 0;
-	unsigned int size = h->size;
-	unsigned int new_size = 0;
-	unsigned int thp2 = 1;
-	double log_size = 1.0;
-
-	i = size;
-	while (i != 0)
-	{
-		log_size += 1.0;
-		i >>= 1;
-	}
-	while (thp2 < threshold * 2)
-		thp2 <<= 1;
-
-	// check if resize is needed due to num of items
-	if (size >= thp2 && counter > 2 * current_num_items)
-		new_size = size << 1;
-	else if (size > thp2 && counter < 0.5 * current_num_items)
-		new_size = size >> 1;
-	else if (size == 1 && counter > thp2)
-		new_size = thp2;
-	else if (size == thp2 && counter < threshold)
-		new_size = 1;
-
-	// is time for periodic resize?
-	if (new_size == 0 && (h->e_counter.count + h->d_counter.count) > RESIZE_PERIOD && h->resize_count / log_size < 0.75)
-		new_size = h->size;
-	// the num of items is doubled/halved but it is not enough for change size
-	//if(new_size == 0 && h->last_resize_count != 0 && (counter >  h->last_resize_count*2 || counter < h->last_resize_count/2 ) )
-	//	new_size = h->size;
-
-	if (new_size != 0)
-	{
-		// allocate new table
-		res = posix_memalign((void **)&new_h, CACHE_LINE_SIZE, sizeof(table));
-		if (res != 0)
-		{
-			printf("No enough memory to new table structure\n");
-			return;
-		}
-
-		res = posix_memalign((void **)&new_h->array, CACHE_LINE_SIZE, new_size * sizeof(nbc_bucket_node));
-		if (res != 0)
-		{
-			free(new_h);
-			printf("No enough memory to new table structure\n");
-			return;
-		}
-
-		tail = h->array->tail;
-		new_h->bucket_width = -1.0;
-		new_h->size = new_size;
-		new_h->new_table = NULL;
-		new_h->d_counter.count = 0;
-		new_h->e_counter.count = 0;
-		new_h->last_resize_count = counter;
-		new_h->resize_count = h->resize_count + 1;
-		new_h->current = ((unsigned long long)-1) << 32;
-		new_h->read_table_period = h->read_table_period;
-
-		for (i = 0; i < new_size; i++)
-		{
-			new_h->array[i].next = tail;
-			new_h->array[i].tail = tail;
-			new_h->array[i].counter = 0;
-			new_h->array[i].epoch = 0;
-		}
-
-		// try to publish the table
-		if (!BOOL_CAS(&(h->new_table), NULL, new_h))
-		{
-			// attempt failed, thus release memory
-			free(new_h->array);
-			free(new_h);
-		}
-		else
-			LOG("%u - CHANGE SIZE from %u to %u, items %u OLD_TABLE:%p NEW_TABLE:%p\n", TID, size, new_size, counter, h, new_h);
-	}
-}
-
-void block_table(table *h)
-{
-	unsigned int i = 0;
-	unsigned int size = h->size;
-	nbc_bucket_node *array = h->array;
-	nbc_bucket_node *bucket, *bucket_next;
-	nbc_bucket_node *left_node, *right_node;
-	nbc_bucket_node *right_node_next, *left_node_next;
-	nbc_bucket_node *tail = array->tail;
-	double rand = 0.0;
-	unsigned int start = 0;
-
-	drand48_r(&seedT, &rand);
-	// start blocking table from a random physical bucket
-	start = (unsigned int)rand * size;
-
-	for (i = 0; i < size; i++)
-	{
-		bucket = array + ((i + start) % size);
-
-		//Try to mark the head as MOV
-		do
-		{
-			bucket_next = bucket->next;
-		} while (!is_marked(bucket_next, MOV) &&
-				 !BOOL_CAS(&(bucket->next), bucket_next, get_marked(bucket_next, MOV)));
-
-		//Try to mark the first VALid node as MOV
-		do
-		{
-			search(bucket, -1.0, 0, &left_node, &left_node_next, REMOVE_DEL_INV);
-			right_node = get_unmarked(left_node_next);
-			right_node_next = right_node->next;
-		} while (
-			right_node != tail &&
-			(is_marked(right_node_next, DEL) ||
-			 (is_marked(right_node_next, VAL) && !BOOL_CAS(&(right_node->next), right_node_next, get_marked(right_node_next, MOV)))));
-	}
-}
-
-double compute_mean_separation_time(table *h,
-									unsigned int new_size, unsigned int threashold, unsigned int elem_per_bucket)
-{
-
-	unsigned int i = 0, index;
-
-	table *new_h = h->new_table;
-	nbc_bucket_node *array = h->array;
-	double old_bw = h->bucket_width;
-	unsigned int size = h->size;
-	double new_bw = new_h->bucket_width;
-
-	nbc_bucket_node *tail = array->tail;
-	unsigned int sample_size;
-	double average = 0.0;
-	double newaverage = 0.0;
-	pkey_t tmp_timestamp;
-	acc_counter = 0;
-	unsigned int counter = 0;
-
-	pkey_t min_next_round = INFTY;
-	pkey_t lower_bound, upper_bound;
-
-	nbc_bucket_node *tmp, *tmp_next;
-
-	index = (unsigned int)(h->current >> 32);
-
-	if (new_bw >= 0)
-		return new_bw;
-
-	//if(new_size < threashold*2)
-	//	return 1.0;
-
-	sample_size = (new_size <= 5) ? (new_size / 2) : (5 + (unsigned int)((double)new_size / 10));
-	sample_size = (sample_size > SAMPLE_SIZE) ? SAMPLE_SIZE : sample_size;
-
-	pkey_t sample_array[SAMPLE_SIZE + 1]; //<--TODO: DOES NOT FOLLOW STANDARD C90
-
-	//read nodes until the total samples is reached or until someone else do it
-	acc = 0;
-	while (counter != sample_size && new_h->bucket_width == -1.0)
-	{
-
-		for (i = 0; i < size; i++)
-		{
-			tmp = array + (index + i) % size; //get the head of the bucket
-			tmp = get_unmarked(tmp->next);	//pointer to first node
-
-			lower_bound = (pkey_t)((index + i) * old_bw);
-			upper_bound = (pkey_t)((index + i + 1) * old_bw);
-
-			while (tmp != tail && counter < sample_size)
-			{
-				tmp_timestamp = tmp->timestamp;
-				tmp_next = tmp->next;
-				//I will consider ognly valid nodes (VAL or MOV) In realtà se becco nodi MOV posso uscire!
-				if (!is_marked(tmp_next, DEL) && !is_marked(tmp_next, INV))
-				{
-					if ( //belong to the current bucket
-						LESS(tmp_timestamp, upper_bound) && GEQ(tmp_timestamp, lower_bound) &&
-						D_EQUAL(tmp_timestamp, sample_array[counter]))
-					{
-						acc++;
-					}
-					if ( //belong to the current bucket
-						LESS(tmp_timestamp, upper_bound) && GEQ(tmp_timestamp, lower_bound) &&
-						!D_EQUAL(tmp_timestamp, sample_array[counter]))
-					{
-						sample_array[++counter] = tmp_timestamp;
-					}
-					else if (GEQ(tmp_timestamp, upper_bound) && LESS(tmp_timestamp, min_next_round))
-					{
-						min_next_round = tmp_timestamp;
-						break;
-					}
-				}
-				tmp = get_unmarked(tmp_next);
-			}
-		}
-		//if the calendar has no more elements I will go out
-		if (min_next_round == INFTY)
-			break;
-		//otherwise I will restart from the next good bucket
-		index = hash(min_next_round, old_bw);
-		min_next_round = INFTY;
-	}
-
-	if (counter < sample_size)
-		sample_size = counter;
-
-	for (i = 2; i <= sample_size; i++)
-		average += sample_array[i] - sample_array[i - 1];
-
-	// Get the average
-	average = average / (double)(sample_size - 1);
-
-	int j = 0;
-	// Recalculate ignoring large separations
-	for (i = 2; i <= sample_size; i++)
-	{
-		if ((sample_array[i] - sample_array[i - 1]) < (average * 2.0))
-		{
-			newaverage += (sample_array[i] - sample_array[i - 1]);
-			j++;
-		}
-	}
-
-	// Compute new width
-	newaverage = (newaverage / j) * elem_per_bucket; /* this is the new width */
-	//	LOG("%d- my new bucket %.10f for %p\n", TID, newaverage, h);
-
-	if (newaverage <= 0.0)
-		newaverage = 1.0;
-	//if(newaverage <  pow(10,-4))
-	//	newaverage = pow(10,-3);
-	if (isnan(newaverage))
-		newaverage = 1.0;
-
-	//  LOG("%d- my new bucket %.10f for %p AVG REPEAT:%u\n", TID, newaverage, h, acc/counter);
-	return newaverage;
-}
-
-void migrate_node(nbc_bucket_node *right_node, table *new_h)
-{
-	nbc_bucket_node *replica;
-	nbc_bucket_node **new_node;
-	nbc_bucket_node *right_replica_field, *right_node_next;
-
-	nbc_bucket_node *bucket, *new_node_pointer;
-	unsigned int index;
-
-	unsigned int new_node_counter;
-	pkey_t new_node_timestamp;
-
-	int res = 0;
-
-	//se il nodo non merita di essere validato, marcalo e basta
-	
-	//if (right_node->op_id == 1) {
-	//	// il nodo è in inserimento
-	//	printf("MIGRATION %p\n", (*(right_node->requestor)));
-	//	op_node * op = *(right_node->requestor);
-	//	if (op->candidate == NULL) {
-	//		// the node has to be validated
-	//		if (!__sync_bool_compare_and_swap(&(op->candidate), NULL, right_node))
-	//			return;
-	//	}
-	//	else if (op->candidate != right_node)
-	//		return;
-	//}
-	
-	if (right_node->op_id == 1) {
-		op_node * op = *(right_node->requestor);
-		if (!__sync_bool_compare_and_swap(&(op->candidate), NULL, right_node))
-		{
-			wideptr curr_state, new_state;
-			// someone has already set up the right candidate - we must delete the node
-			do {
-				curr_state.next = right_node->next;
-				curr_state.op_id = right_node->op_id;
-
-				new_state.next = ((unsigned long) right_node->next) | DEL;
-				new_state.op_id = 0;
-			} while(__sync_val_compare_and_swap(&right_node->widenext, curr_state.widenext, new_state.widenext) != curr_state.widenext);
-			
-			return;
-		}
-
-	}
-
-	//Create a new node to be inserted in the new table as as INValid
-	replica = numa_node_malloc(right_node->payload, right_node->timestamp, right_node->counter, NODE_HASH(hash(right_node->timestamp, new_h->bucket_width)));
-	//replica->op_id = right_node->op_id;
-	replica->requestor = right_node->requestor;
-
-	new_node = &replica;
-	new_node_pointer = (*new_node);
-	new_node_counter = new_node_pointer->counter;
-	new_node_timestamp = new_node_pointer->timestamp;
-
-	index = hash(new_node_timestamp, new_h->bucket_width);
-
-	// node to be added in the hashtable
-	bucket = new_h->array + (index % new_h->size);
-
-	do
-	{
-		right_replica_field = right_node->replica;
-	}
-	// try to insert the replica in the new table
-	while (right_replica_field == NULL && (res =
-											   search_and_insert(bucket, new_node_timestamp, new_node_counter, REMOVE_DEL, new_node_pointer, new_node)) == ABORT);
-	// at this point we have at least one replica into the new table
-
-	// try to decide which is the right replica and if I won the challenge increase the counter of enqueued items into the new set table
-	if (right_replica_field == NULL &&
-		BOOL_CAS(
-			&(right_node->replica),
-			NULL,
-			replica))
-		ATOMIC_INC(&(new_h->e_counter));
-
-	right_replica_field = right_node->replica;
-
-	// make the replica being valid
-	do
-	{
-		right_node_next = right_replica_field->next;
-	} while (
-		is_marked(right_node_next, INV) &&
-		!BOOL_CAS(&(right_replica_field->next),
-				  right_node_next,
-				  get_unmarked(right_node_next)));
-
-	// now the insertion is completed so flush the current of the new table
-	flush_current(new_h, index, right_replica_field);
-
-	// invalidate the node MOV to DEL (11->01)
-	right_node_next = FETCH_AND_AND(&(right_node->next), MASK_DEL);
-}
-
-table *read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsigned int elem_per_bucket, double perc_used_bucket)
-{
-#if ENABLE_EXPANSION == 0
-	return *curr_table_ptr;
-#endif
-
-	nbc_bucket_node *tail;
-	nbc_bucket_node *bucket, *array;
-	nbc_bucket_node *right_node, *left_node, *right_node_next, *node;
-	table *new_h;
-	table *h = *curr_table_ptr;
-	double new_bw;
-	double newaverage;
-	double rand;
-	int a, b, signed_counter;
-	int samples[2];
-	int sample_a;
-	int sample_b;
-	unsigned int counter;
-	unsigned int start;
-	unsigned int i, size = h->size;
-
-	// this is used to break synchrony while invoking readtable
-	read_table_count = (((unsigned int)(-(read_table_count == UINT_MAX))) & TID) +
-					   (((unsigned int)(-(read_table_count != UINT_MAX))) & read_table_count);
-
-	// after READTABLE_PERIOD iterations check if a new set table is required
-	if (read_table_count++ % h->read_table_period == 0)
-	{
-		// make two reads of op. counters in order to reduce probability of a descheduling between each read
-		for (i = 0; i < 2; i++)
-		{
-			b = ATOMIC_READ(&h->d_counter);
-			a = ATOMIC_READ(&h->e_counter);
-			samples[i] = a - b;
-		}
-
-		// compute two samples
-		sample_a = abs(samples[0] - ((int)(size * perc_used_bucket)));
-		sample_b = abs(samples[1] - ((int)(size * perc_used_bucket)));
-
-		// take the minimum of the samples
-		signed_counter = (sample_a < sample_b) ? samples[0] : samples[1];
-
-		// take the maximum between the signed_counter and ZERO
-		counter = (unsigned int)((-(signed_counter >= 0)) & signed_counter);
-
-		// call the set_new_table
-		if (h->new_table == NULL)
-			set_new_table(h, threshold, perc_used_bucket, elem_per_bucket, counter);
-	}
-
-	// if a reshuffle is started execute the protocol
-	if (h->new_table != NULL)
-	{
-		new_h = h->new_table;
-		array = h->array;
-		new_bw = new_h->bucket_width;
-		tail = array->tail;
-
-		if (new_bw < 0)
-		{
-			block_table(h);																		   // avoid that extraction can succeed after its completition
-			newaverage = compute_mean_separation_time(h, new_h->size, threshold, elem_per_bucket); // get the new bucket width
-			if																					   // commit the new bucket width
-				(
-					BOOL_CAS(
-						UNION_CAST(&(new_h->bucket_width), unsigned long long *),
-						UNION_CAST(new_bw, unsigned long long),
-						UNION_CAST(newaverage, unsigned long long)))
-				LOG("COMPUTE BW -  OLD:%.20f NEW:%.20f %u SAME TS:%u\n", new_bw, newaverage, new_h->size, acc_counter != 0 ? acc / acc_counter : 0);
-		}
-
-		//First speculative try: try to migrate the nodes, if a conflict occurs, continue to the next bucket
-		drand48_r(&seedT, &rand);
-		start = (unsigned int)rand * size; // start to migrate from a random bucket
-
-		for (i = 0; i < size; i++)
-		{
-			bucket = array + ((i + start) % size); // get the head
-			node = get_unmarked(bucket->next);	 // get the successor of the head (unmarked because heads are MOV)
-			do
-			{
-				if (node == tail)
-					break; // the bucket is empty
-
-				search(node, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV); // compact and get the successor of node
-				right_node = get_unmarked(right_node);
-				right_node_next = right_node->next;
-
-				// Skip the current bucket if
-				if (right_node == tail ||		  // the successor of node is a tail ??? WTF???
-					is_marked(right_node_next) || // the successor of node is already MOV
-					!BOOL_CAS(					  // the successor of node has been concurrently set as MOV
-						&(right_node->next),
-						right_node_next,
-						get_marked(right_node_next, MOV)))
-					break;
-
-				migrate_node(node, new_h); // migrate node
-				node = right_node;		   // go to the next node
-
-			} while (true);
-		}
-
-		//Second conservative try: migrate the nodes and continue until each bucket is empty
-		drand48_r(&seedT, &rand);
-
-		start = (unsigned int)rand + size;
-		for (i = 0; i < size; i++)
-		{
-			bucket = array + ((i + start) % size); // get the head
-			node = get_unmarked(bucket->next);	 // get the successor of the head (unmarked because heads are MOV)
-			do
-			{
-				if (node == tail)
-					break; // the bucket is empty
-
-				do
-				{
-					search(node, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV); // compact and get the successor of node
-					right_node = get_unmarked(right_node);
-					right_node_next = right_node->next;
-				} while (				  // repeat because
-					right_node != tail && // the successor of node is not a tail
-					(
-						is_marked(right_node_next, DEL) || // the successor of node is DEL (we need to check the next one)
-						(
-							is_marked(right_node_next, VAL) // the successor of node is VAL and the cas to mark it as MOV is failed
-							&& !BOOL_CAS(&(right_node->next), right_node_next, get_marked(right_node_next, MOV)))));
-
-				if (is_marked(node->next, MOV))
-					migrate_node(node, new_h); // if node is marked as MOV we can migrate it
-				node = right_node;			   // proceed to the next node (which is also MOV)
-
-			} while (true);
-
-			search(bucket, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV); // perform a compact to remove all DEL nodes (make head and tail adjacents again)
-			assertf(get_unmarked(right_node) != tail, "Fail in line 972 %p %p %p %p %p %p\n",
-					bucket,
-					left_node,
-					right_node,
-					((nbc_bucket_node *)get_unmarked(right_node))->next,
-					((nbc_bucket_node *)get_unmarked(right_node))->replica,
-					tail);
-		}
-
-		if (BOOL_CAS(curr_table_ptr, h, new_h))
-		{ //Try to replace the old table with the new one
-			// I won the challenge thus I collect memory
-			node_gc_add_ptr_to_hook_list(ptst, h, gc_hid[0], NID);
-			node_gc_add_ptr_to_hook_list(ptst, h->array, gc_hid[0], NID);
-		}
-
-		h = new_h;
-	}
-
-	// return the current set table
-	return h;
-}
 
 void std_free_hook(ptst_t *p, void *ptr) { free(ptr); }
 
@@ -993,106 +139,6 @@ void *pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	return res;
 }
 
-#ifdef USE_STD_ENQ
-int pq_enqueue(void* q, pkey_t timestamp, void* payload)
-{
-	assertf(timestamp < MIN || timestamp >= INFTY, "Key out of range %s\n", "");
-
-	nb_calqueue* queue = (nb_calqueue*) q; 	
-	critical_enter();
-
-	nbc_bucket_node *bucket, *new_node = numa_node_malloc(payload, timestamp, 0, NID);
-	table * h = NULL;		
-	unsigned int index, size;
-	unsigned long long newIndex = 0;
-	
-	
-	// get configuration of the queue
-	double pub = queue->perc_used_bucket;
-	unsigned int epb = queue->elem_per_bucket;
-	unsigned int th = queue->threshold;
-	
-	int res, con_en = 0;
-	
-
-	//init the result
-	res = MOV_FOUND;
-	
-	//repeat until a successful insert
-	while(res != OK){
-		
-		// It is the first iteration or a node marked as MOV has been met (a resize is occurring)
-		if(res == MOV_FOUND){
-			
-			//free the old node
-			node_free(new_node);
-			
-			// check for a resize
-			h = read_table(&queue->hashtable, th, epb, pub);
-			// get actual size
-			size = h->size;
-	        // read the actual epoch
-        	//new_node->epoch = (h->current & MASK_EPOCH);
-			// compute the index of the virtual bucket
-			newIndex = hash(timestamp, h->bucket_width);
-			
-			// allocate a new node on numa node
-			new_node = numa_node_malloc(payload, timestamp, 0, newIndex%_NUMA_NODES);
-			new_node->op_id = 0;
-			new_node->epoch = (h->current & MASK_EPOCH);
-
-			// compute the index of the physical bucket
-			index = ((unsigned int) newIndex) % size;			
-			// get the bucket
-			bucket = h->array + index;
-			// read the number of executed enqueues for statistics purposes
-			con_en = h->e_counter.count;
-		}
-
-
-		#if KEY_TYPE != DOUBLE
-		if(res == PRESENT){
-			res = 0;
-			goto out;
-		}
-		#endif
-
-		// search the two adjacent nodes that surround the new key and try to insert with a CAS 
-	    res = search_and_insert(bucket, timestamp, 0, REMOVE_DEL_INV, new_node, &new_node);
-	}
-
-	//LOG("ENQ - inserted node %p, with ts %ld and %p|%ld\n", new_node, new_node->timestamp, new_node->next, new_node->op_id);
-
-	// the CAS succeeds, thus we want to ensure that the insertion becomes visible
-	flush_current(h, newIndex, new_node);
-	performed_enqueue++;
-	res=1;
-	
-	// updates for statistics
-	
-	concurrent_enqueue += (unsigned long long) (__sync_fetch_and_add(&h->e_counter.count, 1) - con_en);
-	
-	#if COMPACT_RANDOM_ENQUEUE == 1
-	// clean a random bucket
-	unsigned long long oldCur = h->current;
-	unsigned long long oldIndex = oldCur >> 32;
-	unsigned long long dist = 1;
-	double rand;
-	nbc_bucket_node *left_node, *right_node;
-	drand48_r(&seedT, &rand);
-	search(h->array+((oldIndex + dist + (unsigned int)( ( (double)(size-dist) )*rand )) % size), -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
-	#endif
-
-  #if KEY_TYPE != DOUBLE
-  out:
-  #endif
-	critical_exit();
-	return res;
-
-}
-
-#else
-
 static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *payload, nbc_bucket_node ** candidate, op_node *operation)
 {
 	nbc_bucket_node *bucket, *new_node, *ins_node;
@@ -1106,16 +152,15 @@ static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *paylo
 	size = h->size;
 	// compute virtual bucket index
 	newIndex = hash(timestamp, h->bucket_width);
-	
+	// compute the index of physical bucket
+	index = ((unsigned int)newIndex) % size;
+
 	// allocate node on right NUMA NODE
-	new_node = numa_node_malloc(payload, timestamp, 0, NODE_HASH(newIndex));
+	new_node = numa_node_malloc(payload, timestamp, 0, NODE_HASH(index));
 	new_node->op_id = 0x1ull; // (!new) now nodes cannot be dequeued until resize
 	new_node->requestor = operation->requestor; // who requested the insertion?;
 	// read actual epoch
 	new_node->epoch = (h->current & MASK_EPOCH);
-
-	// compute the index of physical bucket
-	index = ((unsigned int)newIndex) % size;
 
 	// get the bucket
 	bucket = h->array + index;
@@ -1200,7 +245,7 @@ static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *paylo
 		// updates for statistics
 		concurrent_enqueue += (unsigned long long)(__sync_fetch_and_add(&h->e_counter.count, 1) - con_en);
 
-#if COMPACT_RANDOM_ENQUEUE == 1
+#if COMPACT_RANDOM_ENQUEUE == 0
 		// clean a random bucket
 		unsigned long long oldCur = h->current;
 		unsigned long long oldIndex = oldCur >> 32;
@@ -1217,170 +262,6 @@ static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *paylo
 	return res;
 }
 
-#endif
-
-#ifdef USE_STD_DEQ
-
-pkey_t pq_dequeue(void *q, void** result)
-{
-	nb_calqueue *queue = (nb_calqueue*)q;
-	nbc_bucket_node *min, *min_next, 
-					*left_node, *left_node_next, 
-					*tail, *array;
-	table * h = NULL;
-	
-	unsigned long long current, old_current, new_current;
-	unsigned long long index;
-	unsigned long long epoch;
-	
-	unsigned int size, attempts = 0;
-	unsigned int counter;
-	pkey_t left_ts;
-	double bucket_width, left_limit, right_limit;
-
-	double pub = queue->perc_used_bucket;
-	unsigned int epb = queue->elem_per_bucket;
-	unsigned int th = queue->threshold;
-	unsigned int ep = 0;
-	int con_de = 0;
-	bool prob_overflow = false;
-	tail = queue->tail;
-	performed_dequeue++;
-	
-	critical_enter();
-
-begin:
-	// Get the current set table
-	h = read_table(&queue->hashtable, th, epb, pub);
-
-	// Get data from the table
-	size = h->size;
-	array = h->array;
-	bucket_width = h->bucket_width;
-	current = h->current;
-	con_de = h->d_counter.count;
-	attempts = 0;
-
-	do
-	{	
-		// To many attempts: there is some problem? recheck the table
-		if( h->read_table_period == attempts){
-			goto begin;
-		}
-		attempts++;
-
-		// get fields from current
-		index = current >> 32;
-		epoch = current & MASK_EPOCH;
-
-
-		// get the physical bucket
-		min = array + (index % (size));
-		left_node = min_next = min->next;
-		
-		// get the left limit
-		left_limit = ((double)index)*bucket_width;
-
-		index++;
-
-		// get the right limit
-		right_limit = ((double)index)*bucket_width;
-		// check for a possible overflow
-		prob_overflow = (index > MASK_EPOCH);
-		
-		// reset variables for a new scan
-		counter = ep = 0;
-		
-		// a reshuffle has been detected => restart
-		if(is_marked(min_next, MOV)) goto begin;
-		
-		do
-		{
-			
-			// get data from the current node	
-			left_node_next = left_node->next;
-			left_ts = left_node->timestamp;
-
-			// increase count of traversed deleted items
-			counter++;
-
-			// Skip marked nodes, invalid nodes and nodes with timestamp out of range
-			if(is_marked(left_node_next, DEL) || is_marked(left_node_next, INV) || (left_ts < left_limit && left_node != tail)) continue;
-			
-			// Abort the operation since there is a resize or a possible insert in the past
-			if(is_marked(left_node_next, MOV) || left_node->epoch > epoch) goto begin;
-			
-			// The virtual bucket is empty
-			if(left_ts >= right_limit || left_node == tail) break;
-			
-			// the node is a good candidate for extraction! lets try for it
-			int res = atomic_test_and_set_x64(UNION_CAST(&left_node->next, unsigned long long*));
-
-			// the extraction is failed
-			if(!res) left_node_next = left_node->next;
-
-			//left_node_next = FETCH_AND_OR(&left_node->next, DEL);
-			
-			// the node cannot be extracted && is marked as MOV	=> restart
-			if(is_marked(left_node_next, MOV))	goto begin;
-
-			// the node cannot be extracted && is marked as DEL => skip
-			if(is_marked(left_node_next, DEL))	continue;
-			
-			// the node has been extracted
-
-			//LOG("DEQ - Removed node %p with ts %ld, %p|%ld\n", left_node, left_ts, left_node_next, left_node->op_id);
-
-			// use it for count the average number of traversed node per dequeue
-			scan_list_length += counter;
-			// use it for count the average of completed extractions
-			concurrent_dequeue += (unsigned long long) (__sync_fetch_and_add(&h->d_counter.count, 1) - con_de);
-
-			*result = left_node->payload;
-				
-			critical_exit();
-
-			return left_ts;
-										
-		}while( (left_node = get_unmarked(left_node_next)));
-		
-
-		// if i'm here it means that the virtual bucket was empty. Check for queue emptyness
-		if(left_node == tail && size == 1 && !is_marked(min->next, MOV))
-		{
-			critical_exit();
-			*result = NULL;
-			return INFTY;
-		}
-				
-		new_current = h->current;
-		if(new_current == current){
-
-			if(prob_overflow && h->e_counter.count == 0) goto begin;
-			
-
-
-			assertf(prob_overflow, "\nOVERFLOW INDEX:%llu" "BW:%.10f"  "SIZE:%u TAIL:%p TABLE:%p\n", index, bucket_width, size, tail, h);
-			//assertf((index - (last_curr >> 32) -1) <= dist, "%s\n", "PROVA");
-
-			num_cas++;
-			old_current = VAL_CAS( &(h->current), current, ((index << 32) | epoch) );
-			if(old_current == current){
-				current = ((index << 32) | epoch);
-				num_cas_useful++;
-			}
-			else
-				current = old_current;
-		}
-		else
-			current = new_current;
-		
-	}while(1);
-	
-	return INFTY;
-}
-
-#else
 
 static inline pkey_t single_step_pq_dequeue(table *h, nb_calqueue *queue, void **result, unsigned long op_id, nbc_bucket_node**candidate)
 {
@@ -1652,94 +533,92 @@ nbc_bucket_node *min, *min_next,
 	return INFTY;
 }
 
-#endif
-
-#ifndef USE_STD_ENQ
-
 int pq_enqueue(void* q, pkey_t timestamp, void *payload) 
 {
 	assertf(timestamp < MIN || timestamp >= INFTY, "Key out of range %s\n", "");
 
 	nb_calqueue *queue = (nb_calqueue *) q;
 	table *h = NULL;
-	op_node *operation, *new_operation, *extracted_op;
+	op_node *operation, *new_operation, *extracted_op,
+		*requested_op, *handling_op;
 	
 	pkey_t ret_ts;
 
-	unsigned long long vb_index;
-	unsigned int dest_node;	 
+	unsigned long long vb_index, index;
+	unsigned int dest_node, new_dest;	 
 	unsigned int op_type;
 	int ret, i;
 
 	void* new_payload;
 
-	critical_enter();
-
 	//table configuration
 	double pub = queue->perc_used_bucket;
 	unsigned int epb = queue->elem_per_bucket;
 	unsigned int th = queue->threshold;
+
+	bool mine = false;
+
+	critical_enter();
+
+	h = read_table(&queue->hashtable, th, epb, pub);
+	vb_index = hash(timestamp, h->bucket_width);
+	index = vb_index % h->size;
+	dest_node = NODE_HASH(index);
+
+	if (dest_node == NID)
+	{
+		// allocate op
+		requested_op = operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
+		requested_op->op_id = 1;//__sync_fetch_and_add(&op_counter, 1);
+		requested_op->type = OP_PQ_ENQ;
+		requested_op->timestamp = timestamp;
+		requested_op->payload = payload; //DEADBEEF
+		requested_op->response = -1;
+		requested_op->candidate = NULL;
+		requested_op->requestor = &requested_op;
+		// try to execute op till dest node changes
+		
+		do {
+			h = read_table(&queue->hashtable, th, epb, pub);
+			vb_index = hash(timestamp, h->bucket_width);
+			index = vb_index % h->size;
+			dest_node = NODE_HASH(index);
+
+			if (dest_node != NID)
+				break;
+
+			ret = single_step_pq_enqueue(h, timestamp, payload, &operation->candidate, operation);
+		} while(ret < 0);
+
+		if (ret >= 0)
+		{
+			gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
+			critical_exit();
+			return ret;
+		}
+
+		gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
+		requested_op = NULL;
+		operation = NULL;
+	}
+
+	// dest node is not NID -> allocate new op
+	// allocate op
+	requested_op = operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
+	requested_op->op_id = 1;//__sync_fetch_and_add(&op_counter, 1);
+	requested_op->type = OP_PQ_ENQ;
+	requested_op->timestamp = timestamp;
+	requested_op->payload = payload; //DEADBEEF
+	requested_op->response = -1;
+	requested_op->candidate = NULL;
+	requested_op->requestor = &requested_op;
+
+	// post operation
+	tq_enqueue(&op_queue[dest_node], (void *)operation, dest_node);
 	
-	requested_op = NULL;
-	operation = new_operation = extracted_op = NULL;
-	
+	extracted_op = NULL;
 	do {
-		// read table
-		h = read_table(&queue->hashtable, th, epb, pub);
-
-		if (unlikely(requested_op == NULL && operation == NULL)) // maybe is not a really smart idea
-		{
-			// first iteration - publish my op
-			vb_index  = hash(timestamp, h->bucket_width);
-			dest_node = NODE_HASH(vb_index);
-
-			requested_op = operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
-			requested_op->op_id = 1;//__sync_fetch_and_add(&op_counter, 1);
-			requested_op->type = OP_PQ_ENQ;
-			requested_op->timestamp = timestamp;
-			requested_op->payload = payload; //DEADBEEF
-			requested_op->response = -1;
-			requested_op->candidate = NULL;
-			requested_op->requestor = &requested_op;
-		}
-
-		if (operation != NULL)
-		{
-			// compute vb
-			op_type = operation->type;
-			if (op_type == OP_PQ_ENQ) 
-			{
-				vb_index  = hash(operation->timestamp, h->bucket_width);
-				dest_node = NODE_HASH(vb_index);	
-			}
-			else 
-			{
-				vb_index = (h->current) >> 32;
-				dest_node = NODE_HASH(vb_index);
-			}
-			// need to move to another queue?
-			if (dest_node != NID) 
-			{
-				// The node has been extracted from a non optimal queue
-				new_operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
-				new_operation->op_id = operation->op_id;
-				new_operation->type = operation->type;
-				new_operation->timestamp = operation->timestamp;
-				new_operation->payload = operation->payload;
-				new_operation->response = operation->response;
-				new_operation->candidate = operation->candidate;
-				new_operation->requestor = operation->requestor;
-					
-				*(new_operation->requestor) = new_operation;
-				gc_free(ptst, operation, gc_aid[GC_OPNODE]);
-
-				operation = new_operation;
-			}
-			// publish op on right queue
-			tq_enqueue(&op_queue[dest_node], (void *)operation, dest_node);
-		}
-		extracted_op = NULL;
-
+		mine = false;
 		// check if my op was done 
 		if ((ret = __sync_fetch_and_add(&(requested_op->response), 0)) != -1)
 		{
@@ -1747,510 +626,255 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 			critical_exit();
 			requested_op = NULL;
 			// dovrebbe essere come se il thread fosse stato deschedulato prima della return
-			return ret; // someone did my op, we can return
+			// someone did my op, we can return
+			return ret; 
 		}
 
-		// dequeue one op
-		if (!tq_dequeue(&op_queue[NID], &extracted_op)) {
+		// extract op from one queue
+		if (!tq_dequeue(&op_queue[NID], &extracted_op))
+		{
 			extracted_op = requested_op;
-			i = 1;
+			mine = true;
 		}
-		
+
 		handling_op = extracted_op;
+
+		// check if someone already did the Operation I extracted
 		if (handling_op->response != -1) {
-			operation = NULL;
 			continue;
 		}
+
+		do { 
+			h = read_table(&queue->hashtable, th, epb, pub);
+
+			if (handling_op->type == OP_PQ_ENQ)
+				vb_index = hash(handling_op->timestamp, h->bucket_width);
+			else
+				vb_index = (h->current) >> 32;
+			new_dest = NODE_HASH(vb_index % h->size);
+			if (new_dest != NID || (mine && new_dest != dest_node))
+			{
+				ret = -1;
+				ret_ts = -1;
+				break;
+			}
+			
+			if (handling_op->type == OP_PQ_ENQ)
+				ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->payload, &handling_op->candidate, handling_op);
+			else
+				ret_ts = single_step_pq_dequeue(h, queue, &new_payload, handling_op->op_id, &handling_op->candidate);
 		
-		if (handling_op->type == OP_PQ_ENQ)
+		} while(ret < 0 && ret_ts < 0);
+
+		// check if returned 
+		if (ret != -1 || ret_ts != -1)
 		{
-			ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->payload, &handling_op->candidate, handling_op);
-			if (ret != -1) //enqueue succesful
+			if (handling_op->type == OP_PQ_ENQ)
 			{
 				__sync_bool_compare_and_swap(&(handling_op->response), -1, ret); /* Is this an overkill? */
-				operation = NULL;
-				continue;
 			}
-		}
-		else 
-		{
-			ret_ts = single_step_pq_dequeue(h, queue, &new_payload, handling_op->op_id, &handling_op->candidate);
-			if (ret_ts != -1)
-			{ //dequeue failed
+			else 
+			{
 				performed_dequeue++;
 				handling_op->payload = new_payload;
 				handling_op->timestamp = ret_ts;
 				__sync_bool_compare_and_swap(&(handling_op->response), -1, 1); /* Is this an overkill? */
-				operation = NULL;
-				continue;
 			}
+			operation = NULL;
+				continue;
 		}
 
-		if (i == 0) 
-		{
-			handling_op = NULL;
-			operation = extracted_op;
-		}
-		i = 0;
-
+		// If I'm here the operation has changed destination
+		// repost operation
+		if (mine)
+			continue;
+		
+		new_operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
+		new_operation->op_id = extracted_op->op_id;
+		new_operation->type = extracted_op->type;
+		new_operation->timestamp = extracted_op->timestamp;
+		new_operation->payload = extracted_op->payload;
+		new_operation->response = extracted_op->response;
+		new_operation->candidate = extracted_op->candidate;
+		new_operation->requestor = extracted_op->requestor;
+					
+		*(new_operation->requestor) = new_operation;
+		gc_free(ptst, extracted_op, gc_aid[GC_OPNODE]);
+		
+		// publish op on right queue
+		tq_enqueue(&op_queue[dest_node], (void *)new_operation, dest_node);
 	} while(1);
 }
-
-
-/*
- * Requested op and handling op (handling maybe is not needed)
- * */
-
-int pq_enqueue_2(void *q, pkey_t timestamp, void *payload)
-{
-	assertf(timestamp < MIN || timestamp >= INFTY, "Key out of range %s\n", "");
-	nb_calqueue *queue = (nb_calqueue *)q;
-	pkey_t ret_ts, ts = timestamp;
-	op_node *operation = NULL;
-
-	int ret;
-	unsigned long long vb_index;
-
-	unsigned int node = NID, i = 0;
-
-	unsigned int dest_node;
-	void *new_payload;
-
-	critical_enter();
-
-	table *h = NULL;
-
-	//table configuration
-	double pub = queue->perc_used_bucket;
-	unsigned int epb = queue->elem_per_bucket;
-	unsigned int th = queue->threshold;
-
-	do
-	{
-		//read table
-		h = read_table(&queue->hashtable, th, epb, pub);
-
-		//compute vb
-		vb_index = hash(ts, h->bucket_width);
-		dest_node = NODE_HASH(vb_index);
-
-		if (requested_op == NULL && operation == NULL)
-		{
-			//first iteration
-			requested_op = operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
-			// se avviene una resize e il nodo di destinazione cambia non peggioro la situazione?
-
-			//@TODO The structure must be reshuffled to be handled correctly
-			requested_op->op_id = 1;//__sync_fetch_and_add(&op_counter, 1);
-			requested_op->type = OP_PQ_ENQ;
-			requested_op->timestamp = ts;
-			requested_op->payload = payload; //DEADBEEF
-			requested_op->response = -1;
-			requested_op->candidate = NULL;
-		}
-
-#ifdef USE_TQ_ENQ
-		if (operation != NULL)
-			tq_enqueue(&op_queue[dest_node], (void *)operation, dest_node);
-		op_node *extracted_op = NULL;
-#else
-		op_node *extracted_op = requested_op;
-#endif
-
-		if ((ret = __sync_fetch_and_add(&(requested_op->response), 0)) != -1)
-		{
-			gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
-			critical_exit();
-			requested_op = NULL;
-			// dovrebbe essere come se il thread fosse stato deschedulato prima della return
-			return ret; // someone did my op, we can return
-		}
-#ifdef USE_TQ_ENQ
-#ifndef USE_ST_ENQ
-		// extract from one queue
-		i = node = NID;
-		do
-		{
-			if (tq_dequeue(&op_queue[i], &extracted_op))
-			{
-				break;
-			}
-			i = (i + 1) % _NUMA_NODES;
-		} while (i != node);
-		// all queues are empty
-		if (extracted_op == NULL)
-		{
-			assertf(requested_op == NULL, "ENQ - No op available to deq%s\n", "");
-			//@TODO how to handle this case?
-			continue;
-		}
-#else
-		node = NID;
-		if (!tq_dequeue(&op_queue[node], &extracted_op))
-		{
-			extracted_op = requested_op;
-			i = 1;
-		}
-#endif
-#endif
-		//extracted op, executing
-		handling_op = extracted_op;
-		if (handling_op->response != -1) {
-			operation = NULL;
-			continue;
-		}
-		if (handling_op->type == OP_PQ_ENQ)
-		{
-			ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->payload, &handling_op->candidate, handling_op);
-			if (ret != -1) //enqueue succesful
-			{
-				__sync_bool_compare_and_swap(&(handling_op->response), -1, ret);
-				operation = NULL;
-				continue;
-			}
-		}
-		else if (handling_op->type == OP_PQ_DEQ)
-		{
-#ifndef USE_STD_DEQ
-			// table* h, nb_calqueue *queue, void** result
-			ret_ts = single_step_pq_dequeue(h, queue, &new_payload, handling_op->op_id, &handling_op->candidate);
-			if (ret_ts != -1) //dequeue succesful
-			{
-				performed_dequeue++;
-				handling_op->payload = new_payload;
-				handling_op->timestamp = ret_ts;
-				__sync_bool_compare_and_swap(&(handling_op->response), -1, 1);
-				operation = NULL;
-				continue;
-			}
-#endif
-		}
-
-		// @TODO in case of failure update ts of vb
-		//op failed
-
-#ifdef USE_TQ_ENQ
-#ifdef USE_ST_ENQ
-		if (i == 0)
-		{
-#endif
-			handling_op = NULL;
-			operation = extracted_op;
-			ts = operation->timestamp;
-#ifdef USE_ST_ENQ
-		}
-		i = 0;
-#endif
-#endif 
-	} while (true);
-	//critical_exit()
-	//return code
-}
-#endif
-
-#ifndef USE_STD_DEQ
 
 pkey_t pq_dequeue(void *q, void **result) 
 {
 	nb_calqueue *queue = (nb_calqueue *) q;
 	table *h = NULL;
-	op_node *operation, *new_operation, *extracted_op = NULL;
+	op_node *operation, *new_operation, *extracted_op,
+		*requested_op, *handling_op;
 
-	unsigned long long vb_index;
-	unsigned int dest_node;	 
+	unsigned long long vb_index, index;
+	unsigned int dest_node, new_dest;	 
 	unsigned int op_type;
 	int ret, i;
 	pkey_t ret_ts;
 	void* new_payload;
 
-	critical_enter();
+	bool mine = false;
 
 	//table configuration
 	double pub = queue->perc_used_bucket;
 	unsigned int epb = queue->elem_per_bucket;
 	unsigned int th = queue->threshold;
-	
-	requested_op = NULL;
-	operation = new_operation = extracted_op = NULL;
-
-	do {
-		// read table
-		h = read_table(&queue->hashtable, th, epb, pub);
-
-		if (unlikely(requested_op == NULL && operation == NULL)) // maybe is not a really smart idea
-		{
-			// first iteration - publish my op
-			vb_index  = (h->current) >> 32;
-			dest_node = NODE_HASH(vb_index);
-
-			requested_op = operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
-			requested_op->op_id = __sync_fetch_and_add(&op_counter, 1);
-			requested_op->type = OP_PQ_DEQ;
-			requested_op->timestamp = vb_index * (h->bucket_width);
-			requested_op->payload = NULL; //DEADBEEF
-			requested_op->response = -1;
-			requested_op->candidate = NULL;
-			requested_op->requestor = &requested_op;
-		}
-
-		if (operation != NULL)
-		{
-			// compute vb
-			op_type = operation->type;
-			if (op_type == OP_PQ_ENQ) 
-			{
-
-				vb_index  = hash(operation->timestamp, h->bucket_width);
-				dest_node = NODE_HASH(vb_index);
-				
-			}
-			else 
-			{
-				vb_index = (h->current) >> 32;
-				dest_node = NODE_HASH(vb_index);
-			}
-			// need to move to another queue?
-			if (dest_node != NID) 
-			{
-					// The node has been extracted from a non optimal queue
-					new_operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
-					new_operation->op_id = operation->op_id;
-					new_operation->type = operation->type;
-					new_operation->timestamp = operation->timestamp;
-					new_operation->payload = operation->payload;
-					new_operation->response = operation->response;
-					new_operation->candidate = operation->candidate;
-					new_operation->requestor = operation->requestor;
-					
-					*(new_operation->requestor) = new_operation;
-					gc_free(ptst, operation, gc_aid[GC_OPNODE]);
-
-					operation = new_operation;
-			}
-			// publish op on right queue
-			tq_enqueue(&op_queue[dest_node], (void *)operation, dest_node);
-		}
-		extracted_op = NULL;
-
-		// check if my op was done 
-		if ((ret = __sync_fetch_and_add(&(requested_op->response), 0)) != -1)
-		{
-			gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
-			critical_exit();
-			requested_op = NULL;
-			// dovrebbe essere come se il thread fosse stato deschedulato prima della return
-			return ret; // someone did my op, we can return
-		}
-
-		// dequeue one op
-		if (!tq_dequeue(&op_queue[NID], &extracted_op)) {
-			extracted_op = requested_op;
-			i = 1;
-		}
-			
-		
-		// execute op
-		handling_op = extracted_op;
-		if (handling_op->response != -1) {
-			operation = NULL;
-			continue;
-		}
-		
-		if (handling_op->type == OP_PQ_ENQ)
-		{
-			ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->payload, &handling_op->candidate, handling_op);
-			if (ret != -1) //enqueue succesful
-			{
-				__sync_bool_compare_and_swap(&(handling_op->response), -1, ret); /* Is this an overkill? */
-				operation = NULL;
-				continue;
-			}
-		}
-		else 
-		{
-			ret_ts = single_step_pq_dequeue(h, queue, &new_payload, handling_op->op_id, &handling_op->candidate);
-			if (ret_ts != -1)
-			{ //dequeue failed
-				performed_dequeue++;
-				handling_op->payload = new_payload;
-				handling_op->timestamp = ret_ts;
-				__sync_bool_compare_and_swap(&(handling_op->response), -1, 1); /* Is this an overkill? */
-				operation = NULL;
-				continue;
-			}
-		}
-
-		if (i == 0) 
-		{
-			handling_op = NULL;
-			operation = extracted_op;
-		}
-		i = 0;
-
-	} while(1);
-}
-
-pkey_t pq_dequeue_2(void *q, void **result)
-{
-	nb_calqueue *queue = (nb_calqueue *)q;
-	table *h = NULL;
-	pkey_t ret_ts, ts = 1;
-	op_node *operation = NULL;
-
-	int ret;
-
-	//for read table
-	double pub = queue->perc_used_bucket;
-	unsigned int epb = queue->elem_per_bucket;
-	unsigned int th = queue->threshold;
-
-	unsigned int node = NID, i = 0;
-
-	unsigned long long vb_index;
-	unsigned int dest_node = NID;
-
-	void *new_payload;
 
 	critical_enter();
 
-	do
+	h = read_table(&queue->hashtable, th, epb, pub);
+	vb_index = (h->current) >> 32;
+	index = vb_index % h->size;
+	dest_node = NODE_HASH(index);
+
+	if (dest_node == NID)
 	{
-		h = read_table(&queue->hashtable, th, epb, pub);
-
-		// first iteration are dummy
-		vb_index = hash(ts, h->bucket_width);
-		dest_node = NODE_HASH(vb_index);
-
-		if (requested_op == NULL && operation == NULL)
-		{
-			//taken only first iteration
-
-			// take index of minimum
+		// allocate op
+		requested_op = operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
+		requested_op->op_id = __sync_fetch_and_add(&op_counter, 1);
+		requested_op->type = OP_PQ_DEQ;
+		requested_op->timestamp = -1;
+		requested_op->payload = NULL; //DEADBEEF
+		requested_op->response = -1;
+		requested_op->candidate = NULL;
+		requested_op->requestor = &requested_op;
+		// try to execute op till dest node changes
+		
+		do {
+			h = read_table(&queue->hashtable, th, epb, pub);
 			vb_index = (h->current) >> 32;
-			dest_node = NODE_HASH(vb_index);
+			index = vb_index % h->size;
+			dest_node = NODE_HASH(index);
 
-			//compute ts in order to take right node
-			ts = vb_index * (h->bucket_width);
+			if (dest_node != NID)
+				break;
+			ret_ts = single_step_pq_dequeue(h, queue, &new_payload, requested_op->op_id, &requested_op->candidate);
+		} while(ret_ts < 0);
 
-			requested_op = operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
-
-			requested_op->op_id = __sync_fetch_and_add(&op_counter, 1);
-			requested_op->type = OP_PQ_DEQ;
-			requested_op->timestamp = ts;
-			requested_op->payload = NULL;
-			requested_op->candidate = NULL;
-			requested_op->response = -1;
+		if (ret_ts >= 0)
+		{
+			performed_dequeue++;
+			gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
+			critical_exit();
+			*result = new_payload;
+			return ret_ts;
 		}
 
-#ifdef USE_TQ_DEQ
-		if (operation != NULL)
-			tq_enqueue(&op_queue[dest_node], (void *)operation, dest_node);
-		op_node *extracted_op = NULL;
+		gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
+		requested_op = NULL;
+		operation = NULL;
+	}
 
-#else
-		op_node *extracted_op = operation;
-#endif
+	// dest node is not NID -> allocate new op
+	// allocate op
+	requested_op = operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
+	requested_op->op_id = __sync_fetch_and_add(&op_counter, 1);
+	requested_op->type = OP_PQ_DEQ;
+	requested_op->timestamp = -1;
+	requested_op->payload = NULL; //DEADBEEF
+	requested_op->response = -1;
+	requested_op->candidate = NULL;
+	requested_op->requestor = &requested_op;
 
+	// post operation
+	tq_enqueue(&op_queue[dest_node], (void *)operation, dest_node);
+	
+	extracted_op = NULL;
+	do {
+		mine = false;
+		// check if my op was done 
 		if ((ret = __sync_fetch_and_add(&(requested_op->response), 0)) != -1)
 		{
+
 			ret_ts = requested_op->timestamp;
 			*result = requested_op->payload;
 			gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
 			critical_exit();
-
-			requested_op = NULL;
 			return ret_ts;
 		}
 
-#ifdef USE_TQ_DEQ
-#ifndef USE_ST_DEQ
-		// extract from one queue
-		i = node = NID;
-		do
-		{
-			if (tq_dequeue(&op_queue[i], &extracted_op))
-				break;
-			i = (i + 1) % _NUMA_NODES;
-		} while (i != node);
-
-		// all queues are empty
-		if (extracted_op == NULL)
-		{
-			assertf(requested_op == NULL, "DEQ - No op available to deq%s\n", "");
-			//@TODO how to handle this case?
-			continue;
-		}
-
-#else
-		/*
-		 * If local queue is empty, execute directly my op.
-		 * Do not enqueue it again, but execute it till success
-		 * */
-		node = NID;
-		if (!tq_dequeue(&op_queue[node], &extracted_op))
+		// extract op from one queue
+		if (!tq_dequeue(&op_queue[NID], &extracted_op))
 		{
 			extracted_op = requested_op;
-			i = 1;
+			mine = true;
 		}
-#endif
 
-#endif
-
-		//extracted op, executing
 		handling_op = extracted_op;
+
+		// check if someone already did the Operation I extracted
 		if (handling_op->response != -1) {
-			operation = NULL;
 			continue;
 		}
+
+		do { 
+			h = read_table(&queue->hashtable, th, epb, pub);
+
+			if (handling_op->type == OP_PQ_ENQ)
+				vb_index = hash(handling_op->timestamp, h->bucket_width);
+			else
+				vb_index = (h->current) >> 32;
+			new_dest = NODE_HASH(vb_index % h->size);
+			if (new_dest != NID || (mine && new_dest != dest_node))
+			{
+				ret = -1;
+				ret_ts = -1;
+				break;
+			}
+			
+			if (handling_op->type == OP_PQ_ENQ)
+				ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->payload, &handling_op->candidate, handling_op);
+			else
+				ret_ts = single_step_pq_dequeue(h, queue, &new_payload, handling_op->op_id, &handling_op->candidate);
 		
-		if (handling_op->type == OP_PQ_ENQ)
+		} while(ret < 0 && ret_ts < 0);
+
+		// check if returned 
+		if (ret != -1 || ret_ts != -1)
 		{
-#ifndef USE_STD_ENQ
-			ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->payload, &handling_op->candidate, handling_op);
-			if (ret != -1) //enqueue succesful
+			if (handling_op->type == OP_PQ_ENQ)
 			{
 				__sync_bool_compare_and_swap(&(handling_op->response), -1, ret); /* Is this an overkill? */
-				operation = NULL;
-				continue;
 			}
-#else
-		abort();
-#endif
-		}
-		else if (handling_op->type == OP_PQ_DEQ)
-		{
-			/* table* h, nb_calqueue *queue, void** result */
-			ret_ts = single_step_pq_dequeue(h, queue, &new_payload, handling_op->op_id, &handling_op->candidate);
-			if (ret_ts != -1)
-			{ //dequeue failed
+			else 
+			{
 				performed_dequeue++;
 				handling_op->payload = new_payload;
 				handling_op->timestamp = ret_ts;
 				__sync_bool_compare_and_swap(&(handling_op->response), -1, 1); /* Is this an overkill? */
-				operation = NULL;
-				continue;
 			}
+			operation = NULL;
+				continue;
 		}
 
-		// @TODO in case of failure update ts of vb if dequeue
-		//op failed
-#ifdef USE_TQ_DEQ
-#ifdef USE_ST_DEQ
-		if (i == 0)
-		{
-#endif
-			handling_op = NULL;
-			operation = extracted_op;
-			ts = operation->timestamp;
-#ifdef USE_ST_DEQ
-		}
-		i = 0;
-#endif
-#endif
-	} while (true);
+		// If I'm here the operation has changed destination
+		// repost operation
+		if (mine)
+			continue;
+		
+		new_operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
+		new_operation->op_id = extracted_op->op_id;
+		new_operation->type = extracted_op->type;
+		new_operation->timestamp = extracted_op->timestamp;
+		new_operation->payload = extracted_op->payload;
+		new_operation->response = extracted_op->response;
+		new_operation->candidate = extracted_op->candidate;
+		new_operation->requestor = extracted_op->requestor;
+					
+		*(new_operation->requestor) = new_operation;
+		gc_free(ptst, extracted_op, gc_aid[GC_OPNODE]);
+		
+		// publish op on right queue
+		tq_enqueue(&op_queue[dest_node], (void *)new_operation, dest_node);
+	} while(1);
 }
-
-#endif
 
 void pq_report(int TID)
 {

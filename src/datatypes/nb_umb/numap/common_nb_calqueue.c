@@ -52,6 +52,9 @@ unsigned int ACTIVE_NUMA_NODES;
 	abort();\
 	}while (0)
 
+/*
+ * @TODO add counter how may times repost vs how may time above thresh
+ * */
 
 /*************************************
  * THREAD LOCAL VARIABLES			 *

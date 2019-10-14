@@ -34,8 +34,6 @@
  * MACROS TO ACTIVATE OPS
  * */
 
-//#define NOWS
-
 #define DO_BLOOP
 
 #define LOOP_COUNT 1200
@@ -152,54 +150,55 @@ void *pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 }
 
 __thread pkey_t last_ts;
+__thread unsigned long value = 0;
 
-static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *payload, nbc_bucket_node ** candidate)
+
+int single_step_pq_enqueue(table *h, pkey_t timestamp, void *payload, nbc_bucket_node ** candidate)
 {
 
 	last_ts = timestamp;
 
 	#ifdef BLOOP
-
-	unsigned long x = LOOP_COUNT;
+	unsigned long x = value;
 	unsigned long y = LOOP_COUNT;
 
 	for(; y>0; y--)
 	{
-		x -= 1^y;	
+		x -= x^y;
 	}
-
+	value = x;
 	#endif
-
-	// do busy loop
-	/*
-	unsigned long long i = 0;
 	
-	do {
-		i++;
-	} while (i % 100 != 0);
-	*/
 	performed_enqueue++;
 	return 1;
 }
 
-static inline pkey_t single_step_pq_dequeue(table *h, nb_calqueue *queue, void **result, unsigned long op_id, nbc_bucket_node**candidate)
+pkey_t single_step_pq_dequeue(table *h, nb_calqueue *queue, void **result, unsigned long op_id, nbc_bucket_node**candidate)
 {
+
 	#ifdef BLOOP
-	unsigned long x = LOOP_COUNT;
+	unsigned long x = value;
 	unsigned long y = LOOP_COUNT;
+	
 	for(; y>0; y--)
 	{
-		x -= 1^y;	
+		x -= x^y;
 	}
+	value = x;
 	#endif
 
+	*result = (void *) 0x1ull;
 	performed_dequeue++;
 	return last_ts;
 }
 
+
+__thread unsigned int next_node_deq;
+
 int pq_enqueue(void *q, pkey_t timestamp, void *payload)
 {
-		assertf(timestamp < MIN || timestamp >= INFTY, "Key out of range %s\n", "");
+	
+	assertf(timestamp < MIN || timestamp >= INFTY, "Key out of range %s\n", "");
 
 	nb_calqueue *queue = (nb_calqueue *) q;
 	table *h = NULL;
@@ -214,12 +213,13 @@ int pq_enqueue(void *q, pkey_t timestamp, void *payload)
 
 	void* new_payload;
 
-	critical_enter();
-
-	//table configuration
 	double pub = queue->perc_used_bucket;
 	unsigned int epb = queue->elem_per_bucket;
 	unsigned int th = queue->threshold;
+	
+	critical_enter();
+
+	//table configuration
 	
 	requested_op = NULL;
 	operation = new_operation = extracted_op = NULL;
@@ -280,11 +280,6 @@ int pq_enqueue(void *q, pkey_t timestamp, void *payload)
 			tq_enqueue(&op_queue[dest_node], (void *)operation, dest_node);
 		}
 
-		#ifdef NOWS
-			performed_enqueue++;
-			return timestamp;
-		#else
-
 		extracted_op = NULL;
 
 		// check if my op was done 
@@ -339,10 +334,11 @@ int pq_enqueue(void *q, pkey_t timestamp, void *payload)
 			operation = extracted_op;
 		}
 		i = 0;
-	#endif
 	} while(1);
 	
 }
+
+__thread unsigned int next_node_deq;
 
 pkey_t pq_dequeue(void *q, void **result)
 {
@@ -370,7 +366,6 @@ pkey_t pq_dequeue(void *q, void **result)
 		// read table
 		h = read_table(&queue->hashtable, th, epb, pub);
 
-		#ifndef NOWS
 		if (unlikely(requested_op == NULL)) // maybe is not a really smart idea
 		{
 			// first iteration - publish my op
@@ -480,13 +475,10 @@ pkey_t pq_dequeue(void *q, void **result)
 		}
 		i = 0;
 
-		#else
 			i = NID;
 			tq_dequeue(&op_queue[i], &extracted_op);
 			performed_dequeue++;
 			return TID;
-		#endif	
-
 	} while(1);
 }
 

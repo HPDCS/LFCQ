@@ -41,6 +41,9 @@ extern __thread ptst_t *ptst;
 extern int gc_aid[];
 extern int gc_hid[];
 
+unsigned int ACTIVE_NUMA_NODES;
+#define NODE_HASH(bucket_id) ((bucket_id >> 2ull) % ACTIVE_NUMA_NODES)
+
 #define GC_BUCKETNODE 2
 #define GC_OPNODE 3
 
@@ -241,17 +244,17 @@ extern __thread unsigned long long num_cas;
 extern __thread unsigned long long num_cas_useful;
 extern __thread unsigned long long dist;
 
-extern void set_new_table(table *h, unsigned int threshold, double pub, unsigned int epb, unsigned int counter);
-extern table *read_table(table *volatile *hashtable, unsigned int threshold, unsigned int elem_per_bucket, double perc_used_bucket);
-extern void block_table(table *h);
-extern double compute_mean_separation_time(table *h, unsigned int new_size, unsigned int threashold, unsigned int elem_per_bucket);
-extern void migrate_node(nbc_bucket_node *right_node, table *new_h);
-extern void search(nbc_bucket_node *head, pkey_t timestamp, unsigned int tie_breaker, nbc_bucket_node **left_node, nbc_bucket_node **right_node, int flag);
-extern void flush_current(table *h, unsigned long long newIndex, nbc_bucket_node *node);
+// extern void set_new_table(table *h, unsigned int threshold, double pub, unsigned int epb, unsigned int counter);
+// extern table *read_table(table *volatile *hashtable, unsigned int threshold, unsigned int elem_per_bucket, double perc_used_bucket);
+// extern void block_table(table *h);
+// extern double compute_mean_separation_time(table *h, unsigned int new_size, unsigned int threashold, unsigned int elem_per_bucket);
+// extern void migrate_node(nbc_bucket_node *right_node, table *new_h);
+// extern void search(nbc_bucket_node *head, pkey_t timestamp, unsigned int tie_breaker, nbc_bucket_node **left_node, nbc_bucket_node **right_node, int flag);
+// extern void flush_current(table *h, unsigned long long newIndex, nbc_bucket_node *node);
 extern double nbc_prune();
 extern void nbc_report(unsigned int);
-extern int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, unsigned int tie_breaker,
-							 int flag, nbc_bucket_node *new_node_pointer, nbc_bucket_node **new_node);
+// extern int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, unsigned int tie_breaker,
+// 							 int flag, nbc_bucket_node *new_node_pointer, nbc_bucket_node **new_node);
 
 /**
  *  This function is an helper to allocate a node and filling its fields.
