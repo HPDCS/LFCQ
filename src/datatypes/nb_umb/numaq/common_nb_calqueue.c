@@ -641,14 +641,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 
 		// check if someone already did the Operation I extracted
 
-		do { 
-			
-			if (__sync_fetch_and_add(&(handling_op->response), 0) != -1) 
-			{
-				handling_op = NULL;
-				break;
-			}
-
+		while (__sync_fetch_and_add(&(handling_op->response), 0) == -1) // operation done
+		{
 			h = read_table(&queue->hashtable, th, epb, pub);
 
 			if (handling_op->type == OP_PQ_ENQ)
@@ -660,41 +654,35 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 			
 			if (!mine && dest_node != NID) // extracted from non optimal queue
 				break;
-			
+
 			// execute my op
 			if (handling_op->type == OP_PQ_ENQ)
 			{
 				ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->timestamp, &(handling_op->candidate), handling_op);
 				if (ret != -1)
-					break;
+				{
+					__sync_bool_compare_and_swap(&(handling_op->response), -1, ret); /* Is this an overkill? */
+					operation = NULL;
+					continue;
+				}	
 			}
 			else if (handling_op->type == OP_PQ_DEQ)
 			{
 				ret_ts = single_step_pq_dequeue(h, queue, &new_payload, handling_op->op_id, &(handling_op->candidate));
 				if (ret_ts != -1)
-					break;
+				{
+					handling_op->payload = new_payload;
+					handling_op->timestamp = ret_ts;
+					__sync_bool_compare_and_swap(&(handling_op->response), -1, 1); /* Is this an overkill? */
+					operation = NULL;
+					continue;
+				}
 			}
-		} while(1);
-
-		if (handling_op == NULL)
-			continue;
-
-		// check if returned 
-		if (handling_op->type == OP_PQ_ENQ && ret != -1)
-		{
-			__sync_bool_compare_and_swap(&(handling_op->response), -1, ret); /* Is this an overkill? */
-			operation = NULL;
-			continue;
 		}
-		else if (handling_op->type == OP_PQ_DEQ && ret_ts != -1)
-		{
-			handling_op->payload = new_payload;
-			handling_op->timestamp = ret_ts;
-			__sync_bool_compare_and_swap(&(handling_op->response), -1, 1); /* Is this an overkill? */
-			operation = NULL;
-			continue;
-		}
-
+		
+		// if operation undone realloc 
+		// @TODO
+		
 		// If operation was mine i will check the return value next iteration
 		if (!mine)
 		{	
