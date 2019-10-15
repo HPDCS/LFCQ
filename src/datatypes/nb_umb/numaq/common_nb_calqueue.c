@@ -583,14 +583,18 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 		// try to execute op till dest node changes
 		
 		do {
-			ret = single_step_pq_enqueue(h, operation->timestamp, operation->payload, &(operation->candidate), operation);
 			
 			h = read_table(&queue->hashtable, th, epb, pub);
 			vb_index = hash(timestamp, h->bucket_width);
 			index = vb_index % h->size;
 			dest_node = NODE_HASH(index);
 			
-		} while(ret == -1 && dest_node == NID);
+			if (dest_node != NID)
+				break;
+
+			ret = single_step_pq_enqueue(h, operation->timestamp, operation->payload, &(operation->candidate), operation);
+
+		} while(ret == -1);
 
 		gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
 		requested_op = NULL;
@@ -710,7 +714,6 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 }
 
 
-// @TODO fix dequeue->look @enqueue
 pkey_t pq_dequeue(void *q, void **result) 
 {
 	nb_calqueue *queue = (nb_calqueue *) q;
@@ -754,15 +757,18 @@ pkey_t pq_dequeue(void *q, void **result)
 		requested_op->requestor = &requested_op;
 		// try to execute op till dest node changes
 		
-		do {
-			ret_ts = single_step_pq_dequeue(h, queue, &new_payload, requested_op->op_id, &requested_op->candidate);
-			
+		do {		
 			h = read_table(&queue->hashtable, th, epb, pub);
 			vb_index = (h->current) >> 32;
 			index = vb_index % h->size;
 			dest_node = NODE_HASH(index);
 
-		} while(ret_ts == -1 && dest_node == NID);
+			if (dest_node != NID)
+				break;
+
+			ret_ts = single_step_pq_dequeue(h, queue, &new_payload, requested_op->op_id, &requested_op->candidate);
+
+		} while(ret_ts == -1);
 
 		gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
 		requested_op = NULL;
