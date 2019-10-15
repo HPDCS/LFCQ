@@ -62,8 +62,8 @@ __thread unsigned int acc = 0;
 __thread unsigned int acc_counter = 0;
 
 
-__thread op_node *requested_op;
-__thread op_node *handling_op;
+//__thread op_node *requested_op;
+//__thread op_node *handling_op;
 
 void std_free_hook(ptst_t *p, void *ptr) { free(ptr); }
 
@@ -547,7 +547,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 
 	nb_calqueue *queue = (nb_calqueue *) q;
 	table *h = NULL;
-	op_node *operation, *new_operation, *extracted_op;
+	op_node *operation, *new_operation, *extracted_op,
+		*requested_op, *handling_op;
 	
 	pkey_t ret_ts;
 
@@ -694,7 +695,8 @@ pkey_t pq_dequeue(void *q, void **result)
 {
 	nb_calqueue *queue = (nb_calqueue *) q;
 	table *h = NULL;
-	op_node *operation, *new_operation, *extracted_op = NULL;
+	op_node *operation, *new_operation, *extracted_op = NULL,
+		*requested_op, *handling_op;
 
 	unsigned long long vb_index;
 	unsigned int dest_node;	 
