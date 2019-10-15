@@ -551,7 +551,9 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	unsigned long long vb_index;
 	unsigned int dest_node;	 
 	unsigned int op_type;
-	int ret, i;
+	int ret;
+	
+	bool mine = false;
 
 	void* new_payload;
 
@@ -598,8 +600,9 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 				vb_index = (h->current) >> 32;
 				dest_node = NODE_HASH(vb_index);
 			}
+
 			// need to move to another queue?
-			if (dest_node != NID) 
+			if (dest_node != NID && !mine) 
 			{
 				// The node has been extracted from a non optimal queue
 				new_operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
@@ -615,11 +618,13 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 				gc_free(ptst, operation, gc_aid[GC_OPNODE]);
 
 				operation = new_operation;
+
+				// publish op on right queue
+				tq_enqueue(&op_queue[dest_node], (void *)operation, dest_node);
 			}
-			// publish op on right queue
-			tq_enqueue(&op_queue[dest_node], (void *)operation, dest_node);
+			// here we keep the operation if it is not null
 		}
-		extracted_op = NULL;
+		extracted_op = operation;
 
 		// check if my op was done 
 		if ((ret = __sync_fetch_and_add(&(requested_op->response), 0)) != -1)
@@ -631,12 +636,17 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 			return ret; // someone did my op, we can return
 		}
 
-		// dequeue one op
-		if (!tq_dequeue(&op_queue[NID], &extracted_op)) {
-			extracted_op = requested_op;
-			i = 1;
+		if (extracted_op == NULL)
+		{
+			if (!tq_dequeue(&op_queue[NID], &extracted_op)) 
+			{
+				extracted_op = requested_op;
+				mine = true;
+			}
+			else
+				mine = false;
 		}
-		
+
 		handling_op = extracted_op;
 		if (handling_op->response != -1) {
 			operation = NULL;
@@ -667,12 +677,12 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 			}
 		}
 
-		if (i == 0) 
+		if (!mine) 
 		{
 			handling_op = NULL;
 			operation = extracted_op;
 		}
-		i = 0;
+		mine = false;
 
 	} while(1);
 }
@@ -686,9 +696,11 @@ pkey_t pq_dequeue(void *q, void **result)
 	unsigned long long vb_index;
 	unsigned int dest_node;	 
 	unsigned int op_type;
-	int ret, i;
+	int ret;
 	pkey_t ret_ts;
 	void* new_payload;
+
+	bool mine = false;
 
 	critical_enter();
 
@@ -716,6 +728,7 @@ pkey_t pq_dequeue(void *q, void **result)
 
 
 	do {
+
 		// read table
 		h = read_table(&queue->hashtable, th, epb, pub);
 
@@ -738,24 +751,26 @@ pkey_t pq_dequeue(void *q, void **result)
 			// need to move to another queue?
 			if (dest_node != NID) 
 			{
-					// The node has been extracted from a non optimal queue
-					new_operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
-					new_operation->op_id = operation->op_id;
-					new_operation->type = operation->type;
-					new_operation->timestamp = operation->timestamp;
-					new_operation->payload = operation->payload;
-					new_operation->response = operation->response;
-					new_operation->candidate = operation->candidate;
-					new_operation->requestor = operation->requestor;
+				// The node has been extracted from a non optimal queue
+				new_operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
+				new_operation->op_id = operation->op_id;
+				new_operation->type = operation->type;
+				new_operation->timestamp = operation->timestamp;
+				new_operation->payload = operation->payload;
+				new_operation->response = operation->response;
+				new_operation->candidate = operation->candidate;
+				new_operation->requestor = operation->requestor;
 					
-					*(new_operation->requestor) = new_operation;
-					gc_free(ptst, operation, gc_aid[GC_OPNODE]);
+				*(new_operation->requestor) = new_operation;
+				gc_free(ptst, operation, gc_aid[GC_OPNODE]);
 
-					operation = new_operation;
+				operation = new_operation;				
 			}
-			// publish op on right queue
+			
+			// keep the operation in case it's on the same node
 			tq_enqueue(&op_queue[dest_node], (void *)operation, dest_node);
 		}
+
 		extracted_op = NULL;
 
 		// check if my op was done 
@@ -771,7 +786,7 @@ pkey_t pq_dequeue(void *q, void **result)
 		// dequeue one op
 		if (!tq_dequeue(&op_queue[NID], &extracted_op)) {
 			extracted_op = requested_op;
-			i = 1;
+			mine = true;
 		}
 			
 		
@@ -806,12 +821,12 @@ pkey_t pq_dequeue(void *q, void **result)
 			}
 		}
 
-		if (i == 0) 
+		if (!mine) 
 		{
 			handling_op = NULL;
 			operation = extracted_op;
 		}
-		i = 0;
+		mine = false;
 
 	} while(1);
 }
