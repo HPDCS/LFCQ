@@ -752,7 +752,7 @@ pkey_t pq_dequeue(void *q, void **result)
 				dest_node = NODE_HASH(vb_index);
 			}
 			// need to move to another queue?
-			if (dest_node != NID) 
+			if (dest_node != NID & !mine) 
 			{
 				// The node has been extracted from a non optimal queue
 				new_operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
