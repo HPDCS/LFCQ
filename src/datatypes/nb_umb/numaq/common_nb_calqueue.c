@@ -236,7 +236,7 @@ static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *paylo
 			
 		// prova a valdiare il nodo (se non lo è già)
 		if (!__sync_bool_compare_and_swap(&(ins_node->op_id), 1, 0))
-			return -1;
+			return 1; //-1
 
 		// must be done once
 		flush_current(h, newIndex, new_node);
@@ -875,75 +875,6 @@ pkey_t pq_dequeue(void *q, void **result)
 			// publish op on right queue
 			tq_enqueue(&op_queue[dest_node], (void *)new_operation, dest_node);
 		}
-		/*
-		do { 
-			// check if someone already did the Operation I extracted
-			if (__sync_fetch_and_add(&(handling_op->response), 0) != -1) 
-			{
-				handling_op = NULL;
-				break;
-			}
-
-			h = read_table(&queue->hashtable, th, epb, pub);
-
-			if (handling_op->type == OP_PQ_ENQ)
-				vb_index = hash(handling_op->timestamp, h->bucket_width);
-			else
-				vb_index = (h->current) >> 32;
-
-			new_dest = NODE_HASH(vb_index % h->size);
-			if (!mine && new_dest != NID)
-			{
-				ret = -1;
-				ret_ts = -1;
-				break;
-			}
-			
-			if (handling_op->type == OP_PQ_ENQ)
-				ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->payload, &handling_op->candidate, handling_op);
-			else if (handling_op->type == OP_PQ_DEQ)
-				ret_ts = single_step_pq_dequeue(h, queue, &new_payload, handling_op->op_id, &handling_op->candidate);
-		
-		} while(ret == -1 && ret_ts == -1);
-
-		if (handling_op == NULL)
-			continue;
-
-		// check if returned 
-		if (handling_op->type == OP_PQ_ENQ && ret != -1)
-		{
-			__sync_bool_compare_and_swap(&(handling_op->response), -1, ret); /* Is this an overkill? */
-		/*	continue;
-		}
-		else if (handling_op->type == OP_PQ_DEQ && ret_ts != -1)
-		{
-			handling_op->payload = new_payload;
-			handling_op->timestamp = ret_ts;
-			__sync_bool_compare_and_swap(&(handling_op->response), -1, 1); /* Is this an overkill? */
-		/*	continue;
-		}
-
-		// If I'm here the operation has changed destination
-		if (mine)
-			continue;
-
-		// repost operation
-		new_operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], new_dest);
-		new_operation->op_id = handling_op->op_id;
-		new_operation->type = handling_op->type;
-		new_operation->timestamp = handling_op->timestamp;
-		new_operation->payload = handling_op->payload;
-		new_operation->response = handling_op->response;
-		new_operation->candidate = handling_op->candidate;
-		new_operation->requestor = handling_op->requestor;
-					
-		*(new_operation->requestor) = new_operation;
-		gc_free(ptst, handling_op, gc_aid[GC_OPNODE]);
-		handling_op = NULL;
-		
-		// publish op on right queue
-		tq_enqueue(&op_queue[new_dest], (void *)new_operation, new_dest);
-		*/
 	} while(1);
 	
 }
