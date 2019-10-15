@@ -546,7 +546,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	pkey_t ret_ts;
 
 	unsigned long long vb_index, index;
-	unsigned int dest_node, new_dest;	 
+	unsigned int dest_node;	 
 	unsigned int op_type;
 	int ret, i;
 
@@ -658,7 +658,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 			// execute my op
 			if (handling_op->type == OP_PQ_ENQ)
 			{
-				ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->timestamp, &(handling_op->candidate), handling_op);
+				ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->payload, &(handling_op->candidate), handling_op);
 				if (ret != -1)
 				{
 					__sync_bool_compare_and_swap(&(handling_op->response), -1, ret); /* Is this an overkill? */
@@ -831,7 +831,7 @@ pkey_t pq_dequeue(void *q, void **result)
 			// execute my op
 			if (handling_op->type == OP_PQ_ENQ)
 			{
-				ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->timestamp, &(handling_op->candidate), handling_op);
+				ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->payload, &(handling_op->candidate), handling_op);
 				if (ret != -1)
 				{
 					__sync_bool_compare_and_swap(&(handling_op->response), -1, ret); /* Is this an overkill? */
