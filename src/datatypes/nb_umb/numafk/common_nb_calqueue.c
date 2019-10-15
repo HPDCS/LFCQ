@@ -153,12 +153,12 @@ __thread pkey_t last_ts;
 __thread unsigned long value = 0;
 
 
-int single_step_pq_enqueue(table *h, pkey_t timestamp, void *payload, nbc_bucket_node ** candidate, op_node* operation)
+int __attribute__((optimize("O0"))) single_step_pq_enqueue(table *h, pkey_t timestamp, void *payload, nbc_bucket_node ** candidate, op_node* operation)
 {
 
 	last_ts = timestamp;
 
-	#ifdef BLOOP
+	#ifdef DO_BLOOP
 	unsigned long x = value;
 	unsigned long y = LOOP_COUNT;
 
@@ -173,10 +173,10 @@ int single_step_pq_enqueue(table *h, pkey_t timestamp, void *payload, nbc_bucket
 	return 1;
 }
 
-pkey_t single_step_pq_dequeue(table *h, nb_calqueue *queue, void **result, unsigned long op_id, nbc_bucket_node**candidate)
+pkey_t __attribute__((optimize("O0"))) single_step_pq_dequeue(table *h, nb_calqueue *queue, void **result, unsigned long op_id, nbc_bucket_node**candidate)
 {
 
-	#ifdef BLOOP
+	#ifdef DO_BLOOP
 	unsigned long x = value;
 	unsigned long y = LOOP_COUNT;
 	

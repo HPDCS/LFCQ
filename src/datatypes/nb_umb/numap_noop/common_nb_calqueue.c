@@ -52,7 +52,7 @@ unsigned int ACTIVE_NUMA_NODES;
 	abort();\
 	}while (0)
 
-//#define DO_BLOOP
+#define DO_BLOOP
 
 #define LOOP_COUNT 1200 //12-13us
 
@@ -168,7 +168,7 @@ __thread pkey_t last_ts;
  * @param payload: the value to be enqueued
  * @return true if the event is inserted in the set table else false
  */
-int do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
+int __attribute__((optimize("O0"))) do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
 {
 
 	last_ts = timestamp;
@@ -197,7 +197,7 @@ int do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
  * @return the highest priority 
  *
  */
-pkey_t do_pq_dequeue(void *q, void** result)
+pkey_t __attribute__((optimize("O0"))) do_pq_dequeue(void *q, void** result)
 {
 
 	#ifdef DO_BLOOP
