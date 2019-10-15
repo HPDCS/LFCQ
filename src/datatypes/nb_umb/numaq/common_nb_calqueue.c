@@ -565,25 +565,24 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	requested_op = NULL;
 	operation = new_operation = extracted_op = NULL;
 	
+	h = read_table(&queue->hashtable, th, epb, pub);
+
+	vb_index  = hash(timestamp, h->bucket_width);
+	dest_node = NODE_HASH(vb_index % h->size);
+
+	requested_op = operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
+	requested_op->op_id = 1;//__sync_fetch_and_add(&op_counter, 1);
+	requested_op->type = OP_PQ_ENQ;
+	requested_op->timestamp = timestamp;
+	requested_op->payload = payload; //DEADBEEF
+	requested_op->response = -1;
+	requested_op->candidate = NULL;
+	requested_op->requestor = &requested_op;
+
+
 	do {
 		// read table
 		h = read_table(&queue->hashtable, th, epb, pub);
-
-		if (unlikely(requested_op == NULL && operation == NULL)) // maybe is not a really smart idea
-		{
-			// first iteration - publish my op
-			vb_index  = hash(timestamp, h->bucket_width);
-			dest_node = NODE_HASH(vb_index);
-
-			requested_op = operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
-			requested_op->op_id = 1;//__sync_fetch_and_add(&op_counter, 1);
-			requested_op->type = OP_PQ_ENQ;
-			requested_op->timestamp = timestamp;
-			requested_op->payload = payload; //DEADBEEF
-			requested_op->response = -1;
-			requested_op->candidate = NULL;
-			requested_op->requestor = &requested_op;
-		}
 
 		if (operation != NULL)
 		{
@@ -700,26 +699,25 @@ pkey_t pq_dequeue(void *q, void **result)
 	
 	requested_op = NULL;
 	operation = new_operation = extracted_op = NULL;
+	
+	h = read_table(&queue->hashtable, th, epb, pub);
+
+	vb_index  = (h->current) >> 32;
+	dest_node = NODE_HASH(vb_index % h->size);
+
+	requested_op = operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
+	requested_op->op_id = __sync_fetch_and_add(&op_counter, 1);
+	requested_op->type = OP_PQ_DEQ;
+	requested_op->timestamp = vb_index * (h->bucket_width);
+	requested_op->payload = NULL; //DEADBEEF
+	requested_op->response = -1;
+	requested_op->candidate = NULL;
+	requested_op->requestor = &requested_op;
+
 
 	do {
 		// read table
 		h = read_table(&queue->hashtable, th, epb, pub);
-
-		if (unlikely(requested_op == NULL && operation == NULL)) // maybe is not a really smart idea
-		{
-			// first iteration - publish my op
-			vb_index  = (h->current) >> 32;
-			dest_node = NODE_HASH(vb_index);
-
-			requested_op = operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
-			requested_op->op_id = __sync_fetch_and_add(&op_counter, 1);
-			requested_op->type = OP_PQ_DEQ;
-			requested_op->timestamp = vb_index * (h->bucket_width);
-			requested_op->payload = NULL; //DEADBEEF
-			requested_op->response = -1;
-			requested_op->candidate = NULL;
-			requested_op->requestor = &requested_op;
-		}
 
 		if (operation != NULL)
 		{
