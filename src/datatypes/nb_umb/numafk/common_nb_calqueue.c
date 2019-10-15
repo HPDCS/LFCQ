@@ -518,13 +518,15 @@ pkey_t pq_dequeue(void *q, void **result)
 	
 	h = read_table(&queue->hashtable, th, epb, pub);
 
+	op_type = next_node_deq++;
+
 	vb_index  = (h->current) >> 32;
-	dest_node = NODE_HASH(next_node_deq++);
+	dest_node = NODE_HASH(op_type);
 
 	requested_op = operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
 	requested_op->op_id = __sync_fetch_and_add(&op_counter, 1);
 	requested_op->type = OP_PQ_DEQ;
-	requested_op->timestamp = next_node_deq++;
+	requested_op->timestamp = op_type;
 	requested_op->payload = NULL; //DEADBEEF
 	requested_op->response = -1;
 	requested_op->candidate = NULL;
