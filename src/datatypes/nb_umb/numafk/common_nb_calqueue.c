@@ -255,7 +255,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 			else 
 			{
 				vb_index = (h->current) >> 32;
-				dest_node = NODE_HASH(next_node_deq++);
+				dest_node = NODE_HASH((unsigned long) operation->timestamp);
 			}
 
 			// need to move to another queue?
@@ -524,7 +524,7 @@ pkey_t pq_dequeue(void *q, void **result)
 	requested_op = operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
 	requested_op->op_id = __sync_fetch_and_add(&op_counter, 1);
 	requested_op->type = OP_PQ_DEQ;
-	requested_op->timestamp = vb_index * (h->bucket_width);
+	requested_op->timestamp = next_node_deq++;
 	requested_op->payload = NULL; //DEADBEEF
 	requested_op->response = -1;
 	requested_op->candidate = NULL;
@@ -550,7 +550,7 @@ pkey_t pq_dequeue(void *q, void **result)
 			else 
 			{
 				vb_index = (h->current) >> 32;
-				dest_node = NODE_HASH(next_node_deq++);
+				dest_node = NODE_HASH(operation->timestamp);
 			}
 			// need to move to another queue?
 			if (dest_node != NID & !mine) 

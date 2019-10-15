@@ -244,7 +244,7 @@ alloc:
                 if ((likely(!node_unsafe(idx)) || rq->head < t) && CAS2((uint64_t*)cell, -1, idx, arg, t)) {
                     if (nrq != null) {
                         //gc_free(ptst, nrq, gc_aid[GC_RING_QUEUE]); // to avoid use per thread variable
-                        node_gc_add_ptr_to_hook_list(ptst, nrq, gc_hid[3], numa_node);
+                        gc_add_ptr_to_hook_list(ptst, nrq, gc_hid[3]);
                     }
                     return true;
                 }
