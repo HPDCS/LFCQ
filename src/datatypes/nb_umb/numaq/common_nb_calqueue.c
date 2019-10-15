@@ -145,6 +145,9 @@ void *pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 
 static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *payload, nbc_bucket_node ** candidate, op_node *operation)
 {
+
+	assertf(operation->type != OP_PQ_ENQ, "Passing a dequeue to an enqueue%s\n", "");
+
 	nbc_bucket_node *bucket, *new_node, *ins_node;
 
 	unsigned int index, size;
@@ -626,7 +629,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 		}
 		extracted_op = operation;
 
-		// check if my op was done 
+		// check if my op was done // we could lose ops
 		if ((ret = __sync_fetch_and_add(&(requested_op->response), 0)) != -1)
 		{
 			gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
@@ -765,15 +768,17 @@ pkey_t pq_dequeue(void *q, void **result)
 				gc_free(ptst, operation, gc_aid[GC_OPNODE]);
 
 				operation = new_operation;				
+			
+				tq_enqueue(&op_queue[dest_node], (void *)operation, dest_node);
 			}
 			
 			// keep the operation in case it's on the same node
-			tq_enqueue(&op_queue[dest_node], (void *)operation, dest_node);
+			
 		}
 
-		extracted_op = NULL;
+		extracted_op = operation;
 
-		// check if my op was done 
+		// check if my op was done // we could lose op
 		if ((ret = __sync_fetch_and_add(&(requested_op->response), 0)) != -1)
 		{
 			gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
@@ -784,9 +789,14 @@ pkey_t pq_dequeue(void *q, void **result)
 		}
 
 		// dequeue one op
-		if (!tq_dequeue(&op_queue[NID], &extracted_op)) {
-			extracted_op = requested_op;
-			mine = true;
+		if (extracted_op == NULL)
+		{
+			if (!tq_dequeue(&op_queue[NID], &extracted_op)) {
+				extracted_op = requested_op;
+				mine = true;
+			}
+			else 
+				mine = false;
 		}
 			
 		
