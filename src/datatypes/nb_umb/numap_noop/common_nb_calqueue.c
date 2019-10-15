@@ -83,6 +83,9 @@ __thread unsigned long long local_deq = 0ULL;
 __thread unsigned long long remote_enq = 0ULL;
 __thread unsigned long long remote_deq = 0ULL;
 
+__thread unsigned long long repost_enq = 0ULL;
+__thread unsigned long long repost_deq = 0ULL;
+
 void std_free_hook(ptst_t *p, void *ptr){	free(ptr); }
 
 
@@ -347,6 +350,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 				{
 					abort_line();
 				}
+
+				repost_enq++;
 			}
 			attempts = 0;
 		}
@@ -456,7 +461,7 @@ pkey_t pq_dequeue(void *q, void** result)
 				{			
 					abort_line();
 				}	
-
+				repost_deq++;
 			}
 			attempts = 0;
 		}
@@ -483,19 +488,19 @@ void pq_report(int TID)
 {
 	
 	printf("%d- "
-	"Enqueue: %.10f LEN: %.10f ST: %llu : %llu ### "
-	"Dequeue: %.10f LEN: %.10f NUMCAS: %llu : %llu ST: %llu : %llu ### "
+	"Enqueue: %.10f LEN: %.10f ST: %llu : %llu : %llu ### "
+	"Dequeue: %.10f LEN: %.10f NUMCAS: %llu : %llu ST: %llu : %llu : %llu ### "
 	"NEAR: %llu "
 	"RTC:%d, M:%lld, "
 	"Local ENQ: %llu DEQ: %llu, Remote ENQ: %llu DEQ: %llu\n",
 			TID,
 			((float)concurrent_enqueue) /((float)performed_enqueue),
 			((float)scan_list_length_en)/((float)performed_enqueue),
-			enq_steal_attempt, enq_steal_done,
+			enq_steal_attempt, enq_steal_done, repost_enq,
 			((float)concurrent_dequeue) /((float)performed_dequeue),
 			((float)scan_list_length)   /((float)performed_dequeue),
 			num_cas, num_cas_useful,
-			deq_steal_attempt, deq_steal_done,
+			deq_steal_attempt, deq_steal_done, repost_deq,
 			near,
 			read_table_count	  ,
 			malloc_count,
