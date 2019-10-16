@@ -61,10 +61,6 @@ __thread unsigned long long near = 0;
 __thread unsigned int acc = 0;
 __thread unsigned int acc_counter = 0;
 
-
-//__thread op_node *requested_op;
-//__thread op_node *handling_op;
-
 void std_free_hook(ptst_t *p, void *ptr) { free(ptr); }
 
 /**

@@ -10,7 +10,7 @@ USER_OBJS :=
 
 LIBS := -lpthread -lm -lnuma -lrt -mrtm
 SRC_DIR := src
-TARGETS := NUMAP NUMAPNOP NUMAPBL NBCQ UNBCQ NUMAFK NUMAQ #LIND MARO CBCQ SLCQ NBVB 2CAS NRTM VBPQ UNBCQ NUMAQ NUMAFK NUMAP #V2CQ NUMA WORK
+TARGETS := NUMAFK NUMAFK_MALLOC NUMAFK_NUMA #LIND MARO CBCQ SLCQ NBVB 2CAS NRTM VBPQ UNBCQ NUMAQ NUMAFK NUMAP #V2CQ NUMA WORK
 
 UTIL_value := src/utils/common.o src/utils/hpdcs_math.o 
 GACO_value := src/gc/gc.o src/gc/ptst.o
@@ -24,6 +24,12 @@ NUMAQ_link := gcc
 
 NUMAFK_value := src/datatypes/nb_umb/numafk/msq.o src/datatypes/nb_umb/numafk/stack.o src/datatypes/nb_umb/numafk/lcrq.o src/datatypes/nb_umb/numafk/common_nb_calqueue.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMAFK_link := gcc
+
+NUMAFK_MALLOC_value := src/datatypes/nb_umb/numafk_malloc/msq.o src/datatypes/nb_umb/numafk_malloc/stack.o src/datatypes/nb_umb/numafk_malloc/lcrq.o src/datatypes/nb_umb/numafk_malloc/common_nb_calqueue.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMAFK_MALLOC_link := gcc
+
+NUMAFK_NUMA_value := src/datatypes/nb_umb/numafk_numa/msq.o src/datatypes/nb_umb/numafk_numa/stack.o src/datatypes/nb_umb/numafk_numa/lcrq.o src/datatypes/nb_umb/numafk_numa/common_nb_calqueue.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMAFK_NUMA_link := gcc
 
 UNBCQ_value := src/datatypes/nb_umb/unbcq/nb_calqueue.o src/datatypes/nb_umb/unbcq/common_nb_calqueue.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 UNBCQ_link := gcc
@@ -109,7 +115,7 @@ else ifeq ($(OBJS_DIR), GProf)
 	DEBUG+=-pg
 endif
 
-C_SUBDIRS 		:= src src/datatypes/nbcalendars src/datatypes/nbcalendars_with_vb src/datatypes/nbcalendars_with_vb2 src/datatypes/nbcalendars_with_vb_rtm src/datatypes/nbcalendars_with_vb_2CAS  src/datatypes/nbskiplists src/datatypes/slcalqueue  src/arch src/gc src/utils src/datatypes/nb_umb/unbcq src/datatypes/nb_umb/numaq src/datatypes/nb_umb/numafk src/datatypes/nb_umb/numap src/datatypes/nb_umb/numap_bl src/datatypes/nb_umb/numap_noop src/datatypes/nb_umb/gc
+C_SUBDIRS 		:= src src/datatypes/nbcalendars src/datatypes/nbcalendars_with_vb src/datatypes/nbcalendars_with_vb2 src/datatypes/nbcalendars_with_vb_rtm src/datatypes/nbcalendars_with_vb_2CAS  src/datatypes/nbskiplists src/datatypes/slcalqueue  src/arch src/gc src/utils src/datatypes/nb_umb/unbcq src/datatypes/nb_umb/numaq src/datatypes/nb_umb/numafk src/datatypes/nb_umb/numafk_numa src/datatypes/nb_umb/numafk_malloc src/datatypes/nb_umb/numap src/datatypes/nb_umb/numap_bl src/datatypes/nb_umb/numap_noop src/datatypes/nb_umb/gc
 C_SRCS			:= $(shell ls   $(patsubst %, %/*.c, $(C_SUBDIRS)) )
 C_SRCS 			:= $(filter-out $(FILTER_OUT_C_SRC), $(C_SRCS))
 C_OBJS			:= $(strip $(subst .c,.o, $(C_SRCS)))
