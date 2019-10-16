@@ -123,7 +123,7 @@ void _lcrq_free_hook(ptst_t *p, void *ptr)
 void _init_gc_lcrq() 
 {
     printf("\n########\nRing Node size Bytes: %ld, Ring Queue Size Bytes: %ld\n#########\n", sizeof(RingNode), sizeof(RingQueue));
-    //gc_aid[GC_RING_QUEUE] = gc_add_allocator(sizeof(RingQueue));
+    gc_aid[GC_RING_QUEUE] = gc_add_allocator(sizeof(RingQueue));
     gc_hid[3] = gc_add_hook(_lcrq_free_hook);
 }
 
@@ -159,7 +159,7 @@ static inline void fixState(RingQueue *rq) {
 
 // SHARED_OBJECT_INIT
 void lcrq_init(LCRQ *queue, unsigned int numa_node) {
-    RingQueue *rq = malloc(sizeof(RingQueue));//numa_alloc_onnode(sizeof(RingQueue),numa_node);//gc_alloc_node(ptst, gc_aid[GC_RING_QUEUE], numa_node);
+    RingQueue *rq = gc_alloc_node(ptst, gc_aid[GC_RING_QUEUE], numa_node);
     init_ring(rq);
     queue->head = queue->tail = rq;
 }
@@ -218,7 +218,7 @@ bool _lcrq_enqueue(LCRQ *queue, uint64_t arg, unsigned int numa_node) {
         if (crq_is_closed(t)) {
 alloc:
             if (nrq == null) {
-                nrq = (RingQueue*) malloc(sizeof(RingQueue));//numa_alloc_onnode(sizeof(RingQueue), numa_node);//gc_alloc_node(ptst, gc_aid[GC_RING_QUEUE], numa_node);
+                nrq = (RingQueue*) gc_alloc_node(ptst, gc_aid[GC_RING_QUEUE], numa_node);
                 init_ring(nrq);
             }
 
@@ -243,8 +243,7 @@ alloc:
             if (likely(node_index(idx) <= t)) {
                 if ((likely(!node_unsafe(idx)) || rq->head < t) && CAS2((uint64_t*)cell, -1, idx, arg, t)) {
                     if (nrq != null) {
-                        //gc_free(ptst, nrq, gc_aid[GC_RING_QUEUE]); // to avoid use per thread variable
-                        gc_add_ptr_to_hook_list(ptst, nrq, gc_hid[3]);
+                        gc_free(ptst, nrq, gc_aid[GC_RING_QUEUE]); // to avoid use per thread variable
                     }
                     return true;
                 }
@@ -335,8 +334,7 @@ bool _lcrq_dequeue(LCRQ *queue, int64_t* item) {
             if (tail_index(rq->tail) <= h + 1)
                 if (CASPTR(&queue->head, rq, next))
                 { 
-                    //gc_free(ptst, rq, gc_aid[GC_RING_QUEUE]);
-                    gc_add_ptr_to_hook_list(ptst, rq, gc_hid[3]);
+                    gc_free(ptst, rq, gc_aid[GC_RING_QUEUE]);
                 }
         }
     }
