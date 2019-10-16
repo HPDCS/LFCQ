@@ -22,19 +22,19 @@ NGACO_value := src/datatypes/nb_umb/gc/gc.o src/datatypes/nb_umb/gc/ptst.o
 NUMAQ_value := src/datatypes/nb_umb/numaq/msq.o src/datatypes/nb_umb/numaq/stack.o src/datatypes/nb_umb/numaq/lcrq.o src/datatypes/nb_umb/numaq/common_nb_calqueue.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMAQ_link := gcc
 
-NUMAQBLK_value := src/datatypes/nb_umb/numaq_blk/msq.o src/datatypes/nb_umb/numaq_blk/stack.o src/datatypes/nb_umb/numaq_blk/lcrq.o src/datatypes/nb_umb/numaq_blk/common_nb_calqueue.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMAQBLK_value := src/datatypes/nb_umb/numaq_blk/lcrq.o src/datatypes/nb_umb/numaq_blk/common_nb_calqueue.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMAQBLK_link := gcc
 
-NUMAFK_value := src/datatypes/nb_umb/numafk/msq.o src/datatypes/nb_umb/numafk/stack.o src/datatypes/nb_umb/numafk/lcrq.o src/datatypes/nb_umb/numafk/common_nb_calqueue.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMAFK_value := src/datatypes/nb_umb/numafk/lcrq.o src/datatypes/nb_umb/numafk/common_nb_calqueue.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMAFK_link := gcc
 
-NUMAFKBL_value := src/datatypes/nb_umb/numafk_bl/msq.o src/datatypes/nb_umb/numafk_bl/stack.o src/datatypes/nb_umb/numafk_bl/lcrq.o src/datatypes/nb_umb/numafk_bl/common_nb_calqueue.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMAFKBL_value := src/datatypes/nb_umb/numafk_bl/lcrq.o src/datatypes/nb_umb/numafk_bl/common_nb_calqueue.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMAFKBL_link := gcc
 
-NUMAFK_MALLOC_value := src/datatypes/nb_umb/numafk_malloc/msq.o src/datatypes/nb_umb/numafk_malloc/stack.o src/datatypes/nb_umb/numafk_malloc/lcrq.o src/datatypes/nb_umb/numafk_malloc/common_nb_calqueue.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMAFK_MALLOC_value := src/datatypes/nb_umb/numafk_malloc/lcrq.o src/datatypes/nb_umb/numafk_malloc/common_nb_calqueue.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMAFK_MALLOC_link := gcc
 
-NUMAFK_NUMA_value := src/datatypes/nb_umb/numafk_numa/msq.o src/datatypes/nb_umb/numafk_numa/stack.o src/datatypes/nb_umb/numafk_numa/lcrq.o src/datatypes/nb_umb/numafk_numa/common_nb_calqueue.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMAFK_NUMA_value := src/datatypes/nb_umb/numafk_numa/lcrq.o src/datatypes/nb_umb/numafk_numa/common_nb_calqueue.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMAFK_NUMA_link := gcc
 
 UNBCQ_value := src/datatypes/nb_umb/unbcq/nb_calqueue.o src/datatypes/nb_umb/unbcq/common_nb_calqueue.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
