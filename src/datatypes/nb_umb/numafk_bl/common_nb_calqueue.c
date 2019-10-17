@@ -36,7 +36,7 @@
 
 #define DO_BLOOP
 
-#define LOOP_COUNT 1000
+#define LOOP_COUNT 500
 
 // END MACROS TO ACTIVATE OPS
 

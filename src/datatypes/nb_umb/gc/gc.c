@@ -215,6 +215,7 @@ static chunk_t* node_alloc_more_chunks(unsigned int node)
 
     /* I care which is the numa node of this area of memory because of hooks*/
     mem_area = numa_alloc_onnode(alloc_size, node);
+    malloc_count+=1;
     if ( mem_area == NULL ) MEM_FAIL(alloc_size);
     
     end = mem_area + alloc_size;
@@ -313,6 +314,7 @@ static chunk_t *node_get_filled_chunks(int n, int sz, unsigned int numa_node)
     alloc_size = num_pages * page_size;
 
     node = start = numa_alloc_onnode(alloc_size, numa_node);
+    malloc_count+=1;
     if ( node == NULL ) MEM_FAIL(alloc_size);
 
     end = node + alloc_size;

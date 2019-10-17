@@ -54,7 +54,7 @@ unsigned int ACTIVE_NUMA_NODES;
 
 #define DO_BLOOP
 
-#define LOOP_COUNT 1000 //10us
+#define LOOP_COUNT 500 //10us
 
 /*************************************
  * THREAD LOCAL VARIABLES			 *
