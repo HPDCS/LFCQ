@@ -10,7 +10,7 @@ USER_OBJS :=
 
 LIBS := -lpthread -lm -lnuma -lrt -mrtm
 SRC_DIR := src
-TARGETS := NUMAFK NUMAQ NUMAFKBL UNBCQ NBCQ NUMAP NUMAPNOP NUMAPBL NUMAQBLK #LIND MARO CBCQ SLCQ NBVB 2CAS NRTM VBPQ UNBCQ NUMAQ NUMAFK NUMAP #V2CQ NUMA WORK
+TARGETS := PHYNBCQ UNBCQ#NUMAFK NUMAQ NUMAFKBL UNBCQ NBCQ NUMAP NUMAPNOP NUMAPBL NUMAQBLK #LIND MARO CBCQ SLCQ NBVB 2CAS NRTM VBPQ UNBCQ NUMAQ NUMAFK NUMAP #V2CQ NUMA WORK
 
 UTIL_value := src/utils/common.o src/utils/hpdcs_math.o 
 GACO_value := src/gc/gc.o src/gc/ptst.o
@@ -18,6 +18,9 @@ ARCH_value := src/arch/x86.o
 
 
 NGACO_value := src/datatypes/nb_umb/gc/gc.o src/datatypes/nb_umb/gc/ptst.o
+
+PHYNBCQ_value := src/datatypes/nb_umb/nbcq_phy/phynbcq.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+PHYNBCQ_link := gcc
 
 NUMAQ_value := src/datatypes/nb_umb/numaq/msq.o src/datatypes/nb_umb/numaq/stack.o src/datatypes/nb_umb/numaq/lcrq.o src/datatypes/nb_umb/numaq/common_nb_calqueue.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMAQ_link := gcc
@@ -92,7 +95,7 @@ WORK_value := src/datatypes/worker_queue.o  src/datatypes/common_nb_calqueue.o  
 
 
 L1_CACHE_LINE_SIZE := $(shell getconf LEVEL1_DCACHE_LINESIZE)
-NUMA_NODES := $(shell lscpu | grep -e "NUMA node(s)" | cut -d' ' -f 10-)
+NUMA_NODES := $(shell lscpu | grep -e "NUMA node(s)" | cut -d' ' -f 22-)
 NUM_CPUS := $(shell nproc --all)
 MACRO := -DARCH_X86_64  -DCACHE_LINE_SIZE=$(L1_CACHE_LINE_SIZE) -DINTEL -D_NUMA_NODES=$(NUMA_NODES) -DNUM_CPUS=$(NUM_CPUS)
 
@@ -121,7 +124,7 @@ else ifeq ($(OBJS_DIR), GProf)
 	DEBUG+=-pg
 endif
 
-C_SUBDIRS 		:= src src/datatypes/nbcalendars src/datatypes/nbcalendars_with_vb src/datatypes/nbcalendars_with_vb2 src/datatypes/nbcalendars_with_vb_rtm src/datatypes/nbcalendars_with_vb_2CAS  src/datatypes/nbskiplists src/datatypes/slcalqueue  src/arch src/gc src/utils src/datatypes/nb_umb/unbcq src/datatypes/nb_umb/numaq src/datatypes/nb_umb/numaq_blk src/datatypes/nb_umb/numafk src/datatypes/nb_umb/numafk_numa src/datatypes/nb_umb/numafk_bl src/datatypes/nb_umb/numafk_malloc src/datatypes/nb_umb/numap src/datatypes/nb_umb/numap_bl src/datatypes/nb_umb/numap_noop src/datatypes/nb_umb/gc
+C_SUBDIRS 		:= src src/datatypes/nbcalendars src/datatypes/nbcalendars_with_vb src/datatypes/nbcalendars_with_vb2 src/datatypes/nbcalendars_with_vb_rtm src/datatypes/nbcalendars_with_vb_2CAS  src/datatypes/nbskiplists src/datatypes/slcalqueue  src/arch src/gc src/utils src/datatypes/nb_umb/unbcq src/datatypes/nb_umb/numaq src/datatypes/nb_umb/numaq_blk src/datatypes/nb_umb/numafk src/datatypes/nb_umb/numafk_numa src/datatypes/nb_umb/numafk_bl src/datatypes/nb_umb/numafk_malloc src/datatypes/nb_umb/numap src/datatypes/nb_umb/numap_bl src/datatypes/nb_umb/nbcq_phy src/datatypes/nb_umb/numap_noop src/datatypes/nb_umb/gc
 C_SRCS			:= $(shell ls   $(patsubst %, %/*.c, $(C_SUBDIRS)) )
 C_SRCS 			:= $(filter-out $(FILTER_OUT_C_SRC), $(C_SRCS))
 C_OBJS			:= $(strip $(subst .c,.o, $(C_SRCS)))

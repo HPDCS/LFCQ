@@ -483,7 +483,7 @@ int main(int argc, char **argv)
 	printf("MEAN_INTERARRIVAL_TIME:%f,", MEAN_INTERARRIVAL_TIME);
 	printf("PERC_USED_BUCKET:%f,", PERC_USED_BUCKET);
 	printf("ELEM_PER_BUCKET:%u,", ELEM_PER_BUCKET);
-	printf("EMPTY_QUEUE:%u,", EMPTY_QUEUE);
+	printf("EMPTY_QUEUE:%u,\n", EMPTY_QUEUE);
 	
 
 	TOTAL_OPS2 += TOTAL_OPS1;
