@@ -29,10 +29,6 @@
 
 #include "common_nb_calqueue.h"
 #include "table_utils.h"
-/*
- * MACROS TO ACTIVATE OPS
- * */
-
 
 /*************************************
  * GLOBAL VARIABLES					 *
@@ -76,8 +72,8 @@ void *pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 
 	ACTIVE_NUMA_NODES = (((THREADS * _NUMA_NODES)) / NUM_CPUS) + ((((THREADS * _NUMA_NODES)) % NUM_CPUS) != 0); // (!new) compute the number of active numa nodes 
 	ACTIVE_NUMA_NODES = ACTIVE_NUMA_NODES < _NUMA_NODES? ACTIVE_NUMA_NODES:_NUMA_NODES;
-	printf("\n#######\nThreads %d, NUMA Nodes %d, CPUS %d, ACTIVE NUMA Nodes %d\n########\n", THREADS, _NUMA_NODES, NUM_CPUS, ACTIVE_NUMA_NODES);
-
+	LOG("\n#######\nThreads %d, NUMA Nodes %d, CPUS %d, ACTIVE NUMA Nodes %d\n########\n", THREADS, _NUMA_NODES, NUM_CPUS, ACTIVE_NUMA_NODES);
+	
 	unsigned int i = 0;
 	int res_mem_posix = 0;
 	nb_calqueue *res = NULL;
@@ -138,6 +134,11 @@ void *pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 
 	return res;
 }
+
+/*
+ * - Change single step to do_
+ * - Change queue code to one similar numap
+ * */
 
 static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *payload)
 {
