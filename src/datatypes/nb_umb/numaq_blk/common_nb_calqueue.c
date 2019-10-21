@@ -71,6 +71,10 @@ __thread unsigned long long local_deq = 0ULL;
 __thread unsigned long long remote_enq = 0ULL;
 __thread unsigned long long remote_deq = 0ULL;
 
+__thread unsigned long long enq_steal_done = 0ULL;
+__thread unsigned long long enq_steal_attempt = 0ULL;
+__thread unsigned long long deq_steal_done = 0ULL;
+__thread unsigned long long deq_steal_attempt = 0ULL;
 __thread unsigned long long repost_enq = 0ULL;
 __thread unsigned long long repost_deq = 0ULL;
 
@@ -628,31 +632,35 @@ pkey_t pq_dequeue(void *q, void **result)
 	attempts = 0;
 	do 
 	{
-		// mark op as in handling -> who extract it from queue will yeld it
-		if (BOOL_CAS(&(requested_op->response), OP_NEW, OP_IN_HANDLING))
+		if (attempts > ENQ_MAX_WAIT_ATTEMPTS)
 		{
-			h = read_table(&queue->hashtable, th, epb, pub);
-			new_dest_node =  NODE_HASH(((h->current) >> 32) % (h->size));
-			if (new_dest_node == dest_node || new_dest_node == NID)
+			// mark op as in handling -> who extract it from queue will yeld it
+			if (BOOL_CAS(&(requested_op->response), OP_NEW, OP_IN_HANDLING))
 			{
-				ret_ts = do_pq_dequeue(q, result);
-				break; // steal succesful
+				h = read_table(&queue->hashtable, th, epb, pub);
+				new_dest_node =  NODE_HASH(((h->current) >> 32) % (h->size));
+				if (new_dest_node == dest_node || new_dest_node == NID)
+				{
+					ret_ts = do_pq_dequeue(q, result);
+					break; // steal succesful
+				}
+				dest_node = new_dest_node;
+
+				operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
+				operation->type = OP_PQ_DEQ;
+				//operation->timestamp = vb_index * (h->bucket_width);
+				operation->payload = NULL; //DEADBEEF
+				operation->response = OP_NEW;
+
+				gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
+				requested_op = operation;
+
+				tq_enqueue(&op_queue[dest_node], (void *)requested_op, dest_node);
+
 			}
-			dest_node = new_dest_node;
-
-			operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
-			operation->type = OP_PQ_DEQ;
-			//operation->timestamp = vb_index * (h->bucket_width);
-			operation->payload = NULL; //DEADBEEF
-			operation->response = OP_NEW;
-
-			gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
-			requested_op = operation;
-
-			tq_enqueue(&op_queue[dest_node], (void *)requested_op, dest_node);
-
+			attempts = 0;
 		}
-		attempts = 0;
+		
 
 		count = handle_ops(q);
 		if (count > 0)
