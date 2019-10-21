@@ -487,7 +487,6 @@ static inline int handle_ops(void* q)
 	return count;	
 }
 
-// @TODO - enable blocking steal of operations
 // @TODO - add steal/repost counters
 
 int pq_enqueue(void* q, pkey_t timestamp, void *payload) 
@@ -543,8 +542,12 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 		if (attempts > ENQ_MAX_WAIT_ATTEMPTS)
 		{
 			// mark op as in handling
+			enq_steal_attempt++;
 			if (BOOL_CAS(&(requested_op->response), OP_NEW, OP_IN_HANDLING))
 			{
+				
+				enq_steal_done++;
+
 				h = read_table(&queue->hashtable, th, epb, pub);
 				new_dest_node =  NODE_HASH(hash(timestamp, h->bucket_width) % (h->size));
 				if (new_dest_node == dest_node || new_dest_node == NID)
@@ -565,6 +568,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 				requested_op = operation;
 
 				tq_enqueue(&op_queue[dest_node], (void *)requested_op, dest_node);
+				repost_enq++;
 			}
 			attempts = 0;
 		}
@@ -632,11 +636,13 @@ pkey_t pq_dequeue(void *q, void **result)
 	attempts = 0;
 	do 
 	{
-		if (attempts > ENQ_MAX_WAIT_ATTEMPTS)
+		if (attempts > DEQ_MAX_WAIT_ATTEMPTS)
 		{
+			deq_steal_attempt++;
 			// mark op as in handling -> who extract it from queue will yeld it
 			if (BOOL_CAS(&(requested_op->response), OP_NEW, OP_IN_HANDLING))
 			{
+				deq_steal_done++;
 				h = read_table(&queue->hashtable, th, epb, pub);
 				new_dest_node =  NODE_HASH(((h->current) >> 32) % (h->size));
 				if (new_dest_node == dest_node || new_dest_node == NID)
@@ -656,7 +662,7 @@ pkey_t pq_dequeue(void *q, void **result)
 				requested_op = operation;
 
 				tq_enqueue(&op_queue[dest_node], (void *)requested_op, dest_node);
-
+				repost_deq++;
 			}
 			attempts = 0;
 		}
@@ -685,19 +691,21 @@ void pq_report(int TID)
 {
 
 	printf("%d- "
-	"Enqueue: %.10f LEN: %.10f ### "
-	"Dequeue: %.10f LEN: %.10f NUMCAS: %llu : %llu ### "
+	"Enqueue: %.10f LEN: %.10f ST: %llu : %llu : %llu ### "
+	"Dequeue: %.10f LEN: %.10f NUMCAS: %llu : %llu ST: %llu : %llu : %llu ### "
 	"NEAR: %llu "
 	"RTC:%d, M:%lld, "
 	"Local ENQ: %llu DEQ: %llu, Remote ENQ: %llu DEQ: %llu\n",
 			TID,
 			((float)concurrent_enqueue) /((float)performed_enqueue),
 			((float)scan_list_length_en)/((float)performed_enqueue),
+			enq_steal_attempt, enq_steal_done, repost_enq,
 			((float)concurrent_dequeue) /((float)performed_dequeue),
 			((float)scan_list_length)   /((float)performed_dequeue),
 			num_cas, num_cas_useful,
+			deq_steal_attempt, deq_steal_done, repost_deq,
 			near,
-			read_table_count,
+			read_table_count	  ,
 			malloc_count,
 			local_enq, local_deq, remote_enq, remote_deq);
 }
