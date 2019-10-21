@@ -40,6 +40,15 @@ int gc_hid[4];
 unsigned long op_counter = 2;
 task_queue op_queue[_NUMA_NODES]; // (!new) per numa node queue
 
+
+#ifndef ENQ_MAX_WAIT_ATTEMPTS
+#define ENQ_MAX_WAIT_ATTEMPTS 10000
+#endif
+ 
+#ifndef DEQ_MAX_WAIT_ATTEMPTS
+#define DEQ_MAX_WAIT_ATTEMPTS 10000
+#endif
+
 /*************************************
  * THREAD LOCAL VARIABLES			 *
  ************************************/
@@ -117,7 +126,7 @@ void *pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	res->tail->next = NULL;
 
 	// (!new) initialize numa queues
-	for (i = 0; i < _NUMA_NODES; i++)
+	for (i = 0; i < ACTIVE_NUMA_NODES; i++)
 	{
 		init_tq(&op_queue[i], i);
 	}
@@ -436,32 +445,37 @@ begin:
 
 static inline int handle_ops(void* q) 
 {
-	int ret, count;
 	
-	unsigned int type;
-
-	pkey_t ts;
+	op_node *operation;
 	void *pld;
 
-	op_node *operation;
+	pkey_t ts;
+
+	unsigned int type;
+	int ret, count;
 
 	count = 0;
 	while(tq_dequeue(&op_queue[NID], &operation))
 	{
+		// block the operation
+		if (!BOOL_CAS(&(operation->response), OP_NEW, OP_IN_HANDLING))
+			continue;
+
+		// handle the operation
 		type = operation->type;
 		if (type == OP_PQ_ENQ)
 		{
 			ts = operation->timestamp;
 			pld = operation->payload;
 			ret = do_pq_enqueue(q, ts, pld);
-			__sync_bool_compare_and_swap(&(operation->response), -1, ret);
+			__sync_bool_compare_and_swap(&(operation->response), OP_IN_HANDLING, ret);
 		}
 		else 
 		{
 			ts = do_pq_dequeue(q, &pld);
 			operation->timestamp = ts;
 			operation->payload = pld;
-			__sync_bool_compare_and_swap(&(operation->response), -1, 1);
+			__sync_bool_compare_and_swap(&(operation->response), OP_IN_HANDLING, 1);
 		}
 		count++;
 	}
@@ -469,16 +483,20 @@ static inline int handle_ops(void* q)
 	return count;	
 }
 
+// @TODO - enable blocking steal of operations
+// @TODO - add steal/repost counters
+
 int pq_enqueue(void* q, pkey_t timestamp, void *payload) 
 {
 	assertf(timestamp < MIN || timestamp >= INFTY, "Key out of range %s\n", "");
 
 	nb_calqueue *queue = (nb_calqueue *) q;
 	table *h = NULL;
-	op_node *requested_op;
+	op_node *requested_op, *operation;
 
 	unsigned long long vb_index;
-	unsigned int dest_node;	 
+	unsigned int dest_node, new_dest_node;
+	unsigned int attempts, count;	 
 	int ret;
 
 	//table configuration
@@ -510,16 +528,52 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	requested_op->type = OP_PQ_ENQ;
 	requested_op->timestamp = timestamp;
 	requested_op->payload = payload; //DEADBEEF
-	requested_op->response = -1;
+	requested_op->response = OP_NEW;
 
 	tq_enqueue(&op_queue[dest_node], (void *)requested_op, dest_node);
 
 	//
+	attempts = 0;
 	do 
 	{	
-		handle_ops(q);
+		if (attempts > ENQ_MAX_WAIT_ATTEMPTS)
+		{
+			// mark op as in handling
+			if (BOOL_CAS(&(requested_op->response), OP_NEW, OP_IN_HANDLING))
+			{
+				h = read_table(&queue->hashtable, th, epb, pub);
+				new_dest_node =  NODE_HASH(hash(timestamp, h->bucket_width) % (h->size));
+				if (new_dest_node == dest_node || new_dest_node == NID)
+				{
+					ret = do_pq_enqueue(q, timestamp, payload);
+					break;
+				}
+				dest_node = new_dest_node;
 
-		if ((ret = __sync_fetch_and_add(&(requested_op->response), 0))!= -1)
+				// repost operation
+				operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
+				operation->type = OP_PQ_ENQ;
+				operation->timestamp = timestamp;
+				operation->payload = payload; //DEADBEEF
+				operation->response = OP_NEW;
+
+				gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
+				requested_op = operation;
+
+				tq_enqueue(&op_queue[dest_node], (void *)requested_op, dest_node);
+			}
+			attempts = 0;
+		}
+		// steal/repost
+
+		count = handle_ops(q);
+
+		if (count > 0)
+			attempts=0;
+		else
+			attempts++;
+
+		if ((ret = __sync_fetch_and_add(&(requested_op->response), 0)) >= 0)
 			break;
 	} while(1);
 
@@ -532,10 +586,11 @@ pkey_t pq_dequeue(void *q, void **result)
 {
 	nb_calqueue *queue = (nb_calqueue *) q;
 	table *h = NULL;
-	op_node *requested_op;
+	op_node *requested_op, *operation;
 
 	unsigned long long vb_index;
-	unsigned int dest_node;	 
+	unsigned int dest_node, new_dest_node;
+	unsigned int count, attempts;
 	int ret;
 	pkey_t ret_ts;
 	
@@ -564,23 +619,55 @@ pkey_t pq_dequeue(void *q, void **result)
 
 	requested_op = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
 	requested_op->type = OP_PQ_DEQ;
-	requested_op->timestamp = vb_index * (h->bucket_width);
+	//requested_op->timestamp = vb_index * (h->bucket_width);
 	requested_op->payload = NULL; //DEADBEEF
-	requested_op->response = -1;
+	requested_op->response = OP_NEW;
 
 	tq_enqueue(&op_queue[dest_node], (void *)requested_op, dest_node);
-	//
+	
+	attempts = 0;
 	do 
 	{
-		handle_ops(q);
+		// mark op as in handling -> who extract it from queue will yeld it
+		if (BOOL_CAS(&(requested_op->response), OP_NEW, OP_IN_HANDLING))
+		{
+			h = read_table(&queue->hashtable, th, epb, pub);
+			new_dest_node =  NODE_HASH(((h->current) >> 32) % (h->size));
+			if (new_dest_node == dest_node || new_dest_node == NID)
+			{
+				ret_ts = do_pq_dequeue(q, result);
+				break; // steal succesful
+			}
+			dest_node = new_dest_node;
 
-		if ((ret = __sync_fetch_and_add(&(requested_op->response), 0))!= -1)
+			operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
+			operation->type = OP_PQ_DEQ;
+			//operation->timestamp = vb_index * (h->bucket_width);
+			operation->payload = NULL; //DEADBEEF
+			operation->response = OP_NEW;
+
+			gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
+			requested_op = operation;
+
+			tq_enqueue(&op_queue[dest_node], (void *)requested_op, dest_node);
+
+		}
+		attempts = 0;
+
+		count = handle_ops(q);
+		if (count > 0)
+			attempts = 0;
+		else 
+			attempts++;
+
+		if ((ret = __sync_fetch_and_add(&(requested_op->response), 0)) >= 0)
+		{
+			result = requested_op->payload;
+			ret_ts = requested_op->timestamp;
 			break;
+		}
 	} while(1);
 
-	// fix this
-	*result = requested_op->payload;
-	ret_ts = requested_op->timestamp;
 	gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
 	critical_exit();
 	return ret_ts;
