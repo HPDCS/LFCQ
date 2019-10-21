@@ -211,7 +211,7 @@ static chunk_t* node_alloc_more_chunks(unsigned int node)
     char *mem_area, *end, *next_page;
 
     chunk_t *h, *p;
-    size_t alloc_size = page_size * 150; //1050 chunks
+    size_t alloc_size = page_size * 300; //1500 chunks
 
     /* I care which is the numa node of this area of memory because of hooks*/
     mem_area = numa_alloc_onnode(alloc_size, node);

@@ -10,7 +10,7 @@ USER_OBJS :=
 
 LIBS := -lpthread -lm -lnuma -lrt -mrtm
 SRC_DIR := src
-TARGETS := PHYNBCQ UNBCQ NUMAQBLK NBCQ#NUMAFK NUMAQ NUMAFKBL UNBCQ NBCQ NUMAP NUMAPNOP NUMAPBL NUMAQBLK #LIND MARO CBCQ SLCQ NBVB 2CAS NRTM VBPQ UNBCQ NUMAQ NUMAFK NUMAP #V2CQ NUMA WORK
+TARGETS := PHYNBCQ UNBCQ NUMAQBLK NBCQ NUMAP NUMAFK NUMAQ#NUMAFK NUMAQ NUMAFKBL UNBCQ NBCQ NUMAP NUMAPNOP NUMAPBL NUMAQBLK #LIND MARO CBCQ SLCQ NBVB 2CAS NRTM VBPQ UNBCQ NUMAQ NUMAFK NUMAP #V2CQ NUMA WORK
 
 UTIL_value := src/utils/common.o src/utils/hpdcs_math.o 
 GACO_value := src/gc/gc.o src/gc/ptst.o
@@ -95,7 +95,7 @@ WORK_value := src/datatypes/worker_queue.o  src/datatypes/common_nb_calqueue.o  
 
 
 L1_CACHE_LINE_SIZE := $(shell getconf LEVEL1_DCACHE_LINESIZE)
-NUMA_NODES := $(shell lscpu | grep -e "NUMA node(s)" | cut -d' ' -f 22-)
+NUMA_NODES := $(shell lscpu | grep -e "NUMA node(s)" | cut -d' ' -f 10-)
 NUM_CPUS := $(shell nproc --all)
 MACRO := -DARCH_X86_64  -DCACHE_LINE_SIZE=$(L1_CACHE_LINE_SIZE) -DINTEL -D_NUMA_NODES=$(NUMA_NODES) -DNUM_CPUS=$(NUM_CPUS)
 
