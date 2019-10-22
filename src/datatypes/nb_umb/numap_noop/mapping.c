@@ -25,7 +25,6 @@ void init_mapping()
     for (i = 0; i < ACTIVE_SOCKETS; ++i) 
     {
         socket_to_node = i << 1;
-        print("%d socket to node", socket_to_node);
         req_mapping[i] = numa_alloc_onnode(sizeof(op_node)*THREADS, socket_to_node);
         res_mapping[i] = numa_alloc_onnode(sizeof(op_node)*THREADS, socket_to_node);
         
