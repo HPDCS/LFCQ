@@ -9,22 +9,25 @@
 #define L_FREE 0x0
 #endif
 
-op_node *res_mapping[_NUMA_NODES];
-op_node *req_mapping[_NUMA_NODES];
+op_node *res_mapping[NUM_SOCKETS];
+op_node *req_mapping[NUM_SOCKETS];
 
-__thread op_node** req_out_slots  = NULL; // slot per "postare" la richiesta su altri nodi
-__thread op_node** req_in_slots   = NULL; // slot per "leggere" la richiesta da altri nodi
+//__thread op_node** req_out_slots  = NULL; // slot per "postare" la richiesta su altri nodi
+//__thread op_node** req_in_slots   = NULL; // slot per "leggere" la richiesta da altri nodi
 
-__thread op_node** res_out_slots  = NULL; // slot per "postare" la risposta su nodi 
-__thread op_node** res_in_slots   = NULL; // slot per "leggere" la risposta da nodi 
+//__thread op_node** res_out_slots  = NULL; // slot per "postare" la risposta su nodi 
+//__thread op_node** res_in_slots   = NULL; // slot per "leggere" la risposta da nodi 
 
 void init_mapping() 
 {
     int i, j;
-    for (i = 0; i < ACTIVE_NUMA_NODES; ++i) 
+    int socket_to_node;
+    for (i = 0; i < ACTIVE_SOCKETS; ++i) 
     {
-        req_mapping[i] = numa_alloc_onnode(sizeof(op_node)*THREADS, i);
-        res_mapping[i] = numa_alloc_onnode(sizeof(op_node)*THREADS, i);
+        socket_to_node = i << 1;
+        print("%d socket to node", socket_to_node);
+        req_mapping[i] = numa_alloc_onnode(sizeof(op_node)*THREADS, socket_to_node);
+        //res_mapping[i] = numa_alloc_onnode(sizeof(op_node)*THREADS, i);
         
         for (j = 0; j < THREADS; ++j) 
         {
@@ -42,13 +45,16 @@ void init_mapping()
     }
 }
 
+/*
 static inline void init_local_mapping() 
 {
     req_in_slots  = numa_alloc_onnode(sizeof(op_node*)*_NUMA_NODES, NID);
     req_out_slots = numa_alloc_onnode(sizeof(op_node*)*_NUMA_NODES, NID);
 
-    res_in_slots  = numa_alloc_onnode(sizeof(op_node*)*_NUMA_NODES, NID); // tutti su nodi numa diversi
-    res_out_slots = numa_alloc_onnode(sizeof(op_node*)*_NUMA_NODES, NID); // tutti su nodi numa diversi
+    res_slots  = numa_alloc_onnode(sizeof(op_node*)*_NUMA_NODES, NID); // tutti su nodi numa diversi
+
+    //res_in_slots  = numa_alloc_onnode(sizeof(op_node*)*_NUMA_NODES, NID); // tutti su nodi numa diversi
+    //res_out_slots = numa_alloc_onnode(sizeof(op_node*)*_NUMA_NODES, NID); // tutti su nodi numa diversi
 
     int i, j = LTID;
     
@@ -57,47 +63,71 @@ static inline void init_local_mapping()
         req_in_slots[i]    = &req_mapping[NID][j];
 
         req_out_slots[i]   = &req_mapping[i][TID];
+        
+        res_slots[i]       = &req_mapping[i][j];
 
-        res_in_slots[i]    = &res_mapping[NID][j];
+        //res_in_slots[i]    = &res_mapping[NID][j];
        
-        res_out_slots[i]   = &res_mapping[i][TID];
+        //res_out_slots[i]   = &res_mapping[i][TID];
 
 
         j += num_cpus_per_node;
     }
 }
+*/
 
 op_node* get_req_slot_from_node(unsigned int numa_node)
 {
+    /*
     if (unlikely(req_in_slots==NULL))
         init_local_mapping();
-
+    
     return req_in_slots[numa_node];
-
+    */
+    return &req_mapping[(NID >> 1)][((numa_node >> 1) * CPU_PER_SOCKET) + LTID];
 }
 
 op_node* get_req_slot_to_node(unsigned int numa_node)
 {
+    /*
     if (unlikely(req_out_slots==NULL))
         init_local_mapping();
 
     return req_out_slots[numa_node];
+    */
+    return &req_mapping[numa_node][TID];
 }
+
+/*
+op_node* get_res_slot(unsigned int numa_node)
+{
+    
+    // if (unlikely(res_slots==NULL))
+    //     init_local_mapping();
+
+    // return res_slots[numa_node];
+    
+    return &req_mapping[numa_node][(numa_node * num_cpus_per_node) + LTID];
+}
+*/
+
 
 op_node* get_res_slot_from_node(unsigned int numa_node)
 {
-    if (unlikely(res_in_slots==NULL))
-        init_local_mapping();
+    // if (unlikely(res_in_slots==NULL))
+    //     init_local_mapping();
 
-    return res_in_slots[numa_node];
+    // return res_in_slots[numa_node];
+    return &res_mapping[(NID >> 1)][((numa_node>>1) * CPU_PER_SOCKET) + LTID];
 }
 
 op_node* get_res_slot_to_node(unsigned int numa_node)
 {
-    if (unlikely(res_out_slots==NULL))
-        init_local_mapping();
+    // if (unlikely(res_out_slots==NULL))
+    //     init_local_mapping();
 
-    return res_out_slots[numa_node];
+    // return res_out_slots[numa_node];
+    return &res_mapping[numa_node][TID];
 }
 
 bool read_slot(op_node* slot, 

@@ -42,6 +42,8 @@ extern int gc_aid[];
 extern int gc_hid[];
 
 unsigned int ACTIVE_NUMA_NODES;
+unsigned int ACTIVE_SOCKETS;
+
 #define NODE_HASH(bucket_id) ((bucket_id >> 2ull) % ACTIVE_NUMA_NODES)
 
 #define GC_BUCKETNODE 2

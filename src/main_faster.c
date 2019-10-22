@@ -348,7 +348,7 @@ void* process(void *arg)
 	(TID) 		= my_id;
 	int cpu 	= numa_mapping[my_id];
 	(NID) 		= numa_node_of_cpu(cpu);
-	LTID		= my_id % num_cpus_per_node;
+	LTID		= my_id % CPU_PER_SOCKET;
 	srand48_r(my_id+157, &seed2);
     srand48_r(my_id+359, &seed);
     srand48_r(my_id+254, &seedT);
