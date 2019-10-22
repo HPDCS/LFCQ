@@ -27,7 +27,7 @@ void init_mapping()
         socket_to_node = i << 1;
         print("%d socket to node", socket_to_node);
         req_mapping[i] = numa_alloc_onnode(sizeof(op_node)*THREADS, socket_to_node);
-        //res_mapping[i] = numa_alloc_onnode(sizeof(op_node)*THREADS, i);
+        res_mapping[i] = numa_alloc_onnode(sizeof(op_node)*THREADS, socket_to_node);
         
         for (j = 0; j < THREADS; ++j) 
         {
@@ -95,7 +95,7 @@ op_node* get_req_slot_to_node(unsigned int numa_node)
 
     return req_out_slots[numa_node];
     */
-    return &req_mapping[numa_node][TID];
+    return &req_mapping[(numa_node>>1)][TID];
 }
 
 /*
@@ -127,7 +127,7 @@ op_node* get_res_slot_to_node(unsigned int numa_node)
     //     init_local_mapping();
 
     // return res_out_slots[numa_node];
-    return &res_mapping[numa_node][TID];
+    return &res_mapping[(numa_node>>1)][TID];
 }
 
 bool read_slot(op_node* slot, 

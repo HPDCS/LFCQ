@@ -41,7 +41,7 @@ extern __thread ptst_t *ptst;
 extern int gc_aid[];
 extern int gc_hid[];
 
-unsigned int ACTIVE_SOCKETS
+unsigned int ACTIVE_SOCKETS;
 
 #define SAMPLE_SIZE 25
 #define HEAD_ID 0
