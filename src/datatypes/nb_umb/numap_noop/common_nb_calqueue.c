@@ -100,10 +100,6 @@ void std_free_hook(ptst_t *p, void *ptr){	free(ptr); }
 void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket)
 {
 
-	ACTIVE_SOCKETS = (((THREADS * NUM_SOCKETS)) / NUM_CPUS) + ((((THREADS * NUM_SOCKETS)) % NUM_CPUS) != 0);
-	ACTIVE_SOCKETS = ACTIVE_SOCKETS < NUM_SOCKETS? ACTIVE_SOCKETS:NUM_SOCKETS;
-	LOG("\n#######\nThreads %d, NUMA Nodes %d, CPUs %d, ACTIVE Sockets %d\n########\n", THREADS, _NUMA_NODES, NUM_CPUS, ACTIVE_SOCKETS);
-
 	ACTIVE_NUMA_NODES = (((THREADS * _NUMA_NODES)) / NUM_CPUS) + ((((THREADS * _NUMA_NODES)) % NUM_CPUS) != 0); // (!new) compute the number of active numa nodes 
 	ACTIVE_NUMA_NODES = ACTIVE_NUMA_NODES < _NUMA_NODES? ACTIVE_NUMA_NODES:_NUMA_NODES;
 	LOG("\n#######\nThreads %d, NUMA Nodes %d, CPUs %d, ACTIVE NUMA NODES%d\n########\n", THREADS, _NUMA_NODES, NUM_CPUS, ACTIVE_NUMA_NODES);
@@ -302,7 +298,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	dest_node = NODE_HASH((unsigned int) timestamp);
 
 	// if NID execute
-	if ((dest_node>>1) == (NID>>1))
+	if (dest_node == NID)
 	{
 		local_enq++;
 		int ret = do_pq_enqueue(q, timestamp, payload);
@@ -334,9 +330,9 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 				h = read_table(&queue->hashtable, th, epb, pub);
 				new_dest_node =  NODE_HASH(hash(timestamp, h->bucket_width) % (h->size));
 
-				if ((new_dest_node>>1) == (dest_node>>1) || (new_dest_node>>1) == (NID>>1))
+				if (new_dest_node == dest_node || new_dest_node == NID)
 				{
-					if ((new_dest_node>>1) == (NID>>1))
+					if (new_dest_node == NID)
 						local_enq++;
 					else
 						remote_enq++;
@@ -413,7 +409,7 @@ pkey_t pq_dequeue(void *q, void** result)
 	// check destination
 	dest_node = NODE_HASH(next_node_deq++);
 
-	if ((dest_node>>1) == (NID>>1)) {
+	if (dest_node == NID) {
 		local_deq++;
 		pkey_t ret = do_pq_dequeue(q, result);
 		critical_exit();
@@ -446,9 +442,9 @@ pkey_t pq_dequeue(void *q, void** result)
 				new_dest_node = NODE_HASH(((h->current)>>32)%(h->size));
 
 				// if the dest node is mine or is unchanged
-				if ((new_dest_node>>1) == (NID>>1) || (new_dest_node>>1) == (dest_node>>1))
+				if (new_dest_node == NID || new_dest_node == dest_node)
 				{
-					if ((new_dest_node>>1) == (NID>>1))
+					if (new_dest_node == NID)
 						local_deq++;
 					else
 						remote_deq++;

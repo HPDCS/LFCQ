@@ -9,8 +9,8 @@
 #define L_FREE 0x0
 #endif
 
-op_node *res_mapping[NUM_SOCKETS];
-op_node *req_mapping[NUM_SOCKETS];
+op_node *res_mapping[_NUMA_NODES];
+op_node *req_mapping[_NUMA_NODES];
 
 //__thread op_node** req_out_slots  = NULL; // slot per "postare" la richiesta su altri nodi
 //__thread op_node** req_in_slots   = NULL; // slot per "leggere" la richiesta da altri nodi
@@ -21,12 +21,10 @@ op_node *req_mapping[NUM_SOCKETS];
 void init_mapping() 
 {
     int i, j;
-    int socket_to_node;
-    for (i = 0; i < ACTIVE_SOCKETS; ++i) 
+    for (i = 0; i < ACTIVE_NUMA_NODES; ++i) 
     {
-        socket_to_node = i << 1;
-        req_mapping[i] = numa_alloc_onnode(sizeof(op_node)*THREADS, socket_to_node);
-        res_mapping[i] = numa_alloc_onnode(sizeof(op_node)*THREADS, socket_to_node);
+        req_mapping[i] = numa_alloc_onnode(sizeof(op_node)*THREADS, i);
+        //res_mapping[i] = numa_alloc_onnode(sizeof(op_node)*THREADS, i);
         
         for (j = 0; j < THREADS; ++j) 
         {
@@ -83,7 +81,7 @@ op_node* get_req_slot_from_node(unsigned int numa_node)
     
     return req_in_slots[numa_node];
     */
-    return &req_mapping[(NID >> 1)][((numa_node >> 1) * CPU_PER_SOCKET) + LTID];
+    return &req_mapping[NID][(numa_node * num_cpus_per_node) + LTID];
 }
 
 op_node* get_req_slot_to_node(unsigned int numa_node)
@@ -94,7 +92,7 @@ op_node* get_req_slot_to_node(unsigned int numa_node)
 
     return req_out_slots[numa_node];
     */
-    return &req_mapping[(numa_node>>1)][TID];
+    return &req_mapping[numa_node][TID];
 }
 
 /*
@@ -117,7 +115,7 @@ op_node* get_res_slot_from_node(unsigned int numa_node)
     //     init_local_mapping();
 
     // return res_in_slots[numa_node];
-    return &res_mapping[(NID >> 1)][((numa_node>>1) * CPU_PER_SOCKET) + LTID];
+    return &res_mapping[NID][(numa_node * num_cpus_per_node) + LTID];
 }
 
 op_node* get_res_slot_to_node(unsigned int numa_node)
@@ -126,7 +124,7 @@ op_node* get_res_slot_to_node(unsigned int numa_node)
     //     init_local_mapping();
 
     // return res_out_slots[numa_node];
-    return &res_mapping[(numa_node>>1)][TID];
+    return &res_mapping[numa_node][TID];
 }
 
 bool read_slot(op_node* slot, 

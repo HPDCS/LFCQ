@@ -97,12 +97,7 @@ WORK_value := src/datatypes/worker_queue.o  src/datatypes/common_nb_calqueue.o  
 L1_CACHE_LINE_SIZE := $(shell getconf LEVEL1_DCACHE_LINESIZE)
 NUMA_NODES := $(shell lscpu | grep -e "NUMA node(s)" | cut -d' ' -f 10-)
 NUM_CPUS := $(shell nproc --all)
-
-# this is not portable - Perchè a noi la qualità c'ha rotto il cazzo
-NUM_SOCKETS := $(shell cat /proc/cpuinfo | grep "physical id" | uniq -c | wc -l)
-CPU_PER_SOCKET := $(shell cat /proc/cpuinfo | grep "physical id" | uniq -c | head -n1 | cut -d' ' -f 6)
-
-MACRO := -DARCH_X86_64  -DCACHE_LINE_SIZE=$(L1_CACHE_LINE_SIZE) -DINTEL -D_NUMA_NODES=$(NUMA_NODES) -DNUM_CPUS=$(NUM_CPUS) -DNUM_SOCKETS=$(NUM_SOCKETS) -DCPU_PER_SOCKET=$(CPU_PER_SOCKET)
+MACRO := -DARCH_X86_64  -DCACHE_LINE_SIZE=$(L1_CACHE_LINE_SIZE) -DINTEL -D_NUMA_NODES=$(NUMA_NODES) -DNUM_CPUS=$(NUM_CPUS)
 
 FILTER_OUT_C_SRC := src/main.c src/main_2.c
                   

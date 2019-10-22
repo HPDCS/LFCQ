@@ -40,10 +40,6 @@ op_node* get_req_slot_from_node(unsigned int numa_node);
  * */
 op_node* get_req_slot_to_node(unsigned int numa_node);
 
-/* Get a pointer to a slot where we can read/write the result of an operation
- * */
-//op_node* get_res_slot(unsigned int numa_node);
-
 /* Get a pointer to a slot where we can read the result of an operation
  * */
 op_node* get_res_slot_from_node(unsigned int numa_node);
