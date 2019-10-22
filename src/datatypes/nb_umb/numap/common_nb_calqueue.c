@@ -427,8 +427,6 @@ begin:
 
 			if(prob_overflow && h->e_counter.count == 0) goto begin;
 			
-
-
 			assertf(prob_overflow, "\nOVERFLOW INDEX:%llu" "BW:%.10f"  "SIZE:%u TAIL:%p TABLE:%p\n", index, bucket_width, size, tail, h);
 			//assertf((index - (last_curr >> 32) -1) <= dist, "%s\n", "PROVA");
 
@@ -534,7 +532,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 
 	// posting the operation
 	from_me = get_req_slot_to_node(dest_node);
-	resp = get_res_slot(dest_node);
+	resp = get_res_slot(NID);
 	//read_slot(resp, &type, &ret, &ts, &pld);
 	
 	if (!write_slot(from_me, OP_PQ_ENQ, 0, timestamp, payload))
@@ -548,7 +546,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 		if (attempts > ENQ_MAX_WAIT_ATTEMPTS) 
 		{
 			enq_steal_attempt++;
-			from_me = get_req_slot_to_node(dest_node);
+			//from_me = get_req_slot_to_node(dest_node);
 			if (read_slot(from_me, &type, &ret, &ts, &pld))
 			{
 				enq_steal_done++;
@@ -565,7 +563,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 
 				// posting the operation
 				from_me = get_req_slot_to_node(dest_node);
-				resp = get_res_slot(dest_node);
+				//resp = get_res_slot(NID);
 				
 				if (!write_slot(from_me, OP_PQ_ENQ, 0, timestamp, payload))
 				{
@@ -635,7 +633,7 @@ pkey_t pq_dequeue(void *q, void** result)
 	
 	// posting the operation
 	from_me = get_req_slot_to_node(dest_node);
-	resp = get_res_slot(dest_node);
+	resp = get_res_slot(NID);
 	//read_slot(resp, &type, &ret, &ts, &pld);
 
 	if (!write_slot(from_me, OP_PQ_DEQ, 0, 0, 0))
@@ -650,7 +648,7 @@ pkey_t pq_dequeue(void *q, void** result)
 		if (attempts > DEQ_MAX_WAIT_ATTEMPTS) 
 		{
 			deq_steal_attempt++;
-			from_me = get_req_slot_to_node(dest_node);
+			//from_me = get_req_slot_to_node(dest_node);
 			if (read_slot(from_me, &type, &ret, &ts, &pld))
 			{
 				deq_steal_done++;
@@ -668,7 +666,7 @@ pkey_t pq_dequeue(void *q, void** result)
 				dest_node = new_dest_node;
 
 				from_me = get_req_slot_to_node(dest_node);
-				resp = get_res_slot(dest_node);
+				//resp = get_res_slot(dest_node);
 
 				if (!write_slot(from_me, OP_PQ_DEQ, 0, 0, 0))
 				{			

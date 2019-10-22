@@ -26,7 +26,7 @@ void init_mapping()
     for (i = 0; i < ACTIVE_NUMA_NODES; ++i) 
     {
         req_mapping[i] = numa_alloc_onnode(sizeof(op_node)*THREADS, i);
-        res_mapping[i] = numa_alloc_onnode(sizeof(op_node)*THREADS, i);
+        //res_mapping[i] = numa_alloc_onnode(sizeof(op_node)*THREADS, i);
         
         for (j = 0; j < THREADS; ++j) 
         {
@@ -90,7 +90,7 @@ op_node* get_req_slot_to_node(unsigned int numa_node)
     return req_out_slots[numa_node];
 }
 
-op_node* get_res_slot_from_node(unsigned int numa_node)
+op_node* get_res_slot(unsigned int numa_node)
 {
     if (unlikely(res_slots==NULL))
         init_local_mapping();
