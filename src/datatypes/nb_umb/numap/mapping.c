@@ -9,16 +9,14 @@
 #define L_FREE 0x0
 #endif
 
-//op_node *res_mapping[_NUMA_NODES];
+op_node *res_mapping[_NUMA_NODES];
 op_node *req_mapping[_NUMA_NODES];
 
-__thread op_node** req_out_slots  = NULL; // slot per "postare" la richiesta su altri nodi
-__thread op_node** req_in_slots   = NULL; // slot per "leggere" la richiesta da altri nodi
+//__thread op_node** req_out_slots  = NULL; // slot per "postare" la richiesta su altri nodi
+//__thread op_node** req_in_slots   = NULL; // slot per "leggere" la richiesta da altri nodi
 
 //__thread op_node** res_out_slots  = NULL; // slot per "postare" la risposta su nodi 
 //__thread op_node** res_in_slots   = NULL; // slot per "leggere" la risposta da nodi 
-
-__thread op_node** res_slots = NULL;
 
 void init_mapping() 
 {
@@ -35,15 +33,16 @@ void init_mapping()
             spinlock_init(&(res_mapping[i][j].spin));
             #else
             req_mapping[i][j].busy = L_FREE;
-            //res_mapping[i][j].busy = L_FREE;
+            res_mapping[i][j].busy = L_FREE;
             #endif
 
-            //res_mapping[i][j].response = 1;
+            res_mapping[i][j].response = 1;
             req_mapping[i][j].response = 1;
         }
     }
 }
 
+/*
 static inline void init_local_mapping() 
 {
     req_in_slots  = numa_alloc_onnode(sizeof(op_node*)*_NUMA_NODES, NID);
@@ -72,49 +71,61 @@ static inline void init_local_mapping()
         j += num_cpus_per_node;
     }
 }
+*/
 
 op_node* get_req_slot_from_node(unsigned int numa_node)
 {
+    /*
     if (unlikely(req_in_slots==NULL))
         init_local_mapping();
-
+    
     return req_in_slots[numa_node];
-
+    */
+    return &req_mapping[NID][(numa_node * num_cpus_per_node) + LTID];
 }
 
 op_node* get_req_slot_to_node(unsigned int numa_node)
 {
+    /*
     if (unlikely(req_out_slots==NULL))
         init_local_mapping();
 
     return req_out_slots[numa_node];
-}
-
-op_node* get_res_slot(unsigned int numa_node)
-{
-    if (unlikely(res_slots==NULL))
-        init_local_mapping();
-
-    return res_slots[numa_node];
+    */
+    return &req_mapping[numa_node][TID];
 }
 
 /*
+op_node* get_res_slot(unsigned int numa_node)
+{
+    
+    // if (unlikely(res_slots==NULL))
+    //     init_local_mapping();
+
+    // return res_slots[numa_node];
+    
+    return &req_mapping[numa_node][(numa_node * num_cpus_per_node) + LTID];
+}
+*/
+
+
 op_node* get_res_slot_from_node(unsigned int numa_node)
 {
-    if (unlikely(res_in_slots==NULL))
-        init_local_mapping();
+    // if (unlikely(res_in_slots==NULL))
+    //     init_local_mapping();
 
-    return res_in_slots[numa_node];
+    // return res_in_slots[numa_node];
+    return &res_mapping[NID][(numa_node * num_cpus_per_node) + LTID];
 }
 
 op_node* get_res_slot_to_node(unsigned int numa_node)
 {
-    if (unlikely(res_out_slots==NULL))
-        init_local_mapping();
+    // if (unlikely(res_out_slots==NULL))
+    //     init_local_mapping();
 
-    return res_out_slots[numa_node];
+    // return res_out_slots[numa_node];
+    return &res_mapping[numa_node][TID];
 }
-*/
 
 bool read_slot(op_node* slot, 
     unsigned int* type, 
