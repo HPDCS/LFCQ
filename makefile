@@ -26,7 +26,7 @@ PHYNBCQ_link := gcc
 NUMAQ_value := $(TQ_value) src/datatypes/nb_umb/numaq/common_nb_calqueue.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMAQ_link := gcc
 
-NUMA2Q_value := $(TQ_value) src/datatypes/nb_umb/numa2q/common_nb_calqueue.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMA2Q_value := $(TQ_value) src/datatypes/nb_umb/numa2q/common_nb_calqueue.o src/datatypes/nb_umb/numa2q/sw_cache.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMA2Q_link := gcc
 
 NUMAQBLK_value := $(TQ_value) src/datatypes/nb_umb/numaq_blk/common_nb_calqueue.o $(UTIL_value) $(ARCH_value) $(NGACO_value)

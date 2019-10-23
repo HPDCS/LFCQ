@@ -30,6 +30,8 @@
 #include "common_nb_calqueue.h"
 #include "table_utils.h"
 
+#include "sw_cache.h"
+
 /*************************************
  * GLOBAL VARIABLES					 *
  ************************************/
@@ -324,6 +326,9 @@ begin:
 	con_de = h->d_counter.count;
 	attempts = 0;
 
+	// check cache validity - se la tbale è cambiata o il current è cambiato flush tutto
+	validate_cache(h, current);
+
 	do
 	{	
 		// To many attempts: there is some problem? recheck the table
@@ -341,6 +346,9 @@ begin:
 		min = array + (index % (size));
 		left_node = min_next = min->next;
 		
+		// check if we can use last min got
+		left_node = read_last_min(left_node);
+
 		dest_node = NODE_HASH(index % (size));
 		if (dest_node != NID)
 			remote = true;
@@ -409,6 +417,9 @@ begin:
 			else
 				remote_deq++;
 
+			// update cached last min 
+			update_last_min(left_node);
+
 			return left_ts;
 										
 		}while( (left_node = get_unmarked(left_node_next)));
@@ -420,14 +431,13 @@ begin:
 			*result = NULL;
 			return INFTY;
 		}
-				
+		
+		// La coda non è vuota-> è cambiato il current
 		new_current = h->current;
 		if(new_current == current){
 
 			if(prob_overflow && h->e_counter.count == 0) goto begin;
 			
-
-
 			assertf(prob_overflow, "\nOVERFLOW INDEX:%llu" "BW:%.10f"  "SIZE:%u TAIL:%p TABLE:%p\n", index, bucket_width, size, tail, h);
 			//assertf((index - (last_curr >> 32) -1) <= dist, "%s\n", "PROVA");
 
@@ -442,7 +452,9 @@ begin:
 		}
 		else
 			current = new_current;
-		
+
+		validate_cache(h, current); // qui probabilmente il current è cambiato, validiamo i valori in cache
+
 	}while(1);
 	
 	return INFTY;
@@ -578,7 +590,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 		// steal/repost
 
 		count = handle_ops(q, OP_PQ_ENQ);
-
+		count += handle_ops(q, OP_PQ_DEQ);
+		
 		if (count > 0)
 			attempts=0;
 		else
@@ -670,8 +683,9 @@ pkey_t pq_dequeue(void *q, void **result)
 			attempts = 0;
 		}
 		
-
-		count = handle_ops(q, OP_PQ_DEQ);
+		count = handle_ops(q, OP_PQ_ENQ);
+		count += handle_ops(q, OP_PQ_DEQ);
+		
 		if (count > 0)
 			attempts = 0;
 		else 
