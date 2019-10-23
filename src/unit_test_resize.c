@@ -46,7 +46,8 @@
 #define NID nid
 #define TID tid
 #define LTID ltid
-
+#define LSID lsid
+#define SID sid
 
 
 struct payload
@@ -93,6 +94,9 @@ __thread int TID;
 __thread int NID;
 __thread int LTID;
 __thread unsigned int num_op=0;
+
+__thread int SID;
+__thread int LSID;
 
 int NUMA_NODES;
 
@@ -207,6 +211,9 @@ void* process(void *arg)
 
 int main(int argc, char **argv)
 {
+
+	// @TODO read cpu binding
+
 	int par = 1;
 	int num_par = 17;
 	unsigned int i = 0;
