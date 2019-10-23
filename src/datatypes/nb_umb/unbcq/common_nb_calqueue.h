@@ -41,7 +41,7 @@ extern int gc_hid[];
 
 #define NODE_HASH(bucket_id) ((bucket_id >> 2ull) % _NUMA_NODES)
 
-#define SAMPLE_SIZE 25
+#define SAMPLE_SIZE 50
 #define HEAD_ID 0
 //#define MAXIMUM_SIZE 1048576 //524288 //262144 //131072 //65536 //32768
 #define MINIMUM_SIZE 1
