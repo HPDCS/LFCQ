@@ -9,7 +9,7 @@
 #define INT 	2
 #define LONG	3
 
-#define KEY_TYPE DOUBLE
+#define KEY_TYPE INT //DOUBLE
 
 
 #define LESS(a,b) 		( (a) <  (b) )
