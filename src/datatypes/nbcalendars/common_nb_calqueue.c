@@ -54,6 +54,8 @@ __thread unsigned long long near = 0;
 __thread unsigned int 		acc = 0;
 __thread unsigned int 		acc_counter = 0;
 
+__thread double last_bw = 0.0;
+
 
 
 /**
@@ -437,7 +439,7 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 	
 	
 	// is time for periodic resize?
-	if(new_size == 0 && (h->e_counter.count + h->d_counter.count) > RESIZE_PERIOD && h->resize_count/log_size < 0.75)
+	if(new_size == 0 && (h->e_counter.count + h->d_counter.count) > RESIZE_PERIOD && h->resize_count/log_size < 0.25)
 		new_size = h->size;
 	// the num of items is doubled/halved but it is not enough for change size
 	//if(new_size == 0 && h->last_resize_count != 0 && (counter >  h->last_resize_count*2 || counter < h->last_resize_count/2 ) )
@@ -1001,6 +1003,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
         	new_node->epoch = (h->current & MASK_EPOCH);
 			// compute the index of the virtual bucket
 			newIndex = hash(timestamp, h->bucket_width);
+
+			last_bw = h->bucket_width;
 			// compute the index of the physical bucket
 			index = ((unsigned int) newIndex) % size;
 			// get the bucket
@@ -1061,7 +1065,7 @@ void pq_report(int TID)
 	"Enqueue: %.10f LEN: %.10f ### "
 	"Dequeue: %.10f LEN: %.10f NUMCAS: %llu : %llu ### "
 	"NEAR: %llu "
-	"RTC:%d,M:%lld\n",
+	"RTC:%d,M:%lld BW:%f\n",
 			TID,
 			((float)concurrent_enqueue) /((float)performed_enqueue),
 			((float)scan_list_length_en)/((float)performed_enqueue),
@@ -1070,7 +1074,7 @@ void pq_report(int TID)
 			num_cas, num_cas_useful,
 			near,
 			read_table_count	  ,
-			malloc_count);
+			malloc_count, last_bw);
 }
 
 void pq_reset_statistics(){

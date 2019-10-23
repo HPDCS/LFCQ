@@ -15,6 +15,7 @@ mkdir -p $output
 
 job(){
 SIZE=$1
+DIST=$2
 for u in $usage_factor; do
 	out=$output/"$version-$cmd-1-$DIST-0.3-$SIZE-$DIST-0.5-$OPS-$DIST-0-0-$u-0-$MODE-$TIME.dat"
 	line="THREADS"
@@ -48,21 +49,32 @@ for u in $usage_factor; do
 					file="$ofile-$i"
 					file=`echo "$file" | tr '.' '_'`.dat
 					file=$input/$file
-					val=`cat $file | grep THROUGHPUT | cut -d',' -f4 | cut -d':' -f2`
-					#val=`cat $file | head -n1 | cut -d',' -f20 | cut -d':' -f2` 
+					val=`grep THROUGHPUT $file  | cut -d',' -f4 `
+					#echo $file $val 
+					val=`echo $val  | cut -d':' -f2`
+					if [ "$val" = "" ]; then
+						echo $file
+						count=$(($count+1))
+						continue
+					fi
 					sum=`echo $sum+$val | bc`
 					count=$(($count+1))
 				done
 				avg=`echo $sum/$count | bc`
+
 				for i in $iterations; do
 					file="$ofile-$i"
 					file=`echo "$file" | tr '.' '_'`.dat
 					file=$input/$file
-					val=`cat $file | grep THROUGHPUT | cut -d',' -f4 | cut -d':' -f2`
-					#val=`cat $file | head -n1 | cut -d',' -f20 | cut -d':' -f2` 
+					val=`grep THROUGHPUT $file  | cut -d',' -f4 `
+					#echo $file $val 
+					val=`echo $val  | cut -d':' -f2`
+					if [ "$val" = "" ]; then
+						continue
+					fi
 					ssum=`echo "($val-$avg)*($val-$avg)" | bc`
 				done
-				#std=`echo "sqrt($ssum/($count-1))" | bc`
+							#std=`echo "sqrt($ssum/($count-1))" | bc`
 				line="$line $avg"
 
 				echo -e $prev $old $avg >> tmp1$SIZE
@@ -87,7 +99,7 @@ rm tmp2$SIZE
 for DIST in $distributions; do
 	for s in $queue_sizes; do
 		SIZE=`echo "$s/0.4" | bc`
-		job $SIZE &
+		job $SIZE $DIST &
 	done
 done
 

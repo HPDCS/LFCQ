@@ -28,6 +28,8 @@ __thread unsigned int 		acc = 0;
 __thread unsigned int 		acc_counter = 0;
 
 
+__thread double last_bw = 0.0;
+
 
 int gc_aid[2];
 int gc_hid[1];
@@ -80,21 +82,23 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	res->hashtable->resize_count = 0;
 	res->hashtable->e_counter.count = 0;
 	res->hashtable->d_counter.count = 0;
-	res->hashtable->tail.extractions = 0ULL;
-	res->hashtable->tail.epoch = 0U;
-	res->hashtable->tail.index = UINT_MAX;
-	res->hashtable->tail.type = TAIL;
-	res->hashtable->tail.next = NULL; 
-
+	res->hashtable->b_tail.extractions = 0ULL;
+	res->hashtable->b_tail.epoch = 0U;
+	res->hashtable->b_tail.index = UINT_MAX;
+	res->hashtable->b_tail.type = TAIL;
+	res->hashtable->b_tail.next = NULL; 
+	tail_node_init(&res->hashtable->n_tail);
+	
+	res->hashtable->cached_node = NULL;
 	for (i = 0; i < MINIMUM_SIZE; i++)
 	{
-		res->hashtable->array[i].next = &res->hashtable->tail;
+		res->hashtable->array[i].next = &res->hashtable->b_tail;
+		res->hashtable->array[i].tail = &res->hashtable->n_tail;
 		res->hashtable->array[i].type = HEAD;
 		res->hashtable->array[i].epoch = 0U;
 		res->hashtable->array[i].index = 0U;
 		res->hashtable->array[i].extractions = 0ULL;
 	}
-
 	return res;
 }
 
@@ -137,6 +141,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			size = h->size;
 	        // read the actual epoch
         	epoch = (h->current & MASK_EPOCH);
+			last_bw = h->bucket_width;
 			// compute the index of the virtual bucket
 			newIndex = hash(timestamp, h->bucket_width);
 			// compute the index of the physical bucket
@@ -174,9 +179,12 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	unsigned long long oldIndex = oldCur >> 32;
 	unsigned long long dist = 1;
 	double rand;
-	nbc_bucket_node *left_node, *right_node;
+	bucket_t *left_node, *left_node_next, *right_node;
 	drand48_r(&seedT, &rand);
-	search(h->array+((oldIndex + dist + (unsigned int)( ( (double)(size-dist) )*rand )) % size), -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
+	unsigned int counter = 0;
+	left_node = search(h->array+((oldIndex + dist + (unsigned int)( ( (double)(size-dist) )*rand )) % size), &left_node_next, &right_node, &counter, 0);
+	if(is_marked(left_node, VAL) && left_node_next != right_node && BOOL_CAS(&left_node->next, left_node_next, right_node))
+		connect_to_be_freed_node_list(left_node_next, counter);
 	#endif
 
   #if KEY_TYPE != DOUBLE
@@ -184,7 +192,6 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
   #endif
 	critical_exit();
 	return res;
-
 }
 
 
@@ -199,8 +206,12 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
  * @return the highest priority 
  *
  */
-
 unsigned int ex = 0;
+
+__thread unsigned long long __last_current = -1;
+__thread table_t *__last_table = NULL;
+__thread bucket_t *__last_bckt 	= NULL;
+
 
 pkey_t pq_dequeue(void *q, void** result)
 {
@@ -234,9 +245,16 @@ begin:
 	con_de = h->d_counter.count;
 	attempts = 0;
 
-	do
-	{	
+	if(__last_table != h){
+		__last_table 	= h;
+		__last_current  = -1;
+		__last_bckt 	= NULL;
+		__last_node 	= NULL;
+		__last_val 	= 0;
+	}
 
+	do
+	{
 		*result  = NULL;
 		left_ts  = INFTY;
 
@@ -257,21 +275,37 @@ begin:
 		// a reshuffle has been detected => restart
 		if(is_marked(min_next, MOV)) goto begin;
 
-		left_node = search(min, &left_node_next, &right_node, &counter, index);
-		
-		// if i'm here it means that the physical bucket was empty. Check for queue emptyness
-		if(left_node->type == HEAD  && right_node->type == TAIL   && size == 1 && !is_freezed_for_mov(min->extractions))
+		if(__last_current != current)
 		{
-			critical_exit();
-			*result = NULL;
-			return INFTY;
+			__last_current  = current;
+			__last_bckt 	= NULL;
+			__last_node 	= NULL;
+			__last_val 	= 0;
+		}
+		left_node = __last_bckt;
+
+		if(left_node == NULL || left_node->index != index || is_freezed(left_node->extractions))
+		{
+			left_node = search(min, &left_node_next, &right_node, &counter, index);
+
+			// if i'm here it means that the physical bucket was empty. Check for queue emptyness
+			if(left_node->type == HEAD  && right_node->type == TAIL   && size == 1 && !is_freezed_for_mov(min->extractions))
+			{
+				critical_exit();
+				*result = NULL;
+				return INFTY;
+			}
 		}
 
 		// Bucket present
 		if(left_node->index == index && left_node->type != HEAD){
-	
+
 			if(left_node->epoch > epoch) goto begin;
-			
+			if(left_node != __last_bckt){
+				__last_bckt 	= left_node;
+				__last_node 	= &left_node->head;
+				__last_val 	= 0;
+			}
 			res = extract_from_bucket(left_node, result, &left_ts, (unsigned int)epoch);
 			
 			if(res == MOV_FOUND) goto begin;
@@ -293,9 +327,6 @@ begin:
 
 			num_cas++;
 			index++;
-			// try to mark the bucket as empty
-			//if(left_node->type == ITEM)	BOOL_CAS( &(left_node->next), left_node_next, get_marked(left_node_next,DEL) );
-
 
 			// increase current
 			old_current = VAL_CAS( &(h->current), current, ((index << 32) | epoch) );
@@ -318,11 +349,20 @@ begin:
 
 __thread unsigned long long rtm_other=0ULL, rtm_prova=0ULL, rtm_failed=0ULL, rtm_retry=0ULL, rtm_conflict=0ULL, rtm_capacity=0ULL, rtm_debug=0ULL,  rtm_explicit=0ULL,  rtm_nested=0ULL, rtm_insertions=0ULL, insertions=0ULL, rtm_a=0ULL, rtm_b=0ULL;
 __thread unsigned long long rtm_other2=0ULL, rtm_prova2=0ULL, rtm_failed2=0ULL, rtm_retry2=0ULL, rtm_conflict2=0ULL, rtm_capacity2=0ULL, rtm_debug2=0ULL,  rtm_explicit2=0ULL,  rtm_nested2=0ULL, rtm_insertions2=0ULL, insertions2=0ULL, rtm_a2=0ULL, rtm_b2=0ULL;
-
+//__thread double last_bw = 0.0;
 
 void pq_report(int TID)
 {
-printf("BCKT CONNECT "
+
+unsigned long long cache_load = 0, cache_hit = 0;
+int h=0;
+for(h=0; h<INSERTION_CACHE_LEN-1;h++){
+       cache_load+=__cache_load[h];
+       cache_hit+=__cache_hit[h];
+}
+printf("CHANGE EPOCH REQ: CHANGE_EPO_SUCC %llu - CHANGE_EPO_RQ %llu - BUCKET_CONNECT %llu - Insertion cache efficiency %f %llu %llu\n", count_epoch_ops, rq_epoch_ops, bckt_connect_count,  ((float)cache_hit/(float)cache_load), cache_hit, cache_load);
+
+printf("TID:%u NID:%u BCKT CONNECT "
 "ABORTRATE:%f, "
 "TSX:%llu, "
 "RTM_OTHER:%f, "
@@ -338,6 +378,7 @@ printf("BCKT CONNECT "
 "RTM_INSERTIONS %llu, "
 "FALL_INSERTIONS %llu, "
 "NO_RTM INSERTIONS %llu \n", 
+tid,nid,
 ((double)rtm_failed)/((double)rtm_prova),
 rtm_prova, 
 ((double)rtm_other)	/((double)rtm_prova), 	
@@ -385,11 +426,16 @@ insertions2-rtm_insertions2);
 
 
 	printf("%d- "
+"BCKT contention %.10f - %llu - %llu - %llu ### "
 	"Enqueue: %.10f LEN: %.10f ### "
 	"Dequeue: %.10f LEN: %.10f NUMCAS: %llu : %llu ### "
 	"NEAR: %llu "
-	"RTC:%d,M:%lld\n",
+	"RTC:%d,M:%lld, BW:%f\n",
 			TID,
+			((float)acc_contention)	    /((float)cnt_contention),	
+			min_contention, 
+			max_contention,
+			cnt_contention,
 			((float)concurrent_enqueue) /((float)performed_enqueue),
 			((float)scan_list_length_en)/((float)performed_enqueue),
 			((float)concurrent_dequeue) /((float)performed_dequeue),
@@ -397,7 +443,7 @@ insertions2-rtm_insertions2);
 			num_cas, num_cas_useful,
 			near,
 			read_table_count	  ,
-			malloc_count);
+			malloc_count, last_bw);
 }
 
 void pq_reset_statistics(){

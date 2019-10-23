@@ -32,7 +32,6 @@
 #include <math.h>
 
 #include "common_nb_calqueue.h"
-#include "../../utils/common.h"
 
 /**
  * This function extract the minimum item from the NBCQ. 
@@ -43,16 +42,12 @@
  * @return the highest priority 
  *
  */
-
-unsigned int ex = 0;
-
 pkey_t pq_dequeue(void *q, void** result)
 {
-	//printf("EX: %u\n", ex++);
 	nb_calqueue *queue = (nb_calqueue*)q;
-	bucket_t *min, *min_next, 
+	nbc_bucket_node *min, *min_next, 
 					*left_node, *left_node_next, 
-					*tail, *array, *right_node;
+					*tail, *array;
 	table * h = NULL;
 	
 	unsigned long long current, old_current, new_current;
@@ -61,11 +56,13 @@ pkey_t pq_dequeue(void *q, void** result)
 	
 	unsigned int size, attempts = 0;
 	unsigned int counter;
-	int res = ABORT;
 	pkey_t left_ts;
+	double bucket_width, left_limit, right_limit;
+
 	double pub = queue->perc_used_bucket;
 	unsigned int epb = queue->elem_per_bucket;
 	unsigned int th = queue->threshold;
+	unsigned int ep = 0;
 	int con_de = 0;
 	bool prob_overflow = false;
 	tail = queue->tail;
@@ -75,22 +72,18 @@ pkey_t pq_dequeue(void *q, void** result)
 
 begin:
 	// Get the current set table
-	h = read_table(&queue->hashtable, th, epb, pub, tail);
+	h = read_table(&queue->hashtable, th, epb, pub);
 
 	// Get data from the table
 	size = h->size;
 	array = h->array;
+	bucket_width = h->bucket_width;
 	current = h->current;
 	con_de = h->d_counter.count;
 	attempts = 0;
 
-	//while(1);
 	do
 	{	
-
-		*result  = NULL;
-		left_ts  = INFTY;
-
 		// To many attempts: there is some problem? recheck the table
 		if( h->read_table_period == attempts){
 			goto begin;
@@ -101,62 +94,95 @@ begin:
 		index = current >> 32;
 		epoch = current & MASK_EPOCH;
 
-		//printf("search for key %d\n", index);
 
 		// get the physical bucket
 		min = array + (index % (size));
-		min_next = min->next;
+		left_node = min_next = min->next;
+		
+		// get the left limit
+		left_limit = ((double)index)*bucket_width;
 
+		index++;
+
+		// get the right limit
+		right_limit = ((double)index)*bucket_width;
+		// check for a possible overflow
+		prob_overflow = (index > MASK_EPOCH);
+		
+		// reset variables for a new scan
+		counter = ep = 0;
+		
 		// a reshuffle has been detected => restart
 		if(is_marked(min_next, MOV)) goto begin;
-
-		left_node = search(min, &left_node_next, &right_node, &counter, index);
 		
-		// if i'm here it means that the physical bucket was empty. Check for queue emptyness
-		if(left_node->type == HEAD  && right_node->type == TAIL   && size == 1 && !is_freezed_for_mov(min->extractions))
+		do
 		{
-		//	printf("EMPTY 	QUEUE\n");
+			
+			// get data from the current node	
+			left_node_next = left_node->next;
+			left_ts = left_node->timestamp;
+
+			// increase count of traversed deleted items
+			counter++;
+
+			// Skip marked nodes, invalid nodes and nodes with timestamp out of range
+			if(is_marked(left_node_next, DEL) || is_marked(left_node_next, INV) || (left_ts < left_limit && left_node != tail)) continue;
+			
+			// Abort the operation since there is a resize or a possible insert in the past
+			if(is_marked(left_node_next, MOV) || left_node->epoch > epoch) goto begin;
+			
+			// The virtual bucket is empty
+			if(left_ts >= right_limit || left_node == tail) break;
+			
+			// the node is a good candidate for extraction! lets try for it
+			int res = atomic_test_and_set_x64(UNION_CAST(&left_node->next, unsigned long long*));
+
+			// the extraction is failed
+			if(!res) left_node_next = left_node->next;
+
+			//left_node_next = FETCH_AND_OR(&left_node->next, DEL);
+			
+			// the node cannot be extracted && is marked as MOV	=> restart
+			if(is_marked(left_node_next, MOV))	goto begin;
+
+			// the node cannot be extracted && is marked as DEL => skip
+			if(is_marked(left_node_next, DEL))	continue;
+			
+			// the node has been extracted
+
+			// use it for count the average number of traversed node per dequeue
+			scan_list_length += counter;
+			// use it for count the average of completed extractions
+			concurrent_dequeue += (unsigned long long) (__sync_fetch_and_add(&h->d_counter.count, 1) - con_de);
+
+			*result = left_node->payload;
+				
+			critical_exit();
+
+			return left_ts;
+										
+		}while( (left_node = get_unmarked(left_node_next)));
+		
+
+		// if i'm here it means that the virtual bucket was empty. Check for queue emptyness
+		if(left_node == tail && size == 1 && !is_marked(min->next, MOV))
+		{
 			critical_exit();
 			*result = NULL;
 			return INFTY;
 		}
-
-		// check for a possible overflow
-		prob_overflow = (index > MASK_EPOCH);
-		
-
-		// Bucket present
-		if(left_node->index == index && left_node->type != HEAD){
-	
-			if(left_node->epoch > epoch) goto begin;
-			
-
-			res = extract_from_bucket(left_node, result, &left_ts, (unsigned int)epoch);
-			
-			if(res == MOV_FOUND) goto begin;
-
-			// The bucket was not empty
-			if(res == OK){
-					critical_exit();
-					concurrent_dequeue += (unsigned long long) (__sync_fetch_and_add(&h->d_counter.count, 1) - con_de);
-					return left_ts;
-			}
-		}
-
-		// bucket empty or absent
+				
 		new_current = h->current;
 		if(new_current == current){
-			// save from livelock with empty queue
+
 			if(prob_overflow && h->e_counter.count == 0) goto begin;
+			
+
+
+			assertf(prob_overflow, "\nOVERFLOW INDEX:%llu" "BW:%.10f"  "SIZE:%u TAIL:%p TABLE:%p\n", index, bucket_width, size, tail, h);
+			//assertf((index - (last_curr >> 32) -1) <= dist, "%s\n", "PROVA");
 
 			num_cas++;
-			index++;
-			// try to mark the bucket as empty
-			if(left_node->type == ITEM)
-				BOOL_CAS( &(left_node->next), left_node_next, get_marked(left_node_next,DEL) );
-
-
-			// increase current
 			old_current = VAL_CAS( &(h->current), current, ((index << 32) | epoch) );
 			if(old_current == current){
 				current = ((index << 32) | epoch);

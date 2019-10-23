@@ -33,7 +33,6 @@
 #define PRESENT		4
 #define EMPTY		8
 
-
 #define VAL (0ULL)
 #define DEL (1ULL)
 #define INV (2ULL)
@@ -46,7 +45,6 @@
 #define MAX_UINT 			  (0xffffffffU)
 #define MASK_EPOCH	(0x00000000ffffffffULL)
 #define MASK_CURR	(0xffffffff00000000ULL)
-
 
 
 #define BOOL_CAS_ALE(addr, old, new)  CAS_x86(\
@@ -89,6 +87,44 @@
 #define get_unmarked(pointer)		(UNION_CAST((UNION_CAST(pointer, unsigned long long) & MASK_PTR), void *))
 #define get_marked(pointer, mark)	(UNION_CAST((UNION_CAST(pointer, unsigned long long)|(mark)), void *))
 #define get_mark(pointer)			(UNION_CAST((UNION_CAST(pointer, unsigned long long) & MASK_MRK), unsigned long long))
+
+
+
+
+static inline void clflush(volatile void *p){ asm volatile ("clflush (%0)" :: "r"(p)); }
+
+//#define ENABLE_PREFETCH 
+
+#ifdef ENABLE_PREFETCH
+#define PREFETCH(x, y) {if((x)){unsigned int step = 0; while(step++<10)_mm_pause();__builtin_prefetch(x, y, 0);}}
+#else
+#define PREFETCH(x, y) {}
+#endif
+
+
+#define HEAD 0ULL
+#define ITEM 1ULL
+#define TAIL 2ULL
+
+#define MOV_BIT_POS 63
+#define DEL_BIT_POS 62
+#define EPO_BIT_POS 61
+
+#define FREEZE_FOR_MOV (1ULL << MOV_BIT_POS)
+#define FREEZE_FOR_DEL (1ULL << DEL_BIT_POS)
+#define FREEZE_FOR_EPO (1ULL << EPO_BIT_POS)
+
+
+#define is_freezed(extractions)  ((extractions >> 32) != 0ULL)
+#define is_freezed_for_del(extractions) (extractions & FREEZE_FOR_DEL)
+#define is_freezed_for_mov(extractions) (!is_freezed_for_del(extractions) &&  (extractions & FREEZE_FOR_MOV))
+#define is_freezed_for_epo(extractions) (!is_freezed_for_del(extractions) &&  (extractions & FREEZE_FOR_EPO))
+
+#define get_freezed(extractions, flag)  (( (extractions) << 32) | (extractions) | flag)
+#define get_cleaned_extractions(extractions) (( (extractions) & (~(FREEZE_FOR_EPO | FREEZE_FOR_MOV | FREEZE_FOR_DEL))) >> 32)
+
+
+
 
 
 

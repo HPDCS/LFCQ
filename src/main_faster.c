@@ -118,7 +118,7 @@ void classic_hold(
 {
 
 	pkey_t timestamp = 0.0;
-	pkey_t local_min = 0.0;
+	pkey_t local_min = 1.0;
 	double random_num = 0.0;
 	long long tot_count = 0;
 	long long par_count = 0;
@@ -334,6 +334,11 @@ int num_numa_nodes;
 int num_cpus;
 int num_cpus_per_node;
 
+int *numa_mapping;
+int num_numa_nodes;
+int num_cpus;
+int num_cpus_per_node;
+
 void* process(void *arg)
 {
 	int my_id;
@@ -361,8 +366,6 @@ void* process(void *arg)
 
     __sync_fetch_and_add(&BARRIER, 1);
     
-    
-	
 	while(lock);
 	
 	classic_hold(my_id, &seed, &seed2, &n_dequeue, &n_enqueue);
@@ -395,10 +398,8 @@ void* process(void *arg)
 
 int NUM_CORES = 0;
 
-
 int main(int argc, char **argv)
 {
-
 	num_numa_nodes		= numa_max_node()+1;
 	num_cpus			= numa_num_configured_cpus();
 	NUM_CORES = num_cpus;
@@ -515,15 +516,23 @@ int main(int argc, char **argv)
 	}
 	
 	
+    struct timespec start, end;
+	struct timespec elapsed;
+	double dt;
+	
 	while(!__sync_bool_compare_and_swap(&BARRIER, THREADS, 0));
 	
-	
-    __sync_lock_test_and_set(&lock, 0);
+	gettime(&start);
+	__sync_bool_compare_and_swap(&lock, 1, 0);
     
-    struct timespec start, end;
     if(TEST_MODE == 'T'){
-		while(end_phase_1 != THREADS);
+		while(end_phase_1 != THREADS)usleep(100);
 		while(!__sync_bool_compare_and_swap(&end_phase_1, THREADS, THREADS+1));
+	gettime(&end);
+
+	elapsed = timediff(start, end);
+    dt = (double)elapsed.tv_sec + (double)elapsed.tv_nsec / 1000000000.0;
+	printf("\nTime to setup queue %f\n", dt);
 		gettime(&start);
 		sleep(TIME);
 		__sync_bool_compare_and_swap(&end_test, 0, 1);
@@ -533,8 +542,8 @@ int main(int argc, char **argv)
 		pthread_join(p_tid[i], (void*)&id);
 
 
-	struct timespec elapsed = timediff(start, end);
-    double dt = (double)elapsed.tv_sec + (double)elapsed.tv_nsec / 1000000000.0;
+	elapsed = timediff(start, end);
+    dt = (double)elapsed.tv_sec + (double)elapsed.tv_nsec / 1000000000.0;
 	
     for(i=0;i<THREADS;i++)
     {
@@ -553,7 +562,7 @@ int main(int argc, char **argv)
 	printf("SUM OP:%lld,", sum);
 	if(TEST_MODE == 'T'){
 		printf("TIME:%.8f,", dt);
-		printf("THROUGHPUT:%.3f,", (double)sum*2.0/dt/1000.0);
+		printf("\nTHROUGHPUT:%.3f\n,", (double)sum*2.0/dt/1000.0);
 	}
 	printf("MIN OP:%lld,", min);
 	printf("MAX OP:%lld,", max);

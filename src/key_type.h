@@ -9,7 +9,7 @@
 #define INT 	2
 #define LONG	3
 
-#define KEY_TYPE INT //DOUBLE
+#define KEY_TYPE DOUBLE
 
 
 #define LESS(a,b) 		( (a) <  (b) )
@@ -23,6 +23,7 @@
 	#include <float.h>
 	#define INFTY 	DBL_MAX
 	#define MIN 	0.0
+	#define KEY_STRING "%f"
 	typedef double pkey_t;
 
 	#define MEAN  1.00;			// Maximum distance from the current event owned by the thread
@@ -31,13 +32,28 @@
 
 	#define INFTY INT_MAX
 	#define MIN 	0
+	#define KEY_STRING "%d"
 	typedef int pkey_t;
 
 	#define MILLION 1000000
 	#define BILLION (1000*MILLION)
 	#define TRACE_LEN (300*MILLION)
 
-	#define MEAN  2;			// Maximum distance from the current event owned by the thread
+	#define MEAN 10;			// Maximum distance from the current event owned by the thread
+
+#elif KEY_TYPE == LONG
+
+
+        #define INFTY LONG_MAX
+        #define MIN     0
+        #define KEY_STRING "%ld"
+        typedef long pkey_t;
+
+        #define MILLION 1000000
+        #define BILLION (1000*MILLION)
+        #define TRACE_LEN (300*MILLION)
+
+        #define MEAN 100;                        // Maximum distance from the current event owned by the thread
 
 #endif
 

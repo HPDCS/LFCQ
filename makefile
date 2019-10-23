@@ -10,7 +10,8 @@ USER_OBJS :=
 
 LIBS := -lpthread -lm -lnuma -lrt -mrtm
 SRC_DIR := src
-TARGETS := PHYNBCQ UNBCQ NUMAQBLK NBCQ NUMAP NUMAFK NUMAQ#NUMAFK NUMAQ NUMAFKBL UNBCQ NBCQ NUMAP NUMAPNOP NUMAPBL NUMAQBLK #LIND MARO CBCQ SLCQ NBVB 2CAS NRTM VBPQ UNBCQ NUMAQ NUMAFK NUMAP #V2CQ NUMA WORK
+TARGETS := NBCQ LIND MARO CBCQ SLCQ NBVB 2CAS VBPQ ACRCQ #V2CQ NUMA WORK
+
 
 UTIL_value := src/utils/common.o src/utils/hpdcs_math.o 
 GACO_value := src/gc/gc.o src/gc/ptst.o
@@ -57,9 +58,9 @@ SLCQ_value := src/datatypes/slcalqueue/calqueue.o  $(UTIL_value)
 VBPQ_value := src/datatypes/nbcalendars_with_vb2/vbpq.o $(UTIL_value) $(GACO_value) $(ARCH_value)
 
 NBCQ_value := src/datatypes/nbcalendars/nb_calqueue.o src/datatypes/nbcalendars/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
+ACRCQ_value := src/datatypes/nbcalendars-ad/nb_calqueue.o src/datatypes/nbcalendars-ad/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
 NBVB_value := src/datatypes/nbcalendars_with_vb/nb_calqueue.o src/datatypes/nbcalendars_with_vb/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
 2CAS_value := src/datatypes/nbcalendars_with_vb_2CAS/nb_calqueue.o src/datatypes/nbcalendars_with_vb_2CAS/common_nb_calqueue.o src/datatypes/nbcalendars_with_vb_2CAS/bucket.o $(UTIL_value) $(GACO_value) $(ARCH_value)
-NRTM_value := src/datatypes/nbcalendars_with_vb_rtm/nb_calqueue.o src/datatypes/nbcalendars_with_vb_rtm/common_nb_calqueue.o src/datatypes/nbcalendars_with_vb_rtm/bucket.o $(UTIL_value) $(GACO_value) $(ARCH_value)
 
 LIND_value := src/datatypes/nbskiplists/prioq.o    src/datatypes/nbskiplists/common_prioq.o $(UTIL_value) $(GACO_value) $(ARCH_value)
 MARO_value := src/datatypes/nbskiplists/prioq_v2.o src/datatypes/nbskiplists/common_prioq.o $(UTIL_value) $(GACO_value) $(ARCH_value)
@@ -77,10 +78,10 @@ CBCQ_value := src/datatypes/ChunkBasedPriorityQueue/cbpq.opp\
 SLCQ_link := gcc
 
 NBCQ_link := gcc 
+ACRCQ_link := gcc 
 VBPQ_link := gcc 
 NBVB_link := gcc
 2CAS_link := gcc 
-NRTM_link := gcc 
 
 LIND_link := gcc 
 MARO_link := gcc 
@@ -98,6 +99,9 @@ L1_CACHE_LINE_SIZE := $(shell getconf LEVEL1_DCACHE_LINESIZE)
 NUMA_NODES := $(shell lscpu | grep -e "NUMA node(s)" | cut -d' ' -f 10-)
 NUM_CPUS := $(shell nproc --all)
 MACRO := -DARCH_X86_64  -DCACHE_LINE_SIZE=$(L1_CACHE_LINE_SIZE) -DINTEL -D_NUMA_NODES=$(NUMA_NODES) -DNUM_CPUS=$(NUM_CPUS)
+
+
+
 
 FILTER_OUT_C_SRC := src/main.c src/main_2.c
                   
@@ -125,6 +129,104 @@ else ifeq ($(OBJS_DIR), GProf)
 endif
 
 C_SUBDIRS 		:= src src/datatypes/nbcalendars src/datatypes/nbcalendars_with_vb src/datatypes/nbcalendars_with_vb2 src/datatypes/nbcalendars_with_vb_rtm src/datatypes/nbcalendars_with_vb_2CAS  src/datatypes/nbskiplists src/datatypes/slcalqueue  src/arch src/gc src/utils src/datatypes/nb_umb/unbcq src/datatypes/nb_umb/numaq src/datatypes/nb_umb/numaq_blk src/datatypes/nb_umb/numafk src/datatypes/nb_umb/numafk_numa src/datatypes/nb_umb/numafk_bl src/datatypes/nb_umb/numafk_malloc src/datatypes/nb_umb/numap src/datatypes/nb_umb/numap_bl src/datatypes/nb_umb/nbcq_phy src/datatypes/nb_umb/numap_noop src/datatypes/nb_umb/gc
+
+
+#OPTIMIZATION := -fauto-inc-dec \
+-fbranch-count-reg \
+-fcombine-stack-adjustments \
+-fcompare-elim \
+-fcprop-registers \
+-fdce \
+-fdefer-pop \
+-fdelayed-branch \
+-fdse \
+-fforward-propagate \
+-fguess-branch-probability \
+-fif-conversion \
+-fif-conversion2 \
+-finline-functions-called-once \
+-fipa-profile \
+-fipa-pure-const \
+-fipa-reference \
+-fmerge-constants \
+-fmove-loop-invariants \
+-fomit-frame-pointer \
+-freorder-blocks \
+-fshrink-wrap \
+-fshrink-wrap-separate \
+-fsplit-wide-types \
+-fssa-backprop \
+-fssa-phiopt \
+-ftree-bit-ccp \
+-ftree-ccp \
+-ftree-ch \
+-ftree-coalesce-vars \
+-ftree-copy-prop \
+-ftree-dce \
+-ftree-dominator-opts \
+-ftree-dse \
+-ftree-forwprop \
+-ftree-fre \
+-ftree-phiprop \
+-ftree-pta \
+-ftree-scev-cprop \
+-ftree-sink \
+-ftree-slsr \
+-ftree-sra \
+-ftree-ter \
+-funit-at-a-time \
+-falign-functions  -falign-jumps \
+-falign-labels  -falign-loops \
+-fcaller-saves \
+-fcode-hoisting \
+-fcrossjumping \
+-fcse-follow-jumps  -fcse-skip-blocks \
+-fdelete-null-pointer-checks \
+-fdevirtualize  -fdevirtualize-speculatively \
+-fexpensive-optimizations \
+-fgcse  -fgcse-lm  \
+-fhoist-adjacent-loads \
+-finline-small-functions \
+-findirect-inlining \
+-fipa-bit-cp  -fipa-cp  -fipa-icf \
+-fipa-ra  -fipa-sra  -fipa-vrp \
+-fisolate-erroneous-paths-dereference \
+-flra-remat \
+-foptimize-sibling-calls \
+-foptimize-strlen \
+-fpartial-inlining \
+-fpeephole2 \
+-freorder-blocks-algorithm=stc \
+-freorder-blocks-and-partition  -freorder-functions \
+-frerun-cse-after-loop  \
+-fschedule-insns  -fschedule-insns2 \
+-fsched-interblock  -fsched-spec \
+-fstore-merging \
+-fstrict-aliasing \
+-fthread-jumps \
+-ftree-builtin-call-dce \
+-ftree-pre \
+-ftree-switch-conversion  -ftree-tail-merge \
+-ftree-vrp \
+-fgcse-after-reload \
+-finline-functions \
+-fipa-cp-clone\
+-floop-interchange \
+-floop-unroll-and-jam \
+-fpeel-loops \
+-fpredictive-commoning \
+-fsplit-paths \
+-ftree-loop-distribute-patterns \
+-ftree-loop-distribution \
+-ftree-loop-vectorize \
+-ftree-partial-pre \
+-ftree-slp-vectorize \
+-funswitch-loops \
+-fvect-cost-model 
+
+
+
+C_SUBDIRS 		:= src src/datatypes/nbcalendars-ad src/datatypes/nbcalendars src/datatypes/nbcalendars_with_vb src/datatypes/nbcalendars_with_vb2  src/datatypes/nbcalendars_with_vb_2CAS  src/datatypes/nbskiplists src/datatypes/slcalqueue  src/arch src/gc src/utils
 C_SRCS			:= $(shell ls   $(patsubst %, %/*.c, $(C_SUBDIRS)) )
 C_SRCS 			:= $(filter-out $(FILTER_OUT_C_SRC), $(C_SRCS))
 C_OBJS			:= $(strip $(subst .c,.o, $(C_SRCS)))
