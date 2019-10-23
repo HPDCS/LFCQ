@@ -44,9 +44,12 @@
 #include "gc/gc.h"
 
 
-#define NID nid
-#define TID tid
-#define LTID ltid
+#define NID nid		// numa node
+#define TID tid		// thread id
+#define LTID ltid	// thread it within numa node
+
+#define SID sid		// socket id
+#define LSID lsid	// thread it within socket
 
 struct payload
 {
@@ -93,6 +96,9 @@ __thread int NID;
 __thread unsigned int num_op=0;
 
 __thread int LTID;
+
+__thread int SID;
+__thread int LSID;
 
 int NUMA_NODES;
 
@@ -335,6 +341,7 @@ int num_cpus;
 int num_cpus_per_node;
 
 int *numa_mapping;
+int *socket_mapping;
 int num_numa_nodes;
 int num_cpus;
 int num_cpus_per_node;
@@ -353,7 +360,12 @@ void* process(void *arg)
 	(TID) 		= my_id;
 	int cpu 	= numa_mapping[my_id];
 	(NID) 		= numa_node_of_cpu(cpu);
-	LTID		= my_id % num_cpus_per_node;
+	(LTID)		= my_id % num_cpus_per_node;
+	(SID)		= socket_mapping[cpu];
+	(LSID)		= cpu % CPU_PER_SOCKET;
+	
+	LOG("Thread %d, on cpu %d, on node %d, id in local node %d, socket %d, id in socket %d - Che al mercato mio padre comprò\n",TID, cpu, NID, LTID, SID, LSID);
+
 	srand48_r(my_id+157, &seed2);
     srand48_r(my_id+359, &seed);
     srand48_r(my_id+254, &seedT);
@@ -402,10 +414,15 @@ int main(int argc, char **argv)
 {
 	num_numa_nodes		= numa_max_node()+1;
 	num_cpus			= numa_num_configured_cpus();
-	NUM_CORES = num_cpus;
+	NUM_CORES 			= num_cpus;
 	num_cpus_per_node 	= num_cpus/num_numa_nodes;
 	numa_mapping		= malloc(sizeof(int)*num_cpus);
-	
+	socket_mapping		= malloc(sizeof(int)*num_cpus);
+
+	char line[10];
+	char *bcpu, *bsocket;
+	unsigned int cpu, socket;
+
 	int i,k,j=0;
 
 	k = 0;
@@ -415,6 +432,24 @@ int main(int argc, char **argv)
 				numa_mapping[k++] = j;
 		}
 	}
+
+	// get mapping of sockets
+	FILE *in 			= fopen("cpu_socket.tmp", "r");
+	do{
+		bcpu = fgets(line, 10, in);
+		if (bcpu == NULL)
+			break;
+		
+		cpu = strtol(bcpu, NULL, 10);
+
+		bsocket = fgets(line, 10, in);
+		if (bsocket == NULL)
+		{	printf("Should not happen\n"); break; }
+		socket = strtol(bsocket, NULL, 10);
+
+		socket_mapping[cpu] = socket;	
+	} while(1);
+	fclose(in);
 
 	int par = 1;
 	int num_par = 17;

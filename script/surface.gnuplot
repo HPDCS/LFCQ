@@ -43,7 +43,7 @@ outfile=out.'/'.start.'-SReal-'.queue.'.eps'
 set output outfile
 
 #set zrange [0:6000]
-set cbrange [0:5500]
+set cbrange [0:*]
 
 maxitems=45
 start=35

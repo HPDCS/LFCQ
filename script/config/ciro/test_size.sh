@@ -9,11 +9,11 @@ TIME=10
 # cmd parameters
 ##############################
 
-data_types="NBCQ UNBCQ NUMAP"
-threads="48 36 24 18 12 6 3 1"
+data_types="NBCQ NUMAP" #"UNBCQ"
+threads="48 36 24 18 12 6 1"
 iterations="1 2 3" #"1 2 3 4 5 6 7 8 9 10"
 distributions="E" #"E U T N C"
-queue_sizes="25600 256000 2560000"#"256 2560 25600 256000 2560000" 
+queue_sizes="25600 256000 2560000" #"256 2560 25600 256000 2560000" 
 elem_per_bucket="96" #"3 6 12 24 48 96 192 288 384 480 576 768 960 1152 1440 1782 2016 3168"
 usage_factor="0.33333333333333333333333"
 results="Results/SizeEpb" 
@@ -25,9 +25,9 @@ results="Results/SizeEpb"
 
 #"3 6 12 24 48 96 192 288 384 480 576 768 960 1152 1440 1782 2016 3168"
 
-elem_per_bucket_NBCQ="24 30 48 96"
-elem_per_bucket_UNBCQ="24 30 48 96" 
-elem_per_bucket_NUMAP="24 30 48 96"
+elem_per_bucket_NBCQ="48 96" #30 48 96" #24 30 48 96"
+elem_per_bucket_UNBCQ="30 48 96" #24 30 48 96" 
+elem_per_bucket_NUMAP="48 96" #30 48 96" #24 30 48 96"
 #elem_per_bucket_NUMAP="96" #"3 6 12 24 48 96 192 384 768" #"3 6 12 24 48 96 192 288 384 480 576 768 960 1152 1440 1782 2016 3168"
 #elem_per_bucket_NUMAPNOP="96" #"3 6 12 24 48 96 192 384 768" #"3 6 12 24 48 96 192 288 384 480 576 768 960 1152 1440 1782 2016 3168"
 #elem_per_bucket_NUMAPBL="96" #"3 6 12 24 48 96 192 384 768" #"3 6 12 24 48 96 192 288 384 480 576 768 960 1152 1440 1782 2016 3168"
@@ -42,4 +42,5 @@ elem_per_bucket_NUMAP="24 30 48 96"
 
 #############################
 # compile parameters
-#############################
+ ############################
+ 

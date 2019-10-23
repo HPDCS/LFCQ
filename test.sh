@@ -40,6 +40,8 @@ fi
 lscpu | grep NUMA | grep CPU > tmp.numa.conf
 lscpu | grep  On-line > tmp.cpu.list
 
+cat /proc/cpuinfo | grep -e 'processor' -e 'physical id' | cut -f2 | cut -d' ' -f2 > cpu_socket.tmp
+
 list=`python get_cores.py | cut -d',' -f1-$2`
 #list="0,28,4,32,8,36,12,40,10,38,6,34,2,30,16,44,20,48,24,52,26,54,22,50,18,46,14,42,1,29,5,33,9,37,13,41,11,39,7,35,3,31,17,45,21,49,25,53,27,55,23,51,19,47,15,43"
 list=`echo $list | cut -d',' -f1-$2`
@@ -49,6 +51,8 @@ rm tmp.numa.conf tmp.cpu.list
 
 #cmd_line="taskset -c $list $PRE1$PRE2 ./$version/$1-$cmd $2 1 $DIST ${PROB_DEQUEUE_1} $SIZE $DIST  ${PROB_DEQUEUE_2} $OPS $DIST 0 0 $4 $3 0 $MODE $TIME"
 cmd_line="$PRE1$PRE2 ./$version/$1-$cmd $2 1 $DIST ${PROB_DEQUEUE_1} $SIZE $DIST  ${PROB_DEQUEUE_2} $OPS $DIST 0 0 $4 $3 0 $MODE $TIME"
+
+#rm cpu_socket.tmp
 
 echo ${cmd_line}
 time ${cmd_line}

@@ -24,7 +24,7 @@ void init_mapping()
     for (i = 0; i < ACTIVE_NUMA_NODES; ++i) 
     {
         req_mapping[i] = numa_alloc_onnode(sizeof(op_node)*THREADS, i);
-        //res_mapping[i] = numa_alloc_onnode(sizeof(op_node)*THREADS, i);
+        res_mapping[i] = numa_alloc_onnode(sizeof(op_node)*THREADS, i);
         
         for (j = 0; j < THREADS; ++j) 
         {
