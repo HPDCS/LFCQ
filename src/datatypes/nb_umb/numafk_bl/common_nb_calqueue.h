@@ -35,7 +35,7 @@
 #include "../../../utils/hpdcs_utils.h"
 #include "../gc/ptst.h"
 
-#include "task_queue.h"
+#include "../op_queue/task_queue.h"
 
 extern __thread ptst_t *ptst;
 extern int gc_aid[];

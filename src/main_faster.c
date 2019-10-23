@@ -364,7 +364,7 @@ void* process(void *arg)
 	(SID)		= socket_mapping[cpu];
 	(LSID)		= cpu % CPU_PER_SOCKET;
 	
-	LOG("Thread %d, on cpu %d, on node %d, id in local node %d, socket %d, id in socket %d - Che al mercato mio padre comprò\n",TID, cpu, NID, LTID, SID, LSID);
+	LOG("Thread %d, on cpu %d, on node %d, id in local node %d, socket %d, id in socket %d\n",TID, cpu, NID, LTID, SID, LSID);
 
 	srand48_r(my_id+157, &seed2);
     srand48_r(my_id+359, &seed);
