@@ -44,11 +44,11 @@ task_queue enq_queue[_NUMA_NODES]; // per numa node queue
 task_queue deq_queue[_NUMA_NODES]; 
 
 #ifndef ENQ_MAX_WAIT_ATTEMPTS
-#define ENQ_MAX_WAIT_ATTEMPTS 10000
+#define ENQ_MAX_WAIT_ATTEMPTS 100
 #endif
  
 #ifndef DEQ_MAX_WAIT_ATTEMPTS
-#define DEQ_MAX_WAIT_ATTEMPTS 10000
+#define DEQ_MAX_WAIT_ATTEMPTS 100
 #endif
 
 /*************************************
@@ -490,6 +490,9 @@ static inline int handle_ops(void* q, unsigned int type)
 	{
 		while(tq_dequeue(&deq_queue[NID], &operation))
 		{	
+			// block the operation
+			if (!BOOL_CAS(&(operation->response), OP_NEW, OP_IN_HANDLING))
+				continue;
 			ts = do_pq_dequeue(q, &pld);
 			operation->timestamp = ts;
 			operation->payload = pld;
