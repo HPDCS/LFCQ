@@ -546,13 +546,13 @@ pkey_t pq_dequeue(void *q, void **result)
 			{
 
 				vb_index  = hash(operation->timestamp, h->bucket_width);
-				dest_node = NODE_HASH(operation->timestamp);
+				dest_node = NODE_HASH((unsigned long long) operation->timestamp);
 				
 			}
 			else 
 			{
 				vb_index = (h->current) >> 32;
-				dest_node = NODE_HASH(operation->timestamp);
+				dest_node = NODE_HASH((unsigned long long) operation->timestamp);
 			}
 			// need to move to another queue?
 			if (dest_node != NID & !mine) 
