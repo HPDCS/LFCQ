@@ -25,8 +25,8 @@ void init_mapping()
     for (i = 0; i < NUM_SOCKETS; ++i) 
     {
         node = i << 1;
-        req_mapping[i] = numa_alloc_onnode(sizeof(op_node)*THREADS, i);
-        res_mapping[i] = numa_alloc_onnode(sizeof(op_node)*THREADS, i);
+        req_mapping[i] = numa_alloc_onnode(sizeof(op_node)*THREADS, node);
+        res_mapping[i] = numa_alloc_onnode(sizeof(op_node)*THREADS, node);
         
         for (j = 0; j < THREADS; ++j) 
         {

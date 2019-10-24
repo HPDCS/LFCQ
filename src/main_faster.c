@@ -434,7 +434,7 @@ int main(int argc, char **argv)
 	}
 
 	// get mapping of sockets
-	FILE *in 			= fopen("cpu_socket.tmp", "r");
+	FILE *in 			= fopen("./cpu_socket.tmp", "r");
 	do{
 		bcpu = fgets(line, 10, in);
 		if (bcpu == NULL)

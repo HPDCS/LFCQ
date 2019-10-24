@@ -14,6 +14,8 @@ mkdir -p $results
 echo $results
 ./estimate_runtime.sh $1
 
+cat /proc/cpuinfo | grep -e 'processor' -e 'physical id' | cut -f2 | cut -d' ' -f2 > cpu_socket.tmp
+
 for i in $iterations; do
 	for DIST in $distributions; do
 		for s in $queue_sizes; do
