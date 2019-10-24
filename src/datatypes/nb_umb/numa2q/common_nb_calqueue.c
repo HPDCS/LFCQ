@@ -462,6 +462,57 @@ begin:
 	return INFTY;
 }
 
+static inline int handle_enq(void* q) 
+{
+	op_node * operation;
+	void *pld;
+	pkey_t ts;
+	int ret, count;
+
+	count = 0;
+	while(tq_dequeue(&enq_queue[NID], &operation))
+	{
+		// block the operation
+		if (!BOOL_CAS(&(operation->response), OP_NEW, OP_IN_HANDLING))
+			continue;
+		ts = operation->timestamp;
+		pld = operation->payload;
+		ret = do_pq_enqueue(q, ts, pld);
+		__sync_bool_compare_and_swap(&(operation->response), OP_IN_HANDLING, ret); // for mem barrier
+		count++;
+	}
+
+	return count;
+}
+
+static inline int handle_deq(void* q) 
+{
+	op_node * operation;
+	void *pld;
+	pkey_t ts;
+	int count = 0;
+	// get the lock of dequeue
+	if (BOOL_CAS(&deq_lock, 0, 1))
+	{
+		while(tq_dequeue(&deq_queue[NID], &operation))
+		{	
+			// block the operation
+			if (!BOOL_CAS(&(operation->response), OP_NEW, OP_IN_HANDLING))
+				continue;
+			ts = do_pq_dequeue(q, &pld);
+			operation->timestamp = ts;
+			operation->payload = pld;
+			__sync_bool_compare_and_swap(&(operation->response), OP_IN_HANDLING, 1);
+			count++;
+		}
+	
+		// deq_lock
+		deq_lock = 0;
+	}
+	return count;
+}
+
+/*
 static inline int handle_ops(void* q, unsigned int type) 
 {
 	
@@ -513,6 +564,7 @@ static inline int handle_ops(void* q, unsigned int type)
 	return count;
 	
 }
+*/
 
 // @TODO - add steal/repost counters
 
@@ -545,12 +597,14 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	vb_index  = hash(timestamp, h->bucket_width);
 	dest_node = NODE_HASH(vb_index % h->size);
 
+	
 	if (dest_node == NID)
 	{
 		ret = do_pq_enqueue(q, timestamp, payload);
 		critical_exit();
 		return ret;
 	}
+	
 
 	// post the operation on one queue
 
@@ -601,8 +655,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 		}
 		// steal/repost
 
-		count = handle_ops(q, OP_PQ_ENQ);
-		count += handle_ops(q, OP_PQ_DEQ);
+		count = handle_enq(q);
+		count += handle_deq(q);
 		
 		if (count > 0)
 			attempts=0;
@@ -695,8 +749,8 @@ pkey_t pq_dequeue(void *q, void **result)
 			attempts = 0;
 		}
 		
-		count = handle_ops(q, OP_PQ_ENQ);
-		count += handle_ops(q, OP_PQ_DEQ);
+		count = handle_enq(q);
+		count += handle_deq(q);
 		
 		if (count > 0)
 			attempts = 0;
