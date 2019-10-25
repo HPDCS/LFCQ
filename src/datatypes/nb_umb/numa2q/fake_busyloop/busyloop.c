@@ -27,7 +27,7 @@
 #include <stdlib.h>
 #include <limits.h>
 
-#include "fk.h"
+#include "busyloop.h"
 
 /*************************************
  * GLOBAL VARIABLES					 *
@@ -172,8 +172,12 @@ __thread unsigned long value = 0;
  */
 static inline int __attribute__((optimize("O0"))) do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
 {
-
+	unsigned long i = LOOP_COUNT;
 	last_ts = timestamp;
+
+	while(i > 0)
+		i--;
+
 	performed_enqueue++;
 	return 1;
 }
@@ -190,6 +194,10 @@ static inline int __attribute__((optimize("O0"))) do_pq_enqueue(void* q, pkey_t 
  */
 static inline pkey_t __attribute__((optimize("O0"))) do_pq_dequeue(void *q, void** result)
 {
+
+	unsigned long i = LOOP_COUNT;
+	while(i > 0)
+		i--;
 
 	*result = (void *) 0x1ull;
 	performed_dequeue++;
