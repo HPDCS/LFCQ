@@ -208,6 +208,7 @@ void* process(void *arg)
 	pthread_exit(NULL);    
 }
 
+int NUM_CORES = 8;
 
 int main(int argc, char **argv)
 {
