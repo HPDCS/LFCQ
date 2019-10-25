@@ -33,6 +33,7 @@
 
 #ifndef NDEBUG
 #include <signal.h>
+#include <stdlib.h>
 #define assertf(CONDITION, STRING,  ...)	if(CONDITION) { printf((STRING),  __VA_ARGS__); printf( "line: %s:%d \n" ,__FILE__, __LINE__); raise(SIGINT); }
 #else
 #define assertf(CONDITION, STRING,  ...) {}

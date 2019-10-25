@@ -328,7 +328,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 				enq_steal_done++;
 
 				h = read_table(&queue->hashtable, th, epb, pub);
-				new_dest_node =  NODE_HASH(hash(timestamp, h->bucket_width) % (h->size));
+				new_dest_node =  NODE_HASH((unsigned int) timestamp);
 
 				if (new_dest_node == dest_node || new_dest_node == NID)
 				{

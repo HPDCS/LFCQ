@@ -12,7 +12,7 @@
 
 
 #define MICROSLEEP_TIME 5
-#define CLUSTER_WAIT 200000
+#define CLUSTER_WAIT 2000
 #define WAIT_LOOPS CLUSTER_WAIT //2
 
 void* nbcqueue;
@@ -137,7 +137,7 @@ void generate_trace(char d)
 	for(i = 1; i< TRACE_LEN;i++){
 		trace[i] += trace[i-1];
 		if(trace[i] < trace[i-1])
-			printf("Overflow problem while generating trace i:%d t[i]:"KEY_STRING" t[i+1]:"KEY_STRING"\n", i, trace[i-1], trace[i]);
+			{LOG("Overflow problem while generating trace i:%d t[i]:"KEY_STRING" t[i+1]:"KEY_STRING"\n", i, trace[i-1], trace[i]);}
 	}
 	LOG("%s\n", "Done");
 
@@ -175,11 +175,9 @@ int enqueue(int my_id, struct drand48_data* seed, pkey_t local_min, double (*cur
 		timestamp = local_min + update;
 	}while(timestamp == INFTY);
 	
-	if(timestamp < 0 || timestamp < 1)
-		timestamp = 1.0;
-	timestamp+=LOOKAHEAD;
-	if(timestamp < local_min) printf("Timestamp overflow " KEY_STRING " > " KEY_STRING "\n",timestamp, local_min);
-#else
+	if(timestamp < 0.0)
+		timestamp = 0.0;
+	#else
 	unsigned long long index = __sync_fetch_and_add(&trace_index, 1); 
 	assertf(index > TRACE_LEN, "THE TRACE IS SHORT: %d vs %llu\n", TRACE_LEN, index);
 	timestamp = trace[index];

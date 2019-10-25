@@ -196,7 +196,7 @@ __thread unsigned int next_node_deq;
 
 int pq_enqueue(void* q, pkey_t timestamp, void *payload) 
 {
-	assertf(timestamp < MIN || timestamp >= INFTY, "Key out of range %s\n", "");
+	assertf(timestamp < MIN || timestamp >= INFTY, "Key out of range %d\n", timestamp);
 
 	nb_calqueue *queue = (nb_calqueue *) q;
 	table *h = NULL;

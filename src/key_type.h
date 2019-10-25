@@ -9,8 +9,7 @@
 #define INT 	2
 #define LONG	3
 
-#define KEY_TYPE INT //DOUBLE
-
+#define KEY_TYPE DOUBLE
 
 #define LESS(a,b) 		( (a) <  (b) )
 #define LEQ(a,b)		( (a) <= (b) )
@@ -39,7 +38,7 @@
 	#define BILLION (1000*MILLION)
 	#define TRACE_LEN (300*MILLION)
 
-	#define MEAN 10;			// Maximum distance from the current event owned by the thread
+	#define MEAN 10;			// Maximum distance from the current event owned by the thread <- Overflow when creating trace
 
 #elif KEY_TYPE == LONG
 
