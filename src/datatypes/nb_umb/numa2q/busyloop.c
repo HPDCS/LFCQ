@@ -159,7 +159,6 @@ void *pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 }
 
 __thread pkey_t last_ts;
-__thread unsigned long value = 0;
 
 /**
  * This function implements the enqueue interface of the NBCQ.

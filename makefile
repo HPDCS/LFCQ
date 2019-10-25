@@ -10,7 +10,7 @@ USER_OBJS :=
 
 LIBS := -lpthread -lm -lnuma -lrt -mrtm
 SRC_DIR := src
-TARGETS := ACRCQ NUMA2Q NUMA2QFK NUMA2QBL #NBCQ LIND MARO CBCQ SLCQ NBVB 2CAS VBPQ ACRCQ #V2CQ NUMA WORK
+TARGETS := ACRCQ NUMA2Q NUMA2QFK NUMA2QBL NUMAP NUMAPNOP NUMAPBL #NBCQ LIND MARO CBCQ SLCQ NBVB 2CAS VBPQ ACRCQ #V2CQ NUMA WORK
 
 
 UTIL_value := src/utils/common.o src/utils/hpdcs_math.o 
@@ -33,6 +33,13 @@ NUMA2Q_link := gcc
 NUMA2QFK_link := gcc
 NUMA2QBL_link := gcc
 
+NUMAP_value := src/datatypes/nb_umb/numap/base.o src/datatypes/nb_umb/numap/mapping.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMAPNOP_value := src/datatypes/nb_umb/numap/fake.o src/datatypes/nb_umb/numap/mapping.o $(UTIL_value) $(ARCH_value) $(NGACO_value) 
+NUMAPBL_value := src/datatypes/nb_umb/numap/busyloop.o src/datatypes/nb_umb/numap/mapping.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMAP_link := gcc
+NUMAPNOP_link := gcc
+NUMAPBL_link := gcc
+
 NUMAQBLK_value := $(TQ_value) src/datatypes/nb_umb/numaq_blk/common_nb_calqueue.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMAQBLK_link := gcc
 
@@ -45,9 +52,6 @@ NUMAFKBL_link := gcc
 UNBCQ_value := src/datatypes/nb_umb/unbcq/nb_calqueue.o src/datatypes/nb_umb/unbcq/common_nb_calqueue.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 UNBCQ_link := gcc
 
-NUMAP_value := src/datatypes/nb_umb/numap/common_nb_calqueue.o src/datatypes/nb_umb/numap/mapping.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
-NUMAP_link := gcc
-
 NUMAPNOSHIFT_value := src/datatypes/nb_umb/numap_noshift/common_nb_calqueue.o src/datatypes/nb_umb/numap_noshift/mapping.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMAPNOSHIFT_link := gcc
 
@@ -56,12 +60,6 @@ NUMAPSKT_link := gcc
 
 NUMAPLCRQ_value := $(TQ_value) src/datatypes/nb_umb/numap_lcrq_blk/common_nb_calqueue.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMAPLCRQ_link := gcc
-
-NUMAPNOP_value := src/datatypes/nb_umb/numap_noop/common_nb_calqueue.o src/datatypes/nb_umb/numap_noop/mapping.o $(UTIL_value) $(ARCH_value) $(NGACO_value) 
-NUMAPNOP_link := gcc
-
-NUMAPBL_value := src/datatypes/nb_umb/numap_bl/common_nb_calqueue.o src/datatypes/nb_umb/numap_bl/mapping.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
-NUMAPBL_link := gcc
 
 SLCQ_value := src/datatypes/slcalqueue/calqueue.o  $(UTIL_value)
 
@@ -230,8 +228,8 @@ endif
 -funswitch-loops \
 -fvect-cost-model 
 
-C_SUBDIRS		:= src src/datatypes/nbcalendars-ad src/datatypes/nbcalendars src/datatypes/nbcalendars_with_vb src/datatypes/nbcalendars_with_vb2  src/datatypes/nbcalendars_with_vb_2CAS  src/datatypes/nbskiplists src/datatypes/slcalqueue  src/arch src/gc src/utils src/datatypes/nb_umb/op_queue src/datatypes/nb_umb/gc src/datatypes/nb_umb/unbcq src/datatypes/nb_umb/numa2q
-#C_SUBDIRS 		:=   src/datatypes/nb_umb/numaq src/datatypes/nb_umb/numap_socket src/datatypes/nb_umb/numap_noshift src/datatypes/nb_umb/numaq_blk src/datatypes/nb_umb/numafk src/datatypes/nb_umb/numafk_bl src/datatypes/nb_umb/numap src/datatypes/nb_umb/numap_bl src/datatypes/nb_umb/nbcq_phy src/datatypes/nb_umb/numap_lcrq_blk src/datatypes/nb_umb/numap_noop 
+C_SUBDIRS		:= src src/datatypes/nbcalendars-ad src/datatypes/nbcalendars src/datatypes/nbcalendars_with_vb src/datatypes/nbcalendars_with_vb2  src/datatypes/nbcalendars_with_vb_2CAS  src/datatypes/nbskiplists src/datatypes/slcalqueue  src/arch src/gc src/utils src/datatypes/nb_umb/op_queue src/datatypes/nb_umb/gc src/datatypes/nb_umb/unbcq src/datatypes/nb_umb/numa2q src/datatypes/nb_umb/numap
+#C_SUBDIRS 		:=   src/datatypes/nb_umb/numaq src/datatypes/nb_umb/numap_socket src/datatypes/nb_umb/numap_noshift src/datatypes/nb_umb/numaq_blk src/datatypes/nb_umb/numafk src/datatypes/nb_umb/numafk_bl src/datatypes/nb_umb/nbcq_phy src/datatypes/nb_umb/numap_lcrq_blk
 
 C_SRCS			:= $(shell ls   $(patsubst %, %/*.c, $(C_SUBDIRS)) )
 C_SRCS 			:= $(filter-out $(FILTER_OUT_C_SRC), $(C_SRCS))

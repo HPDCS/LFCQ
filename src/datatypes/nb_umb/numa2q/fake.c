@@ -170,7 +170,7 @@ __thread unsigned long value = 0;
  * @param payload: the value to be enqueued
  * @return true if the event is inserted in the set table else false
  */
-static inline int __attribute__((optimize("O0"))) do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
+static inline int do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
 {
 
 	last_ts = timestamp;
@@ -188,7 +188,7 @@ static inline int __attribute__((optimize("O0"))) do_pq_enqueue(void* q, pkey_t 
  * @return the highest priority 
  *
  */
-static inline pkey_t __attribute__((optimize("O0"))) do_pq_dequeue(void *q, void** result)
+static inline pkey_t do_pq_dequeue(void *q, void** result)
 {
 
 	*result = (void *) 0x1ull;
