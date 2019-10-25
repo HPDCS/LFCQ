@@ -9,7 +9,7 @@ TIME=10
 # cmd parameters
 ##############################
 
-data_types="ACRCQ NUMAP NUMAPSKT NUMAQBLK NUMA2Q" #"NBCQ NUMAQBLK" #"NBCQ UNBCQ NUMAP NUMAQ NUMAQBLK" #"NBCQ UNBCQ NUMAPNOP NUMAFK" #"NBCQ UNBCQ NUMAP NUMAQ" #"NBCQ UNBCQ NUMAP NUMAPNOP NUMAPBL NUMAQ NUMAFK NUMAFKBL"
+data_types="ACRCQ NUMAP NUMAPSKT NUMAQBLK NUMA2Q NUMAPNOSHIFT" #ACRCQH #"NBCQ NUMAQBLK" #"NBCQ UNBCQ NUMAP NUMAQ NUMAQBLK" #"NBCQ UNBCQ NUMAPNOP NUMAFK" #"NBCQ UNBCQ NUMAP NUMAQ" #"NBCQ UNBCQ NUMAP NUMAPNOP NUMAPBL NUMAQ NUMAFK NUMAFKBL"
 threads="48 36 24 18 12 6 3 1"
 iterations="1 2 3" # 4 5" # 6 7 8 9 10"
 distributions="E" #E" # U T N C"
@@ -25,6 +25,8 @@ results="Results/NewBaseline"
 
 elem_per_bucket_ACRCQ="3" # no need to change this
 elem_per_bucket_NUMAP="24 48 96"
+elem_per_bucket_ACRCQH="3"
+elem_per_bucket_NUMAPNOSHIFT="48"
 elem_per_bucket_NUMAPSKT="24 48 96"
 elem_per_bucket_NUMAQBLK="48"
 elem_per_bucket_NUMA2Q='48'
