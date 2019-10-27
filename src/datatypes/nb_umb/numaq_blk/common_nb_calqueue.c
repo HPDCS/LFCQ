@@ -137,7 +137,7 @@ void *pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 
 static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *payload)
 {
-	nbc_bucket_node *bucket, *new_node, *ins_node;
+	nbc_bucket_node *bucket, *new_node;
 
 	unsigned int index, size;
 	unsigned long long newIndex = 0;
@@ -216,8 +216,6 @@ static inline pkey_t single_step_pq_dequeue(table *h, nb_calqueue *queue, void *
 	unsigned long long index;
 	unsigned long long epoch;
 
-	unsigned long left_node_op_id;
-
 	unsigned int size, attempts = 0;
 	unsigned int counter;
 	pkey_t left_ts;
@@ -225,10 +223,7 @@ static inline pkey_t single_step_pq_dequeue(table *h, nb_calqueue *queue, void *
 
 	unsigned int ep = 0;
 	int con_de = 0;
-	bool prob_overflow = false;
-
-	wideptr lnn, new;
-	int res;	
+	bool prob_overflow = false;	
 	
 	tail = queue->tail;
 
@@ -297,9 +292,6 @@ static inline pkey_t single_step_pq_dequeue(table *h, nb_calqueue *queue, void *
 				*result = NULL;
 				return -1; //return error
 			}
-
-			if (left_node_op_id == 1)
-				continue;
 
 			// The virtual bucket is empty
 			if (left_ts >= right_limit || left_node == tail)
@@ -516,7 +508,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 				performed_dequeue++;
 				handling_op->payload = new_payload;
 				handling_op->timestamp = ret_ts;
-				__sync_bool_compare_and_swap(&(handling_op->response), -1, 1); /* Is this an overkill? */
+				__sync_bool_compare_and_swap(&(handling_op->response), -1, 1); // Is this an overkill?
 				operation = NULL;
 				continue;
 			}
@@ -646,7 +638,7 @@ pkey_t pq_dequeue(void *q, void **result)
 			ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->payload);
 			if (ret != -1) //enqueue succesful
 			{
-				__sync_bool_compare_and_swap(&(handling_op->response), -1, ret); /* Is this an overkill? */
+				__sync_bool_compare_and_swap(&(handling_op->response), -1, ret); // Is this an overkill?
 				operation = NULL;
 				continue;
 			}

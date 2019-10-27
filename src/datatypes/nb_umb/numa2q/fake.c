@@ -159,7 +159,6 @@ void *pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 }
 
 __thread pkey_t last_ts;
-__thread unsigned long value = 0;
 
 /**
  * This function implements the enqueue interface of the NBCQ.
@@ -170,7 +169,7 @@ __thread unsigned long value = 0;
  * @param payload: the value to be enqueued
  * @return true if the event is inserted in the set table else false
  */
-static inline int do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
+int do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
 {
 
 	last_ts = timestamp;
@@ -188,7 +187,7 @@ static inline int do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
  * @return the highest priority 
  *
  */
-static inline pkey_t do_pq_dequeue(void *q, void** result)
+pkey_t do_pq_dequeue(void *q, void** result)
 {
 
 	*result = (void *) 0x1ull;

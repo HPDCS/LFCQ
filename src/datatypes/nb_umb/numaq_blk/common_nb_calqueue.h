@@ -158,13 +158,16 @@ struct __bucket_node
 
 struct __op_load
 {
-	unsigned long op_id; //global identifier for the operation 
-	unsigned int type;   // ENQ | DEQ
-	int response;				// -1 waiting for resp | 1 responsed
- 	void *payload;				// paylod to enqueue | dequeued payload
+	unsigned long op_id;		//global identifier for the operation 
+	void *payload;				// paylod to enqueue | dequeued payload
 	pkey_t timestamp;			// ts of node to enqueue | lower ts of bucket to dequeue | returned ts
-	nbc_bucket_node *candidate; // need of candidate node
+	char pad[8-sizeof(pkey_t)];
+	unsigned int type;			// ENQ | DEQ
+	volatile int response;		// -1 waiting for resp | 1 responsed
+	// 32
+	nbc_bucket_node * volatile candidate;	// need of candidate node
 	op_node ** requestor;
+	// 48
 };
 
 typedef union {

@@ -50,10 +50,10 @@ unsigned int ACTIVE_NUMA_NODES;
 #define SAMPLE_SIZE 50
 #define HEAD_ID 0
 //#define MAXIMUM_SIZE 1048576 //524288 //262144 //131072 //65536 //32768
-#define MINIMUM_SIZE 1
+//#define MINIMUM_SIZE 1
 #define MAX_NUMA_NODES 16
 
-#define ENABLE_EXPANSION 1
+//#define ENABLE_EXPANSION 1
 #define READTABLE_PERIOD 63
 #define COMPACT_RANDOM_ENQUEUE 1
 
@@ -150,7 +150,7 @@ struct __bucket_node
 	//32
 	nbc_bucket_node *tail;
 	// nbc_bucket_node * volatile next; // pointer to the successor
-	// union that holds a wideptr (fields can be accesse without changing the whole code ^_^)
+	// union that holds a wideptr (fields can be accesse without changing the whole code ^_^ -> but this should have an impact on performances)
 	union {
 		volatile __uint128_t widenext;
 		struct
@@ -169,13 +169,16 @@ struct __bucket_node
 
 struct __op_load
 {
-	unsigned long op_id; //global identifier for the operation 
-	unsigned int type;   // ENQ | DEQ
-	int response;				// -1 waiting for resp | 1 responsed
- 	void *payload;				// paylod to enqueue | dequeued payload
+	unsigned long op_id;		//global identifier for the operation 
+	void *payload;				// paylod to enqueue | dequeued payload
 	pkey_t timestamp;			// ts of node to enqueue | lower ts of bucket to dequeue | returned ts
-	nbc_bucket_node *candidate; // need of candidate node
+	char pad[8-sizeof(pkey_t)];
+	unsigned int type;			// ENQ | DEQ
+	volatile int response;		// -1 waiting for resp | 1 responsed
+	// 32
+	nbc_bucket_node * volatile candidate;	// need of candidate node
 	op_node ** requestor;
+	// 48
 };
 
 typedef union {

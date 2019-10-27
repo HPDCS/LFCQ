@@ -219,7 +219,7 @@ static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, uns
 	do
 	{
 		len = 0;
-		/// Fetch the head and its next node
+		// Fetch the head and its next node
 		left = tmp = head;
 		// read all data from the head (hopefully only the first access is a cache miss)
 		left_next = tmp_next = tmp->next;
@@ -272,10 +272,14 @@ static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, uns
 						 (!is_new_key && tmp_tie_breaker <= tie_breaker));
 			go_to_next = go_to_next || (ts_equal && tie_lower);
 
+			// here we should update the node to be added in cache
+
 			// Exit if tmp is a tail or its timestamp is > of the searched key
 		} while (tmp != tail &&
 				 (marked ||
 				  go_to_next));
+		
+		// Here we should Update the cache
 
 		// if the right or the left node is MOV signal this to the caller
 		if (is_marked(tmp, MOV) || is_marked(left_next, MOV))
@@ -316,7 +320,7 @@ static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, uns
 				scan_list_length_en += len;
 			}
 			if (counter > 0)
-				connect_to_be_freed_node_list(left_next, counter);
+				connect_to_be_freed_node_list(left_next, counter); // here we should set counter in cached value for integrity
 			return OK;
 		}
 

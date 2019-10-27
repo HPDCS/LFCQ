@@ -620,7 +620,7 @@ static inline void migrate_node(nbc_bucket_node *right_node, table *new_h)
 				curr_state.next = right_node->next;
 				curr_state.op_id = right_node->op_id;
 
-				new_state.next = ((unsigned long) right_node->next) | DEL;
+				new_state.next = get_marked(right_node->next, DEL); //((unsigned long) right_node->next) | DEL;
 				new_state.op_id = 0;
 			} while(__sync_val_compare_and_swap(&right_node->widenext, curr_state.widenext, new_state.widenext) != curr_state.widenext);
 			
