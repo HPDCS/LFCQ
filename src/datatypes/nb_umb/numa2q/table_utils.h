@@ -234,7 +234,16 @@ static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, uns
 		// SANITY CHECKS
 		assertf(head == NULL, "PANIC %s\n", "");
 		assertf(tmp_next == NULL, "PANIC1 %s\n", "");
-		//assertf(is_marked_for_search(left_next, flag), "PANIC2 %s\n", "");
+		#ifdef _CACHE_ON
+		if (is_marked_for_search(left_next, flag))
+		{
+			update_last_node(vb_index, h, NULL);
+			return ABORT;
+		}
+		#else
+		assertf(is_marked_for_search(left_next, flag), "PANIC2 %s\n", "");
+		#endif
+
 
 		// init variables useful during iterations
 		counter = 0;
@@ -248,8 +257,9 @@ static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, uns
 			if (!marked)
 			{
 				if (tmp_timestamp < first_ts)
+				{
 					to_cache = tmp; // cache only unmarked node, marked will be soon removed.
-
+				}
 				left = tmp;
 				left_next = tmp_next;
 				left_tie_breaker = tmp_tie_breaker;
@@ -286,8 +296,12 @@ static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, uns
 		//@TODO Here we should Update the cache
 		if (to_cache != NULL)
 		{
-			to_cache->tail = tail;
-			update_last_node(vb_index, h, to_cache);
+			if (to_cache != head && to_cache != tail)
+			{
+				//printf("to cache %p, vb is %ld, ts is "KEY_STRING" , bw is %f\n", to_cache, vb_index,to_cache->timestamp, h->bucket_width);
+				to_cache->tail = tail;
+				update_last_node(vb_index, h, to_cache);
+			}
 		}
 		// if the right or the left node is MOV signal this to the caller
 		if (is_marked(tmp, MOV) || is_marked(left_next, MOV))

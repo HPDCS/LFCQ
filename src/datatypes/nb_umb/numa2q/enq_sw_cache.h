@@ -1,6 +1,8 @@
 #include "common_nb_calqueue.h"
 #include "../gc/set.h"
 
+//#define _CACHE_ON
+
 /*
  * Queue wide cache - Speedup of enqueues
  * 
