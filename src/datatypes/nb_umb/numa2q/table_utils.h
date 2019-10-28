@@ -234,16 +234,7 @@ static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, uns
 		// SANITY CHECKS
 		assertf(head == NULL, "PANIC %s\n", "");
 		assertf(tmp_next == NULL, "PANIC1 %s\n", "");
-		#ifdef _CACHE_ON
-		if (is_marked_for_search(left_next, flag))
-		{
-			update_last_node(vb_index, h, NULL);
-			return ABORT;
-		}
-		#else
 		assertf(is_marked_for_search(left_next, flag), "PANIC2 %s\n", "");
-		#endif
-
 
 		// init variables useful during iterations
 		counter = 0;

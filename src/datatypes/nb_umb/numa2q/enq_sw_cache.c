@@ -29,7 +29,7 @@ nbc_bucket_node* get_last_node(setkey_t vb_index, table* h)
     if (value == NULL)
         return NULL;
     
-    if (h != value->h || value->last_node->nid > value->node_counter)
+    if (h != value->h || value->last_node->nid > value->node_counter || is_marked(value->last_node->next))
     {
         // table is changed, this is no longer valid
         set_remove(set, vb_index);
