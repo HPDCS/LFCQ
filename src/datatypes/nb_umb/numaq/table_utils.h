@@ -200,7 +200,7 @@ static inline void search(nbc_bucket_node *head, pkey_t timestamp, unsigned int 
 static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, unsigned int tie_breaker,
 					  int flag, nbc_bucket_node *new_node_pointer, nbc_bucket_node **new_node)
 {
-	nbc_bucket_node *left, *left_next, *tmp, *tmp_next, *tail, *old_tmp;
+	nbc_bucket_node *left, *left_next, *tmp, *tmp_next, *tail;
 	unsigned int counter;
 	unsigned int left_tie_breaker, tmp_tie_breaker;
 	unsigned int len;
@@ -254,7 +254,6 @@ static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, uns
 			// increase the count of marked nodes met during scan
 			counter += marked;
 
-			old_tmp = tmp;
 			// get an unmarked reference to the tmp node
 			tmp = get_unmarked(tmp_next);
 
