@@ -346,9 +346,9 @@ static chunk_t *node_get_filled_chunks(int n, int sz, unsigned int numa_node)
             node += sz;
 
             if (i == BLKS_PER_CHUNK) {
-                if ( (p = p->next) == h ) goto out;
                 p->i = BLKS_PER_CHUNK;
                 i = 0;
+                if ( (p = p->next) == h ) goto out;
             }
         }
         node = check;

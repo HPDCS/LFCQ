@@ -610,9 +610,9 @@ pkey_t pq_dequeue(void *q, void **result)
 		// check if my op was done // we could lose op
 		if ((ret = __sync_fetch_and_add(&(requested_op->response), 0)) != -1)
 		{
-			gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
 			*result = requested_op->payload;
 			ret_ts = requested_op->timestamp;
+			gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
 			critical_exit();
 			requested_op = NULL;
 			// dovrebbe essere come se il thread fosse stato deschedulato prima della return
