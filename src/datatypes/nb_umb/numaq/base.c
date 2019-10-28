@@ -222,7 +222,7 @@ int single_step_pq_enqueue(table *h, pkey_t timestamp, void *payload, nbc_bucket
 				curr_state.next = new_node->next;
 				curr_state.op_id = new_node->op_id;
 
-				new_state.next = get_marked(curr_state.next, DEL); //((unsigned long) new_node->next) | DEL;
+				new_state.next = get_marked(new_node->next, DEL); //((unsigned long) new_node->next) | DEL;
 				new_state.op_id = 0;
 
 			} while(__sync_val_compare_and_swap(&new_node->widenext, curr_state.widenext, new_state.widenext) != curr_state.widenext);
@@ -234,7 +234,7 @@ int single_step_pq_enqueue(table *h, pkey_t timestamp, void *payload, nbc_bucket
 			
 		// prova a valdiare il nodo (se non lo è già)
 		if (!__sync_bool_compare_and_swap(&(ins_node->op_id), 1, 0))
-			return 1; //se questa cas fallisce vuol dire che il nodo è stato già validato-> va solo flushato il current
+			return 1; //-1
 
 		// must be done once
 		flush_current(h, newIndex, new_node);
