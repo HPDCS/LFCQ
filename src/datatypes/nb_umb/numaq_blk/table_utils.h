@@ -316,7 +316,8 @@ static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, uns
 				scan_list_length_en += len;
 			}
 			if (counter > 0)
-				connect_to_be_freed_node_list(left_next, counter);
+				//connect_to_be_freed_node_list(left_next, counter);
+				search(head, -1.0, 0, &lnode, &rnode, flag);
 			return OK;
 		}
 
