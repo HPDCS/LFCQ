@@ -134,7 +134,7 @@ void *pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	return res;
 }
 
-static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *payload, nbc_bucket_node* volatile * candidate, op_node *operation)
+int single_step_pq_enqueue(table *h, pkey_t timestamp, void *payload, nbc_bucket_node* volatile * candidate, op_node *operation)
 {
 
 	assertf(operation->type != OP_PQ_ENQ, "Passing a dequeue to an enqueue%s\n", "");
@@ -234,7 +234,7 @@ static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *paylo
 			
 		// prova a valdiare il nodo (se non lo è già)
 		if (!__sync_bool_compare_and_swap(&(ins_node->op_id), 1, 0))
-			return -1; //-1
+			return 1; //se questa cas fallisce vuol dire che il nodo è stato già validato-> va solo flushato il current
 
 		// must be done once
 		flush_current(h, newIndex, new_node);
@@ -261,7 +261,7 @@ static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *paylo
 }
 
 
-static inline pkey_t single_step_pq_dequeue(table *h, nb_calqueue *queue, void **result, unsigned long op_id, nbc_bucket_node* volatile *candidate)
+pkey_t single_step_pq_dequeue(table *h, nb_calqueue *queue, void **result, unsigned long op_id, nbc_bucket_node* volatile *candidate)
 {
 
 nbc_bucket_node *min, *min_next,
