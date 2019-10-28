@@ -199,6 +199,8 @@ bool _lcrq_enqueue(LCRQ *queue, uint64_t arg, unsigned int numa_node) {
 
     RingQueue *nrq = null;
     int try_close = 0;
+    
+    critical_enter();
 
     while (1) {
         RingQueue *rq = queue->tail;
@@ -231,6 +233,7 @@ alloc:
             if (CASPTR(&rq->next, null, nrq)) {
                 CASPTR(&queue->tail, rq, nrq);
                 nrq = null;
+                critical_exit();
                 return true;
             }
             continue;
@@ -248,6 +251,7 @@ alloc:
                     if (nrq != null) {
                         gc_free(ptst, nrq, gc_id[GC_RING_QUEUE]); // to avoid use per thread variable
                     }
+                    critical_exit();
                     return true;
                 }
             }
@@ -265,6 +269,7 @@ alloc:
 //inline Object dequeue(int pid) {
 bool _lcrq_dequeue(LCRQ *queue, int64_t* item) {
 
+    critical_enter();
     while (1) {
         RingQueue *rq = queue->head;
         RingQueue *next;
@@ -297,6 +302,7 @@ bool _lcrq_dequeue(LCRQ *queue, int64_t* item) {
                 if (likely(idx == h)) {
                     if (CAS2((uint64_t*)cell, val, cell_idx, -1, unsafe | (h + RING_SIZE))) {
                         *item = val;
+                        critical_exit();
                         return true;
                     }
                 } else {
@@ -333,7 +339,10 @@ bool _lcrq_dequeue(LCRQ *queue, int64_t* item) {
             // try to return empty
             next = rq->next;
             if (next == null)
+            {
+                critical_exit();
                 return false;
+            }
             if (tail_index(rq->tail) <= h + 1)
                 if (CASPTR(&queue->head, rq, next))
                 { 

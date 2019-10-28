@@ -334,8 +334,8 @@ static chunk_t *node_get_filled_chunks(int n, int sz, unsigned int numa_node)
     {
         check = node + page_size;
 
-        // skip numa node idx
-        node += sizeof(unsigned long)+reminder; // Unused bytes at beginning - In this way the addresses will be aligned in most of the cases
+        // skip numa node idx + left bytes at beginning - In this way the addresses will be aligned in most of the cases
+        node += sizeof(unsigned long)+reminder; 
 
         while (node + sz <= check) //we have enough memory to handle request?
         {
