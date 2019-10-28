@@ -10,8 +10,6 @@
  * 
  * */
 
-// @TODO merge with deq sw_cache
-
 typedef struct item_s item_t;
 struct item_s
 {
