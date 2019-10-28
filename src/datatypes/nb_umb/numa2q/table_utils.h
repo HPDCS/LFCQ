@@ -1,4 +1,4 @@
-#include "common_nb_calqueue.h"
+#include "enq_sw_cache.h"
 
 extern __thread unsigned long long scan_list_length_en;
 extern __thread unsigned int 		acc;
@@ -211,7 +211,7 @@ static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, uns
 	bool is_new_key = flag == REMOVE_DEL_INV;
 	drand48_r(&seedT, &rand);
 
-	pkey_t first_ts = vb_index * (h->bucket_width);
+	pkey_t first_ts;
 	nbc_bucket_node* to_cache = NULL;
 
 	// clean the heading zone of the bucket
@@ -220,6 +220,8 @@ static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, uns
 
 	vb_index = hash(timestamp, h->bucket_width);
 	cached = get_last_node(vb_index, h);
+
+	first_ts = vb_index * (h->bucket_width);
 
 	// read tail from head (this is done for avoiding an additional cache miss)
 	tail = head->tail;
