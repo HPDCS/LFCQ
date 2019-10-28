@@ -2,8 +2,8 @@
 
 __thread table *last_table;
 __thread unsigned long long last_current;
-__thread nbc_bucket_node *last_head 	= NULL;
-__thread nbc_bucket_node *last_min 		= NULL;
+__thread nbc_bucket_node *last_head 	= NULL; //next dell'ultima testa
+__thread nbc_bucket_node *last_min 		= NULL; //ultimo nodo estratto
 
 
 // se il current è cambiato azzera tutto

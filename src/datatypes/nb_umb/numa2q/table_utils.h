@@ -198,9 +198,10 @@ static inline void search(nbc_bucket_node *head, pkey_t timestamp, unsigned int 
  *
  */
 static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, unsigned int tie_breaker,
-					  int flag, nbc_bucket_node *new_node_pointer, nbc_bucket_node **new_node, unsigned long long vb_index, table *h)
+					  int flag, nbc_bucket_node *new_node_pointer, nbc_bucket_node **new_node, table *h)
 {
-	nbc_bucket_node *left, *left_next, *tmp, *tmp_next, *tail;
+	nbc_bucket_node *left, *left_next, *tmp, *tmp_next, *tail, *cached;
+	unsigned long vb_index;
 	unsigned int counter;
 	unsigned int left_tie_breaker, tmp_tie_breaker;
 	unsigned int len;
@@ -217,8 +218,13 @@ static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, uns
 	nbc_bucket_node *lnode, *rnode;
 	search(head, -1.0, 0, &lnode, &rnode, flag);
 
+	vb_index = hash(timestamp, h->bucket_width);
+	cached = get_last_node(vb_index, h);
+
 	// read tail from head (this is done for avoiding an additional cache miss)
 	tail = head->tail;
+	if (cached != NULL && cached != head)
+		head = cached;
 	do
 	{
 		len = 0;
@@ -235,6 +241,8 @@ static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, uns
 		assertf(head == NULL, "PANIC %s\n", "");
 		assertf(tmp_next == NULL, "PANIC1 %s\n", "");
 		assertf(is_marked_for_search(left_next, flag), "PANIC2 %s\n", "");
+
+		
 
 		// init variables useful during iterations
 		counter = 0;
@@ -290,7 +298,6 @@ static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, uns
 			if (to_cache != head && to_cache != tail)
 			{
 				//printf("to cache %p, vb is %ld, ts is "KEY_STRING" , bw is %f\n", to_cache, vb_index,to_cache->timestamp, h->bucket_width);
-				to_cache->tail = tail;
 				update_last_node(vb_index, h, to_cache);
 			}
 		}
@@ -333,7 +340,9 @@ static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, uns
 				scan_list_length_en += len;
 			}
 			if (counter > 0)
+			{
 				connect_to_be_freed_node_list(left_next, counter); // here we should set counter in cached value for integrity
+			}
 			return OK;
 		}
 
@@ -629,7 +638,7 @@ nbc_bucket_node *replica;
     do{	right_replica_field = right_node->replica; } 
     // try to insert the replica in the new table       
 	while(right_replica_field == NULL && (res = 
-	search_and_insert(bucket, new_node_timestamp, new_node_counter, REMOVE_DEL, new_node_pointer, new_node, index, new_h)
+	search_and_insert(bucket, new_node_timestamp, new_node_counter, REMOVE_DEL, new_node_pointer, new_node, new_h)
 	) == ABORT);
 	// at this point we have at least one replica into the new table
 
