@@ -52,11 +52,14 @@ void update_last_node(setkey_t vb_index, table*h, nbc_bucket_node* node)
         new_item = gc_alloc_node(ptst, gc_id[0], NID);
         new_item->h = h;
         new_item->last_node = node;
+    	old_node = set_update(set, vb_index, new_item,1, NID);
+	if (old_node != NULL)
+		gc_free(ptst, old_node, gc_id[0]);
     }
-    
-    old_node = set_update(set, vb_index, new_item, 1, NID);
-    if (old_node != NULL)
-        gc_free(ptst, old_node, gc_id[0]);
+    else
+    {
+    	set_remove(set, vb_index);
+    }
     #else
     return;
     #endif

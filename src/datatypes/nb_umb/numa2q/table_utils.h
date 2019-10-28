@@ -219,18 +219,21 @@ static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, uns
 	search(head, -1.0, 0, &lnode, &rnode, flag);
 
 	vb_index = hash(timestamp, h->bucket_width);
-	cached = get_last_node(vb_index, h);
 
 	first_ts = vb_index * (h->bucket_width);
 
 	// read tail from head (this is done for avoiding an additional cache miss)
 	tail = head->tail;
-	if (cached != NULL && cached != head)
-		head = cached;
 	do
 	{
 		len = 0;
 		// Fetch the head and its next node
+		cached = get_last_node(vb_index, h);
+		if (cached != NULL && cached->next!=NULL && !is_marked_for_search(cached->next, flag))
+			head = cached;
+		else 
+			update_last_node(vb_index, h, NULL);
+		
 		left = tmp = head;
 		// read all data from the head (hopefully only the first access is a cache miss)
 		left_next = tmp_next = tmp->next;
