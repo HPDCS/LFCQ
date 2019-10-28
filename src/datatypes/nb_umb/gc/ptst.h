@@ -14,6 +14,7 @@
 typedef struct ptst_st ptst_t;
 
 #include "gc.h"
+#include "random.h"
 
 struct ptst_st
 {

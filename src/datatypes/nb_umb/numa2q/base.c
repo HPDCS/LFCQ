@@ -103,6 +103,7 @@ void *pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	// init fraser garbage collector/allocator
 	_init_gc_subsystem();
 	_init_gc_tq();
+	_init_gc_cache();
 	// add allocator of nbc_bucket_node
 	gc_aid[GC_BUCKETNODE] = gc_add_allocator(sizeof(nbc_bucket_node));
 	gc_aid[GC_OPNODE] = gc_add_allocator(sizeof(op_node));
@@ -173,6 +174,7 @@ static inline int do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	nb_calqueue* queue = (nb_calqueue*) q; 	
 
 	nbc_bucket_node *bucket, *new_node = numa_node_malloc(payload, timestamp, 0, NID);
+	nbc_bucket_node *start_scan;
 	table * h = NULL;		
 	unsigned int index, size;
 	unsigned long long newIndex = 0;
@@ -237,9 +239,13 @@ static inline int do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
 
 		// here we check in the Cache if there is a node from which we can start the search
 		// It is the last node of the previous VB in the PB
+		start_scan = get_last_node(newIndex, h); 
+		if (start_scan != NULL)
+			if (!is_marked(start_scan->next))
+				bucket = start_scan;
 
 		// search the two adjacent nodes that surround the new key and try to insert with a CAS 
-	    res = search_and_insert(bucket, timestamp, 0, REMOVE_DEL_INV, new_node, &new_node);
+	    res = search_and_insert(bucket, timestamp, 0, REMOVE_DEL_INV, new_node, &new_node, newIndex, h);
 	}
 
 

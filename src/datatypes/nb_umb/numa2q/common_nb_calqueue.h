@@ -44,8 +44,8 @@ extern int gc_hid[];
 unsigned int ACTIVE_NUMA_NODES;
 #define NODE_HASH(bucket_id) ((bucket_id >> 2ull) % ACTIVE_NUMA_NODES)
 
-#define GC_BUCKETNODE 2
-#define GC_OPNODE 3
+#define GC_BUCKETNODE 30
+#define GC_OPNODE 29
 
 #define SAMPLE_SIZE 50
 #define HEAD_ID 0
@@ -312,6 +312,7 @@ static inline void connect_to_be_freed_node_list(nbc_bucket_node *start, unsigne
 	while (start != NULL && counter-- != 0) //<-----NEW
 	{										//<-----NEW
 		tmp_next = start->next;				//<-----NEW
+		start->nid++;					// ref counter for cache
 		gc_free(ptst, (void *)start, gc_aid[GC_BUCKETNODE]);
 		start = get_unmarked(tmp_next); //<-----NEW
 	}									//<-----NEW

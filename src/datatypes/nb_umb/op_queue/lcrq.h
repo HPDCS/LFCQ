@@ -14,11 +14,9 @@
 #endif
 #define RING_SIZE       (1ull << RING_POW)
 
-extern int gc_aid[];
-extern int gc_hid[];
 extern __thread ptst_t *ptst;
 
-#define GC_RING_QUEUE   0
+#define GC_RING_QUEUE 0
 
 typedef struct RingNode {
     volatile uint64_t val;

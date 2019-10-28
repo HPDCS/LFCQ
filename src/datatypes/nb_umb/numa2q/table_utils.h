@@ -198,7 +198,7 @@ static inline void search(nbc_bucket_node *head, pkey_t timestamp, unsigned int 
  *
  */
 static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, unsigned int tie_breaker,
-					  int flag, nbc_bucket_node *new_node_pointer, nbc_bucket_node **new_node)
+					  int flag, nbc_bucket_node *new_node_pointer, nbc_bucket_node **new_node, unsigned long long vb_index, table *h)
 {
 	nbc_bucket_node *left, *left_next, *tmp, *tmp_next, *tail;
 	unsigned int counter;
@@ -209,6 +209,9 @@ static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, uns
 	bool marked, ts_equal, tie_lower, go_to_next;
 	bool is_new_key = flag == REMOVE_DEL_INV;
 	drand48_r(&seedT, &rand);
+
+	pkey_t first_ts = vb_index * (h->bucket_width);
+	nbc_bucket_node* to_cache = NULL;
 
 	// clean the heading zone of the bucket
 	nbc_bucket_node *lnode, *rnode;
@@ -231,7 +234,7 @@ static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, uns
 		// SANITY CHECKS
 		assertf(head == NULL, "PANIC %s\n", "");
 		assertf(tmp_next == NULL, "PANIC1 %s\n", "");
-		assertf(is_marked_for_search(left_next, flag), "PANIC2 %s\n", "");
+		//assertf(is_marked_for_search(left_next, flag), "PANIC2 %s\n", "");
 
 		// init variables useful during iterations
 		counter = 0;
@@ -244,6 +247,9 @@ static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, uns
 			// potentially this if can be removed
 			if (!marked)
 			{
+				if (tmp_timestamp < first_ts)
+					to_cache = tmp; // cache only unmarked node, marked will be soon removed.
+
 				left = tmp;
 				left_next = tmp_next;
 				left_tie_breaker = tmp_tie_breaker;
@@ -272,15 +278,17 @@ static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, uns
 						 (!is_new_key && tmp_tie_breaker <= tie_breaker));
 			go_to_next = go_to_next || (ts_equal && tie_lower);
 
-			// here we should update the node to be added in cache
-
 			// Exit if tmp is a tail or its timestamp is > of the searched key
 		} while (tmp != tail &&
 				 (marked ||
 				  go_to_next));
 		
-		// Here we should Update the cache
-
+		//@TODO Here we should Update the cache
+		if (to_cache != NULL)
+		{
+			to_cache->tail = tail;
+			update_last_node(vb_index, h, to_cache);
+		}
 		// if the right or the left node is MOV signal this to the caller
 		if (is_marked(tmp, MOV) || is_marked(left_next, MOV))
 			return MOV_FOUND;
@@ -616,7 +624,7 @@ nbc_bucket_node *replica;
     do{	right_replica_field = right_node->replica; } 
     // try to insert the replica in the new table       
 	while(right_replica_field == NULL && (res = 
-	search_and_insert(bucket, new_node_timestamp, new_node_counter, REMOVE_DEL, new_node_pointer, new_node)
+	search_and_insert(bucket, new_node_timestamp, new_node_counter, REMOVE_DEL, new_node_pointer, new_node, index, new_h)
 	) == ABORT);
 	// at this point we have at least one replica into the new table
 

@@ -12,15 +12,15 @@ LIBS := -lpthread -lm -lnuma -lrt -mrtm
 SRC_DIR := src
 TARGETS := ACRCQ NUMA2Q NUMA2QFK NUMA2QBL NUMAP NUMAPNOP NUMAPBL NUMAQ NUMAFK NUMAFKBL #NBCQ LIND MARO CBCQ SLCQ NBVB 2CAS VBPQ ACRCQ #V2CQ NUMA WORK
 
-
 UTIL_value := src/utils/common.o src/utils/hpdcs_math.o 
 GACO_value := src/gc/gc.o src/gc/ptst.o
 ARCH_value := src/arch/x86.o
 
 NGACO_value := src/datatypes/nb_umb/gc/gc.o src/datatypes/nb_umb/gc/ptst.o
 TQ_value := src/datatypes/nb_umb/op_queue/msq.o src/datatypes/nb_umb/op_queue/stack.o src/datatypes/nb_umb/op_queue/lcrq.o
+SET_value := src/datatypes/nb_umb/gc/skip_cas.o
 
-NUMA2Q_value := $(TQ_value) src/datatypes/nb_umb/numa2q/base.o src/datatypes/nb_umb/numa2q/sw_cache.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMA2Q_value := $(TQ_value) $(SET_value) src/datatypes/nb_umb/numa2q/base.o src/datatypes/nb_umb/numa2q/sw_cache.o src/datatypes/nb_umb/numa2q/enq_sw_cache.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMA2QFK_value := $(TQ_value) src/datatypes/nb_umb/numa2q/fake.o src/datatypes/nb_umb/numa2q/sw_cache.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMA2QBL_value := $(TQ_value) src/datatypes/nb_umb/numa2q/busyloop.o src/datatypes/nb_umb/numa2q/sw_cache.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMA2Q_link := gcc
