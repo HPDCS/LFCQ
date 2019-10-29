@@ -205,7 +205,7 @@ static inline int single_step_pq_enqueue(table *h, pkey_t timestamp, void *paylo
 }
 
 
-static inline pkey_t single_step_pq_dequeue(table *h, nb_calqueue *queue, void **result)
+static inline int single_step_pq_dequeue(table *h, nb_calqueue *queue, pkey_t* ret_ts, void **result)
 {
 
 	nbc_bucket_node *min, *min_next, 
@@ -332,8 +332,8 @@ static inline pkey_t single_step_pq_dequeue(table *h, nb_calqueue *queue, void *
 			performed_dequeue++;
 
 			*result = left_node->payload;
-
-			return left_ts;
+			*ret_ts = left_ts;
+			return 1;
 
 		} while ((left_node = get_unmarked(left_node_next)));
 
@@ -342,7 +342,8 @@ static inline pkey_t single_step_pq_dequeue(table *h, nb_calqueue *queue, void *
 		{
 			critical_exit();
 			*result = NULL;
-			return INFTY;
+			*ret_ts = INFTY;
+			return 1;
 		}
 
 		new_current = h->current;
@@ -375,7 +376,7 @@ static inline pkey_t single_step_pq_dequeue(table *h, nb_calqueue *queue, void *
 
 	} while (1);
 
-	return INFTY;
+	return -1;
 }
 
 int pq_enqueue(void* q, pkey_t timestamp, void *payload) 
@@ -502,8 +503,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 		}
 		else 
 		{
-			ret_ts = single_step_pq_dequeue(h, queue, &new_payload);
-			if (ret_ts != -1)
+			ret = single_step_pq_dequeue(h, queue, &ret_ts, &new_payload);
+			if (ret != -1)
 			{ //dequeue failed
 				performed_dequeue++;
 				handling_op->payload = new_payload;
@@ -647,8 +648,8 @@ pkey_t pq_dequeue(void *q, void **result)
 		}
 		else 
 		{
-			ret_ts = single_step_pq_dequeue(h, queue, &new_payload);
-			if (ret_ts != -1)
+			ret = single_step_pq_dequeue(h, queue, &ret_ts, &new_payload);
+			if (ret != -1)
 			{ //dequeue failed
 				performed_dequeue++;
 				handling_op->payload = new_payload;

@@ -145,11 +145,12 @@ int single_step_pq_enqueue(table *h, pkey_t timestamp, void *payload, nbc_bucket
 }
 
 
-pkey_t single_step_pq_dequeue(table *h, nb_calqueue *queue, void **result, unsigned long op_id, nbc_bucket_node* volatile *candidate)
+int single_step_pq_dequeue(table *h, nb_calqueue *queue, pkey_t *ret_ts, void **result, unsigned long op_id, nbc_bucket_node* volatile *candidate)
 {
     *result = (void *) 0x1ull;
+	*ret_ts = last_ts;
 	performed_dequeue++;
-	return last_ts;
+	return 1;
 }
 
 int pq_enqueue(void* q, pkey_t timestamp, void *payload) 
@@ -280,8 +281,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 		}
 		else 
 		{
-			ret_ts = single_step_pq_dequeue(h, queue, &new_payload, handling_op->op_id, &handling_op->candidate);
-			if (ret_ts != -1)
+			ret = single_step_pq_dequeue(h, queue, &ret_ts, &new_payload, handling_op->op_id, &handling_op->candidate);
+			if (ret != -1)
 			{ //dequeue failed
 				performed_dequeue++;
 				handling_op->payload = new_payload;
@@ -434,8 +435,8 @@ pkey_t pq_dequeue(void *q, void **result)
 		}
 		else 
 		{
-			ret_ts = single_step_pq_dequeue(h, queue, &new_payload, handling_op->op_id, &handling_op->candidate);
-			if (ret_ts != -1)
+			ret = single_step_pq_dequeue(h, queue, &ret_ts, &new_payload, handling_op->op_id, &handling_op->candidate);
+			if (ret != -1)
 			{ //dequeue failed
 				performed_dequeue++;
 				handling_op->payload = new_payload;

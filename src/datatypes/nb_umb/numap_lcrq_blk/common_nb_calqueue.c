@@ -42,11 +42,11 @@ task_queue op_queue[_NUMA_NODES]; // (!new) per numa node queue
 
 
 #ifndef ENQ_MAX_WAIT_ATTEMPTS
-#define ENQ_MAX_WAIT_ATTEMPTS 10000
+#define ENQ_MAX_WAIT_ATTEMPTS 100
 #endif
  
 #ifndef DEQ_MAX_WAIT_ATTEMPTS
-#define DEQ_MAX_WAIT_ATTEMPTS 10000
+#define DEQ_MAX_WAIT_ATTEMPTS 100
 #endif
 
 /*************************************

@@ -50,7 +50,7 @@ elem_per_bucket_NUMAPBL="1"
 
 elem_per_bucket_NUMAPSKT="24 48 96"
 elem_per_bucket_NUMAPSKTFK="1"
-elem_per_bucket_NUMAPSKYBL="1"
+elem_per_bucket_NUMAPSKTBL="1"
 
 
 

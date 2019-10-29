@@ -261,7 +261,7 @@ int single_step_pq_enqueue(table *h, pkey_t timestamp, void *payload, nbc_bucket
 }
 
 
-pkey_t single_step_pq_dequeue(table *h, nb_calqueue *queue, void **result, unsigned long op_id, nbc_bucket_node* volatile *candidate)
+int single_step_pq_dequeue(table *h, nb_calqueue *queue, pkey_t* ret_ts, void **result, unsigned long op_id, nbc_bucket_node* volatile *candidate)
 {
 
 nbc_bucket_node *min, *min_next,
@@ -377,7 +377,8 @@ nbc_bucket_node *min, *min_next,
 				{	
 					// someone returned empty
 					*result = NULL;
-					return INFTY;
+					*ret_ts = INFTY;
+					return 1;
 				}
 				// try to extract the candidate then 
 				lnn.next = current_candidate->next;
@@ -395,7 +396,8 @@ nbc_bucket_node *min, *min_next,
 					if (current_candidate->op_id == op_id)
 					{
 						*result = current_candidate->payload;
-						return current_candidate->timestamp;
+						*ret_ts = current_candidate->timestamp;
+						return 1;
 					}
 					else
 					{
@@ -469,7 +471,8 @@ nbc_bucket_node *min, *min_next,
 				{
 					// the node has been already extracted by someone with my op
 					*result = left_node->payload;
-					return left_ts;
+					*ret_ts = left_ts;
+					return 1;
 				}
 			}
 
@@ -482,8 +485,8 @@ nbc_bucket_node *min, *min_next,
 			performed_dequeue++;
 
 			*result = left_node->payload;
-
-			return left_ts;
+			*ret_ts = left_ts;
+			return 1;
 
 		} while ((left_node = get_unmarked(left_node_next)));
 
@@ -495,7 +498,8 @@ nbc_bucket_node *min, *min_next,
 			if (__sync_bool_compare_and_swap(candidate, NULL, 1))
 			{
 				*result = NULL;
-				return INFTY;
+				*ret_ts = INFTY;
+				return 1;
 			}
 		}
 
@@ -529,7 +533,7 @@ nbc_bucket_node *min, *min_next,
 
 	} while (1);
 
-	return INFTY;
+	return -1;
 }
 
 int pq_enqueue(void* q, pkey_t timestamp, void *payload) 
@@ -660,8 +664,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 		}
 		else 
 		{
-			ret_ts = single_step_pq_dequeue(h, queue, &new_payload, handling_op->op_id, &handling_op->candidate);
-			if (ret_ts != -1)
+			ret = single_step_pq_dequeue(h, queue, &ret_ts, &new_payload, handling_op->op_id, &handling_op->candidate);
+			if (ret != -1)
 			{ //dequeue failed
 				performed_dequeue++;
 				handling_op->payload = new_payload;
@@ -814,8 +818,8 @@ pkey_t pq_dequeue(void *q, void **result)
 		}
 		else 
 		{
-			ret_ts = single_step_pq_dequeue(h, queue, &new_payload, handling_op->op_id, &handling_op->candidate);
-			if (ret_ts != -1)
+			ret = single_step_pq_dequeue(h, queue, &ret_ts, &new_payload, handling_op->op_id, &handling_op->candidate);
+			if (ret != -1)
 			{ //dequeue failed
 				performed_dequeue++;
 				handling_op->payload = new_payload;
