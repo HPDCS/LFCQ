@@ -29,6 +29,10 @@ nbc_bucket_node* get_last_node(setkey_t vb_index, table* h)
     if (value == NULL)
         return NULL;
     
+    // nid, serve nel caso il nodo sia stato rimosso e riutilizzato
+    // è improbabile, ma potrebbe succedere
+    // se il nid è maggiore di quello che avevamo storato
+    // vuol dire che il nodo è stato rimosso e poi re-inserito nella tabella senza che la cache se ne accorgesse
     if (h != value->h || value->last_node->nid > value->node_counter || is_marked(value->last_node->next))
     {
         // table is changed, this is no longer valid

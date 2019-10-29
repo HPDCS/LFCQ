@@ -27,7 +27,7 @@
 #include <stdlib.h>
 #include <limits.h>
 
-#include "fake.h"
+#include "busyloop.h"
 
 /*************************************
  * GLOBAL VARIABLES					 *
@@ -37,6 +37,7 @@ int gc_aid[1];
 int gc_hid[1];
 
 unsigned int ACTIVE_NUMA_NODES;
+unsigned int ACTIVE_SOCKETS;
 
 #ifndef ENQ_MAX_WAIT_ATTEMPTS
 #define ENQ_MAX_WAIT_ATTEMPTS 100
@@ -50,6 +51,10 @@ unsigned int ACTIVE_NUMA_NODES;
 	printf("Aborting @Line %d\n", __LINE__);\
 	abort();\
 	}while (0)
+
+/*
+ * @TODO add counter how may times repost vs how may time above thresh
+ * */
 
 /*************************************
  * THREAD LOCAL VARIABLES			 *
@@ -94,6 +99,9 @@ void std_free_hook(ptst_t *p, void *ptr){	free(ptr); }
  */
 void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket)
 {
+
+	ACTIVE_SOCKETS = (((THREADS * NUM_SOCKETS)) / NUM_CPUS) + ((((THREADS * NUM_SOCKETS)) % NUM_CPUS) != 0);
+	ACTIVE_SOCKETS = ACTIVE_SOCKETS < NUM_SOCKETS? ACTIVE_SOCKETS:NUM_SOCKETS;
 
 	ACTIVE_NUMA_NODES = (((THREADS * _NUMA_NODES)) / NUM_CPUS) + ((((THREADS * _NUMA_NODES)) % NUM_CPUS) != 0); // (!new) compute the number of active numa nodes 
 	ACTIVE_NUMA_NODES = ACTIVE_NUMA_NODES < _NUMA_NODES? ACTIVE_NUMA_NODES:_NUMA_NODES;
@@ -154,17 +162,22 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 }
 
 __thread pkey_t last_ts;
+
 /**
  * This function implements the enqueue interface of the NBCQ.
  * Cost O(1) when succeeds
  *
- * @param q: pointer to the queue
+ * @param q: pointer to the queueu
  * @param timestamp: the key associated with the value
  * @param payload: the value to be enqueued
  * @return true if the event is inserted in the set table else false
  */
-int do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
+int __attribute__((optimize("O0"))) do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
 {
+
+    unsigned long i = LOOP_COUNT;
+	while(i > 0)
+		i--;
 
 	last_ts = timestamp;
 	performed_enqueue++;
@@ -181,9 +194,12 @@ int do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
  * @return the highest priority 
  *
  */
-pkey_t do_pq_dequeue(void *q, void** result)
+pkey_t __attribute__((optimize("O0"))) do_pq_dequeue(void *q, void** result)
 {
-	
+	unsigned long i = LOOP_COUNT;
+	while(i > 0)
+		i--;
+
 	*result = (void*) 0x1;
 	performed_dequeue++;
 	return last_ts;
@@ -213,15 +229,10 @@ static inline int handle_ops(void* q)
 			from_me = get_res_slot_to_node(i);
 
 			if (type == OP_PQ_ENQ) 
-			{
-				local_enq++;
 				ret = do_pq_enqueue(q, ts, pld);
-			}
-			else
-			{ 
-				local_deq++;
+			else 
 				ts = do_pq_dequeue(q, &pld);
-			}
+			
 			if (!write_slot(from_me, type, ret, ts, pld))
 			{
 				abort_line();
@@ -262,19 +273,17 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	
 	unsigned int dest_node, new_dest_node;
 
-	count = handle_ops(q);	
+	//count = handle_ops(q);	// execute pending op, useful in case this is the last op.
 
 	// read table
 	h = read_table(&queue->hashtable, th, epb, pub);
 	
 	// check destination
-	//dest_node = NODE_HASH(hash(timestamp, h->bucket_width) % h->size);
 	dest_node = NODE_HASH((unsigned long) timestamp);
 
 	// if NID execute
-	if (dest_node == NID)
+	if ((dest_node>>1) == SID)
 	{
-		local_enq++;
 		int ret = do_pq_enqueue(q, timestamp, payload);
 		critical_exit();
 		return ret;
@@ -296,7 +305,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 		if (attempts > ENQ_MAX_WAIT_ATTEMPTS) 
 		{
 			enq_steal_attempt++;
-			from_me = get_req_slot_to_node(dest_node);
+			//from_me = get_req_slot_to_node(dest_node);
 			if (read_slot(from_me, &type, &ret, &ts, &pld))
 			{
 				enq_steal_done++;
@@ -304,13 +313,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 				h = read_table(&queue->hashtable, th, epb, pub);
 				new_dest_node =  NODE_HASH((unsigned long) timestamp);
 
-				if (new_dest_node == dest_node || new_dest_node == NID)
+				if ((new_dest_node>>1) == (dest_node>>1) || (new_dest_node>>1) == SID)
 				{
-					if (new_dest_node == NID)
-						local_enq++;
-					else
-						remote_enq++;
-
 					ret = do_pq_enqueue(q, timestamp, payload);
 					break;
 				}
@@ -324,7 +328,6 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 				{
 					abort_line();
 				}
-
 				repost_enq++;
 			}
 			attempts = 0;
@@ -376,15 +379,14 @@ pkey_t pq_dequeue(void *q, void** result)
 	
 	unsigned int dest_node, new_dest_node;
 	
-	count = handle_ops(q);
+	//count = handle_ops(q); // clean pending op 
 	
 	// read table
 	h = read_table(&queue->hashtable, th, epb, pub);
 	// check destination
 	dest_node = NODE_HASH(next_node_deq++);
 
-	if (dest_node == NID) {
-		local_deq++;
+	if ((dest_node>>1) == SID) {
 		pkey_t ret = do_pq_dequeue(q, result);
 		critical_exit();
 		return ret;
@@ -407,7 +409,7 @@ pkey_t pq_dequeue(void *q, void** result)
 		if (attempts > DEQ_MAX_WAIT_ATTEMPTS) 
 		{
 			deq_steal_attempt++;
-			from_me = get_req_slot_to_node(dest_node);
+			//from_me = get_req_slot_to_node(dest_node);
 			if (read_slot(from_me, &type, &ret, &ts, &pld))
 			{
 				deq_steal_done++;
@@ -416,12 +418,8 @@ pkey_t pq_dequeue(void *q, void** result)
 				new_dest_node = NODE_HASH(next_node_deq);
 
 				// if the dest node is mine or is unchanged
-				if (new_dest_node == NID || new_dest_node == dest_node)
+				if ((new_dest_node>>1) == SID || (new_dest_node>>1) == (dest_node>>1))
 				{
-					if (new_dest_node == NID)
-						local_deq++;
-					else
-						remote_deq++;
 					ts = do_pq_dequeue(q, &pld);
 					break;
 				}
@@ -434,8 +432,9 @@ pkey_t pq_dequeue(void *q, void** result)
 				if (!write_slot(from_me, OP_PQ_DEQ, 0, 0, 0))
 				{			
 					abort_line();
-				}	
+				}
 				repost_deq++;
+			
 			}
 			attempts = 0;
 		}

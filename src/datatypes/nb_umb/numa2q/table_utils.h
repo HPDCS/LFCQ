@@ -229,6 +229,7 @@ static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, uns
 		len = 0;
 		// Fetch the head and its next node
 		cached = get_last_node(vb_index, h);
+		// non c'è un nodo cachato, non ha un next o è marcato come del -> non è sicuro da usare 
 		if (cached != NULL && cached->next!=NULL && !is_marked_for_search(cached->next, flag))
 			head = cached;
 		else 

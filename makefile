@@ -10,8 +10,8 @@ USER_OBJS :=
 
 LIBS := -lpthread -lm -lnuma -lrt -mrtm
 SRC_DIR := src
-TARGETS := ACRCQ NUMA2Q NUMA2QFK NUMA2QBL NUMAP NUMAPNOP NUMAPBL NUMAQ NUMAFK NUMAFKBL NUMAQBLK #NBCQ LIND MARO CBCQ SLCQ NBVB 2CAS VBPQ ACRCQ #V2CQ NUMA WORK
-
+TARGETS := ACRCQ NUMA2Q NUMA2QFK NUMA2QBL NUMAP NUMAPNOP NUMAPBL NUMAQ NUMAFK NUMAFKBL NUMAQBLK NUMAPSKT NUMAPSKTFK NUMAPSKTBL #NBCQ LIND MARO CBCQ SLCQ NBVB 2CAS VBPQ ACRCQ #V2CQ NUMA WORK
+		#ACRCQH NUMAPLCRQBLK NUMA2QNC + altri con cache on
 UTIL_value := src/utils/common.o src/utils/hpdcs_math.o 
 GACO_value := src/gc/gc.o src/gc/ptst.o
 ARCH_value := src/arch/x86.o
@@ -41,6 +41,13 @@ NUMAQ_link := gcc
 NUMAFK_link := gcc
 NUMAFKBL_link := gcc
 
+NUMAPSKT_value := src/datatypes/nb_umb/numap_socket/base.o src/datatypes/nb_umb/numap_socket/mapping.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMAPSKTFK_value := src/datatypes/nb_umb/numap_socket/fake.o src/datatypes/nb_umb/numap_socket/mapping.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMAPSKTBL_value := src/datatypes/nb_umb/numap_socket/busyloop.o src/datatypes/nb_umb/numap_socket/mapping.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMAPSKT_link := gcc
+NUMAPSKTFK_link := gcc
+NUMAPSKTBL_link := gcc
+
 PHYNBCQ_value := src/datatypes/nb_umb/nbcq_phy/phynbcq.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 PHYNBCQ_link := gcc
 
@@ -53,8 +60,6 @@ UNBCQ_link := gcc
 NUMAPNOSHIFT_value := src/datatypes/nb_umb/numap_noshift/common_nb_calqueue.o src/datatypes/nb_umb/numap_noshift/mapping.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMAPNOSHIFT_link := gcc
 
-NUMAPSKT_value := src/datatypes/nb_umb/numap_socket/common_nb_calqueue.o src/datatypes/nb_umb/numap_socket/mapping.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
-NUMAPSKT_link := gcc
 
 NUMAPLCRQ_value := $(TQ_value) src/datatypes/nb_umb/numap_lcrq_blk/common_nb_calqueue.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMAPLCRQ_link := gcc

@@ -12,21 +12,17 @@
 op_node *res_mapping[NUM_SOCKETS];
 op_node *req_mapping[NUM_SOCKETS];
 
-//__thread op_node** req_out_slots  = NULL; // slot per "postare" la richiesta su altri nodi
-//__thread op_node** req_in_slots   = NULL; // slot per "leggere" la richiesta da altri nodi
-
-//__thread op_node** res_out_slots  = NULL; // slot per "postare" la risposta su nodi 
-//__thread op_node** res_in_slots   = NULL; // slot per "leggere" la risposta da nodi 
-
 void init_mapping() 
 {
     int i, j;
     unsigned int node;
+    unsigned int max_threads = NUM_SOCKETS*CPU_PER_SOCKET; 
     for (i = 0; i < NUM_SOCKETS; ++i) 
     {
+
         node = i << 1;
-        req_mapping[i] = numa_alloc_onnode(sizeof(op_node)*THREADS, node);
-        res_mapping[i] = numa_alloc_onnode(sizeof(op_node)*THREADS, node);
+        req_mapping[i] = numa_alloc_onnode(sizeof(op_node)*max_threads, node);  // even if CPU are not active we can use the channel-> operation will be always handled remotely
+        res_mapping[i] = numa_alloc_onnode(sizeof(op_node)*max_threads, node); 
         
         for (j = 0; j < THREADS; ++j) 
         {
@@ -44,74 +40,23 @@ void init_mapping()
     }
 }
 
-/*
-static inline void init_local_mapping() 
-{
-    req_in_slots  = numa_alloc_onnode(sizeof(op_node*)*_NUMA_NODES, NID);
-    req_out_slots = numa_alloc_onnode(sizeof(op_node*)*_NUMA_NODES, NID);
-
-    res_slots  = numa_alloc_onnode(sizeof(op_node*)*_NUMA_NODES, NID); // tutti su nodi numa diversi
-
-    //res_in_slots  = numa_alloc_onnode(sizeof(op_node*)*_NUMA_NODES, NID); // tutti su nodi numa diversi
-    //res_out_slots = numa_alloc_onnode(sizeof(op_node*)*_NUMA_NODES, NID); // tutti su nodi numa diversi
-
-    int i, j = LTID;
-    
-    for (i = 0; i < ACTIVE_NUMA_NODES; ++i) 
-    {
-        req_in_slots[i]    = &req_mapping[NID][j];
-
-        req_out_slots[i]   = &req_mapping[i][TID];
-        
-        res_slots[i]       = &req_mapping[i][j];
-
-        //res_in_slots[i]    = &res_mapping[NID][j];
-       
-        //res_out_slots[i]   = &res_mapping[i][TID];
-
-
-        j += num_cpus_per_node;
-    }
-}
-*/
-
 op_node* get_req_slot_from_node(unsigned int numa_node)
 {
-    /*
-    if (unlikely(req_in_slots==NULL))
-        init_local_mapping();
-    
-    return req_in_slots[numa_node];
-    */
     return &req_mapping[SID][((numa_node>>1) * CPU_PER_SOCKET) + LSID];
 }
 
 op_node* get_req_slot_to_node(unsigned int numa_node)
 {
-    /*
-    if (unlikely(req_out_slots==NULL))
-        init_local_mapping();
-
-    return req_out_slots[numa_node];
-    */
     return &req_mapping[(numa_node>>1)][TID];
 }
 
 op_node* get_res_slot_from_node(unsigned int numa_node)
 {
-    // if (unlikely(res_in_slots==NULL))
-    //     init_local_mapping();
-
-    // return res_in_slots[numa_node];
     return &res_mapping[SID][((numa_node>>1) * CPU_PER_SOCKET) + LSID];
 }
 
 op_node* get_res_slot_to_node(unsigned int numa_node)
 {
-    // if (unlikely(res_out_slots==NULL))
-    //     init_local_mapping();
-
-    // return res_out_slots[numa_node];
     return &res_mapping[(numa_node>>1)][TID];
 }
 

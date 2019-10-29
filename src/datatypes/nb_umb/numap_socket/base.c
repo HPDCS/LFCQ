@@ -27,7 +27,7 @@
 #include <stdlib.h>
 #include <limits.h>
 
-#include "fake.h"
+#include "base.h"
 
 /*************************************
  * GLOBAL VARIABLES					 *
@@ -37,6 +37,7 @@ int gc_aid[1];
 int gc_hid[1];
 
 unsigned int ACTIVE_NUMA_NODES;
+unsigned int ACTIVE_SOCKETS;
 
 #ifndef ENQ_MAX_WAIT_ATTEMPTS
 #define ENQ_MAX_WAIT_ATTEMPTS 100
@@ -50,6 +51,10 @@ unsigned int ACTIVE_NUMA_NODES;
 	printf("Aborting @Line %d\n", __LINE__);\
 	abort();\
 	}while (0)
+
+/*
+ * @TODO add counter how may times repost vs how may time above thresh
+ * */
 
 /*************************************
  * THREAD LOCAL VARIABLES			 *
@@ -94,6 +99,9 @@ void std_free_hook(ptst_t *p, void *ptr){	free(ptr); }
  */
 void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket)
 {
+
+	ACTIVE_SOCKETS = (((THREADS * NUM_SOCKETS)) / NUM_CPUS) + ((((THREADS * NUM_SOCKETS)) % NUM_CPUS) != 0);
+	ACTIVE_SOCKETS = ACTIVE_SOCKETS < NUM_SOCKETS? ACTIVE_SOCKETS:NUM_SOCKETS;
 
 	ACTIVE_NUMA_NODES = (((THREADS * _NUMA_NODES)) / NUM_CPUS) + ((((THREADS * _NUMA_NODES)) % NUM_CPUS) != 0); // (!new) compute the number of active numa nodes 
 	ACTIVE_NUMA_NODES = ACTIVE_NUMA_NODES < _NUMA_NODES? ACTIVE_NUMA_NODES:_NUMA_NODES;
@@ -153,12 +161,12 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	return res;
 }
 
-__thread pkey_t last_ts;
+
 /**
  * This function implements the enqueue interface of the NBCQ.
  * Cost O(1) when succeeds
  *
- * @param q: pointer to the queue
+ * @param q: pointer to the queueu
  * @param timestamp: the key associated with the value
  * @param payload: the value to be enqueued
  * @return true if the event is inserted in the set table else false
@@ -166,10 +174,108 @@ __thread pkey_t last_ts;
 int do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
 {
 
-	last_ts = timestamp;
-	performed_enqueue++;
-	return 1;
+	nb_calqueue* queue = (nb_calqueue*) q; 	
 
+	nbc_bucket_node *bucket, *new_node = numa_node_malloc(payload, timestamp, 0, NID);
+	table * h = NULL;		
+	unsigned int index, size;
+	unsigned long long newIndex = 0;
+	
+	
+	// get configuration of the queue
+	double pub = queue->perc_used_bucket;
+	unsigned int epb = queue->elem_per_bucket;
+	unsigned int th = queue->threshold;
+	
+	int dest_node;
+	bool remote = false; // tells whether the enqueue touched a remote node
+
+	int res, con_en = 0;
+	
+
+	//init the result
+	res = MOV_FOUND;
+	
+	//repeat until a successful insert
+	while(res != OK){
+		
+		// It is the first iteration or a node marked as MOV has been met (a resize is occurring)
+		if(res == MOV_FOUND){
+			
+			//free the old node
+			node_free(new_node);
+			
+			// check for a resize
+			h = read_table(&queue->hashtable, th, epb, pub);
+			// get actual size
+			size = h->size;
+	        // read the actual epoch
+        	//new_node->epoch = (h->current & MASK_EPOCH);
+			// compute the index of the virtual bucket
+			newIndex = hash(timestamp, h->bucket_width);
+			
+			// compute the index of the physical bucket
+			index = ((unsigned int) newIndex) % size;	
+
+			dest_node = NODE_HASH(index);
+			if (dest_node != NID)
+				remote = true;
+
+			// allocate a new node on numa node
+			new_node = numa_node_malloc(payload, timestamp, 0, dest_node);
+			new_node->epoch = (h->current & MASK_EPOCH);
+	
+			// get the bucket
+			bucket = h->array + index;
+			// read the number of executed enqueues for statistics purposes
+			con_en = h->e_counter.count;
+		}
+
+
+		#if KEY_TYPE != DOUBLE
+		if(res == PRESENT){
+			res = 0;
+			goto out;
+		}
+		#endif
+
+		// search the two adjacent nodes that surround the new key and try to insert with a CAS 
+	    res = search_and_insert(bucket, timestamp, 0, REMOVE_DEL_INV, new_node, &new_node);
+	}
+
+
+	// the CAS succeeds, thus we want to ensure that the insertion becomes visible
+	flush_current(h, newIndex, new_node);
+	performed_enqueue++;
+	res=1;
+	
+	// updates for statistics
+	
+	concurrent_enqueue += (unsigned long long) (__sync_fetch_and_add(&h->e_counter.count, 1) - con_en);
+	
+	#if COMPACT_RANDOM_ENQUEUE == 1
+	// clean a random bucket
+	unsigned long long oldCur = h->current;
+	unsigned long long oldIndex = oldCur >> 32;
+	unsigned long long dist = 1;
+	double rand;
+	nbc_bucket_node *left_node, *right_node;
+	drand48_r(&seedT, &rand);
+	search(h->array+((oldIndex + dist + (unsigned int)( ( (double)(size-dist) )*rand )) % size), -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
+	#endif
+
+  #if KEY_TYPE != DOUBLE
+  out:
+  #endif
+
+	// check if local or not
+	if (!remote)
+		local_enq++;
+	else
+		remote_enq++;
+	
+
+	return res;
 }
 
 /**
@@ -183,11 +289,165 @@ int do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
  */
 pkey_t do_pq_dequeue(void *q, void** result)
 {
+
+	nb_calqueue *queue = (nb_calqueue*)q;
+	nbc_bucket_node *min, *min_next, 
+					*left_node, *left_node_next, 
+					*tail, *array;
+	table * h = NULL;
 	
-	*result = (void*) 0x1;
+	unsigned long long current, old_current, new_current;
+	unsigned long long index;
+	unsigned long long epoch;
+	
+	unsigned int size, attempts = 0;
+	unsigned int counter, dest_node;
+	pkey_t left_ts;
+	double bucket_width, left_limit, right_limit;
+
+	double pub = queue->perc_used_bucket;
+	unsigned int epb = queue->elem_per_bucket;
+	unsigned int th = queue->threshold;
+	unsigned int ep = 0;
+	int con_de = 0;
+	bool prob_overflow = false;
+	tail = queue->tail;
 	performed_dequeue++;
-	return last_ts;
 	
+	bool remote = false;
+
+begin:
+	// Get the current set table
+	h = read_table(&queue->hashtable, th, epb, pub);
+
+	// Get data from the table
+	size = h->size;
+	array = h->array;
+	bucket_width = h->bucket_width;
+	current = h->current;
+	con_de = h->d_counter.count;
+	attempts = 0;
+
+	do
+	{	
+		// To many attempts: there is some problem? recheck the table
+		if( h->read_table_period == attempts){
+			goto begin;
+		}
+		attempts++;
+
+		// get fields from current
+		index = current >> 32;
+		epoch = current & MASK_EPOCH;
+
+
+		// get the physical bucket
+		min = array + (index % (size));
+		left_node = min_next = min->next;
+		
+		dest_node = NODE_HASH(index % (size));
+		if (dest_node != NID)
+			remote = true;
+
+		// get the left limit
+		left_limit = ((double)index)*bucket_width;
+
+		index++;
+
+		// get the right limit
+		right_limit = ((double)index)*bucket_width;
+		// check for a possible overflow
+		prob_overflow = (index > MASK_EPOCH);
+		
+		// reset variables for a new scan
+		counter = ep = 0;
+		
+		// a reshuffle has been detected => restart
+		if(is_marked(min_next, MOV)) goto begin;
+		
+		do
+		{
+			
+			// get data from the current node	
+			left_node_next = left_node->next;
+			left_ts = left_node->timestamp;
+
+			// increase count of traversed deleted items
+			counter++;
+
+			// Skip marked nodes, invalid nodes and nodes with timestamp out of range
+			if(is_marked(left_node_next, DEL) || is_marked(left_node_next, INV) || (left_ts < left_limit && left_node != tail)) continue;
+			
+			// Abort the operation since there is a resize or a possible insert in the past
+			if(is_marked(left_node_next, MOV) || left_node->epoch > epoch) goto begin;
+			
+			// The virtual bucket is empty
+			if(left_ts >= right_limit || left_node == tail) break;
+			
+			// the node is a good candidate for extraction! lets try for it
+			int res = atomic_test_and_set_x64(UNION_CAST(&left_node->next, unsigned long long*));
+
+			// the extraction is failed
+			if(!res) left_node_next = left_node->next;
+
+			//left_node_next = FETCH_AND_OR(&left_node->next, DEL);
+			
+			// the node cannot be extracted && is marked as MOV	=> restart
+			if(is_marked(left_node_next, MOV))	goto begin;
+
+			// the node cannot be extracted && is marked as DEL => skip
+			if(is_marked(left_node_next, DEL))	continue;
+			
+			// the node has been extracted
+
+			// use it for count the average number of traversed node per dequeue
+			scan_list_length += counter;
+			// use it for count the average of completed extractions
+			concurrent_dequeue += (unsigned long long) (__sync_fetch_and_add(&h->d_counter.count, 1) - con_de);
+
+			*result = left_node->payload;
+				
+			// check if local or not
+			if (!remote)
+				local_deq++;
+			else
+				remote_deq++;
+
+			return left_ts;
+										
+		}while( (left_node = get_unmarked(left_node_next)));
+		
+
+		// if i'm here it means that the virtual bucket was empty. Check for queue emptyness
+		if(left_node == tail && size == 1 && !is_marked(min->next, MOV))
+		{
+			*result = NULL;
+			return INFTY;
+		}
+				
+		new_current = h->current;
+		if(new_current == current){
+
+			if(prob_overflow && h->e_counter.count == 0) goto begin;
+			
+			assertf(prob_overflow, "\nOVERFLOW INDEX:%llu" "BW:%.10f"  "SIZE:%u TAIL:%p TABLE:%p\n", index, bucket_width, size, tail, h);
+			//assertf((index - (last_curr >> 32) -1) <= dist, "%s\n", "PROVA");
+
+			num_cas++;
+			old_current = VAL_CAS( &(h->current), current, ((index << 32) | epoch) );
+			if(old_current == current){
+				current = ((index << 32) | epoch);
+				num_cas_useful++;
+			}
+			else
+				current = old_current;
+		}
+		else
+			current = new_current;
+		
+	}while(1);
+	
+	return INFTY;
 }
 
 static inline int handle_ops(void* q) 
@@ -213,15 +473,10 @@ static inline int handle_ops(void* q)
 			from_me = get_res_slot_to_node(i);
 
 			if (type == OP_PQ_ENQ) 
-			{
-				local_enq++;
 				ret = do_pq_enqueue(q, ts, pld);
-			}
-			else
-			{ 
-				local_deq++;
+			else 
 				ts = do_pq_dequeue(q, &pld);
-			}
+			
 			if (!write_slot(from_me, type, ret, ts, pld))
 			{
 				abort_line();
@@ -262,19 +517,17 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	
 	unsigned int dest_node, new_dest_node;
 
-	count = handle_ops(q);	
+	//count = handle_ops(q);	// execute pending op, useful in case this is the last op.
 
 	// read table
 	h = read_table(&queue->hashtable, th, epb, pub);
 	
 	// check destination
-	//dest_node = NODE_HASH(hash(timestamp, h->bucket_width) % h->size);
-	dest_node = NODE_HASH((unsigned long) timestamp);
+	dest_node = NODE_HASH(hash(timestamp, h->bucket_width) % (h->size));
 
 	// if NID execute
-	if (dest_node == NID)
+	if ((dest_node>>1) == SID)
 	{
-		local_enq++;
 		int ret = do_pq_enqueue(q, timestamp, payload);
 		critical_exit();
 		return ret;
@@ -296,21 +549,16 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 		if (attempts > ENQ_MAX_WAIT_ATTEMPTS) 
 		{
 			enq_steal_attempt++;
-			from_me = get_req_slot_to_node(dest_node);
+			//from_me = get_req_slot_to_node(dest_node);
 			if (read_slot(from_me, &type, &ret, &ts, &pld))
 			{
 				enq_steal_done++;
 
 				h = read_table(&queue->hashtable, th, epb, pub);
-				new_dest_node =  NODE_HASH((unsigned long) timestamp);
+				new_dest_node =  NODE_HASH(hash(timestamp, h->bucket_width) % (h->size));
 
-				if (new_dest_node == dest_node || new_dest_node == NID)
+				if ((new_dest_node>>1) == (dest_node>>1) || (new_dest_node>>1) == SID)
 				{
-					if (new_dest_node == NID)
-						local_enq++;
-					else
-						remote_enq++;
-
 					ret = do_pq_enqueue(q, timestamp, payload);
 					break;
 				}
@@ -324,7 +572,6 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 				{
 					abort_line();
 				}
-
 				repost_enq++;
 			}
 			attempts = 0;
@@ -346,8 +593,6 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	critical_exit();
 	return ret;	
 }
-
-__thread unsigned int next_node_deq;
 
 pkey_t pq_dequeue(void *q, void** result)
 {
@@ -376,15 +621,14 @@ pkey_t pq_dequeue(void *q, void** result)
 	
 	unsigned int dest_node, new_dest_node;
 	
-	count = handle_ops(q);
+	//count = handle_ops(q); // clean pending op 
 	
 	// read table
 	h = read_table(&queue->hashtable, th, epb, pub);
 	// check destination
-	dest_node = NODE_HASH(next_node_deq++);
+	dest_node = NODE_HASH(((h->current)>>32)%(h->size));
 
-	if (dest_node == NID) {
-		local_deq++;
+	if ((dest_node>>1) == SID) {
 		pkey_t ret = do_pq_dequeue(q, result);
 		critical_exit();
 		return ret;
@@ -407,21 +651,17 @@ pkey_t pq_dequeue(void *q, void** result)
 		if (attempts > DEQ_MAX_WAIT_ATTEMPTS) 
 		{
 			deq_steal_attempt++;
-			from_me = get_req_slot_to_node(dest_node);
+			//from_me = get_req_slot_to_node(dest_node);
 			if (read_slot(from_me, &type, &ret, &ts, &pld))
 			{
 				deq_steal_done++;
 
 				h = read_table(&queue->hashtable, th, epb, pub);
-				new_dest_node = NODE_HASH(next_node_deq);
+				new_dest_node = NODE_HASH(((h->current)>>32)%(h->size));
 
 				// if the dest node is mine or is unchanged
-				if (new_dest_node == NID || new_dest_node == dest_node)
+				if ((new_dest_node>>1) == SID || (new_dest_node>>1) == (dest_node>>1))
 				{
-					if (new_dest_node == NID)
-						local_deq++;
-					else
-						remote_deq++;
 					ts = do_pq_dequeue(q, &pld);
 					break;
 				}
@@ -434,8 +674,9 @@ pkey_t pq_dequeue(void *q, void** result)
 				if (!write_slot(from_me, OP_PQ_DEQ, 0, 0, 0))
 				{			
 					abort_line();
-				}	
+				}
 				repost_deq++;
+			
 			}
 			attempts = 0;
 		}
