@@ -88,6 +88,7 @@
  */
 #define ENTRIES_PER_RECLAIM_ATTEMPT 100
 
+#define WEAK_MEM_ORDER
 /*
  *  0: current epoch -- threads are moving to this;
  * -1: some threads may still throw garbage into this epoch;
@@ -327,7 +328,6 @@ static chunk_t *node_get_filled_chunks(int n, int sz, unsigned int numa_node)
 
     check = node+page_size;
     
-    p->i = BLKS_PER_CHUNK;
     i = 0;
 
     while (node + page_size <= end) 
@@ -348,7 +348,8 @@ static chunk_t *node_get_filled_chunks(int n, int sz, unsigned int numa_node)
             if (i == BLKS_PER_CHUNK) {
                 p->i = BLKS_PER_CHUNK;
                 i = 0;
-                if ( (p = p->next) == h ) goto out;
+                if ( (p = p->next) == h )
+                    goto out;
             }
         }
         node = check;

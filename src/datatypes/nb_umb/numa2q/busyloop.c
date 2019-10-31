@@ -220,7 +220,7 @@ static inline int handle_enq(void* q)
 		ts = operation->timestamp;
 		pld = operation->payload;
 		ret = do_pq_enqueue(q, ts, pld);
-		__sync_bool_compare_and_swap(&(operation->response), OP_IN_HANDLING, ret); // for mem barrier
+		__sync_bool_compare_and_swap(&(operation->response), OP_IN_HANDLING, ret);
 		count++;
 	}
 

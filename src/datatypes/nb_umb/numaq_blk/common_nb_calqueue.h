@@ -170,15 +170,6 @@ struct __op_load
 	// 48
 };
 
-typedef union {
-	volatile __uint128_t widenext;
-	struct
-	{
-		nbc_bucket_node *volatile next;
-		volatile unsigned long op_id;
-	};
-} wideptr; // used for assignement
-
 //extern nbc_bucket_node *g_tail;
 
 typedef struct table table;

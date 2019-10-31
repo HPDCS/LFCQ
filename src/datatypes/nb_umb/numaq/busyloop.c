@@ -206,6 +206,16 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	requested_op->candidate = NULL;
 	requested_op->requestor = &requested_op;
 
+	if (dest_node == NID)
+	{
+		ret = single_step_pq_enqueue(h, timestamp, payload, &requested_op->candidate, requested_op);
+		if (ret != -1) //enqueue succesful
+		{
+			gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
+			critical_exit();
+			return ret;
+		}
+	}
 
 	do {
 		// read table
@@ -352,6 +362,20 @@ pkey_t pq_dequeue(void *q, void **result)
 	requested_op->candidate = NULL;
 	requested_op->requestor = &requested_op;
 
+	if (dest_node == NID)
+	{
+		ret = single_step_pq_dequeue(h, queue, &ret_ts, &new_payload, requested_op->op_id, &requested_op->candidate);
+		if (ret != -1)
+		{ //dequeue performed
+			*result = requested_op->payload;
+			ret_ts = requested_op->timestamp;
+			gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
+			critical_exit();
+			requested_op = NULL;
+			// dovrebbe essere come se il thread fosse stato deschedulato prima della return
+			return ret_ts; // someone did my op, we can return
+		}
+	}
 
 	do {
 
