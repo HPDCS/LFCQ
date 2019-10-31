@@ -209,6 +209,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	requested_op->candidate = NULL;
 	requested_op->requestor = &requested_op;
 
+	/*
 	if (dest_node == NID)
 	{
 		ret = single_step_pq_enqueue(h, timestamp, payload, &requested_op->candidate, requested_op);
@@ -219,7 +220,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 			return ret;
 		}
 	}
-
+	*/
 	do {
 		// read table
 		h = read_table(&queue->hashtable, th, epb, pub);
@@ -340,6 +341,7 @@ pkey_t pq_dequeue(void *q, void **result)
 	requested_op->candidate = NULL;
 	requested_op->requestor = &requested_op;
 
+	/*
 	if (dest_node == NID)
 	{
 		ret = single_step_pq_dequeue(h, queue, &ret_ts, &new_payload, requested_op->op_id, &requested_op->candidate);
@@ -354,6 +356,7 @@ pkey_t pq_dequeue(void *q, void **result)
 			return ret_ts; // someone did my op, we can return
 		}
 	}
+	*/
 
 	do {
 
