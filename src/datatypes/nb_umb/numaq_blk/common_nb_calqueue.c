@@ -425,9 +425,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	requested_op = operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
 	requested_op->type = OP_PQ_ENQ;
 	requested_op->timestamp = timestamp;
-	requested_op->payload = payload; //DEADBEEF
+	requested_op->payload = payload; //0xDEADBEEF
 	requested_op->response = -1;
-	requested_op->requestor = &requested_op;
 
 	do {
 		// read table
@@ -457,9 +456,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 				new_operation->timestamp = operation->timestamp;
 				new_operation->payload = operation->payload;
 				new_operation->response = operation->response;
-				new_operation->requestor = operation->requestor;
-					
-				*(new_operation->requestor) = new_operation;
+
 				gc_free(ptst, operation, gc_aid[GC_OPNODE]);
 
 				operation = new_operation;
@@ -569,8 +566,6 @@ pkey_t pq_dequeue(void *q, void **result)
 	requested_op->timestamp = vb_index * (h->bucket_width);
 	requested_op->payload = NULL; //DEADBEEF
 	requested_op->response = -1;
-	requested_op->requestor = &requested_op;
-
 
 	do {
 
@@ -602,9 +597,7 @@ pkey_t pq_dequeue(void *q, void **result)
 				new_operation->timestamp = operation->timestamp;
 				new_operation->payload = operation->payload;
 				new_operation->response = operation->response;
-				new_operation->requestor = operation->requestor;
-					
-				*(new_operation->requestor) = new_operation;
+
 				gc_free(ptst, operation, gc_aid[GC_OPNODE]);
 
 				operation = new_operation;				

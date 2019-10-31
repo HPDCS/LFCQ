@@ -44,8 +44,8 @@ extern int gc_hid[];
 unsigned int ACTIVE_NUMA_NODES;
 #define NODE_HASH(bucket_id) ((bucket_id >> 2ull) % ACTIVE_NUMA_NODES)
 
-#define GC_BUCKETNODE 30
-#define GC_OPNODE 29
+#define GC_BUCKETNODE 2
+#define GC_OPNODE 3
 
 #define SAMPLE_SIZE 50
 #define HEAD_ID 0
@@ -53,7 +53,7 @@ unsigned int ACTIVE_NUMA_NODES;
 //#define MINIMUM_SIZE 1
 #define MAX_NUMA_NODES 16
 
-//#define ENABLE_EXPANSION 1 // move somwhere else
+//#define ENABLE_EXPANSION 1
 #define READTABLE_PERIOD 63
 #define COMPACT_RANDOM_ENQUEUE 1
 
@@ -132,9 +132,6 @@ unsigned int ACTIVE_NUMA_NODES;
 #define OP_PQ_DEQ 0x1
 
 
-#define OP_NEW -1
-#define OP_IN_HANDLING -2
-
 typedef struct __op_load op_node; //maybe a union is better?
 /**
  *  Struct that define a node in a bucket
@@ -143,30 +140,55 @@ typedef struct __op_load op_node; //maybe a union is better?
 typedef struct __bucket_node nbc_bucket_node;
 struct __bucket_node
 {
-	void *payload;  				// general payload
-	unsigned long long epoch;		//enqueue's epoch
+	void *payload;			  // general payload
+	unsigned long long epoch; //enqueue's epoch
 	//16
-	pkey_t timestamp;  				// key
-	char pad[8-sizeof(pkey_t)];
-	unsigned int counter; 			// used to resolve the conflict with same timestamp using a FIFO policy
-	unsigned int nid; 				// used to resolve the conflict with same timestamp using a FIFO policy
+	pkey_t timestamp; // key
+	char pad[8 - sizeof(pkey_t)];
+	unsigned int counter; // used to resolve the conflict with same timestamp using a FIFO policy
+	unsigned int nid;	 // used to resolve the conflict with same timestamp using a FIFO policy
 	//32
-	nbc_bucket_node * tail;
-	nbc_bucket_node * volatile next;	// pointer to the successor
+	nbc_bucket_node *tail;
+	// nbc_bucket_node * volatile next; // pointer to the successor
+	// union that holds a wideptr (fields can be accesse without changing the whole code ^_^ -> but this should have an impact on performances)
+	union {
+		volatile __uint128_t widenext;
+		struct
+		{
+			nbc_bucket_node *volatile next;
+			volatile unsigned long op_id;
+		};
+	}; // pointer to the successor, can use wide cas
 	//48
-	nbc_bucket_node * volatile replica;	// pointer to the replica
-	nbc_bucket_node * volatile next_next;
-	//64
+	nbc_bucket_node *volatile replica; // pointer to the replica
+									   //nbc_bucket_node * volatile next_next;
+									   //64
+	op_node ** requestor;
 };
+
 
 struct __op_load
 {
+	unsigned long op_id;		//global identifier for the operation 
 	void *payload;				// paylod to enqueue | dequeued payload
-	pkey_t timestamp;			// ts of node to enqueue | lower ts of bucket to dequeue | returned t
+	pkey_t timestamp;			// ts of node to enqueue | lower ts of bucket to dequeue | returned ts
 	char pad[8-sizeof(pkey_t)];
-	unsigned int type;   		// ENQ | DEQ
+	unsigned int type;			// ENQ | DEQ
 	volatile int response;		// -1 waiting for resp | 1 responsed
+	// 32
+	nbc_bucket_node * volatile candidate;	// need of candidate node
+	op_node ** requestor;
+	// 48
 };
+
+typedef union {
+	volatile __uint128_t widenext;
+	struct
+	{
+		nbc_bucket_node *volatile next;
+		volatile unsigned long op_id;
+	};
+} wideptr; // used for assignement
 
 //extern nbc_bucket_node *g_tail;
 
@@ -225,8 +247,17 @@ extern __thread unsigned long long num_cas;
 extern __thread unsigned long long num_cas_useful;
 extern __thread unsigned long long dist;
 
+// extern void set_new_table(table *h, unsigned int threshold, double pub, unsigned int epb, unsigned int counter);
+// extern table *read_table(table *volatile *hashtable, unsigned int threshold, unsigned int elem_per_bucket, double perc_used_bucket);
+// extern void block_table(table *h);
+// extern double compute_mean_separation_time(table *h, unsigned int new_size, unsigned int threashold, unsigned int elem_per_bucket);
+// extern void migrate_node(nbc_bucket_node *right_node, table *new_h);
+// extern void search(nbc_bucket_node *head, pkey_t timestamp, unsigned int tie_breaker, nbc_bucket_node **left_node, nbc_bucket_node **right_node, int flag);
+// extern void flush_current(table *h, unsigned long long newIndex, nbc_bucket_node *node);
 extern double nbc_prune();
 extern void nbc_report(unsigned int);
+// extern int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, unsigned int tie_breaker,
+// 							 int flag, nbc_bucket_node *new_node_pointer, nbc_bucket_node **new_node);
 
 /**
  *  This function is an helper to allocate a node and filling its fields.
@@ -282,6 +313,7 @@ static inline nbc_bucket_node *numa_node_malloc(void *payload, pkey_t timestamp,
 	res->replica = NULL;
 	res->payload = payload;
 	res->epoch = 0;
+	res->op_id = 0;
 	res->timestamp = timestamp;
 
 	return res;
@@ -312,7 +344,6 @@ static inline void connect_to_be_freed_node_list(nbc_bucket_node *start, unsigne
 	while (start != NULL && counter-- != 0) //<-----NEW
 	{										//<-----NEW
 		tmp_next = start->next;				//<-----NEW
-		start->nid++;					// ref counter for cache
 		gc_free(ptst, (void *)start, gc_aid[GC_BUCKETNODE]);
 		start = get_unmarked(tmp_next); //<-----NEW
 	}									//<-----NEW

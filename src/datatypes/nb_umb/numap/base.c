@@ -513,7 +513,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	
 	unsigned int dest_node, new_dest_node;
 
-	//count = handle_ops(q);	// execute pending op, useful in case this is the last op.
+	count = handle_ops(q);	// execute pending op, useful in case this is the last op.
 
 	// read table
 	h = read_table(&queue->hashtable, th, epb, pub);
@@ -617,7 +617,7 @@ pkey_t pq_dequeue(void *q, void** result)
 	
 	unsigned int dest_node, new_dest_node;
 	
-	//count = handle_ops(q); // clean pending op 
+	count = handle_ops(q); // clean pending op 
 	
 	// read table
 	h = read_table(&queue->hashtable, th, epb, pub);

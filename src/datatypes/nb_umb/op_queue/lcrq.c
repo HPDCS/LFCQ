@@ -162,9 +162,11 @@ static inline void fixState(RingQueue *rq) {
 
 // SHARED_OBJECT_INIT
 void lcrq_init(LCRQ *queue, unsigned int numa_node) {
+    //critical_enter();
     RingQueue *rq = gc_alloc_node(ptst, gc_id[GC_RING_QUEUE], numa_node);
     init_ring(rq);
     queue->head = queue->tail = rq;
+    //critical_exit();
 }
 
 #ifdef RING_STATS

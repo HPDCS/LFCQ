@@ -200,26 +200,24 @@ static inline void search(nbc_bucket_node *head, pkey_t timestamp, unsigned int 
 static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, unsigned int tie_breaker,
 					  int flag, nbc_bucket_node *new_node_pointer, nbc_bucket_node **new_node, table *h)
 {
-	nbc_bucket_node *left, *left_next, *tmp, *tmp_next, *tail, *cached;
+	nbc_bucket_node *left, *left_next, *tmp, *tmp_next, *tail, *cached, *to_cache;
 	unsigned long vb_index;
 	unsigned int counter;
 	unsigned int left_tie_breaker, tmp_tie_breaker;
 	unsigned int len;
-	pkey_t left_timestamp, tmp_timestamp;
+	pkey_t left_timestamp, tmp_timestamp, first_ts;
 	double rand;
 	bool marked, ts_equal, tie_lower, go_to_next;
 	bool is_new_key = flag == REMOVE_DEL_INV;
 	drand48_r(&seedT, &rand);
 
-	pkey_t first_ts;
-	nbc_bucket_node* to_cache = NULL;
+	to_cache = NULL;
 
 	// clean the heading zone of the bucket
 	nbc_bucket_node *lnode, *rnode;
 	search(head, -1.0, 0, &lnode, &rnode, flag);
 
 	vb_index = hash(timestamp, h->bucket_width);
-
 	first_ts = vb_index * (h->bucket_width);
 
 	// read tail from head (this is done for avoiding an additional cache miss)
@@ -227,14 +225,15 @@ static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, uns
 	do
 	{
 		len = 0;
-		// Fetch the head and its next node
+		/// Fetch the head and its next node
+
 		cached = get_last_node(vb_index, h);
 		// non c'è un nodo cachato, non ha un next o è marcato come del -> non è sicuro da usare 
 		if (cached != NULL && cached->next!=NULL && !is_marked_for_search(cached->next, flag))
 			head = cached;
 		else 
 			update_last_node(vb_index, h, NULL);
-		
+
 		left = tmp = head;
 		// read all data from the head (hopefully only the first access is a cache miss)
 		left_next = tmp_next = tmp->next;
@@ -248,8 +247,6 @@ static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, uns
 		assertf(tmp_next == NULL, "PANIC1 %s\n", "");
 		assertf(is_marked_for_search(left_next, flag), "PANIC2 %s\n", "");
 
-		
-
 		// init variables useful during iterations
 		counter = 0;
 		marked = is_marked_for_search(tmp_next, flag);
@@ -261,10 +258,6 @@ static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, uns
 			// potentially this if can be removed
 			if (!marked)
 			{
-				if (tmp_timestamp < first_ts)
-				{
-					to_cache = tmp; // cache only unmarked node, marked will be soon removed.
-				}
 				left = tmp;
 				left_next = tmp_next;
 				left_tie_breaker = tmp_tie_breaker;
@@ -297,8 +290,7 @@ static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, uns
 		} while (tmp != tail &&
 				 (marked ||
 				  go_to_next));
-		
-		//@TODO Here we should Update the cache
+
 		if (to_cache != NULL)
 		{
 			if (to_cache != head && to_cache != tail)
@@ -307,13 +299,14 @@ static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, uns
 				update_last_node(vb_index, h, to_cache);
 			}
 		}
+
 		// if the right or the left node is MOV signal this to the caller
 		if (is_marked(tmp, MOV) || is_marked(left_next, MOV))
 			return MOV_FOUND;
 
 		// mark the to-be.inserted node as INV if flag == REMOVE_DEL
 		new_node_pointer->next = get_marked(tmp, INV & (-(!is_new_key)));
-
+		//LOG("%p\n",new_node_pointer->next);
 		// set the tie_breaker to:
 		// 1+T1 		IF K1 == timestamp AND flag == REMOVE_DEL_INV
 		// 1			IF K1 != timestamp AND flag == REMOVE_DEL_INV
@@ -347,7 +340,8 @@ static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, uns
 			}
 			if (counter > 0)
 			{
-				connect_to_be_freed_node_list(left_next, counter); // here we should set counter in cached value for integrity
+					//connect_to_be_freed_node_list(left_next, counter);
+				search(head, -1.0, 0, &lnode, &rnode, flag);	
 			}
 			return OK;
 		}
@@ -615,64 +609,100 @@ static inline double compute_mean_separation_time(table *h,
 
 static inline void migrate_node(nbc_bucket_node *right_node, table *new_h)
 {
-nbc_bucket_node *replica;
-	nbc_bucket_node** new_node;
+	nbc_bucket_node *replica;
+	nbc_bucket_node **new_node;
 	nbc_bucket_node *right_replica_field, *right_node_next;
-	
+
 	nbc_bucket_node *bucket, *new_node_pointer;
 	unsigned int index;
 
-	unsigned int new_node_counter 	;
-	pkey_t 		 new_node_timestamp ;
+	unsigned int new_node_counter;
+	pkey_t new_node_timestamp;
 
-	
 	int res = 0;
+
+	//se il nodo non merita di essere validato, marcalo e basta
 	
+	//if (right_node->op_id == 1) {
+	//	// il nodo è in inserimento
+	//	printf("MIGRATION %p\n", (*(right_node->requestor)));
+	//	op_node * op = *(right_node->requestor);
+	//	if (op->candidate == NULL) {
+	//		// the node has to be validated
+	//		if (!__sync_bool_compare_and_swap(&(op->candidate), NULL, right_node))
+	//			return;
+	//	}
+	//	else if (op->candidate != right_node)
+	//		return;
+	//}
+	
+	if (right_node->op_id == 1) {
+		op_node * op = *(right_node->requestor);
+		if (!__sync_bool_compare_and_swap(&(op->candidate), NULL, right_node))
+		{
+			wideptr curr_state, new_state;
+			// someone has already set up the right candidate - we must delete the node
+			do {
+				curr_state.next = right_node->next;
+				curr_state.op_id = right_node->op_id;
+
+				new_state.next = get_marked(right_node->next, DEL); //((unsigned long) right_node->next) | DEL;
+				new_state.op_id = 0;
+			} while(__sync_val_compare_and_swap(&right_node->widenext, curr_state.widenext, new_state.widenext) != curr_state.widenext);
+			
+			return;
+		}
+
+	}
+
 	//Create a new node to be inserted in the new table as as INValid
-	replica = node_malloc(right_node->payload, right_node->timestamp,  right_node->counter);
-	
-	new_node 			= &replica;
-	new_node_pointer 	= (*new_node);
-	new_node_counter 	= new_node_pointer->counter;
-	new_node_timestamp 	= new_node_pointer->timestamp;
-	
+	new_node_timestamp = right_node->timestamp;
 	index = hash(new_node_timestamp, new_h->bucket_width);
+
+	replica = numa_node_malloc(right_node->payload, new_node_timestamp, right_node->counter, NODE_HASH(index % new_h->size));
+	//replica->op_id = right_node->op_id;
+	replica->requestor = right_node->requestor;
+
+	new_node = &replica;
+	new_node_pointer = (*new_node);
+	new_node_counter = new_node_pointer->counter;
+	new_node_timestamp = new_node_pointer->timestamp;
 
 	// node to be added in the hashtable
 	bucket = new_h->array + (index % new_h->size);
-	         
-    do{	right_replica_field = right_node->replica; } 
-    // try to insert the replica in the new table       
-	while(right_replica_field == NULL && (res = 
-	search_and_insert(bucket, new_node_timestamp, new_node_counter, REMOVE_DEL, new_node_pointer, new_node, new_h)
-	) == ABORT);
+
+	do
+	{
+		right_replica_field = right_node->replica;
+	}
+	// try to insert the replica in the new table
+	while (right_replica_field == NULL && (res =
+											   search_and_insert(bucket, new_node_timestamp, new_node_counter, REMOVE_DEL, new_node_pointer, new_node, new_h)) == ABORT);
 	// at this point we have at least one replica into the new table
 
 	// try to decide which is the right replica and if I won the challenge increase the counter of enqueued items into the new set table
-	if( right_replica_field == NULL && 
-			BOOL_CAS(
-				&(right_node->replica),
-				NULL,
-				replica
-				)
-		)
+	if (right_replica_field == NULL &&
+		BOOL_CAS(
+			&(right_node->replica),
+			NULL,
+			replica))
 		ATOMIC_INC(&(new_h->e_counter));
-             
+
 	right_replica_field = right_node->replica;
 
 	// make the replica being valid
-	do{	right_node_next = right_replica_field->next;}
-	while( 
-		is_marked(right_node_next, INV) && 
-		!BOOL_CAS(	&(right_replica_field->next),
-					right_node_next,
-					get_unmarked(right_node_next)
-				)
-		);
+	do
+	{
+		right_node_next = right_replica_field->next;
+	} while (
+		is_marked(right_node_next, INV) &&
+		!BOOL_CAS(&(right_replica_field->next),
+				  right_node_next,
+				  get_unmarked(right_node_next)));
 
 	// now the insertion is completed so flush the current of the new table
 	flush_current(new_h, index, right_replica_field);
-	
+
 	// invalidate the node MOV to DEL (11->01)
 	right_node_next = FETCH_AND_AND(&(right_node->next), MASK_DEL);
 }

@@ -392,7 +392,7 @@ nbc_bucket_node *min, *min_next,
 				// check if someone extracted the candidate
 				if (is_marked(current_candidate->next, DEL))
 				{
-					// was for my operation?
+					// was I?
 					if (current_candidate->op_id == op_id)
 					{
 						*result = current_candidate->payload;
