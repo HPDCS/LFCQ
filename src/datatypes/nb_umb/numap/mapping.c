@@ -9,17 +9,33 @@
 #define L_FREE 0x0
 #endif
 
+static int gc_id[1];
+
+struct _op_payload
+{
+	unsigned int type;			// ENQ | DEQ
+	int ret_value;
+	pkey_t timestamp;			// ts of node to enqueue
+ 	void *payload;				// paylod to enqueue | dequeued payload
+	
+};
+
+struct __op_load
+{
+	volatile int busy;
+	char pad0[60];
+	op_payload* volatile content;
+	char pad1[56];
+};
+
 op_node *res_mapping[_NUMA_NODES];
 op_node *req_mapping[_NUMA_NODES];
 
-//__thread op_node** req_out_slots  = NULL; // slot per "postare" la richiesta su altri nodi
-//__thread op_node** req_in_slots   = NULL; // slot per "leggere" la richiesta da altri nodi
-
-//__thread op_node** res_out_slots  = NULL; // slot per "postare" la risposta su nodi 
-//__thread op_node** res_in_slots   = NULL; // slot per "leggere" la risposta da nodi 
-
 void init_mapping() 
 {
+
+    gc_id[0] = gc_add_allocator(sizeof(op_payload));
+
     int i, j;
     for (i = 0; i < ACTIVE_NUMA_NODES; ++i) 
     {
@@ -36,95 +52,49 @@ void init_mapping()
             res_mapping[i][j].busy = L_FREE;
             #endif
 
-            res_mapping[i][j].response = 1;
-            req_mapping[i][j].response = 1;
+            res_mapping[i][j].content = (void*) 0x1ull;
+            req_mapping[i][j].content = (void*) 0x1ull;
         }
     }
 }
 
-/*
-static inline void init_local_mapping() 
-{
-    req_in_slots  = numa_alloc_onnode(sizeof(op_node*)*_NUMA_NODES, NID);
-    req_out_slots = numa_alloc_onnode(sizeof(op_node*)*_NUMA_NODES, NID);
-
-    res_slots  = numa_alloc_onnode(sizeof(op_node*)*_NUMA_NODES, NID); // tutti su nodi numa diversi
-
-    //res_in_slots  = numa_alloc_onnode(sizeof(op_node*)*_NUMA_NODES, NID); // tutti su nodi numa diversi
-    //res_out_slots = numa_alloc_onnode(sizeof(op_node*)*_NUMA_NODES, NID); // tutti su nodi numa diversi
-
-    int i, j = LTID;
-    
-    for (i = 0; i < ACTIVE_NUMA_NODES; ++i) 
-    {
-        req_in_slots[i]    = &req_mapping[NID][j];
-
-        req_out_slots[i]   = &req_mapping[i][TID];
-        
-        res_slots[i]       = &req_mapping[i][j];
-
-        //res_in_slots[i]    = &res_mapping[NID][j];
-       
-        //res_out_slots[i]   = &res_mapping[i][TID];
-
-
-        j += num_cpus_per_node;
-    }
-}
-*/
-
 op_node* get_req_slot_from_node(unsigned int numa_node)
 {
-    /*
-    if (unlikely(req_in_slots==NULL))
-        init_local_mapping();
-    
-    return req_in_slots[numa_node];
-    */
     return &req_mapping[NID][(numa_node * num_cpus_per_node) + LTID];
 }
 
 op_node* get_req_slot_to_node(unsigned int numa_node)
 {
-    /*
-    if (unlikely(req_out_slots==NULL))
-        init_local_mapping();
-
-    return req_out_slots[numa_node];
-    */
     return &req_mapping[numa_node][TID];
 }
 
-/*
-op_node* get_res_slot(unsigned int numa_node)
-{
-    
-    // if (unlikely(res_slots==NULL))
-    //     init_local_mapping();
-
-    // return res_slots[numa_node];
-    
-    return &req_mapping[numa_node][(numa_node * num_cpus_per_node) + LTID];
-}
-*/
 
 
 op_node* get_res_slot_from_node(unsigned int numa_node)
 {
-    // if (unlikely(res_in_slots==NULL))
-    //     init_local_mapping();
 
-    // return res_in_slots[numa_node];
     return &res_mapping[NID][(numa_node * num_cpus_per_node) + LTID];
 }
 
 op_node* get_res_slot_to_node(unsigned int numa_node)
 {
-    // if (unlikely(res_out_slots==NULL))
-    //     init_local_mapping();
 
-    // return res_out_slots[numa_node];
     return &res_mapping[numa_node][TID];
+}
+
+inline int atomic_test_x64(unsigned long long *b) 
+{
+    int result = 0;
+
+	__asm__  __volatile__ (
+		LOCK "bt $0, %1;\n\t"
+		"adc %0, %0"
+		: "=r" (result)
+		: "m" (*b), "0" (result)
+		: "memory"
+	);
+
+	return !result;
 }
 
 bool read_slot(op_node* slot, 
@@ -136,39 +106,25 @@ bool read_slot(op_node* slot,
     
     int val;
 
-    #ifdef _NM_USE_SPINLOCK
-    if (!spin_trylock_x86(&(slot->spin)))
-        return false;
-    #else
-    /*val = __sync_val_compare_and_swap(&(slot->busy), L_FREE, R_BUSY);
-    if (val == W_BUSY)
-        return false;
-    */
     if (!__sync_bool_compare_and_swap(&(slot->busy), L_FREE, R_BUSY))
         return false;
-    #endif
 
-    val = __sync_fetch_and_add(&(slot->response), 1);
-    if (val != 0)
+
+    val = atomic_test_and_set_x64(UNION_CAST(&slot->content, unsigned long long*));
+    if (!val)
     {
+        // the slot has been already read
         slot->busy = L_FREE;
         return false;
     }
 
-    *type = slot->type;
-    *ret_value = slot->ret_value;
-    *timestamp = slot->timestamp; 
-    *payload = slot->payload;
-
+    *type = slot->content->type;
+    *ret_value = slot->content->ret_value;
+    *timestamp = slot->content->timestamp; 
+    *payload = slot->content->payload;
     
-    
-    #ifdef _NM_USE_SPINLOCK
-    spin_unlock_x86(&(slot->spin));
-    #else
-    //__sync_bool_compare_and_swap(&(slot->busy), R_BUSY, L_FREE);
     slot->busy = L_FREE;
-    #endif
-
+    
     return true;
 }
 
@@ -180,6 +136,9 @@ bool write_slot(op_node* slot,
 {
 
     int val;
+    op_payload* load = gc_alloc_node(ptst, gc_id[0], NID); // to do take the slot numa node
+
+    op_payload *old, *new;
 
     #ifdef _NM_USE_SPINLOCK
     spin_lock_x86(&(slot->spin));
@@ -187,21 +146,35 @@ bool write_slot(op_node* slot,
     while(!__sync_bool_compare_and_swap(&(slot->busy), L_FREE, W_BUSY));
     #endif
 
-    slot->type = type;
-    slot->ret_value = ret_value;
-    slot->timestamp = timestamp; 
-    slot->payload = payload;
+    load->type = type;
+    load->ret_value = ret_value;
+    load->timestamp = timestamp; 
+    load->payload = payload;
 
-    val = __sync_fetch_and_and(&(slot->response), 0);
+    do
+    {
+        old = get_unmarked(slot->content);
+        old = get_marked(old, DEL);
 
-    #ifdef _NM_USE_SPINLOCK
-    spin_unlock_x86(&(slot->spin));
-    #else
+        new = __sync_val_compare_and_swap(&slot->content, old, load);
+
+        if (new != old && !is_marked(new))
+        {
+            gc_free(ptst, load, gc_id[0]);
+            slot->busy = L_FREE;
+            return false;
+            // writing on a good slot->someone else wrote on the slot
+        }
+        else if (new == old)
+        {  
+            gc_free(ptst, get_unmarked(new), gc_id[0]);
+            break;
+        }
+    } while(1);
+
+   
     slot->busy = L_FREE;
-    #endif
-    if (val != 0)
-        return true;
-    else 
-        return false;
+    return true;
+    
 }
 
