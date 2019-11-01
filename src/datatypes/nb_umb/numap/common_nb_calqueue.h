@@ -35,7 +35,7 @@
 #include "../../../utils/hpdcs_utils.h"
 #include "../gc/ptst.h"
 
-#include "mapping.h"
+#include "mapping_nb.h"
 
 extern __thread ptst_t *ptst;
 extern int gc_aid[];
