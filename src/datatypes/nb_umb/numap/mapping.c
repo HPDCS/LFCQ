@@ -131,11 +131,12 @@ bool write_slot(op_node* slot,
     unsigned int type, 
     int ret_value, 
     pkey_t timestamp, 
-    void* payload)
+    void* payload,
+    unsigned int dest_node)
 {
 
     int val;
-    op_payload* load = gc_alloc_node(ptst, gc_id[0], NID); // to do take the slot numa node
+    op_payload* load = gc_alloc_node(ptst, gc_id[0], dest_node); // to do take the slot numa node
 
     op_payload *old, *new;
 
@@ -165,7 +166,7 @@ bool write_slot(op_node* slot,
         }
         else if (new == old)
         {  
-            if (get_unmarked(new) == NULL)
+            if (get_unmarked(new) != NULL)
                 gc_free(ptst, get_unmarked(new), gc_id[0]);
             break;
         }

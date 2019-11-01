@@ -38,6 +38,6 @@ op_node* get_res_slot_to_node(unsigned int numa_node);
 
 bool read_slot(op_node* slot, unsigned int* type, int *ret_value, pkey_t *timestamp, void** payload);
 
-bool write_slot(op_node* slot, unsigned int type, int ret_value, pkey_t timestamp, void* payload);
+bool write_slot(op_node* slot, unsigned int type, int ret_value, pkey_t timestamp, void* payload, unsigned int dest_node);
 
 #endif /* _NUMA_MAPPING */
