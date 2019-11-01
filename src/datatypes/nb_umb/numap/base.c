@@ -473,7 +473,7 @@ static inline int handle_ops(void* q)
 			else 
 				ts = do_pq_dequeue(q, &pld);
 			
-			if (!write_slot(from_me, type, ret, ts, pld, i))
+			if (!write_slot(from_me, type, ret, ts, pld))
 			{
 				abort_line();
 			}
@@ -534,7 +534,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	resp = get_res_slot_from_node(dest_node);
 	//read_slot(resp, &type, &ret, &ts, &pld);
 	
-	if (!write_slot(from_me, OP_PQ_ENQ, 0, timestamp, payload, dest_node))
+	if (!write_slot(from_me, OP_PQ_ENQ, 0, timestamp, payload))
 	{
 		abort_line();
 	}
@@ -564,7 +564,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 				from_me = get_req_slot_to_node(dest_node);
 				resp = get_res_slot_from_node(dest_node);
 				
-				if (!write_slot(from_me, OP_PQ_ENQ, 0, timestamp, payload, dest_node))
+				if (!write_slot(from_me, OP_PQ_ENQ, 0, timestamp, payload))
 				{
 					abort_line();
 				}
@@ -635,7 +635,7 @@ pkey_t pq_dequeue(void *q, void** result)
 	resp = get_res_slot_from_node(dest_node);
 	//read_slot(resp, &type, &ret, &ts, &pld);
 
-	if (!write_slot(from_me, OP_PQ_DEQ, 0, 0, 0, dest_node))
+	if (!write_slot(from_me, OP_PQ_DEQ, 0, 0, 0))
 	{
 		abort_line();
 	}
@@ -667,7 +667,7 @@ pkey_t pq_dequeue(void *q, void** result)
 				from_me = get_req_slot_to_node(dest_node);
 				resp = get_res_slot_from_node(dest_node);
 
-				if (!write_slot(from_me, OP_PQ_DEQ, 0, 0, 0, dest_node))
+				if (!write_slot(from_me, OP_PQ_DEQ, 0, 0, 0))
 				{			
 					abort_line();
 				}

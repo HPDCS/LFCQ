@@ -1,7 +1,7 @@
 #include <numa.h>
 #include <numaif.h>
 
-#include "mapping_blk.h"
+#include "mapping.h"
 
 #ifndef _NM_USE_SPINLOCK
 #define R_BUSY 0x2
