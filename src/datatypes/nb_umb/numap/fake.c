@@ -103,10 +103,9 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	int res_mem_posix = 0;
 	nb_calqueue* res = NULL;
 
-	init_mapping();
-
 	// init fraser garbage collector/allocator //maybe using basic allocator will be better
 	_init_gc_subsystem();
+	init_mapping();
 	// add allocator of nbc_bucket_node
 	gc_aid[0] = gc_add_allocator(sizeof(nbc_bucket_node));
 	// add callback for set tables and array of nodes whene a grace period has been identified

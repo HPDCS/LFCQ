@@ -105,23 +105,22 @@ bool read_slot(op_node* slot,
 {
     
     int val;
+    op_payload *content;
 
     if (!__sync_bool_compare_and_swap(&(slot->busy), L_FREE, R_BUSY))
         return false;
 
-
-    val = atomic_test_and_set_x64(UNION_CAST(&slot->content, unsigned long long*));
-    if (!val)
+    content = FETCH_AND_OR(&(slot->content), (unsigned long) 0x1ull);
+    if (is_marked(content, DEL))
     {
-        // the slot has been already read
         slot->busy = L_FREE;
         return false;
     }
-
-    *type = slot->content->type;
-    *ret_value = slot->content->ret_value;
-    *timestamp = slot->content->timestamp; 
-    *payload = slot->content->payload;
+    
+    *type = content->type;
+    *ret_value = content->ret_value;
+    *timestamp = content->timestamp; 
+    *payload = content->payload;
     
     slot->busy = L_FREE;
     
@@ -153,8 +152,7 @@ bool write_slot(op_node* slot,
 
     do
     {
-        old = get_unmarked(slot->content);
-        old = get_marked(old, DEL);
+        old = get_marked(slot->content, DEL);
 
         new = __sync_val_compare_and_swap(&slot->content, old, load);
 
@@ -167,7 +165,8 @@ bool write_slot(op_node* slot,
         }
         else if (new == old)
         {  
-            gc_free(ptst, get_unmarked(new), gc_id[0]);
+            if (get_unmarked(new) == NULL)
+                gc_free(ptst, get_unmarked(new), gc_id[0]);
             break;
         }
     } while(1);
