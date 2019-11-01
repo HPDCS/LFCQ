@@ -88,7 +88,6 @@
  */
 #define ENTRIES_PER_RECLAIM_ATTEMPT 100
 
-#define WEAK_MEM_ORDER
 /*
  *  0: current epoch -- threads are moving to this;
  * -1: some threads may still throw garbage into this epoch;
