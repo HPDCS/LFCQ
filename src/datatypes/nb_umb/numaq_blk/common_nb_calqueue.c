@@ -477,9 +477,10 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 				return ret; // someone did my op, we can return
 			}
 
-			if (!tq_dequeue(&op_queue[NID], &extracted_op)) 
-			{
-				continue;
+			// try all to avoid get stalled
+			int i = NID;
+			while (!tq_dequeue(&op_queue[NID], &extracted_op)) {
+				i = (i+1)%ACTIVE_NUMA_NODES; 
 			}
 
 		}
@@ -618,8 +619,10 @@ pkey_t pq_dequeue(void *q, void **result)
 				return ret_ts; // someone did my op, we can return
 			}
 
-			if (!tq_dequeue(&op_queue[NID], &extracted_op)) {
-				continue;
+			// try all queue to avoid get stalled
+			int i = NID;
+			while (!tq_dequeue(&op_queue[NID], &extracted_op)) {
+				i = (i+1)%ACTIVE_NUMA_NODES; 
 			}
 		}
 

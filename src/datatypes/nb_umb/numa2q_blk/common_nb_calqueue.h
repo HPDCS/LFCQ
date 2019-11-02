@@ -140,30 +140,20 @@ typedef struct __op_load op_node; //maybe a union is better?
 typedef struct __bucket_node nbc_bucket_node;
 struct __bucket_node
 {
-	void *payload;			  // general payload
-	unsigned long long epoch; //enqueue's epoch
+	void *payload;  				// general payload
+	unsigned long long epoch;		//enqueue's epoch
 	//16
-	pkey_t timestamp; // key
-	char pad[8 - sizeof(pkey_t)];
-	unsigned int counter; // used to resolve the conflict with same timestamp using a FIFO policy
-	unsigned int nid;	 // used to resolve the conflict with same timestamp using a FIFO policy
+	pkey_t timestamp;  				// key
+	char pad[8-sizeof(pkey_t)];
+	unsigned int counter; 			// used to resolve the conflict with same timestamp using a FIFO policy
+	unsigned int nid; 				// used to resolve the conflict with same timestamp using a FIFO policy
 	//32
-	nbc_bucket_node *tail;
-	// nbc_bucket_node * volatile next; // pointer to the successor
-	// union that holds a wideptr (fields can be accesse without changing the whole code ^_^ -> but this should have an impact on performances)
-	union {
-		volatile __uint128_t widenext;
-		struct
-		{
-			nbc_bucket_node *volatile next;
-			volatile unsigned long op_id;
-		};
-	}; // pointer to the successor, can use wide cas
+	nbc_bucket_node * tail;
+	nbc_bucket_node * volatile next;	// pointer to the successor
 	//48
-	nbc_bucket_node *volatile replica; // pointer to the replica
-									   //nbc_bucket_node * volatile next_next;
-									   //64
-	op_node ** requestor;
+	nbc_bucket_node * volatile replica;	// pointer to the replica
+	nbc_bucket_node * volatile next_next;
+	//64
 };
 
 
@@ -174,6 +164,7 @@ struct __op_load
 	char pad[8-sizeof(pkey_t)];
 	unsigned int type;			// ENQ | DEQ
 	volatile int response;		// -1 waiting for resp | 1 responsed
+	op_node ** requestor;
 };
 
 //extern nbc_bucket_node *g_tail;
@@ -299,7 +290,6 @@ static inline nbc_bucket_node *numa_node_malloc(void *payload, pkey_t timestamp,
 	res->replica = NULL;
 	res->payload = payload;
 	res->epoch = 0;
-	res->op_id = 0;
 	res->timestamp = timestamp;
 
 	return res;
