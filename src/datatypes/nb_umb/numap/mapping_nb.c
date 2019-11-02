@@ -64,6 +64,7 @@ bool read_slot(op_node* slot,
     unsigned long val, new_current;
     op_payload *slot_arr = slot->slots;
 
+    // first attempt - Try to read current slot
     val = __sync_fetch_and_add(&(slot_arr[current].counter), 1);
     if (val == 0)
     {
@@ -75,6 +76,7 @@ bool read_slot(op_node* slot,
         return true;
     }
 
+    // current slot has been already read - increase the current
     new_current = (current + 1) % SLOT_NUMBER;
     if (!BOOL_CAS(&slot->current, current, new_current))
     {    
@@ -82,6 +84,7 @@ bool read_slot(op_node* slot,
         return false;
     }
 
+    // second attempt - Read new slot
     val = __sync_fetch_and_add(&(slot_arr[current].counter), 1);
     if (val == 0)
     {
@@ -93,6 +96,7 @@ bool read_slot(op_node* slot,
         return true;
     }
 
+    // try to read from all slots? 
     return false;
 
 }
@@ -121,23 +125,28 @@ bool write_slot(op_node* slot,
         return false; // no free slots
     }
 
+    // write on slot
     slot_arr[index].type = type;
     slot_arr[index].ret_value = ret_value;
     slot_arr[index].timestamp = timestamp; 
     slot_arr[index].payload = payload;
 
+    // set the slot as new
     __sync_fetch_and_and(&(slot_arr[index].counter), 0);
-    
+    // the new value is now visible    
+
+    // we have written on a good slot - this is not possible
     if (slot_arr[index].counter == 0)
     {
         printf("WRITING ON GOOD SLOT\n");
         return false;
     }
 
-    // nobody read the current slot
+    // nobody has read the current slot - cannot move to next current
     if (slot_arr[current].counter == 0)
         return true;
 
+    // the current slot is stale - update the current
     if (BOOL_CAS(&slot->current, current, index))
         return true;
     else
