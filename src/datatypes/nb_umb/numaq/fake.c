@@ -160,7 +160,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	nb_calqueue *queue = (nb_calqueue *) q;
 	table *h = NULL;
 	op_node *operation, *new_operation, *extracted_op,
-		*requested_op, *handling_op;
+		*requested_op, *handling_op, *tmp;
 	
 	pkey_t ret_ts;
 
@@ -229,15 +229,16 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 				new_operation->candidate = operation->candidate;
 				new_operation->requestor = operation->requestor;
 					
-				*(new_operation->requestor) = new_operation;
-				gc_free(ptst, operation, gc_aid[GC_OPNODE]);
-
-				operation = new_operation;
+				do
+				{
+					tmp = *(new_operation->requestor);
+				} while(!BOOL_CAS(new_operation->requestor, tmp,new_operation));
 
 				// publish op on right queue
-				tq_enqueue(&op_queue[dest_node], (void *)operation, dest_node);
-			
-				operation = NULL;
+				tq_enqueue(&op_queue[dest_node], (void *)new_operation, dest_node);
+				gc_free(ptst, operation, gc_aid[GC_OPNODE]);
+				operation = NULL; // yeld the op since is no longer for us.
+
 			}
 			// here we keep the operation if it is not null
 		}
@@ -306,7 +307,7 @@ pkey_t pq_dequeue(void *q, void **result)
 	nb_calqueue *queue = (nb_calqueue *) q;
 	table *h = NULL;
 	op_node *operation, *new_operation, *extracted_op = NULL,
-		*requested_op, *handling_op;
+		*requested_op, *handling_op, *tmp;
 
 	unsigned long long vb_index;
 	unsigned int dest_node;	 
@@ -392,14 +393,16 @@ pkey_t pq_dequeue(void *q, void **result)
 				new_operation->candidate = operation->candidate;
 				new_operation->requestor = operation->requestor;
 					
-				*(new_operation->requestor) = new_operation;
-				gc_free(ptst, operation, gc_aid[GC_OPNODE]);
+				do
+				{
+					tmp = *(new_operation->requestor);
+				} while(!BOOL_CAS(new_operation->requestor, tmp,new_operation));
 
-				operation = new_operation;				
-			
-				tq_enqueue(&op_queue[dest_node], (void *)operation, dest_node);
-			
-				operation = NULL;
+				// publish op on right queue
+				tq_enqueue(&op_queue[dest_node], (void *)new_operation, dest_node);
+				gc_free(ptst, operation, gc_aid[GC_OPNODE]);
+				operation = NULL; // yeld the op since is no longer for us.
+
 			}
 			
 			// keep the operation in case it's on the same node
