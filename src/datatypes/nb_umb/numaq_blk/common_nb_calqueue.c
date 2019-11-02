@@ -385,7 +385,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	nb_calqueue *queue = (nb_calqueue *) q;
 	table *h = NULL;
 	op_node *operation, *new_operation, *extracted_op,
-		*requested_op;
+		*requested_op, *tmp;
 	
 	pkey_t ret_ts;
 
@@ -411,21 +411,13 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	vb_index  = hash(timestamp, h->bucket_width);
 	dest_node = NODE_HASH(vb_index % h->size);
 
-	if (dest_node == NID)
-	{
-		ret = single_step_pq_enqueue(h, timestamp, payload);
-		if (ret != -1) //enqueue succesful
-		{
-			critical_exit();
-			return ret;
-		}
-	}
 
 	requested_op = operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
 	requested_op->type = OP_PQ_ENQ;
 	requested_op->timestamp = timestamp;
 	requested_op->payload = payload; //0xDEADBEEF
 	requested_op->response = -1;
+	requested_op->requestor = &requested_op; // used to change requested op from another node
 
 	do {
 		// read table
@@ -455,6 +447,12 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 				new_operation->timestamp = operation->timestamp;
 				new_operation->payload = operation->payload;
 				new_operation->response = operation->response;
+				new_operation->requestor = operation->requestor;
+					
+				do
+				{
+					tmp = *(new_operation->requestor);
+				} while(!BOOL_CAS(new_operation->requestor, tmp,new_operation));
 
 				// publish op on right queue
 				tq_enqueue(&op_queue[dest_node], (void *)new_operation, dest_node);
@@ -525,7 +523,7 @@ pkey_t pq_dequeue(void *q, void **result)
 	nb_calqueue *queue = (nb_calqueue *) q;
 	table *h = NULL;
 	op_node *operation, *new_operation, *extracted_op = NULL,
-		*requested_op;
+		*requested_op, *tmp;
 
 	unsigned long long vb_index;
 	unsigned int dest_node;	 
@@ -549,22 +547,12 @@ pkey_t pq_dequeue(void *q, void **result)
 	vb_index  = (h->current) >> 32;
 	dest_node = NODE_HASH(vb_index % h->size);
 	
-	if (dest_node == NID)
-	{
-		ret = single_step_pq_dequeue(h, queue, &ret_ts, &new_payload);
-		if (ret != -1)
-		{ //dequeue performed
-			*result = new_payload;
-			critical_exit();
-			return ret_ts;		
-		}
-	}
-
 	requested_op = operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
 	requested_op->type = OP_PQ_DEQ;
 	requested_op->timestamp = vb_index * (h->bucket_width);
 	requested_op->payload = NULL; //DEADBEEF
 	requested_op->response = -1;
+	requested_op->requestor = &requested_op;
 
 	do {
 
@@ -596,7 +584,13 @@ pkey_t pq_dequeue(void *q, void **result)
 				new_operation->timestamp = operation->timestamp;
 				new_operation->payload = operation->payload;
 				new_operation->response = operation->response;
-			
+				new_operation->requestor = operation->requestor;
+					
+				do
+				{
+					tmp = *(new_operation->requestor);
+				} while(!BOOL_CAS(new_operation->requestor, tmp,new_operation));
+
 				tq_enqueue(&op_queue[dest_node], (void *)new_operation, dest_node);
 
 				gc_free(ptst, operation, gc_aid[GC_OPNODE]);

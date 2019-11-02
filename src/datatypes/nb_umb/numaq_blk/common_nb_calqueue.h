@@ -158,11 +158,11 @@ struct __bucket_node
 
 struct __op_load
 {
-	unsigned long op_id;		//global identifier for the operation 
 	void *payload;				// paylod to enqueue | dequeued payload
 	pkey_t timestamp;			// ts of node to enqueue | lower ts of bucket to dequeue | returned ts
 	char pad[8-sizeof(pkey_t)];
 	unsigned int type;			// ENQ | DEQ
+	op_node ** requestor;
 	volatile int response;		// -1 waiting for resp | 1 responsed
 };
 
