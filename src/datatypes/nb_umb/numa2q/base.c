@@ -740,9 +740,10 @@ pkey_t pq_dequeue(void *q, void **result)
 					total += succ;
 					num++;
 					
+					/*
 					if (total > 1)
 						LOG("Series: len %llu, num %llu \n", (unsigned long) total/num, num);
-					
+					*/
 					return ret_ts; // someone did my op, we can return
 				}
 				extracted_op = requested_op;

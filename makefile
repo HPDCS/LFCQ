@@ -28,11 +28,7 @@ NUMA2QFK_link := gcc
 NUMA2QBL_link := gcc
 
 NUMA2QBLK_value := $(TQ_value) $(SET_value) src/datatypes/nb_umb/numa2q_blk/base.o src/datatypes/nb_umb/numa2q_blk/sw_cache.o src/datatypes/nb_umb/numa2q_blk/enq_sw_cache.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
-NUMA2QBLKFK_value := $(TQ_value) $(SET_value) src/datatypes/nb_umb/numa2q_blk/fake.o src/datatypes/nb_umb/numa2q_blk/sw_cache.o src/datatypes/nb_umb/numa2q_blk/enq_sw_cache.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
-NUMA2QBLKBL_value := $(TQ_value) $(SET_value) src/datatypes/nb_umb/numa2q_blk/busyloop.o src/datatypes/nb_umb/numa2q_blk/sw_cache.o src/datatypes/nb_umb/numa2q_blk/enq_sw_cache.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMA2QBLK_link := gcc
-NUMA2QBLKFK_link := gcc
-NUMA2QBLKBL_link := gcc
 
 NUMAP_value := src/datatypes/nb_umb/numap/base.o src/datatypes/nb_umb/numap/mapping_nb.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMAPNOP_value := src/datatypes/nb_umb/numap/fake.o src/datatypes/nb_umb/numap/mapping_nb.o $(UTIL_value) $(ARCH_value) $(NGACO_value) 
