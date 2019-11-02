@@ -598,26 +598,28 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 
 				// publish op on right queue
 				tq_enqueue(&enq_queue[dest_node], (void *)operation, dest_node);
+
+				operation = NULL; // need to extract another op
 			}
 			// here we keep the operation if it is not null
 		}
 
 		extracted_op = operation;
 
-		// check if my op was done // we could lose ops
-		if ((ret = __sync_fetch_and_add(&(requested_op->response), 0)) != -1)
-		{
-			gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
-			critical_exit();
-			requested_op = NULL;
-			// dovrebbe essere come se il thread fosse stato deschedulato prima della return
-			return ret; // someone did my op, we can return
-		}
-
 		if (extracted_op == NULL)
 		{
 			if (!tq_dequeue(&enq_queue[NID], &extracted_op)) 
 			{
+				// check if my op was done // we could lose ops
+				if ((ret = __sync_fetch_and_add(&(requested_op->response), 0)) != -1)
+				{
+					gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
+					critical_exit();
+					requested_op = NULL;
+					// dovrebbe essere come se il thread fosse stato deschedulato prima della return
+					return ret; // someone did my op, we can return
+				}
+
 				extracted_op = requested_op;
 				mine = true;
 			}

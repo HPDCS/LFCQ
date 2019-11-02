@@ -197,24 +197,11 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	requested_op->candidate = NULL;
 	requested_op->requestor = &requested_op;
 
-	/*
-	if (dest_node == NID)
-	{
-		ret = single_step_pq_enqueue(h, timestamp, payload, &requested_op->candidate, requested_op);
-		if (ret != -1) //enqueue succesful
-		{
-			gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
-			critical_exit();
-			return ret;
-		}
-	}
-	*/
-
 	do {
 		// read table
 		h = read_table(&queue->hashtable, th, epb, pub);
 
-		if (operation != NULL)
+		if (operation != NULL && !mine)
 		{
 			// compute vb
 			op_type = operation->type;
@@ -230,7 +217,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 			}
 
 			// need to move to another queue?
-			if (dest_node != NID && !mine) 
+			if (dest_node != NID) 
 			{
 				// The node has been extracted from a non optimal queue
 				new_operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
@@ -249,23 +236,25 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 
 				// publish op on right queue
 				tq_enqueue(&op_queue[dest_node], (void *)operation, dest_node);
+			
+				operation = NULL;
 			}
 			// here we keep the operation if it is not null
 		}
-		extracted_op = operation;
 
-		// check if my op was done // we could lose ops
-		if ((ret = __sync_fetch_and_add(&(requested_op->response), 0)) != -1)
-		{
-			gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
-			critical_exit();
-			requested_op = NULL;
-			// dovrebbe essere come se il thread fosse stato deschedulato prima della return
-			return ret; // someone did my op, we can return
-		}
+		extracted_op = operation;
 
 		if (extracted_op == NULL)
 		{
+			// check if my op was done
+			if ((ret = __sync_fetch_and_add(&(requested_op->response), 0)) != -1)
+			{
+				gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
+				critical_exit();
+				requested_op = NULL;
+				return ret; // someone did my op, we can return
+			}
+
 			if (!tq_dequeue(&op_queue[NID], &extracted_op)) 
 			{
 				extracted_op = requested_op;
@@ -305,13 +294,10 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 			}
 		}
 
+		handling_op = NULL;
 		if (!mine) 
-		{
-			handling_op = NULL;
 			operation = extracted_op;
-		}
-		mine = false;
-
+		
 	} while(1);
 }
 
@@ -377,7 +363,7 @@ pkey_t pq_dequeue(void *q, void **result)
 		// read table
 		h = read_table(&queue->hashtable, th, epb, pub);
 
-		if (operation != NULL)
+		if (operation != NULL && !mine)
 		{
 			// compute vb
 			op_type = operation->type;
@@ -394,7 +380,7 @@ pkey_t pq_dequeue(void *q, void **result)
 				dest_node = NODE_HASH(next_node_deq);
 			}
 			// need to move to another queue?
-			if (dest_node != NID && !mine) 
+			if (dest_node != NID) 
 			{
 				// The node has been extracted from a non optimal queue
 				new_operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
@@ -412,6 +398,8 @@ pkey_t pq_dequeue(void *q, void **result)
 				operation = new_operation;				
 			
 				tq_enqueue(&op_queue[dest_node], (void *)operation, dest_node);
+			
+				operation = NULL;
 			}
 			
 			// keep the operation in case it's on the same node
@@ -420,21 +408,22 @@ pkey_t pq_dequeue(void *q, void **result)
 
 		extracted_op = operation;
 
-		// check if my op was done // we could lose op
-		if ((ret = __sync_fetch_and_add(&(requested_op->response), 0)) != -1)
-		{
-			*result=requested_op->payload;
-			ret_ts = requested_op->timestamp;
-			gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
-			critical_exit();
-			requested_op = NULL;
-			// dovrebbe essere come se il thread fosse stato deschedulato prima della return
-			return ret_ts; // someone did my op, we can return
-		}
-
 		// dequeue one op
 		if (extracted_op == NULL)
 		{
+			
+			// check if my op was done // we could lose op
+			if ((ret = __sync_fetch_and_add(&(requested_op->response), 0)) != -1)
+			{
+				*result=requested_op->payload;
+				ret_ts = requested_op->timestamp;
+				gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
+				critical_exit();
+				requested_op = NULL;
+				// dovrebbe essere come se il thread fosse stato deschedulato prima della return
+				return ret_ts; // someone did my op, we can return
+			}
+
 			if (!tq_dequeue(&op_queue[NID], &extracted_op)) {
 				extracted_op = requested_op;
 				mine = true;
@@ -475,12 +464,9 @@ pkey_t pq_dequeue(void *q, void **result)
 			}
 		}
 
+		handling_op = NULL;
 		if (!mine) 
-		{
-			handling_op = NULL;
 			operation = extracted_op;
-		}
-		mine = false;
 
 	} while(1);
 }
