@@ -80,8 +80,9 @@ bool read_slot(op_node* slot,
     new_current = (current + 1) % SLOT_NUMBER;
     
     if (slot_arr[new_current].counter != 0)
-	    return false;
+	    return false;                       // change this in find next valid slot
     
+
     if (!BOOL_CAS(&slot->current, current, new_current))
     {    
         //printf("CANNOT READ - unset current");

@@ -705,6 +705,9 @@ pkey_t pq_dequeue(void *q, void **result)
 		}
 	}
 	*/
+	unsigned long succ = 0;
+	unsigned long total = 0;
+	unsigned long num = 0;
 	do {
 
 		// read table
@@ -735,30 +738,42 @@ pkey_t pq_dequeue(void *q, void **result)
 				operation = new_operation;				
 			
 				tq_enqueue(&deq_queue[dest_node], (void *)operation, dest_node);
-			}
-			
-			// keep the operation in case it's on the same node
-			
+
+				if (succ != 0)
+				{
+					total += succ;
+					num += 1;
+					succ = 0;
+				}
+			}			
 		}
 
 		extracted_op = operation;
 
-		// check if my op was done // we could lose op
-		if ((ret = __sync_fetch_and_add(&(requested_op->response), 0)) != -1)
-		{
-			*result = requested_op->payload;
-			ret_ts = requested_op->timestamp;
-			gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
-			critical_exit();
-			requested_op = NULL;
-			// dovrebbe essere come se il thread fosse stato deschedulato prima della return
-			return ret_ts; // someone did my op, we can return
-		}
-
 		// dequeue one op
 		if (extracted_op == NULL)
 		{
-			if (!tq_dequeue(&deq_queue[NID], &extracted_op)) {
+			if (!tq_dequeue(&deq_queue[NID], &extracted_op)) 
+			{
+				// vedo qui se me l'hanno fatta
+				// check if my op was done // we could lose op
+				if ((ret = __sync_fetch_and_add(&(requested_op->response), 0)) != -1)
+				{
+					*result = requested_op->payload;
+					ret_ts = requested_op->timestamp;
+					gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
+					critical_exit();
+					requested_op = NULL;
+					// dovrebbe essere come se il thread fosse stato deschedulato prima della return
+					
+					total += succ;
+					num++;
+					
+					if (total > 1)
+						LOG("Series: len %llu, num %llu \n", (unsigned long) total/num, num);
+					
+					return ret_ts; // someone did my op, we can return
+				}
 				extracted_op = requested_op;
 				mine = true;
 			}
@@ -778,6 +793,7 @@ pkey_t pq_dequeue(void *q, void **result)
 		ret = single_step_pq_dequeue(h, queue, &ret_ts, &new_payload, handling_op->op_id, &handling_op->candidate);
 		if (ret != -1)
 		{ //dequeue failed
+			succ++;
 			performed_dequeue++;
 			handling_op->payload = new_payload;
 			handling_op->timestamp = ret_ts;
