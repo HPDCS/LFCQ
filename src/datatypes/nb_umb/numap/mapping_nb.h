@@ -6,7 +6,7 @@
 #define OP_PQ_ENQ 0x0
 #define OP_PQ_DEQ 0x1
 
-#define SLOT_NUMBER 4
+#define SLOT_NUMBER 4 
 
 typedef struct __op_payload op_payload;
 struct __op_payload

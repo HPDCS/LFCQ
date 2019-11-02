@@ -75,14 +75,20 @@ bool read_slot(op_node* slot,
 
         return true;
     }
-/*
+
     // current slot has been already read - increase the current
     new_current = (current + 1) % SLOT_NUMBER;
+    
+    if (slot_arr[new_current].counter != 0)
+	    return false;
+    
     if (!BOOL_CAS(&slot->current, current, new_current))
     {    
         //printf("CANNOT READ - unset current");
         return false;
     }
+
+
     current = new_current;
 
     // second attempt - Read new slot
@@ -96,7 +102,7 @@ bool read_slot(op_node* slot,
 
         return true;
     }
-*/
+
     // try to read from all slots? 
     return false;
 
@@ -156,15 +162,16 @@ bool write_slot(op_node* slot,
     // nobody has read the current slot - cannot move to next current
     if (slot_arr[current].counter == 0)
         return true;
+	
+    val = VAL_CAS(&slot->current, current, new_index);
 
-    
     // the current slot is stale - update the current
-    if ((val = VAL_CAS(&slot->current, current, new_index)) == current)
+    if (val == current || val == new_index)
         return true;
     else
     {
         printf("CURRENT NOT SET - old_value %lu, new_value %lu, current %lu\n", val, new_index, current ); // we have only one writer this cannot happen
-        return false;
+	return false;
     }
     
 }
