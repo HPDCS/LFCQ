@@ -477,15 +477,17 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 				return ret; // someone did my op, we can return
 			}
 
-			// try all to avoid get stalled
+			// try all to avoid get stalled -> use a threshold to do this
 			int i = NID;
-			while (!tq_dequeue(&op_queue[NID], &extracted_op)) {
-				i = (i+1)%ACTIVE_NUMA_NODES; 
+			while (!tq_dequeue(&op_queue[i], &extracted_op)) {
+				i = (i+1)%ACTIVE_NUMA_NODES;
+				if (i == NID)
+					break; 
 			}
 
 		}
 
-		if (extracted_op->response != -1) {
+		if (extracted_op == NULL || extracted_op->response != -1) {
 			operation = NULL;
 			continue;
 		}
@@ -621,13 +623,15 @@ pkey_t pq_dequeue(void *q, void **result)
 
 			// try all queue to avoid get stalled
 			int i = NID;
-			while (!tq_dequeue(&op_queue[NID], &extracted_op)) {
-				i = (i+1)%ACTIVE_NUMA_NODES; 
+			while (!tq_dequeue(&op_queue[i], &extracted_op)) {
+				i = (i+1)%ACTIVE_NUMA_NODES;
+				if (i == NID)
+					break; 
 			}
 		}
 
 		// execute op
-		if (extracted_op->response != -1) {
+		if (extracted_op == NULL || extracted_op->response != -1) {
 			operation = NULL;
 			continue;
 		}

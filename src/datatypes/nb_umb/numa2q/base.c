@@ -140,8 +140,6 @@ void *pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 int single_step_pq_enqueue(table *h, pkey_t timestamp, void *payload, nbc_bucket_node* volatile * candidate, op_node *operation)
 {
 
-	assertf(operation->type != OP_PQ_ENQ, "Passing a dequeue to an enqueue%s\n", "");
-
 	nbc_bucket_node *bucket, *new_node, *ins_node;
 
 	unsigned int index, size;
@@ -633,8 +631,6 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 		if (!mine) 
 			operation = extracted_op;
 		
-		mine = false;
-
 	} while(1);
 }
 
@@ -779,8 +775,6 @@ pkey_t pq_dequeue(void *q, void **result)
 		if (!mine) 
 			operation = extracted_op;
 		
-		// se resetto mine qui è la stessa cosa perchè se è true solo se operation è NULL
-
 	} while(1);
 }
 
