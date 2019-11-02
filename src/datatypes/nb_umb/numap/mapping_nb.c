@@ -75,14 +75,15 @@ bool read_slot(op_node* slot,
 
         return true;
     }
-
+/*
     // current slot has been already read - increase the current
     new_current = (current + 1) % SLOT_NUMBER;
     if (!BOOL_CAS(&slot->current, current, new_current))
     {    
-        printf("CANNOT READ - unset current");
+        //printf("CANNOT READ - unset current");
         return false;
     }
+    current = new_current;
 
     // second attempt - Read new slot
     val = __sync_fetch_and_add(&(slot_arr[current].counter), 1);
@@ -95,7 +96,7 @@ bool read_slot(op_node* slot,
 
         return true;
     }
-
+*/
     // try to read from all slots? 
     return false;
 
@@ -108,22 +109,32 @@ bool write_slot(op_node* slot,
     void* payload)
 {
     
-    unsigned long i, index, current = slot->current;
+    unsigned long i, index, new_index, val, current = slot->current;
 
     op_payload *slot_arr = slot->slots;
+
+    new_index = current;
 
     // get free slot
     for (i = 0; i < SLOT_NUMBER; i++) 
     {
-        index = (index + i) % SLOT_NUMBER;
-        if (index != current && slot_arr[index].counter != 0)
-            break;
+        index = (current + i) % SLOT_NUMBER;
+        if (index != current)
+	{
+		if(slot_arr[index].counter != 0)
+        		break;
+		else
+			new_index = index;
+
+    	}
     }
     if (index == current)
     {
         printf("NO FREE SLOTS\n");
         return false; // no free slots
     }
+    if (new_index == current)
+	    new_index = index;
 
     // write on slot
     slot_arr[index].type = type;
@@ -132,11 +143,11 @@ bool write_slot(op_node* slot,
     slot_arr[index].payload = payload;
 
     // set the slot as new
-    __sync_fetch_and_and(&(slot_arr[index].counter), 0);
+    val = __sync_fetch_and_and(&(slot_arr[index].counter), 0);
     // the new value is now visible    
 
     // we have written on a good slot - this is not possible
-    if (slot_arr[index].counter == 0)
+    if (val == 0)
     {
         printf("WRITING ON GOOD SLOT\n");
         return false;
@@ -146,12 +157,13 @@ bool write_slot(op_node* slot,
     if (slot_arr[current].counter == 0)
         return true;
 
+    
     // the current slot is stale - update the current
-    if (BOOL_CAS(&slot->current, current, index))
+    if ((val = VAL_CAS(&slot->current, current, new_index)) == current)
         return true;
     else
     {
-        printf("CURRENT NOT SET\n"); // we have only one writer this cannot happen
+        printf("CURRENT NOT SET - old_value %lu, new_value %lu, current %lu\n", val, new_index, current ); // we have only one writer this cannot happen
         return false;
     }
     
