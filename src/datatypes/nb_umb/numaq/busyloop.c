@@ -387,7 +387,7 @@ pkey_t pq_dequeue(void *q, void **result)
 				do
 				{
 					tmp = *(new_operation->requestor);
-				} while(!BOOL_CAS(new_operation->requestor, tmp,new_operation));
+				} while(!BOOL_CAS(new_operation->requestor, tmp, new_operation));
 
 				// publish op on right queue
 				tq_enqueue(&op_queue[dest_node], (void *)new_operation, dest_node);
