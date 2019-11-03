@@ -35,6 +35,8 @@
 #include "../../../utils/hpdcs_utils.h"
 #include "../gc/ptst.h"
 
+typedef struct __bucket_node nbc_bucket_node;
+
 #include "mapping.h"
 
 extern __thread ptst_t *ptst;
@@ -131,7 +133,6 @@ extern int gc_hid[];
  *  Struct that define a node in a bucket
  */ 
 
-typedef struct __bucket_node nbc_bucket_node;
 struct __bucket_node
 {
 	void *payload;  				// general payload
@@ -143,14 +144,28 @@ struct __bucket_node
 	unsigned int nid; 				// used to resolve the conflict with same timestamp using a FIFO policy
 	//32
 	nbc_bucket_node * tail;
-	nbc_bucket_node * volatile next;	// pointer to the successor
-	//48
+	union {
+		volatile __uint128_t widenext;
+		struct
+		{
+			nbc_bucket_node *volatile next;
+			volatile unsigned long op_id;
+		};
+	};
+	//56
 	nbc_bucket_node * volatile replica;	// pointer to the replica
-	nbc_bucket_node * volatile next_next;
+	op_payload * requestor;
 	//64
 };
 
-
+typedef union {
+	volatile __uint128_t widenext;
+	struct
+	{
+		nbc_bucket_node *volatile next;
+		volatile unsigned long op_id;
+	};
+} wideptr; // used for assignement
 //extern nbc_bucket_node *g_tail;
 
 typedef struct table table;
@@ -247,6 +262,7 @@ static inline nbc_bucket_node* node_malloc(void *payload, pkey_t timestamp, unsi
 	res->replica = NULL;
 	res->payload = payload;
 	res->epoch = 0;
+	//res->op_id = 0;
 	res->timestamp = timestamp;
 
 	return res;
@@ -272,6 +288,7 @@ static inline nbc_bucket_node* numa_node_malloc(void *payload, pkey_t timestamp,
 	res->replica = NULL;
 	res->payload = payload;
 	res->epoch = 0;
+	res->op_id = 0;
 	res->timestamp = timestamp;
 
 	return res;
