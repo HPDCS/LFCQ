@@ -20,13 +20,14 @@ op_node *req_mapping[_NUMA_NODES];
 
 void init_mapping() 
 {
+    unsigned int max_threads = _NUMA_NODES * num_cpus_per_node;
     int i, j;
-    for (i = 0; i < ACTIVE_NUMA_NODES; ++i) 
+    for (i = 0; i < _NUMA_NODES; ++i) 
     {
-        req_mapping[i] = numa_alloc_onnode(sizeof(op_node)*THREADS, i);
-        res_mapping[i] = numa_alloc_onnode(sizeof(op_node)*THREADS, i);
+        req_mapping[i] = numa_alloc_onnode(sizeof(op_node)*max_threads, i);
+        res_mapping[i] = numa_alloc_onnode(sizeof(op_node)*max_threads, i);
         
-        for (j = 0; j < THREADS; ++j) 
+        for (j = 0; j < max_threads; ++j) 
         {
             #ifdef _NM_USE_SPINLOCK
             spinlock_init(&(req_mapping[i][j].spin));

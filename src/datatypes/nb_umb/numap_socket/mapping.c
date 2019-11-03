@@ -24,7 +24,7 @@ void init_mapping()
         req_mapping[i] = numa_alloc_onnode(sizeof(op_node)*max_threads, node);  // even if CPU are not active we can use the channel-> operation will be always handled remotely
         res_mapping[i] = numa_alloc_onnode(sizeof(op_node)*max_threads, node); 
         
-        for (j = 0; j < THREADS; ++j) 
+        for (j = 0; j < max_threads; ++j) 
         {
             #ifdef _NM_USE_SPINLOCK
             spinlock_init(&(req_mapping[i][j].spin));

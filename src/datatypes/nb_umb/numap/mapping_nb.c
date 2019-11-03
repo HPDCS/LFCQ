@@ -3,22 +3,19 @@
 
 #include "mapping_nb.h"
 
-#define R_BUSY 0x2
-#define W_BUSY 0x1
-#define L_FREE 0x0
-
 op_node *res_mapping[_NUMA_NODES];
 op_node *req_mapping[_NUMA_NODES];
 
 void init_mapping() 
 {
+    unsigned int max_threads = _NUMA_NODES * num_cpus_per_node;
     int i, j, k;
     for (i = 0; i < ACTIVE_NUMA_NODES; ++i) 
     {
-        req_mapping[i] = numa_alloc_onnode(sizeof(op_node)*THREADS, i);
-        res_mapping[i] = numa_alloc_onnode(sizeof(op_node)*THREADS, i);
+        req_mapping[i] = numa_alloc_onnode(sizeof(op_node)*max_threads, i);
+        res_mapping[i] = numa_alloc_onnode(sizeof(op_node)*max_threads, i);
         
-        for (j = 0; j < THREADS; ++j) 
+        for (j = 0; j < max_threads; ++j) 
         {
             req_mapping[i][j].current = 0;
             res_mapping[i][j].current = 0;
@@ -172,7 +169,7 @@ bool write_slot(op_node* slot,
     else
     {
         printf("CURRENT NOT SET - old_value %lu, new_value %lu, current %lu\n", val, new_index, current ); // we have only one writer this cannot happen
-	return false;
+	    return false;
     }
     
 }
