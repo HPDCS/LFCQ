@@ -490,11 +490,13 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 		}
 
 		handling_op = extracted_op;
-		if (handling_op->response != -1) {
+		if (handling_op == NULL || handling_op->response != -1) {
 			operation = NULL;
 			continue;
 		}
 		
+		attempts = 0;
+
 		ret = single_step_pq_enqueue(h, handling_op->timestamp, handling_op->payload);
 		if (ret != -1) //enqueue succesful
 		{

@@ -517,16 +517,11 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	op_node *operation, *new_operation, *extracted_op,
 		*requested_op, *handling_op, *tmp;
 	
-	pkey_t ret_ts;
-
 	unsigned long long vb_index;
 	unsigned int dest_node;	 
-	unsigned int op_type;
 	int ret;
 	
 	bool mine = false;
-
-	void* new_payload;
 
 	critical_enter();
 
@@ -643,7 +638,6 @@ pkey_t pq_dequeue(void *q, void **result)
 
 	unsigned long long vb_index;
 	unsigned int dest_node;	 
-	unsigned int op_type;
 	int ret;
 	pkey_t ret_ts;
 	void* new_payload;

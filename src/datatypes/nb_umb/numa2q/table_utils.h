@@ -258,6 +258,10 @@ static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, uns
 			// potentially this if can be removed
 			if (!marked)
 			{
+				if (tmp_timestamp < first_ts)
+				{
+					to_cache = tmp; // cache only unmarked node, marked will be soon removed.
+				}
 				left = tmp;
 				left_next = tmp_next;
 				left_tie_breaker = tmp_tie_breaker;

@@ -164,7 +164,6 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	
 	pkey_t ret_ts;
 
-	unsigned long long vb_index;
 	unsigned int dest_node;	 
 	unsigned int op_type;
 	int ret;
@@ -185,7 +184,6 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	
 	h = read_table(&queue->hashtable, th, epb, pub);
 
-	vb_index  = hash(timestamp, h->bucket_width);
 	dest_node = NODE_HASH((unsigned long) timestamp);
 
 	requested_op = operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
@@ -207,12 +205,10 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 			op_type = operation->type;
 			if (op_type == OP_PQ_ENQ) 
 			{
-				vb_index  = hash(operation->timestamp, h->bucket_width);
 				dest_node = NODE_HASH((unsigned long) operation->timestamp);	
 			}
 			else 
 			{
-				vb_index = (h->current) >> 32;
 				dest_node = NODE_HASH(next_node_deq);
 			}
 
