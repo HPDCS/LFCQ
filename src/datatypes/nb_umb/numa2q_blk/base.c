@@ -40,6 +40,9 @@ unsigned long op_counter = 2;
 task_queue enq_queue[_NUMA_NODES]; // (!new) per numa node queue
 task_queue deq_queue[_NUMA_NODES];
 
+#define MAX_ENQ_ATTEMPTS 100
+#define MAX_DEQ_ATTEMPTS 100
+
 /*************************************
  * THREAD LOCAL VARIABLES			 *
  ************************************/
@@ -214,14 +217,11 @@ int single_step_pq_dequeue(table *h, nb_calqueue *queue, pkey_t* ret_ts, void **
 
 nbc_bucket_node *min, *min_next,
 		*left_node, *left_node_next,
-		*tail, *array,
-		*current_candidate;
+		*tail, *array;
 
 	unsigned long long current, old_current, new_current;
 	unsigned long long index;
 	unsigned long long epoch;
-
-	unsigned long left_node_op_id;
 
 	unsigned int size, attempts = 0;
 	unsigned int counter;
@@ -231,8 +231,6 @@ nbc_bucket_node *min, *min_next,
 	unsigned int ep = 0;
 	int con_de = 0;
 	bool prob_overflow = false;
-
-	int res;	
 	
 	tail = queue->tail;
 
@@ -404,15 +402,10 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	table *h = NULL;
 	op_node *operation, *new_operation, *extracted_op,
 		*requested_op, *handling_op, *tmp;
-	
-	pkey_t ret_ts;
 
-	unsigned long long vb_index;
+	unsigned long long vb_index, attempts;
 	unsigned int dest_node;	 
-	unsigned int op_type;
 	int ret;
-
-	void* new_payload;
 
 	critical_enter();
 
@@ -436,6 +429,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	requested_op->response = -1;
 	requested_op->requestor = &requested_op;
 
+	attempts = 0;
 	do {
 		// read table
 		h = read_table(&queue->hashtable, th, epb, pub);
@@ -486,8 +480,12 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 			}
 
 			int i = NID;
-			while (!tq_dequeue(&enq_queue[NID], &extracted_op)) {
-				i = (i+1)%ACTIVE_NUMA_NODES; 
+			while (!tq_dequeue(&enq_queue[i], &extracted_op)) {
+				attempts++;
+				if (attempts > MAX_ENQ_ATTEMPTS)
+					i = (i+1)%ACTIVE_NUMA_NODES; 
+				if (i == NID)
+					break;
 			}
 		}
 
@@ -518,9 +516,8 @@ pkey_t pq_dequeue(void *q, void **result)
 	op_node *operation, *new_operation, *extracted_op = NULL,
 		*requested_op, *handling_op, *tmp;
 
-	unsigned long long vb_index;
+	unsigned long long vb_index, attempts;
 	unsigned int dest_node;	 
-	unsigned int op_type;
 	int ret;
 	pkey_t ret_ts;
 	void* new_payload;
@@ -547,6 +544,7 @@ pkey_t pq_dequeue(void *q, void **result)
 	requested_op->response = -1;
 	requested_op->requestor = &requested_op;
 
+	attempts = 0;
 	do {
 
 		// read table
@@ -601,18 +599,24 @@ pkey_t pq_dequeue(void *q, void **result)
 			}
 
 			int i = NID;
-			while (!tq_dequeue(&enq_queue[NID], &extracted_op)) {
-				i = (i+1)%ACTIVE_NUMA_NODES; 
+			while (!tq_dequeue(&enq_queue[i], &extracted_op)) {
+				attempts++;
+				if (attempts > MAX_DEQ_ATTEMPTS)
+					i = (i+1)%ACTIVE_NUMA_NODES;
+				if (i == NID)
+					break; 
 			}
 		}
 			
 		// execute op
 		handling_op = extracted_op;
-		if (handling_op->response != -1) {
+		if (handling_op == NULL || handling_op->response != -1) {
 			operation = NULL;
 			continue;
 		}
 		
+		attempts = 0;
+
 		ret = single_step_pq_dequeue(h, queue, &ret_ts, &new_payload);
 		if (ret != -1)
 		{

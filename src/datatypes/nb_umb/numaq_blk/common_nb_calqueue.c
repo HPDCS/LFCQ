@@ -40,6 +40,9 @@ int gc_hid[4];
 unsigned long op_counter = 2;
 task_queue op_queue[_NUMA_NODES]; // (!new) per numa node queue
 
+#define MAX_ENQ_ATTEMPTS 100
+#define MAX_DEQ_ATTEMPTS 100 
+
 /*************************************
  * THREAD LOCAL VARIABLES			 *
  ************************************/
@@ -389,7 +392,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	
 	pkey_t ret_ts;
 
-	unsigned long long vb_index;
+	unsigned long long vb_index, attempts;
 	unsigned int dest_node;	 
 	unsigned int op_type;
 	int ret;
@@ -419,6 +422,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	requested_op->response = -1;
 	requested_op->requestor = &requested_op; // used to change requested op from another node
 
+	attempts = 0;
 	do {
 		// read table
 		h = read_table(&queue->hashtable, th, epb, pub);
@@ -480,11 +484,12 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 			// try all to avoid get stalled -> use a threshold to do this
 			int i = NID;
 			while (!tq_dequeue(&op_queue[i], &extracted_op)) {
-				i = (i+1)%ACTIVE_NUMA_NODES;
+				attempts++;
+				if (attempts > MAX_ENQ_ATTEMPTS)
+					i = (i+1)%ACTIVE_NUMA_NODES;
 				if (i == NID)
 					break; 
 			}
-
 		}
 
 		if (extracted_op == NULL || extracted_op->response != -1) {
@@ -492,6 +497,9 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 			continue;
 		}
 		
+		// here we have a valid op.
+		attempts = 0;
+
 		if (extracted_op->type == OP_PQ_ENQ)
 		{
 			ret = single_step_pq_enqueue(h, extracted_op->timestamp, extracted_op->payload);
@@ -528,7 +536,7 @@ pkey_t pq_dequeue(void *q, void **result)
 	op_node *operation, *new_operation, *extracted_op = NULL,
 		*requested_op, *tmp;
 
-	unsigned long long vb_index;
+	unsigned long long vb_index, attempts;
 	unsigned int dest_node;	 
 	unsigned int op_type;
 	int ret;
@@ -557,6 +565,7 @@ pkey_t pq_dequeue(void *q, void **result)
 	requested_op->response = -1;
 	requested_op->requestor = &requested_op;
 
+	attempts = 0;
 	do {
 
 		// read table
@@ -624,7 +633,9 @@ pkey_t pq_dequeue(void *q, void **result)
 			// try all queue to avoid get stalled
 			int i = NID;
 			while (!tq_dequeue(&op_queue[i], &extracted_op)) {
-				i = (i+1)%ACTIVE_NUMA_NODES;
+				attempts++;
+				if (attempts > MAX_DEQ_ATTEMPTS)
+					i = (i+1)%ACTIVE_NUMA_NODES;
 				if (i == NID)
 					break; 
 			}
@@ -636,6 +647,8 @@ pkey_t pq_dequeue(void *q, void **result)
 			continue;
 		}
 		
+		attempts = 0;
+
 		if (extracted_op->type == OP_PQ_ENQ)
 		{
 			ret = single_step_pq_enqueue(h, extracted_op->timestamp, extracted_op->payload);
