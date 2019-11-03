@@ -682,13 +682,16 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 			{
 				enq_steal_done++;
 
+				/*
 				h = read_table(&queue->hashtable, th, epb, pub);
 				new_dest_node =  NODE_HASH(hash(timestamp, h->bucket_width) % (h->size));
 
 				if (new_dest_node == dest_node || new_dest_node == NID)
 				{
+					*/
 					ret = do_pq_enqueue(q, timestamp, payload, &my_operation);
 					break;
+				/*
 				}
 				dest_node = new_dest_node;
 
@@ -701,6 +704,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 					abort_line();
 				}
 				repost_enq++;
+				*/
 			}
 			attempts = 0;
 		}
@@ -799,17 +803,18 @@ pkey_t pq_dequeue(void *q, void** result)
 			{
 				deq_steal_done++;
 
+				/*
 				h = read_table(&queue->hashtable, th, epb, pub);
 				new_dest_node = NODE_HASH(((h->current)>>32)%(h->size));
 
 				// if the dest node is mine or is unchanged
 				if (new_dest_node == NID || new_dest_node == dest_node)
-				{
+				{*/
 					ts = do_pq_dequeue(q, &pld, &my_operation);
 					ts = my_operation.timestamp;
 					pld = my_operation.payload;
 					break;
-				}
+				/*}
 
 				dest_node = new_dest_node;
 
@@ -821,7 +826,7 @@ pkey_t pq_dequeue(void *q, void** result)
 					abort_line();
 				}
 				repost_deq++;
-			
+				*/
 			}
 			attempts = 0;
 		}
