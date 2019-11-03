@@ -3,30 +3,10 @@
 
 #include "common_nb_calqueue.h"
 
-//#define _NM_USE_SPINLOCK
-
 #define OP_PQ_ENQ 0x0
 #define OP_PQ_DEQ 0x1
 
 typedef struct __op_load op_node;
-struct __op_load
-{
-	#ifdef _NM_USE_SPINLOCK
-	spinlock_t spin;
-	#else
-	volatile int busy;
-	#endif
-	volatile int response; 		// 0 posted/wait to be executed; >=1 read/executed;
-	
-	char pad0[56];
-
-	unsigned int type;			// ENQ | DEQ
-	int ret_value;
-	pkey_t timestamp;			// ts of node to enqueue
- 	void *payload;				// paylod to enqueue | dequeued payload
-	//24
-	char pad[48 - sizeof(pkey_t) ];
-};
 
 void init_mapping();
 

@@ -1,7 +1,30 @@
 #include <numa.h>
 #include <numaif.h>
 
-#include "mapping_nb.h"
+#include "mapping.h"
+
+#define SLOT_NUMBER 4 
+
+typedef struct __op_payload op_payload;
+struct __op_payload
+{
+	volatile long counter;
+	unsigned int type;			// ENQ | DEQ
+	int ret_value;
+	pkey_t timestamp;			// ts of node to enqueue
+ 	char ppad0[8 - sizeof(pkey_t) ];
+	void *payload;				// paylod to enqueue | dequeued payload
+	char ppad1[32];
+};
+
+struct __op_load
+{
+	volatile unsigned long current;
+	char lpad[56];
+
+	op_payload slots[SLOT_NUMBER];
+
+};
 
 op_node *res_mapping[_NUMA_NODES];
 op_node *req_mapping[_NUMA_NODES];
@@ -29,6 +52,7 @@ void init_mapping()
             }
         }
     }
+    LOG("init_mapping() done! %s\n","(mapping_nb)");
 }
 
 op_node* get_req_slot_from_node(unsigned int numa_node)

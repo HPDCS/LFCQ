@@ -601,7 +601,7 @@ pkey_t pq_dequeue(void *q, void **result)
 			}
 
 			int i = NID;
-			while (!tq_dequeue(&enq_queue[i], &extracted_op)) {
+			while (!tq_dequeue(&deq_queue[i], &extracted_op)) {
 				attempts++;
 				if (attempts > MAX_DEQ_ATTEMPTS)
 					i = (i+1)%ACTIVE_NUMA_NODES;
