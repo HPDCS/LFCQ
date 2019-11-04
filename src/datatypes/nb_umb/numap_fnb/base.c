@@ -40,10 +40,12 @@ unsigned int ACTIVE_NUMA_NODES;
 
 #ifndef ENQ_MAX_WAIT_ATTEMPTS
 #define ENQ_MAX_WAIT_ATTEMPTS 100
+#define ENQ_HIT_ATTEMPTS 100
 #endif
  
 #ifndef DEQ_MAX_WAIT_ATTEMPTS
 #define DEQ_MAX_WAIT_ATTEMPTS 100
+#define DEQ_HIT_ATTEMPTS 100
 #endif
 
 #define abort_line() do{\
@@ -624,6 +626,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	nbc_bucket_node *candidate = NULL;
 
 	unsigned long attempts, count;
+	unsigned long th_hit; // how many times I hit the threshold when someone was handling my op
 
 	critical_enter();
 
@@ -671,6 +674,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	}
 
 	attempts = 0;
+	th_hit = 0;
 	do {
 
 		if (attempts > ENQ_MAX_WAIT_ATTEMPTS) 
@@ -701,6 +705,14 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 					abort_line();
 				}
 				repost_enq++;
+				th_hit = 0; // it was not taken in handling
+			}
+			else if (th_hit++ > ENQ_HIT_ATTEMPTS) // The operation is in handling wait a little bit more
+			{
+				
+				enq_steal_done++;
+				ret = do_pq_enqueue(q, timestamp, payload, &my_operation);
+				break;
 				
 			}
 			attempts = 0;
@@ -740,6 +752,7 @@ pkey_t pq_dequeue(void *q, void** result)
 	unsigned int	type;
 
 	unsigned long attempts, count;
+	unsigned long th_hit;
 
 	op_payload my_operation, read_operation;
 	nbc_bucket_node *candidate = NULL;
@@ -790,6 +803,7 @@ pkey_t pq_dequeue(void *q, void** result)
 
 
 	attempts = 0;
+	th_hit = 0;
 	do {
 		
 		if (attempts > DEQ_MAX_WAIT_ATTEMPTS) 
@@ -822,6 +836,14 @@ pkey_t pq_dequeue(void *q, void** result)
 					abort_line();
 				}
 				repost_deq++;
+			}
+			else if (th_hit++ > DEQ_HIT_ATTEMPTS) // The operation is in handling wait a little bit more
+			{
+				deq_steal_done++;
+				ts = do_pq_dequeue(q, &pld, &my_operation);
+				ts = my_operation.timestamp;
+				pld = my_operation.payload;
+				break;
 			}
 			attempts = 0;
 		}
