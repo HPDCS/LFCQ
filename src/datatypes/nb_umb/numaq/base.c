@@ -137,6 +137,7 @@ void *pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 int single_step_pq_enqueue(table *h, pkey_t timestamp, void *payload, nbc_bucket_node* volatile * candidate, op_node *operation)
 {
 
+	unsigned long counter = operation->counter;
 	assertf(operation->type != OP_PQ_ENQ, "Passing a dequeue to an enqueue%s\n", "");
 
 	nbc_bucket_node *bucket, *new_node, *ins_node;
@@ -536,14 +537,15 @@ nbc_bucket_node *min, *min_next,
 	return -1;
 }
 
+__thread op_node * volatile requested_op;
+
 int pq_enqueue(void* q, pkey_t timestamp, void *payload) 
 {
 	assertf(timestamp < MIN || timestamp >= INFTY, "Key out of range %s\n", "");
 
 	nb_calqueue *queue = (nb_calqueue *) q;
 	table *h = NULL;
-	op_node *operation, *new_operation, *extracted_op,
-		*requested_op, *handling_op, *tmp;
+	op_node *operation, *new_operation, *extracted_op, *handling_op, *tmp;
 	
 	pkey_t ret_ts;
 
@@ -622,8 +624,11 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 
 				// publish op on right queue
 				tq_enqueue(&op_queue[dest_node], (void *)new_operation, dest_node);
-				gc_free(ptst, operation, gc_aid[GC_OPNODE]);
-				operation = NULL; // yeld the op since is no longer for us.
+				
+                gc_free(ptst, operation, gc_aid[GC_OPNODE]);
+				operation->counter++;
+				
+                operation = NULL; // yeld the op since is no longer for us.
 			}
 			// the operation is still for us, we keep it!
 		}
@@ -638,6 +643,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 			if ((ret = __sync_fetch_and_add(&(requested_op->response), 0)) != -1)
 			{
 				gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
+				requested_op->counter++;
 				critical_exit();
 				requested_op = NULL;
 				// dovrebbe essere come se il thread fosse stato deschedulato prima della return
@@ -696,7 +702,7 @@ pkey_t pq_dequeue(void *q, void **result)
 	nb_calqueue *queue = (nb_calqueue *) q;
 	table *h = NULL;
 	op_node *operation, *new_operation, *extracted_op = NULL,
-		*requested_op, *handling_op, *tmp;
+	 *handling_op, *tmp;
 
 	unsigned long long vb_index;
 	unsigned int dest_node;	 
@@ -774,6 +780,7 @@ pkey_t pq_dequeue(void *q, void **result)
 				// publish op on right queue
 				tq_enqueue(&op_queue[dest_node], (void *)new_operation, dest_node);
 				gc_free(ptst, operation, gc_aid[GC_OPNODE]);
+				operation->counter++;
 				operation = NULL; // yeld the op since is no longer for us.
 			}
 			
@@ -793,6 +800,7 @@ pkey_t pq_dequeue(void *q, void **result)
 				*result = requested_op->payload;
 				ret_ts = requested_op->timestamp;
 				gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
+				requested_op->counter++;
 				critical_exit();
 				requested_op = NULL;
 				// dovrebbe essere come se il thread fosse stato deschedulato prima della return
