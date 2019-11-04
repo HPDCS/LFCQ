@@ -537,16 +537,16 @@ nbc_bucket_node *min, *min_next,
 	return -1;
 }
 
-__thread op_node * volatile requested_op;
-
 int pq_enqueue(void* q, pkey_t timestamp, void *payload) 
 {
 	assertf(timestamp < MIN || timestamp >= INFTY, "Key out of range %s\n", "");
 
+	op_node requested_op; // do not allocate remotely
+
 	nb_calqueue *queue = (nb_calqueue *) q;
 	table *h = NULL;
 	op_node *operation, *new_operation, *extracted_op, *handling_op, *tmp;
-	
+		
 	pkey_t ret_ts;
 
 	unsigned long long vb_index;
@@ -565,7 +565,6 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	unsigned int epb = queue->elem_per_bucket;
 	unsigned int th = queue->threshold;
 	
-	requested_op = NULL;
 	operation = new_operation = extracted_op = NULL;
 	
 	h = read_table(&queue->hashtable, th, epb, pub);
@@ -573,14 +572,16 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	vb_index  = hash(timestamp, h->bucket_width);
 	dest_node = NODE_HASH(vb_index % h->size);
 
-	requested_op = operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
-	requested_op->op_id = 1;//__sync_fetch_and_add(&op_counter, 1);
-	requested_op->type = OP_PQ_ENQ;
-	requested_op->timestamp = timestamp;
-	requested_op->payload = payload; //DEADBEEF
-	requested_op->response = -1;
-	requested_op->candidate = NULL;
-	requested_op->requestor = &requested_op;
+	//requested_op = operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
+	requested_op.op_id = 1;//__sync_fetch_and_add(&op_counter, 1);
+	requested_op.type = OP_PQ_ENQ;
+	requested_op.timestamp = timestamp;
+	requested_op.payload = payload; //DEADBEEF
+	requested_op.response = -1;
+	requested_op.candidate = NULL;
+	requested_op.requestor = &requested_op;
+
+	operation = &requested_op;
 
 	// we should enqueue it, otherwise we cannot publish it!
 
@@ -607,6 +608,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 			// need to move to another queue? 
 			if (dest_node != NID) 
 			{
+				/*
 				// The node has been extracted from a non optimal queue
 				new_operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
 				new_operation->op_id = operation->op_id;
@@ -627,7 +629,11 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 				
                 gc_free(ptst, operation, gc_aid[GC_OPNODE]);
 				operation->counter++;
+				*/
 				
+				// to avoid reuse of nodes
+				tq_enqueue(&op_queue[dest_node], (void*) operation, dest_node);
+
                 operation = NULL; // yeld the op since is no longer for us.
 			}
 			// the operation is still for us, we keep it!
@@ -640,19 +646,19 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 		{
 			
 			// check if my op was done - done here since we don't want to remove someone op from queues
-			if ((ret = __sync_fetch_and_add(&(requested_op->response), 0)) != -1)
+			if ((ret = __sync_fetch_and_add(&(requested_op.response), 0)) != -1)
 			{
-				gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
-				requested_op->counter++;
+				//gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
+				//requested_op->counter++;
 				critical_exit();
-				requested_op = NULL;
+				//requested_op = NULL;
 				// dovrebbe essere come se il thread fosse stato deschedulato prima della return
 				return ret; // someone did my op, we can return
 			}
 
 			if (!tq_dequeue(&op_queue[NID], &extracted_op)) 
 			{
-				extracted_op = requested_op;
+				extracted_op = &requested_op;
 				mine = true;
 			}
 			else
@@ -699,6 +705,9 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 
 pkey_t pq_dequeue(void *q, void **result) 
 {
+
+	op_node requested_op;
+
 	nb_calqueue *queue = (nb_calqueue *) q;
 	table *h = NULL;
 	op_node *operation, *new_operation, *extracted_op = NULL,
@@ -720,7 +729,6 @@ pkey_t pq_dequeue(void *q, void **result)
 	unsigned int epb = queue->elem_per_bucket;
 	unsigned int th = queue->threshold;
 	
-	requested_op = NULL;
 	operation = new_operation = extracted_op = NULL;
 	
 	h = read_table(&queue->hashtable, th, epb, pub);
@@ -728,14 +736,16 @@ pkey_t pq_dequeue(void *q, void **result)
 	vb_index  = (h->current) >> 32;
 	dest_node = NODE_HASH(vb_index % h->size);
 
-	requested_op = operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
-	requested_op->op_id = __sync_fetch_and_add(&op_counter, 1);
-	requested_op->type = OP_PQ_DEQ;
-	requested_op->timestamp = vb_index * (h->bucket_width);
-	requested_op->payload = NULL; //DEADBEEF
-	requested_op->response = -1;
-	requested_op->candidate = NULL;
-	requested_op->requestor = &requested_op;
+	//requested_op = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
+	requested_op.op_id = __sync_fetch_and_add(&op_counter, 1);
+	requested_op.type = OP_PQ_DEQ;
+	requested_op.timestamp = vb_index * (h->bucket_width);
+	requested_op.payload = NULL; //DEADBEEF
+	requested_op.response = -1;
+	requested_op.candidate = NULL;
+	requested_op.requestor = &requested_op;
+
+	operation = &requested_op;
 
 	do {
 
@@ -763,6 +773,7 @@ pkey_t pq_dequeue(void *q, void **result)
 			if (dest_node != NID) 
 			{
 				// The node has been extracted from a non optimal queue
+				/*
 				new_operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
 				new_operation->op_id = operation->op_id;
 				new_operation->type = operation->type;
@@ -781,6 +792,8 @@ pkey_t pq_dequeue(void *q, void **result)
 				tq_enqueue(&op_queue[dest_node], (void *)new_operation, dest_node);
 				gc_free(ptst, operation, gc_aid[GC_OPNODE]);
 				operation->counter++;
+				*/
+				tq_enqueue(&op_queue[dest_node], (void*) operation, dest_node);
 				operation = NULL; // yeld the op since is no longer for us.
 			}
 			
@@ -795,20 +808,20 @@ pkey_t pq_dequeue(void *q, void **result)
 		{
 			
 			// check if my op was done // we could lose op
-			if ((ret = __sync_fetch_and_add(&(requested_op->response), 0)) != -1)
+			if ((ret = __sync_fetch_and_add(&(requested_op.response), 0)) != -1)
 			{
-				*result = requested_op->payload;
-				ret_ts = requested_op->timestamp;
-				gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
-				requested_op->counter++;
+				*result = requested_op.payload;
+				ret_ts = requested_op.timestamp;
+				//gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
+				//requested_op->counter++;
 				critical_exit();
-				requested_op = NULL;
+				//requested_op = NULL;
 				// dovrebbe essere come se il thread fosse stato deschedulato prima della return
 				return ret_ts; // someone did my op, we can return
 			}
 
 			if (!tq_dequeue(&op_queue[NID], &extracted_op)) {
-				extracted_op = requested_op;
+				extracted_op = &requested_op;
 				mine = true;
 			}
 			else 

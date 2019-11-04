@@ -126,7 +126,7 @@ NUM_SOCKETS := $(shell cat /proc/cpuinfo | grep 'physical id' | uniq -c | wc -l)
 MACRO := -DARCH_X86_64  -DCACHE_LINE_SIZE=$(L1_CACHE_LINE_SIZE) -DINTEL -D_NUMA_NODES=$(NUMA_NODES) -DNUM_CPUS=$(NUM_CPUS) -DCPU_PER_SOCKET=$(CPU_PER_SOCKET) -DNUM_SOCKETS=$(NUM_SOCKETS)
 
 
-FILTER_OUT_C_SRC := src/main.c src/main_2.c
+FILTER_OUT_C_SRC := src/main.c src/main_2.c src/datatypes/nb_umb/numaq/fake.c src/datatypes/nb_umb/numaq/busyloop.c
                   
 
 OBJS_DIR 	:= $(strip $(MAKECMDGOALS))

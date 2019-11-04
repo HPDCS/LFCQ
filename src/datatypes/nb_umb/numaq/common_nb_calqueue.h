@@ -177,7 +177,7 @@ struct __op_load
 	int response;		// -1 waiting for resp | 1 responsed
 	// 32
 	nbc_bucket_node * volatile candidate;	// need of candidate node
-	op_node * volatile * requestor;
+	op_node * requestor;
 
 	unsigned long counter;
 	// 48
