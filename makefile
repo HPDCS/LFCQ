@@ -10,8 +10,8 @@ USER_OBJS :=
 
 LIBS := -lpthread -lm -lnuma -lrt -mrtm
 SRC_DIR := src
-TARGETS := ACRCQ NUMA2Q NUMA2QFK NUMA2QBL NUMA2QBLK NUMAP NUMAPNOP NUMAPBL NUMAPNBC NUMAPFNB NUMAQ NUMAFK NUMAFKBL NUMAQBLK NUMAPSKT NUMAPSKTFK NUMAPSKTBL NUMAPLCRQ #NBCQ LIND MARO CBCQ SLCQ NBVB 2CAS VBPQ ACRCQ #V2CQ NUMA WORK
-		#ACRCQH NUMAPLCRQBLK NUMA2QNC + altri con cache on
+TARGETS := ACRCQ NUMAQ NUMAQBLK NUMAFK NUMAFKBL NUMAP NUMAPNOP NUMAPBL NUMAPSKT NUMAPSKTFK NUMAPSKTBL NUMAPNBC NUMAPNBCFK NUMAPNBCBL NUMAPFNB NUMA2Q NUMA2QFK NUMA2QBL NUMA2QBLK # #NBCQ LIND MARO CBCQ SLCQ NBVB 2CAS VBPQ ACRCQ #V2CQ NUMA WORK
+		# NUMA2Q no cache to see difference + ACRCQH + Cache to other structures
 UTIL_value := src/utils/common.o src/utils/hpdcs_math.o 
 GACO_value := src/gc/gc.o src/gc/ptst.o
 ARCH_value := src/arch/x86.o
@@ -39,6 +39,10 @@ NUMAPBL_link := gcc
 
 NUMAPNBC_value := src/datatypes/nb_umb/numap/base.o src/datatypes/nb_umb/numap/mapping_nb.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMAPNBC_link := gcc
+NUMAPNBCFK_value := src/datatypes/nb_umb/numap/fake.o src/datatypes/nb_umb/numap/mapping_nb.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMAPNBCFK_link := gcc
+NUMAPNBCBL_value := src/datatypes/nb_umb/numap/busyloop.o src/datatypes/nb_umb/numap/mapping_nb.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMAPNBCBL_link := gcc
 
 NUMAPFNB_value := src/datatypes/nb_umb/numap_fnb/base.o src/datatypes/nb_umb/numap_fnb/mapping_nb.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMAPFNB_link := gcc
