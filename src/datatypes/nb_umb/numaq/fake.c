@@ -159,8 +159,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 
 	nb_calqueue *queue = (nb_calqueue *) q;
 	table *h = NULL;
-	op_node *operation, *new_operation, *extracted_op,
-		*requested_op, *handling_op, *tmp;
+	op_node *operation, *extracted_op,
+		*requested_op, *handling_op;
 	
 	pkey_t ret_ts;
 
@@ -180,7 +180,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	unsigned int th = queue->threshold;
 	
 	requested_op = NULL;
-	operation = new_operation = extracted_op = NULL;
+	operation = extracted_op = NULL;
 	
 	h = read_table(&queue->hashtable, th, epb, pub);
 
@@ -193,7 +193,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	requested_op->payload = payload; //DEADBEEF
 	requested_op->response = -1;
 	requested_op->candidate = NULL;
-	requested_op->requestor = &requested_op;
+	requested_op->requestor = requested_op;
 
 	do {
 		// read table
@@ -215,6 +215,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 			// need to move to another queue?
 			if (dest_node != NID) 
 			{
+				/*
 				// The node has been extracted from a non optimal queue
 				new_operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
 				new_operation->op_id = operation->op_id;
@@ -234,6 +235,9 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 				tq_enqueue(&op_queue[dest_node], (void *)new_operation, dest_node);
 				gc_free(ptst, operation, gc_aid[GC_OPNODE]);
 				operation = NULL; // yeld the op since is no longer for us.
+				*/
+				tq_enqueue(&op_queue[dest_node], (void *)operation, dest_node);
+				operation = NULL;
 
 			}
 			// here we keep the operation if it is not null
@@ -302,8 +306,8 @@ pkey_t pq_dequeue(void *q, void **result)
 {
 	nb_calqueue *queue = (nb_calqueue *) q;
 	table *h = NULL;
-	op_node *operation, *new_operation, *extracted_op = NULL,
-		*requested_op, *handling_op, *tmp;
+	op_node *operation, *extracted_op = NULL,
+		*requested_op, *handling_op;
 
 	unsigned long long vb_index;
 	unsigned int dest_node;	 
@@ -322,7 +326,7 @@ pkey_t pq_dequeue(void *q, void **result)
 	unsigned int th = queue->threshold;
 	
 	requested_op = NULL;
-	operation = new_operation = extracted_op = NULL;
+	operation = extracted_op = NULL;
 	
 	h = read_table(&queue->hashtable, th, epb, pub);
 
@@ -336,7 +340,7 @@ pkey_t pq_dequeue(void *q, void **result)
 	requested_op->payload = NULL; //DEADBEEF
 	requested_op->response = -1;
 	requested_op->candidate = NULL;
-	requested_op->requestor = &requested_op;
+	requested_op->requestor = requested_op;
 
 	do {
 
@@ -362,6 +366,7 @@ pkey_t pq_dequeue(void *q, void **result)
 			// need to move to another queue?
 			if (dest_node != NID) 
 			{
+				/*
 				// The node has been extracted from a non optimal queue
 				new_operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
 				new_operation->op_id = operation->op_id;
@@ -380,6 +385,9 @@ pkey_t pq_dequeue(void *q, void **result)
 				// publish op on right queue
 				tq_enqueue(&op_queue[dest_node], (void *)new_operation, dest_node);
 				gc_free(ptst, operation, gc_aid[GC_OPNODE]);
+				operation = NULL; // yeld the op since is no longer for us.
+				*/
+				tq_enqueue(&op_queue[dest_node], (void *)operation, dest_node);
 				operation = NULL; // yeld the op since is no longer for us.
 
 			}

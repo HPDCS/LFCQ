@@ -136,8 +136,6 @@ void *pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 
 int single_step_pq_enqueue(table *h, pkey_t timestamp, void *payload, nbc_bucket_node* volatile * candidate, op_node *operation)
 {
-
-	unsigned long counter = operation->counter;
 	assertf(operation->type != OP_PQ_ENQ, "Passing a dequeue to an enqueue%s\n", "");
 
 	nbc_bucket_node *bucket, *new_node, *ins_node;
@@ -157,7 +155,7 @@ int single_step_pq_enqueue(table *h, pkey_t timestamp, void *payload, nbc_bucket
 	// allocate node on right NUMA NODE
 	new_node = numa_node_malloc(payload, timestamp, 0, NODE_HASH(index));
 	new_node->op_id = 0x1ull; // (!new) now nodes cannot be dequeued until resize
-	new_node->requestor = operation->requestor; // who requested the insertion?;
+	new_node->requestor = &operation->requestor; // who requested the insertion?;
 	// read actual epoch
 	new_node->epoch = (h->current & MASK_EPOCH);
 
@@ -543,7 +541,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 
 	nb_calqueue *queue = (nb_calqueue *) q;
 	table *h = NULL;
-	op_node *operation, *new_operation, *extracted_op, *handling_op, *tmp, *requested_op;
+	op_node *operation, *extracted_op, *handling_op, *requested_op;
 		
 	pkey_t ret_ts;
 
@@ -563,7 +561,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	unsigned int epb = queue->elem_per_bucket;
 	unsigned int th = queue->threshold;
 	
-	operation = new_operation = extracted_op = NULL;
+	operation = extracted_op = NULL;
 	
 	h = read_table(&queue->hashtable, th, epb, pub);
 
@@ -577,7 +575,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	requested_op->payload = payload; //DEADBEEF
 	requested_op->response = -1;
 	requested_op->candidate = NULL;
-	requested_op->requestor = &requested_op;
+	requested_op->requestor = requested_op;
 
 	operation = requested_op;
 
@@ -646,17 +644,15 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 			// check if my op was done - done here since we don't want to remove someone op from queues
 			if ((ret = __sync_fetch_and_add(&(requested_op->response), 0)) != -1)
 			{
-				//gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
-				//requested_op->counter++;
+				gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
 				critical_exit();
-				//requested_op = NULL;
 				// dovrebbe essere come se il thread fosse stato deschedulato prima della return
 				return ret; // someone did my op, we can return
 			}
 
 			if (!tq_dequeue(&op_queue[NID], &extracted_op)) 
 			{
-				extracted_op = &requested_op;
+				extracted_op = requested_op;
 				mine = true;
 			}
 			else
@@ -706,8 +702,8 @@ pkey_t pq_dequeue(void *q, void **result)
 
 	nb_calqueue *queue = (nb_calqueue *) q;
 	table *h = NULL;
-	op_node *operation, *new_operation, *extracted_op = NULL,
-	 *handling_op, *tmp, *requested_op;
+	op_node *operation, *extracted_op = NULL,
+	 *handling_op, *requested_op;
 
 	unsigned long long vb_index;
 	unsigned int dest_node;	 
@@ -725,7 +721,7 @@ pkey_t pq_dequeue(void *q, void **result)
 	unsigned int epb = queue->elem_per_bucket;
 	unsigned int th = queue->threshold;
 	
-	operation = new_operation = extracted_op = NULL;
+	operation = extracted_op = NULL;
 	
 	h = read_table(&queue->hashtable, th, epb, pub);
 
@@ -739,7 +735,7 @@ pkey_t pq_dequeue(void *q, void **result)
 	requested_op->payload = NULL; //DEADBEEF
 	requested_op->response = -1;
 	requested_op->candidate = NULL;
-	requested_op->requestor = &requested_op;
+	requested_op->requestor = requested_op;
 
 	operation = requested_op;
 
@@ -808,16 +804,14 @@ pkey_t pq_dequeue(void *q, void **result)
 			{
 				*result = requested_op->payload;
 				ret_ts = requested_op->timestamp;
-				//gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
-				//requested_op->counter++;
+				gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
 				critical_exit();
-				//requested_op = NULL;
 				// dovrebbe essere come se il thread fosse stato deschedulato prima della return
 				return ret_ts; // someone did my op, we can return
 			}
 
 			if (!tq_dequeue(&op_queue[NID], &extracted_op)) {
-				extracted_op = &requested_op;
+				extracted_op = requested_op;
 				mine = true;
 			}
 			else 

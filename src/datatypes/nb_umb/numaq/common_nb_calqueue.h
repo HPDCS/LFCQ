@@ -178,8 +178,6 @@ struct __op_load
 	// 32
 	nbc_bucket_node * volatile candidate;	// need of candidate node
 	op_node * requestor;
-
-	volatile unsigned long counter;	// ref counter (Desperation is coming)
 	// 48
 };
 
