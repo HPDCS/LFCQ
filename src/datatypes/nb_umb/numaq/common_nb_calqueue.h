@@ -176,7 +176,7 @@ struct __op_load
 	unsigned int type;			// ENQ | DEQ
 	volatile int response;		// -1 waiting for resp | 1 responsed
 	// 32
-	nbc_bucket_node * volatile candidate;	// need of candidate node
+	nbc_bucket_node * volatile * candidate;	// need of candidate node
 	op_node ** requestor;
 	// 48
 };

@@ -134,12 +134,13 @@ void *pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	return res;
 }
 
-int single_step_pq_enqueue(table *h, pkey_t timestamp, void *payload, nbc_bucket_node* volatile * candidate, op_node *operation)
+int single_step_pq_enqueue(table *h, pkey_t timestamp, void *payload, op_node *operation)
 {
 
 	assertf(operation->type != OP_PQ_ENQ, "Passing a dequeue to an enqueue%s\n", "");
 
 	nbc_bucket_node *bucket, *new_node, *ins_node;
+	nbc_bucket_node * volatile * candidate = operation->candidate;
 
 	unsigned int index, size;
 	unsigned long long newIndex = 0;
@@ -262,19 +263,23 @@ int single_step_pq_enqueue(table *h, pkey_t timestamp, void *payload, nbc_bucket
 }
 
 
-int single_step_pq_dequeue(table *h, nb_calqueue *queue, pkey_t* ret_ts, void **result, unsigned long op_id, nbc_bucket_node* volatile *candidate)
+int single_step_pq_dequeue(table *h, nb_calqueue *queue, pkey_t* ret_ts, void **result, op_node * operation)
 {
+
+	assertf(operation->type != OP_PQ_DEQ, "Passing a enqueue to a dequeue%s\n", "");
 
 nbc_bucket_node *min, *min_next,
 		*left_node, *left_node_next,
 		*tail, *array,
 		*current_candidate;
 
+	nbc_bucket_node * volatile * candidate = operation->candidate;
+
 	unsigned long long current, old_current, new_current;
 	unsigned long long index;
 	unsigned long long epoch;
 
-	unsigned long left_node_op_id;
+	unsigned long left_node_op_id, op_id = operation->op_id;
 
 	unsigned int size, attempts = 0;
 	unsigned int counter;
@@ -546,6 +551,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	op_node *operation, *new_operation,
 		*requested_op, *tmp;
 	
+	nbc_bucket_node *candidate = NULL;
+
 	pkey_t ret_ts;
 
 	unsigned long long vb_index;
@@ -578,7 +585,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	requested_op->timestamp = timestamp;
 	requested_op->payload = payload; //DEADBEEF
 	requested_op->response = -1;
-	requested_op->candidate = NULL;
+	requested_op->candidate = &candidate;
 	requested_op->requestor = &requested_op;
 
 	// we should enqueue it, otherwise we cannot publish it!
@@ -662,7 +669,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 		op_type = operation->type;
 		if (op_type == OP_PQ_ENQ)
 		{
-			ret = single_step_pq_enqueue(h, operation->timestamp, operation->payload, &operation->candidate, operation);
+			ret = single_step_pq_enqueue(h, operation->timestamp, operation->payload, operation);
 			if (ret != -1) //enqueue succesful
 			{
 				__sync_bool_compare_and_swap(&(operation->response), -1, ret); // Is this an overkill?
@@ -672,7 +679,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 		}
 		else 
 		{
-			ret = single_step_pq_dequeue(h, queue, &ret_ts, &new_payload, operation->op_id, &operation->candidate);
+			ret = single_step_pq_dequeue(h, queue, &ret_ts, &new_payload, operation);
 			if (ret != -1)
 			{ //dequeue failed
 				performed_dequeue++;
@@ -693,6 +700,8 @@ pkey_t pq_dequeue(void *q, void **result)
 	table *h = NULL;
 	op_node *operation, *new_operation,
 		*requested_op, *tmp;
+
+	nbc_bucket_node *candidate = NULL;
 
 	unsigned long long vb_index;
 	unsigned int dest_node;	 
@@ -724,7 +733,7 @@ pkey_t pq_dequeue(void *q, void **result)
 	requested_op->timestamp = vb_index * (h->bucket_width);
 	requested_op->payload = NULL; //DEADBEEF
 	requested_op->response = -1;
-	requested_op->candidate = NULL;
+	requested_op->candidate = &candidate;
 	requested_op->requestor = &requested_op;
 
 	do {
@@ -810,7 +819,7 @@ pkey_t pq_dequeue(void *q, void **result)
 		op_type = operation->type;
 		if (op_type == OP_PQ_ENQ)
 		{
-			ret = single_step_pq_enqueue(h, operation->timestamp, operation->payload, &operation->candidate, operation);
+			ret = single_step_pq_enqueue(h, operation->timestamp, operation->payload, operation);
 			if (ret != -1) //enqueue succesful
 			{
 				__sync_bool_compare_and_swap(&(operation->response), -1, ret); /* Is this an overkill? */
@@ -820,7 +829,7 @@ pkey_t pq_dequeue(void *q, void **result)
 		}
 		else 
 		{
-			ret = single_step_pq_dequeue(h, queue, &ret_ts, &new_payload, operation->op_id, &operation->candidate);
+			ret = single_step_pq_dequeue(h, queue, &ret_ts, &new_payload, operation);
 			if (ret != -1)
 			{ //dequeue failed
 				performed_dequeue++;
