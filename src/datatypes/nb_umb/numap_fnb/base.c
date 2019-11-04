@@ -193,7 +193,6 @@ int do_pq_enqueue(void* q, pkey_t timestamp, void* payload, op_payload * operati
 
 	int res, con_en = 0;
 	
-
 	//init the result
 	res = MOV_FOUND;
 	

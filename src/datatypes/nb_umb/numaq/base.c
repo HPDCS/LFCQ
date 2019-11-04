@@ -140,7 +140,7 @@ int single_step_pq_enqueue(table *h, pkey_t timestamp, void *payload, op_node *o
 	assertf(operation->type != OP_PQ_ENQ, "Passing a dequeue to an enqueue%s\n", "");
 
 	nbc_bucket_node *bucket, *new_node, *ins_node;
-	nbc_bucket_node * volatile * candidate = operation->candidate;
+	nbc_bucket_node * volatile * candidate = &operation->candidate;
 
 	unsigned int index, size;
 	unsigned long long newIndex = 0;
@@ -273,7 +273,7 @@ nbc_bucket_node *min, *min_next,
 		*tail, *array,
 		*current_candidate;
 
-	nbc_bucket_node * volatile * candidate = operation->candidate;
+	nbc_bucket_node * volatile * candidate = &operation->candidate;
 
 	unsigned long long current, old_current, new_current;
 	unsigned long long index;
@@ -551,8 +551,6 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	op_node *operation, *new_operation,
 		*requested_op, *tmp;
 	
-	nbc_bucket_node *candidate = NULL;
-
 	pkey_t ret_ts;
 
 	unsigned long long vb_index;
@@ -585,7 +583,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	requested_op->timestamp = timestamp;
 	requested_op->payload = payload; //DEADBEEF
 	requested_op->response = -1;
-	requested_op->candidate = &candidate;
+	requested_op->candidate = NULL;
 	requested_op->requestor = &requested_op;
 
 	// we should enqueue it, otherwise we cannot publish it!
@@ -701,8 +699,6 @@ pkey_t pq_dequeue(void *q, void **result)
 	op_node *operation, *new_operation,
 		*requested_op, *tmp;
 
-	nbc_bucket_node *candidate = NULL;
-
 	unsigned long long vb_index;
 	unsigned int dest_node;	 
 	unsigned int op_type;
@@ -733,7 +729,7 @@ pkey_t pq_dequeue(void *q, void **result)
 	requested_op->timestamp = vb_index * (h->bucket_width);
 	requested_op->payload = NULL; //DEADBEEF
 	requested_op->response = -1;
-	requested_op->candidate = &candidate;
+	requested_op->candidate = NULL;
 	requested_op->requestor = &requested_op;
 
 	do {
