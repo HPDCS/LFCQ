@@ -541,11 +541,9 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 {
 	assertf(timestamp < MIN || timestamp >= INFTY, "Key out of range %s\n", "");
 
-	op_node requested_op; // do not allocate remotely
-
 	nb_calqueue *queue = (nb_calqueue *) q;
 	table *h = NULL;
-	op_node *operation, *new_operation, *extracted_op, *handling_op, *tmp;
+	op_node *operation, *new_operation, *extracted_op, *handling_op, *tmp, *requested_op;
 		
 	pkey_t ret_ts;
 
@@ -572,16 +570,16 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	vb_index  = hash(timestamp, h->bucket_width);
 	dest_node = NODE_HASH(vb_index % h->size);
 
-	//requested_op = operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
-	requested_op.op_id = 1;//__sync_fetch_and_add(&op_counter, 1);
-	requested_op.type = OP_PQ_ENQ;
-	requested_op.timestamp = timestamp;
-	requested_op.payload = payload; //DEADBEEF
-	requested_op.response = -1;
-	requested_op.candidate = NULL;
-	requested_op.requestor = &requested_op;
+	requested_op = operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
+	requested_op->op_id = 1;//__sync_fetch_and_add(&op_counter, 1);
+	requested_op->type = OP_PQ_ENQ;
+	requested_op->timestamp = timestamp;
+	requested_op->payload = payload; //DEADBEEF
+	requested_op->response = -1;
+	requested_op->candidate = NULL;
+	requested_op->requestor = &requested_op;
 
-	operation = &requested_op;
+	operation = requested_op;
 
 	// we should enqueue it, otherwise we cannot publish it!
 
@@ -646,7 +644,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 		{
 			
 			// check if my op was done - done here since we don't want to remove someone op from queues
-			if ((ret = __sync_fetch_and_add(&(requested_op.response), 0)) != -1)
+			if ((ret = __sync_fetch_and_add(&(requested_op->response), 0)) != -1)
 			{
 				//gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
 				//requested_op->counter++;
@@ -706,12 +704,10 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 pkey_t pq_dequeue(void *q, void **result) 
 {
 
-	op_node requested_op;
-
 	nb_calqueue *queue = (nb_calqueue *) q;
 	table *h = NULL;
 	op_node *operation, *new_operation, *extracted_op = NULL,
-	 *handling_op, *tmp;
+	 *handling_op, *tmp, *requested_op;
 
 	unsigned long long vb_index;
 	unsigned int dest_node;	 
@@ -736,16 +732,16 @@ pkey_t pq_dequeue(void *q, void **result)
 	vb_index  = (h->current) >> 32;
 	dest_node = NODE_HASH(vb_index % h->size);
 
-	//requested_op = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
-	requested_op.op_id = __sync_fetch_and_add(&op_counter, 1);
-	requested_op.type = OP_PQ_DEQ;
-	requested_op.timestamp = vb_index * (h->bucket_width);
-	requested_op.payload = NULL; //DEADBEEF
-	requested_op.response = -1;
-	requested_op.candidate = NULL;
-	requested_op.requestor = &requested_op;
+	requested_op = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
+	requested_op->op_id = __sync_fetch_and_add(&op_counter, 1);
+	requested_op->type = OP_PQ_DEQ;
+	requested_op->timestamp = vb_index * (h->bucket_width);
+	requested_op->payload = NULL; //DEADBEEF
+	requested_op->response = -1;
+	requested_op->candidate = NULL;
+	requested_op->requestor = &requested_op;
 
-	operation = &requested_op;
+	operation = requested_op;
 
 	do {
 
@@ -808,10 +804,10 @@ pkey_t pq_dequeue(void *q, void **result)
 		{
 			
 			// check if my op was done // we could lose op
-			if ((ret = __sync_fetch_and_add(&(requested_op.response), 0)) != -1)
+			if ((ret = __sync_fetch_and_add(&(requested_op->response), 0)) != -1)
 			{
-				*result = requested_op.payload;
-				ret_ts = requested_op.timestamp;
+				*result = requested_op->payload;
+				ret_ts = requested_op->timestamp;
 				//gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
 				//requested_op->counter++;
 				critical_exit();

@@ -174,12 +174,12 @@ struct __op_load
 	pkey_t timestamp;			// ts of node to enqueue | lower ts of bucket to dequeue | returned ts
 	char pad[8-sizeof(pkey_t)];
 	unsigned int type;			// ENQ | DEQ
-	int response;		// -1 waiting for resp | 1 responsed
+	volatile int response;		// -1 waiting for resp | 1 responsed
 	// 32
 	nbc_bucket_node * volatile candidate;	// need of candidate node
 	op_node * requestor;
 
-	unsigned long counter;
+	volatile unsigned long counter;	// ref counter (Desperation is coming)
 	// 48
 };
 
