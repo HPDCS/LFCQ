@@ -514,8 +514,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 
 	nb_calqueue *queue = (nb_calqueue *) q;
 	table *h = NULL;
-	op_node *operation, *new_operation, *extracted_op,
-		*requested_op, *handling_op, *tmp;
+	op_node *operation, *extracted_op,
+		*requested_op, *handling_op;
 	
 	unsigned long long vb_index;
 	unsigned int dest_node;	 
@@ -531,7 +531,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	unsigned int th = queue->threshold;
 	
 	requested_op = NULL;
-	operation = new_operation = extracted_op = NULL;
+	operation = extracted_op = NULL;
 	
 	h = read_table(&queue->hashtable, th, epb, pub);
 
@@ -562,6 +562,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 			// need to move to another queue?
 			if (dest_node != NID) 
 			{
+				/*
 				// The node has been extracted from a non optimal queue
 				new_operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
 				new_operation->op_id = operation->op_id;
@@ -575,11 +576,11 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 				do{
 					tmp = *(new_operation->requestor);
 				} while(!BOOL_CAS(new_operation->requestor, tmp, new_operation));
-
+				*/
 				// publish op on right queue
-				tq_enqueue(&enq_queue[dest_node], (void *)new_operation, dest_node);
+				tq_enqueue(&enq_queue[dest_node], (void *)operation, dest_node);
 				
-				gc_free(ptst, operation, gc_aid[GC_OPNODE]);
+				//gc_free(ptst, operation, gc_aid[GC_OPNODE]);
 				operation = NULL; // need to extract another op
 			}
 			// here we keep the operation if it is not null
@@ -633,8 +634,8 @@ pkey_t pq_dequeue(void *q, void **result)
 {
 	nb_calqueue *queue = (nb_calqueue *) q;
 	table *h = NULL;
-	op_node *operation, *new_operation, *extracted_op = NULL,
-		*requested_op, *handling_op, *tmp;
+	op_node *operation, *extracted_op = NULL,
+		*requested_op, *handling_op;
 
 	unsigned long long vb_index;
 	unsigned int dest_node;	 
@@ -652,7 +653,7 @@ pkey_t pq_dequeue(void *q, void **result)
 	unsigned int th = queue->threshold;
 	
 	requested_op = NULL;
-	operation = new_operation = extracted_op = NULL;
+	operation = extracted_op = NULL;
 	
 	h = read_table(&queue->hashtable, th, epb, pub);
 
@@ -685,6 +686,7 @@ pkey_t pq_dequeue(void *q, void **result)
 			// need to move to another queue?
 			if (dest_node != NID) 
 			{
+				/*
 				// The node has been extracted from a non optimal queue
 				new_operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
 				new_operation->op_id = operation->op_id;
@@ -698,11 +700,11 @@ pkey_t pq_dequeue(void *q, void **result)
 				do{
 					tmp = *(new_operation->requestor);
 				} while(!BOOL_CAS(new_operation->requestor, tmp, new_operation));
-
+				*/
 				// publish op on right queue
-				tq_enqueue(&deq_queue[dest_node], (void *)new_operation, dest_node);
+				tq_enqueue(&deq_queue[dest_node], (void *)operation, dest_node);
 				
-				gc_free(ptst, operation, gc_aid[GC_OPNODE]);
+				//gc_free(ptst, operation, gc_aid[GC_OPNODE]);
 				operation = NULL; // need to extract another op
 
 				if (succ != 0)
