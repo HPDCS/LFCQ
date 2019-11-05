@@ -12,16 +12,24 @@ struct __op_payload
 {
 	volatile long counter; // read count
 
+	char pad0[56];
+
     unsigned long op_id;
 	
-    unsigned int type;			// ENQ | DEQ
+    unsigned int type;						// ENQ | DEQ
 	int ret_value;
-	pkey_t timestamp;			// ts of node to enqueue
- 	char ppad0[8 - sizeof(pkey_t) ];
-	void *payload;				// paylod to enqueue | dequeued payload
-	
-    nbc_bucket_node *volatile* candidate;	// need of candidate node -> è giusto così?
+	pkey_t timestamp;						// ts of node to enqueue
+ 	char tspad[8 - sizeof(pkey_t) ];
+	void *payload;							// paylod to enqueue | dequeued payload
+    nbc_bucket_node * volatile * candidate;	// need of candidate node
 	op_payload * requestor;
+
+	char pad1[16];
+
+	nbc_bucket_node * volatile ptr;			// used to hold the candidate
+
+	char pad2[56];
+
 };
 
 struct __op_load

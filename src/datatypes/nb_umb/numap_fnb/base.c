@@ -319,7 +319,7 @@ pkey_t do_pq_dequeue(void *q, void** result, op_payload * operation)
 	table * h = NULL;
 	
 	nbc_bucket_node * volatile * candidate = operation->candidate;
-	nbc_bucket_node *current_candidate;
+	nbc_bucket_node * current_candidate;
 
 	wideptr lnn, new;
 
@@ -644,14 +644,13 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	// do not use static op
 	my_operation = gc_alloc_node(ptst, gc_aid[1], NID);
 
-	nbc_bucket_node *candidate = NULL;
-
 	my_operation->op_id 	= 1;
 	my_operation->type 		= OP_PQ_ENQ;
 	my_operation->ret_value	= -1;
 	my_operation->timestamp	= timestamp;
 	my_operation->payload	= payload;
-	my_operation->candidate	= &candidate;
+	my_operation->ptr		= NULL;
+	my_operation->candidate	= &(my_operation->ptr);
 	my_operation->requestor = my_operation;
 
 	// read table
@@ -664,6 +663,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	if (dest_node == NID)
 	{
 		ret = do_pq_enqueue(q, timestamp, payload, my_operation);
+		gc_free(ptst, my_operation, gc_aid[1]);
 		critical_exit();
 		return ret;
 	}
@@ -777,15 +777,14 @@ pkey_t pq_dequeue(void *q, void** result)
 	
 	count = handle_ops(q); // clean pending op 
 	
-	nbc_bucket_node *candidate = NULL; // this is a problem
-
 	my_operation = gc_alloc_node(ptst, gc_aid[1], NID);
 	my_operation->op_id		= __sync_fetch_and_add(&next_id, 1);
 	my_operation->type 		= OP_PQ_DEQ;
 	my_operation->ret_value	= -1;
 	my_operation->timestamp	= 0;
 	my_operation->payload	= NULL;
-	my_operation->candidate	= &candidate;
+	my_operation->ptr		= NULL;
+	my_operation->candidate	= &(my_operation->ptr);
 	my_operation->requestor = my_operation;
 
 	// read table
@@ -795,6 +794,7 @@ pkey_t pq_dequeue(void *q, void** result)
 
 	if (dest_node == NID) {
 		pkey_t ret = do_pq_dequeue(q, result, my_operation);
+		gc_free(ptst, my_operation, gc_aid[1]);
 		critical_exit();
 		return ret;
 	}
