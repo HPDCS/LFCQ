@@ -115,6 +115,7 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 
 	// add allocator of nbc_bucket_node
 	gc_aid[0] = gc_add_allocator(sizeof(nbc_bucket_node));
+	gc_aid[1] = gc_add_allocator(sizeof(op_payload));
 	// add callback for set tables and array of nodes whene a grace period has been identified
 	gc_hid[0] = gc_add_hook(std_free_hook);
 	critical_enter();
@@ -622,8 +623,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 
 	int ret;
 
-	op_payload my_operation, read_operation;
-	nbc_bucket_node *candidate = NULL;
+	op_payload *my_operation, read_operation;
 
 	unsigned long attempts, count;
 	unsigned long th_hit; // how many times I hit the threshold when someone was handling my op
@@ -642,13 +642,17 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	count = handle_ops(q);	// execute pending op, useful in case this is the last op.
 
 	// do not use static op
-	my_operation.op_id 		= 1;
-	my_operation.type 		= OP_PQ_ENQ;
-	my_operation.ret_value	= -1;
-	my_operation.timestamp	= timestamp;
-	my_operation.payload	= payload;
-	my_operation.candidate	= &candidate;
-	my_operation.requestor 	= &my_operation;
+	my_operation = gc_alloc_node(ptst, gc_aid[1], NID);
+
+	nbc_bucket_node *candidate = NULL;
+
+	my_operation->op_id 	= 1;
+	my_operation->type 		= OP_PQ_ENQ;
+	my_operation->ret_value	= -1;
+	my_operation->timestamp	= timestamp;
+	my_operation->payload	= payload;
+	my_operation->candidate	= &candidate;
+	my_operation->requestor = my_operation;
 
 	// read table
 	h = read_table(&queue->hashtable, th, epb, pub);
@@ -659,7 +663,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	// if NID execute
 	if (dest_node == NID)
 	{
-		ret = do_pq_enqueue(q, timestamp, payload, &my_operation);
+		ret = do_pq_enqueue(q, timestamp, payload, my_operation);
 		critical_exit();
 		return ret;
 	}
@@ -669,7 +673,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	resp = get_res_slot_from_node(dest_node);
 	//read_slot(resp, &type, &ret, &ts, &pld);
 	
-	if (!write_slot(from_me, &my_operation))
+	if (!write_slot(from_me, my_operation))
 	{
 		abort_line();
 	}
@@ -691,7 +695,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 				if (new_dest_node == dest_node || new_dest_node == NID)
 				{
 					enq_steal_done++;
-					ret = do_pq_enqueue(q, timestamp, payload, &my_operation);
+					ret = do_pq_enqueue(q, timestamp, payload, my_operation);
 					break;
 				
 				}
@@ -701,7 +705,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 				from_me = get_req_slot_to_node(dest_node);
 				resp = get_res_slot_from_node(dest_node);
 				
-				if (!write_slot(from_me, &my_operation))
+				if (!write_slot(from_me, my_operation))
 				{
 					abort_line();
 				}
@@ -712,7 +716,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 			{
 				
 				enq_steal_done++;
-				ret = do_pq_enqueue(q, timestamp, payload, &my_operation);
+				ret = do_pq_enqueue(q, timestamp, payload, my_operation);
 				break;
 				
 			}
@@ -734,6 +738,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 		}
 	} while(1);
 
+	gc_free(ptst, my_operation, gc_aid[1]);
 	critical_exit();
 	return ret;	
 }
@@ -755,8 +760,7 @@ pkey_t pq_dequeue(void *q, void** result)
 	unsigned long attempts, count;
 	unsigned long th_hit;
 
-	op_payload my_operation, read_operation;
-	nbc_bucket_node *candidate = NULL;
+	op_payload *my_operation, read_operation;
 
 	pkey_t	ts;
 	void* pld;
@@ -773,14 +777,16 @@ pkey_t pq_dequeue(void *q, void** result)
 	
 	count = handle_ops(q); // clean pending op 
 	
-	// do not use stati op
-	my_operation.op_id		= __sync_fetch_and_add(&next_id, 1);
-	my_operation.type 		= OP_PQ_DEQ;
-	my_operation.ret_value	= -1;
-	my_operation.timestamp	= 0;
-	my_operation.payload	= NULL;
-	my_operation.candidate	= &candidate;
-	my_operation.requestor 	= &my_operation;
+	nbc_bucket_node *candidate = NULL; // this is a problem
+
+	my_operation = gc_alloc_node(ptst, gc_aid[1], NID);
+	my_operation->op_id		= __sync_fetch_and_add(&next_id, 1);
+	my_operation->type 		= OP_PQ_DEQ;
+	my_operation->ret_value	= -1;
+	my_operation->timestamp	= 0;
+	my_operation->payload	= NULL;
+	my_operation->candidate	= &candidate;
+	my_operation->requestor = my_operation;
 
 	// read table
 	h = read_table(&queue->hashtable, th, epb, pub);
@@ -788,7 +794,7 @@ pkey_t pq_dequeue(void *q, void** result)
 	dest_node = NODE_HASH(((h->current)>>32)%(h->size));
 
 	if (dest_node == NID) {
-		pkey_t ret = do_pq_dequeue(q, result, &my_operation);
+		pkey_t ret = do_pq_dequeue(q, result, my_operation);
 		critical_exit();
 		return ret;
 	}
@@ -798,7 +804,7 @@ pkey_t pq_dequeue(void *q, void** result)
 	resp = get_res_slot_from_node(dest_node);
 	//read_slot(resp, &type, &ret, &ts, &pld);
 
-	if (!write_slot(from_me, &my_operation))
+	if (!write_slot(from_me, my_operation))
 	{
 		abort_line();
 	}
@@ -822,9 +828,9 @@ pkey_t pq_dequeue(void *q, void** result)
 				if (new_dest_node == NID || new_dest_node == dest_node)
 				{
 					deq_steal_done++;
-					ts = do_pq_dequeue(q, &pld, &my_operation);
-					ts = my_operation.timestamp;
-					pld = my_operation.payload;
+					ts = do_pq_dequeue(q, &pld, my_operation);
+					ts = my_operation->timestamp;
+					pld = my_operation->payload;
 					break;
 				}
 
@@ -833,7 +839,7 @@ pkey_t pq_dequeue(void *q, void** result)
 				from_me = get_req_slot_to_node(dest_node);
 				resp = get_res_slot_from_node(dest_node);
 
-				if (!write_slot(from_me, &my_operation))
+				if (!write_slot(from_me, my_operation))
 				{			
 					abort_line();
 				}
@@ -842,9 +848,9 @@ pkey_t pq_dequeue(void *q, void** result)
 			else if (th_hit++ > DEQ_HIT_ATTEMPTS) // The operation is in handling wait a little bit more
 			{
 				deq_steal_done++;
-				ts = do_pq_dequeue(q, &pld, &my_operation);
-				ts = my_operation.timestamp;
-				pld = my_operation.payload;
+				ts = do_pq_dequeue(q, &pld, my_operation);
+				ts = my_operation->timestamp;
+				pld = my_operation->payload;
 				break;
 			}
 			attempts = 0;
@@ -868,6 +874,7 @@ pkey_t pq_dequeue(void *q, void** result)
 	} while(1);
 
 	*result = pld;
+	gc_free(ptst, my_operation, gc_aid[1]);
 	critical_exit();
 	return ts;
 }
