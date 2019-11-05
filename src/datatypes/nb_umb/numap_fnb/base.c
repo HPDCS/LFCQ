@@ -641,6 +641,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 
 	count = handle_ops(q);	// execute pending op, useful in case this is the last op.
 
+	// do not use static op
 	my_operation.op_id 		= 1;
 	my_operation.type 		= OP_PQ_ENQ;
 	my_operation.ret_value	= -1;
@@ -772,6 +773,7 @@ pkey_t pq_dequeue(void *q, void** result)
 	
 	count = handle_ops(q); // clean pending op 
 	
+	// do not use stati op
 	my_operation.op_id		= __sync_fetch_and_add(&next_id, 1);
 	my_operation.type 		= OP_PQ_DEQ;
 	my_operation.ret_value	= -1;
