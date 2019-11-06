@@ -9,6 +9,25 @@
 #define L_FREE 0x0
 #endif
 
+struct __op_load
+{
+	#ifdef _NM_USE_SPINLOCK
+	spinlock_t spin;
+	#else
+	volatile int busy;
+	#endif
+	volatile int response; 		// 0 posted/wait to be executed; >=1 read/executed;
+	
+	char pad0[56];
+
+	unsigned int type;			// ENQ | DEQ
+	int ret_value;
+	pkey_t timestamp;			// ts of node to enqueue
+ 	void *payload;				// paylod to enqueue | dequeued payload
+	//24
+	char pad[48 - sizeof(pkey_t) ];
+};
+
 op_node *res_mapping[NUM_SOCKETS];
 op_node *req_mapping[NUM_SOCKETS];
 
