@@ -282,7 +282,7 @@ nbc_bucket_node *min, *min_next,
 		if (h->read_table_period == attempts)
 		{
 			*result = NULL;
-			return -1; //return error
+			return -1; //return error - need resize (?)
 		}
 		attempts++;
 
@@ -312,7 +312,7 @@ nbc_bucket_node *min, *min_next,
 		if (is_marked(min_next, MOV))
 		{
 			*result = NULL;
-			return -1; //return error
+			return -1; //return error - resize is happening 
 		}
 
 		do
@@ -334,7 +334,7 @@ nbc_bucket_node *min, *min_next,
 			if (is_marked(left_node_next, MOV) || left_node->epoch > epoch)
 			{
 				*result = NULL;
-				return -1; //return error
+				return -1; //return error - insetrion in the past/resize
 			}
 
 			if (left_node_op_id == 1)
@@ -368,6 +368,7 @@ nbc_bucket_node *min, *min_next,
 				new.next = get_marked(current_candidate->next, DEL);//((unsigned long) current_candidate->next) | DEL;
 				new.op_id = op_id; //add our id
 
+				// try extract the candidate - help the dequeue of other threads
 				BOOL_CAS(&current_candidate->widenext, lnn.widenext, new.widenext);
 
 				// check if someone extracted the candidate
@@ -385,12 +386,21 @@ nbc_bucket_node *min, *min_next,
 						// no, reset the candidate and restart
 						__sync_bool_compare_and_swap(candidate, current_candidate, NULL);
 						*result = NULL;
-						return -1;
+						//return -1;
+						/*
+						 * Here the candidate is different from the minimum of the bucket
+						 * This means that or the candidate has been already extracted or
+						 * the left we have is earlier in the bucket (but inserted after the beginning of the extraction).
+						 * When we reach here the candidate has been already extracte by someone else.
+						 * So we can simply retry the extraction of left?
+						 * */
+						continue;
 					}
 				}
 				//che succede se è stato marcato come mov o non è stato marcato?
 			}
 
+			// try extract left node
 			do {
 				lnn.next = left_node->next;
 				lnn.op_id = 0;
@@ -423,7 +433,7 @@ nbc_bucket_node *min, *min_next,
 				//*candidate = NULL;
 				__sync_bool_compare_and_swap(candidate, current_candidate, NULL);
 				*result = NULL;
-				return -1; // return error
+				return -1; // return error - MOV
 			}
 
 			// the node cannot be extracted && is marked as DEL
@@ -432,8 +442,9 @@ nbc_bucket_node *min, *min_next,
 			{
 				if (left_node_op_id != op_id) 
 				{
-				__sync_bool_compare_and_swap(candidate, current_candidate, NULL);
-				continue;
+					// reset candidate e try again
+					__sync_bool_compare_and_swap(candidate, current_candidate, NULL);
+					continue;
 				}
 				else
 				{
@@ -557,7 +568,6 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 			// compute vb
 			vb_index  = hash(operation->timestamp, h->bucket_width);
 			dest_node = NODE_HASH(vb_index);	
-
 
 			// need to move to another queue?
 			if (dest_node != NID) 

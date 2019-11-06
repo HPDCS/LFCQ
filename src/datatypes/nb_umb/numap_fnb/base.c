@@ -33,7 +33,7 @@
  * GLOBAL VARIABLES					 *
  ************************************/
 
-int gc_aid[1];
+int gc_aid[2];
 int gc_hid[1];
 
 unsigned int ACTIVE_NUMA_NODES;

@@ -21,9 +21,7 @@ struct __op_load
 {
 	volatile unsigned long current;
 	char lpad[56];
-
 	op_payload slots[SLOT_NUMBER];
-
 };
 
 op_node *res_mapping[NUM_SOCKETS];
@@ -34,7 +32,7 @@ void init_mapping()
     int i, j, k;
     unsigned int node,
         max_threads = NUM_SOCKETS*CPU_PER_SOCKET; 
-    for (i = 0; i < ACTIVE_NUMA_NODES; ++i) 
+    for (i = 0; i < NUM_SOCKETS; ++i) 
     {
         node = i << 1;
         req_mapping[i] = numa_alloc_onnode(sizeof(op_node)*max_threads, node);
