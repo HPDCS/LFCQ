@@ -9,6 +9,16 @@
 #define L_FREE 0x0
 #endif
 
+#define SLOT_NUMBER 4 
+
+typedef struct __op_payload op_payload;
+struct __op_payload
+{
+	volatile long counter;
+	operation_t* volatile content;
+    char pad1[56];
+};
+
 struct __op_slot
 {
 	#ifdef _NM_USE_SPINLOCK
@@ -16,11 +26,11 @@ struct __op_slot
 	#else
 	volatile int busy;
 	#endif
-	volatile int response; 		// 0 posted/wait to be executed; >=1 read/executed;
+	volatile int current; 		// 0 posted/wait to be executed; >=1 read/executed;
 	
 	char pad0[56];
 
-    operation_t* volatile content;
+    op_payload slots[SLOT_NUMBER];
 
 	char pad1[56];
 };
@@ -31,7 +41,7 @@ op_slot *req_mapping[_NUMA_NODES];
 void init_mapping() 
 {
     unsigned int max_threads = _NUMA_NODES * num_cpus_per_node;
-    int i, j;
+    int i, j,k;
 
     for (i = 0; i < _NUMA_NODES; ++i) 
     {
@@ -40,16 +50,15 @@ void init_mapping()
         
         for (j = 0; j < max_threads; ++j) 
         {
-            #ifdef _NM_USE_SPINLOCK
-            spinlock_init(&(req_mapping[i][j].spin));
-            spinlock_init(&(res_mapping[i][j].spin));
-            #else
-            req_mapping[i][j].busy = L_FREE;
-            res_mapping[i][j].busy = L_FREE;
-            #endif
-
-            res_mapping[i][j].response = 1;
-            req_mapping[i][j].response = 1;
+            req_mapping[i][j].current = 0;
+            res_mapping[i][j].current = 0;
+            for (k = 0; k < SLOT_NUMBER; ++k)
+            {
+            
+                res_mapping[i][j].slots[k].counter = 1;
+                req_mapping[i][j].slots[k].counter = 1;
+        
+            }
         }
     }
     LOG("init_mapping() done! %s\n","(mapping)");
@@ -82,64 +91,103 @@ op_slot* get_res_slot_to_node(unsigned int numa_node)
 bool read_slot(op_slot* slot, operation_t** operation) 
 {
     
-    int val;
+    unsigned long current = slot->current;
+    unsigned long val, new_current;
+    op_payload *slot_arr = slot->slots;
 
-    #ifdef _NM_USE_SPINLOCK
-    if (!spin_trylock_x86(&(slot->spin)))
-        return false;
-    #else
-    /*val = __sync_val_compare_and_swap(&(slot->busy), L_FREE, R_BUSY);
-    if (val == W_BUSY)
-        return false;
-    */
-    if (!__sync_bool_compare_and_swap(&(slot->busy), L_FREE, R_BUSY))
-        return false;
-    #endif
-
-    val = __sync_fetch_and_add(&(slot->response), 1);
-    if (val != 0)
+     // first attempt - Try to read current slot
+    val = __sync_fetch_and_add(&(slot_arr[current].counter), 1);
+    if (val == 0)
     {
-        slot->busy = L_FREE;
+        *operation = slot_arr[current].content;
+        return true;
+    }
+
+    // current slot has been already read - increase the current
+    new_current = (current + 1) % SLOT_NUMBER;
+    
+    if (slot_arr[new_current].counter != 0)
+	    return false;                       // change this in find next valid slot
+    
+
+    if (!BOOL_CAS(&slot->current, current, new_current))
+    {    
+        //printf("CANNOT READ - unset current");
         return false;
     }
 
-    *operation = slot->content;
+    current = new_current;
 
-    #ifdef _NM_USE_SPINLOCK
-    spin_unlock_x86(&(slot->spin));
-    #else
-    //__sync_bool_compare_and_swap(&(slot->busy), R_BUSY, L_FREE);
-    slot->busy = L_FREE;
-    #endif
+    // second attempt - Read new slot
+    val = __sync_fetch_and_add(&(slot_arr[current].counter), 1);
+    if (val == 0)
+    {
+        *operation = slot_arr[current].content;
+        return true;
+    }
 
-    return true;
+    // try to read from all slots? 
+    return false;
 }
 
 bool write_slot(op_slot* slot, 
     operation_t* operation)
 {
 
-    int val;
+    unsigned long i, index, new_index, val, current = slot->current;
+    new_index = current;
 
-    #ifdef _NM_USE_SPINLOCK
-    spin_lock_x86(&(slot->spin));
-    #else
-    while(!__sync_bool_compare_and_swap(&(slot->busy), L_FREE, W_BUSY));
-    #endif
+    op_payload *slot_arr = slot->slots;
 
-    operation_t* old_op = slot->content;
-    if (!BOOL_CAS(&slot->content, old_op, operation))
+    // get free slot
+    for (i = 0; i < SLOT_NUMBER; i++) 
+    {
+        index = (current + i) % SLOT_NUMBER;
+        if (index != current)
+	{
+		if(slot_arr[index].counter != 0)
+        		break;
+		else
+			new_index = index;
+
+    	}
+    }
+    if (index == current)
+    {
+        printf("NO FREE SLOTS\n");
+        return false; // no free slots
+    }
+    if (new_index == current)
+	    new_index = index;
+
+    operation_t* old_op = slot_arr[index].content;
+    if (!BOOL_CAS(&slot_arr[index].content, old_op, operation))
         return false;
 
-    val = __sync_fetch_and_and(&(slot->response), 0);
 
-    #ifdef _NM_USE_SPINLOCK
-    spin_unlock_x86(&(slot->spin));
-    #else
-    slot->busy = L_FREE;
-    #endif
-    if (val != 0)
+    // set the slot as new
+    val = __sync_fetch_and_and(&(slot_arr[index].counter), 0);
+    // the new value is now visible    
+
+    // we have written on a good slot - this is not possible
+    if (val == 0)
+    {
+        printf("WRITING ON GOOD SLOT\n");
+        return false;
+    }
+
+    // nobody has read the current slot - cannot move to next current
+    if (slot_arr[current].counter == 0)
         return true;
-    else 
-        return false;
+	
+    val = VAL_CAS(&slot->current, current, new_index);
+
+    // the current slot is stale - update the current
+    if (val == current || val == new_index)
+        return true;
+    else
+    {
+        printf("CURRENT NOT SET - old_value %lu, new_value %lu, current %lu\n", val, new_index, current ); // we have only one writer this cannot happen
+	    return false;
+    }
 }
