@@ -176,8 +176,7 @@ int do_pq_enqueue(void* q, pkey_t timestamp, void* payload, int override, unsign
 {
 	assertf(timestamp < MIN || timestamp >= INFTY, "Key out of range %s\n", "");
 
-	nb_calqueue* queue = (nb_calqueue*) q; 	
-
+	nb_calqueue* queue = (nb_calqueue*) q;
 	nbc_bucket_node *bucket, *new_node = numa_node_malloc(payload, timestamp, 0, NID);
 	table * h = NULL;		
 	unsigned int index, size;
@@ -338,11 +337,6 @@ begin:
 		index = current >> 32;
 		epoch = current & MASK_EPOCH;
 
-
-		// get the physical bucket
-		min = array + (index % (size));
-		left_node = min_next = min->next;
-		
 		dest_node = NODE_HASH(index % (size));
 		if (!override && (dest_node>>1) != SID)
 		{
@@ -350,6 +344,10 @@ begin:
 			return -1; // locality has changed	
 		}
 
+		// get the physical bucket
+		min = array + (index % (size));
+		left_node = min_next = min->next;
+		
 		// get the left limit
 		left_limit = ((double)index)*bucket_width;
 
@@ -454,7 +452,6 @@ static inline int handle_ops(void* q)
 	unsigned int type;
 	unsigned int new_dest;
 	unsigned int read_node;
-
 	pkey_t ts;
 	void *pld;
 
@@ -476,6 +473,7 @@ static inline int handle_ops(void* q)
 			else 
 				ret = do_pq_dequeue(q, &ts, &pld, 0, &new_dest);
 			
+
 			from_me = get_res_slot_to_node(i);
 			if (!write_slot(from_me, type, ret, ts, pld, new_dest))
 				abort_line();
@@ -522,7 +520,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	
 	unsigned int dest_node, new_dest_node;
 
-	//count = handle_ops(q);	// execute pending op, useful in case this is the last op.
+	count = handle_ops(q);	// execute pending op, useful in case this is the last op.
 
 	// read table
 	h = read_table(&queue->hashtable, th, epb, pub);
@@ -645,7 +643,7 @@ pkey_t pq_dequeue(void *q, void** result)
 	if ((dest_node>>1) == SID) {
 		ret = do_pq_dequeue(q, &ts, result, 1, NULL);
 		critical_exit();
-		return ret;
+		return ts;
 	}
 	
 	// posting the operation

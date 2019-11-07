@@ -458,7 +458,6 @@ static inline int handle_ops(void* q)
 	op_node *to_me, *from_me;
 
 	count = 0;
-
 	for (i = NID; i % ACTIVE_NUMA_NODES != NID; i++)
 	{
 		i = i % ACTIVE_NUMA_NODES;
@@ -468,6 +467,7 @@ static inline int handle_ops(void* q)
 		if (read_slot(to_me, &type, &ret, &ts, &pld, &read_node))
 		{
 			new_dest = read_node;
+			
 			if (type == OP_PQ_ENQ)
 				ret = do_pq_enqueue(q, ts, pld, 0, &new_dest);
 			else 
