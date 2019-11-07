@@ -102,11 +102,10 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	unsigned int i = 0;
 	int res_mem_posix = 0;
 	nb_calqueue* res = NULL;
-	
+
 	// init fraser garbage collector/allocator //maybe using basic allocator will be better
 	_init_gc_subsystem();
 	init_mapping();
-
 	// add allocator of nbc_bucket_node
 	gc_aid[0] = gc_add_allocator(sizeof(nbc_bucket_node));
 	// add callback for set tables and array of nodes whene a grace period has been identified
@@ -141,8 +140,7 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	res->hashtable->e_counter.count = 0;
 	res->hashtable->d_counter.count = 0;
     res->hashtable->read_table_period = res->read_table_period;	
-	res->hashtable->pad = 3; // base epb
-
+	
 	for (i = 0; i < MINIMUM_SIZE; i++)
 	{
 		res->hashtable->array[i].next = res->tail;
@@ -196,12 +194,12 @@ static inline int handle_ops(void* q)
 	int i, ret, count ;
 	
 	unsigned int type;
+	unsigned int node;
 
 	pkey_t ts;
 	void *pld;
 
-	op_slot *to_me, *from_me;
-	operation_t* oper;
+	op_node *to_me, *from_me;
 
 	count = 0;
 	for (i = NID+1; i % ACTIVE_NUMA_NODES != NID; i++)
@@ -210,26 +208,21 @@ static inline int handle_ops(void* q)
 	
 		to_me 	= get_req_slot_from_node(i);
 
-		if (read_slot(to_me, &oper))
+		if (read_slot(to_me, &type, &ret, &ts, &pld, &node))
 		{
 			from_me = get_res_slot_to_node(i);
 
-			type = oper->type;
-
-			if (type == OP_PQ_ENQ)
+			if (type == OP_PQ_ENQ) 
 			{
-				ts = oper->timestamp;
-				pld = oper->payload; 
+				local_enq++;
 				ret = do_pq_enqueue(q, ts, pld);
-				oper->ret_value = ret;
 			}
 			else
 			{ 
+				local_deq++;
 				ts = do_pq_dequeue(q, &pld);
-				oper->timestamp = ts;
-				oper->payload = pld;
 			}
-			if (!write_slot(from_me, oper))
+			if (!write_slot(from_me, type, ret, ts, pld, node))
 			{
 				abort_line();
 			}
@@ -246,10 +239,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	assertf(timestamp < MIN || timestamp >= INFTY, "Key out of range %s\n", "");
 	nb_calqueue* queue = (nb_calqueue*) q;
 
-	op_slot *resp,		// pointer to slot on which someone will post a response 
+	op_node *resp,		// pointer to slot on which someone will post a response 
 			*from_me;	// pointer to slot on which I will post my operation or my response
-
-	operation_t oper, *read_oper;
 
 	int ret;
 	unsigned int type;
@@ -271,33 +262,30 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	
 	unsigned int dest_node, new_dest_node;
 
-	count = handle_ops(q);	// execute pending op, useful in case this is the last op.
+	count = handle_ops(q);	
 
 	// read table
 	h = read_table(&queue->hashtable, th, epb, pub);
 	
 	// check destination
+	//dest_node = NODE_HASH(hash(timestamp, h->bucket_width) % h->size);
 	dest_node = NODE_HASH((unsigned long) timestamp);
 
 	// if NID execute
 	if (dest_node == NID)
 	{
+		local_enq++;
 		int ret = do_pq_enqueue(q, timestamp, payload);
 		critical_exit();
 		return ret;
 	}
-
-	oper.type = OP_PQ_ENQ;
-	oper.ret_value = 0;
-	oper.timestamp = timestamp;
-	oper.payload = payload;
 
 	// posting the operation
 	from_me = get_req_slot_to_node(dest_node);
 	resp = get_res_slot_from_node(dest_node);
 	//read_slot(resp, &type, &ret, &ts, &pld);
 	
-	if (!write_slot(from_me, &oper))
+	if (!write_slot(from_me, OP_PQ_ENQ, 0, timestamp, payload, dest_node))
 	{
 		abort_line();
 	}
@@ -308,8 +296,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 		if (attempts > ENQ_MAX_WAIT_ATTEMPTS) 
 		{
 			enq_steal_attempt++;
-			//from_me = get_req_slot_to_node(dest_node);
-			if (read_slot(from_me, &read_oper))
+			from_me = get_req_slot_to_node(dest_node);
+			if (read_slot(from_me, &type, &ret, &ts, &pld, &new_dest_node))
 			{
 				enq_steal_done++;
 
@@ -318,6 +306,11 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 
 				if (new_dest_node == dest_node || new_dest_node == NID)
 				{
+					if (new_dest_node == NID)
+						local_enq++;
+					else
+						remote_enq++;
+
 					ret = do_pq_enqueue(q, timestamp, payload);
 					break;
 				}
@@ -327,10 +320,11 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 				from_me = get_req_slot_to_node(dest_node);
 				resp = get_res_slot_from_node(dest_node);
 				
-				if (!write_slot(from_me, &oper))
+				if (!write_slot(from_me, OP_PQ_ENQ, 0, timestamp, payload, dest_node))
 				{
 					abort_line();
 				}
+
 				repost_enq++;
 			}
 			attempts = 0;
@@ -345,11 +339,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 			attempts=0;
 
 		// check response
-		if (read_slot(resp, &read_oper))
-		{
-			ret = read_oper->ret_value;
+		if (read_slot(resp, &type, &ret, &ts, &pld, &new_dest_node))
 			break;
-		}
 	} while(1);
 
 	critical_exit();
@@ -363,10 +354,8 @@ pkey_t pq_dequeue(void *q, void** result)
 	// read table
 	nb_calqueue* queue = (nb_calqueue*) q;
 
-	op_slot *resp,		// pointer to slot on which someone will post a response 
+	op_node *resp,		// pointer to slot on which someone will post a response 
 			*from_me;	// pointer to slot on which I will post my operation or my response
-
-	operation_t oper, *read_oper;
 
 	int ret;
 
@@ -387,7 +376,7 @@ pkey_t pq_dequeue(void *q, void** result)
 	
 	unsigned int dest_node, new_dest_node;
 	
-	count = handle_ops(q); // clean pending op 
+	count = handle_ops(q);
 	
 	// read table
 	h = read_table(&queue->hashtable, th, epb, pub);
@@ -401,15 +390,12 @@ pkey_t pq_dequeue(void *q, void** result)
 		return ret;
 	}
 	
-	oper.type = OP_PQ_DEQ;
-	oper.ret_value = 0;
-	
 	// posting the operation
 	from_me = get_req_slot_to_node(dest_node);
 	resp = get_res_slot_from_node(dest_node);
 	//read_slot(resp, &type, &ret, &ts, &pld);
 
-	if (!write_slot(from_me, &oper))
+	if (!write_slot(from_me, OP_PQ_DEQ, 0, 0, 0, dest_node))
 	{
 		abort_line();
 	}
@@ -421,8 +407,8 @@ pkey_t pq_dequeue(void *q, void** result)
 		if (attempts > DEQ_MAX_WAIT_ATTEMPTS) 
 		{
 			deq_steal_attempt++;
-			//from_me = get_req_slot_to_node(dest_node);
-			if (read_slot(from_me, &read_oper))
+			from_me = get_req_slot_to_node(dest_node);
+			if (read_slot(from_me, &type, &ret, &ts, &pld, &new_dest_node))
 			{
 				deq_steal_done++;
 
@@ -432,6 +418,10 @@ pkey_t pq_dequeue(void *q, void** result)
 				// if the dest node is mine or is unchanged
 				if (new_dest_node == NID || new_dest_node == dest_node)
 				{
+					if (new_dest_node == NID)
+						local_deq++;
+					else
+						remote_deq++;
 					ts = do_pq_dequeue(q, &pld);
 					break;
 				}
@@ -441,10 +431,10 @@ pkey_t pq_dequeue(void *q, void** result)
 				from_me = get_req_slot_to_node(dest_node);
 				resp = get_res_slot_from_node(dest_node);
 
-				if (!write_slot(from_me, &oper))
+				if (!write_slot(from_me, OP_PQ_DEQ, 0, 0, 0, dest_node))
 				{			
 					abort_line();
-				}
+				}	
 				repost_deq++;
 			}
 			attempts = 0;
@@ -459,16 +449,11 @@ pkey_t pq_dequeue(void *q, void** result)
 			attempts=0;
 
 		// check response
-		if (read_slot(resp, &read_oper))
-		{
-			pld = read_oper->payload;
-			ts = read_oper->timestamp;
+		if (read_slot(resp, &type, &ret, &ts, &pld, &new_dest_node))
 			break;
-		}
 	} while(1);
 
 	*result = pld;
-
 	critical_exit();
 	return ts;
 }

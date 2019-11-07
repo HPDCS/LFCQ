@@ -10,7 +10,7 @@ USER_OBJS :=
 
 LIBS := -lpthread -lm -lnuma -lrt -mrtm
 SRC_DIR := src
-TARGETS := ACRCQ NUMAQ NUMAQBLK NUMAFK NUMAFKBL NUMAP NUMAPNOP NUMAPBL NUMAPSKT NUMAPSKTFK NUMAPSKTBL NUMAPNBCSKT NUMAPNBCSKTFK NUMAPNBCSKTBL # NUMAPNBC NUMAPNBCFK NUMAPNBCBL NUMAPFNB NUMA2Q NUMA2QFK NUMA2QBL NUMA2QBLK # #NBCQ LIND MARO CBCQ SLCQ NBVB 2CAS VBPQ ACRCQ #V2CQ NUMA WORK
+TARGETS := ACRCQ NUMAP RNUMAP #NUMAQ NUMAQBLK NUMAFK NUMAFKBL NUMAP NUMAPNOP NUMAPBL NUMAPSKT NUMAPSKTFK NUMAPSKTBL NUMAPNBCSKT NUMAPNBCSKTFK NUMAPNBCSKTBL # NUMAPNBC NUMAPNBCFK NUMAPNBCBL NUMAPFNB NUMA2Q NUMA2QFK NUMA2QBL NUMA2QBLK # #NBCQ LIND MARO CBCQ SLCQ NBVB 2CAS VBPQ ACRCQ #V2CQ NUMA WORK
 		# NUMA2Q no cache to see difference + ACRCQH + Cache to other structures
 UTIL_value := src/utils/common.o src/utils/hpdcs_math.o 
 GACO_value := src/gc/gc.o src/gc/ptst.o
@@ -19,6 +19,12 @@ ARCH_value := src/arch/x86.o
 NGACO_value := src/datatypes/nb_umb/gc/gc.o src/datatypes/nb_umb/gc/ptst.o
 TQ_value := src/datatypes/nb_umb/op_queue/msq.o src/datatypes/nb_umb/op_queue/stack.o src/datatypes/nb_umb/op_queue/lcrq.o
 SET_value := src/datatypes/nb_umb/gc/skip_cas.o
+
+NUMAP_value := src/datatypes/nb_umb/numap/base.o src/datatypes/nb_umb/numap/mapping.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMAP_link := gcc
+RNUMAP_value := src/datatypes/nb_umb/numap/base_r.o src/datatypes/nb_umb/numap/mapping.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+RNUMAP_link := gcc
+#### 
 
 NUMA2Q_value := $(TQ_value) $(SET_value) src/datatypes/nb_umb/numa2q/base.o src/datatypes/nb_umb/numa2q/sw_cache.o src/datatypes/nb_umb/numa2q/enq_sw_cache.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMA2QFK_value := $(TQ_value) $(SET_value) src/datatypes/nb_umb/numa2q/fake.o src/datatypes/nb_umb/numa2q/sw_cache.o src/datatypes/nb_umb/numa2q/enq_sw_cache.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
@@ -30,19 +36,17 @@ NUMA2QBL_link := gcc
 NUMA2QBLK_value := $(TQ_value) $(SET_value) src/datatypes/nb_umb/numa2q_blk/base.o src/datatypes/nb_umb/numa2q_blk/sw_cache.o src/datatypes/nb_umb/numa2q_blk/enq_sw_cache.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMA2QBLK_link := gcc
 
-NUMAP_value := src/datatypes/nb_umb/numap/base.o src/datatypes/nb_umb/numap/mapping.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMAPNOP_value := src/datatypes/nb_umb/numap/fake.o src/datatypes/nb_umb/numap/mapping.o $(UTIL_value) $(ARCH_value) $(NGACO_value) 
-#NUMAPBL_value := src/datatypes/nb_umb/numap/busyloop.o src/datatypes/nb_umb/numap/mapping.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
-NUMAP_link := gcc
+NUMAPBL_value := src/datatypes/nb_umb/numap/busyloop.o src/datatypes/nb_umb/numap/mapping.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMAPNOP_link := gcc
-#NUMAPBL_link := gcc
+NUMAPBL_link := gcc
 
-#NUMAPNBC_value := src/datatypes/nb_umb/numap/base.o src/datatypes/nb_umb/numap/mapping_nb.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
-#NUMAPNBC_link := gcc
-#NUMAPNBCFK_value := src/datatypes/nb_umb/numap/fake.o src/datatypes/nb_umb/numap/mapping_nb.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
-#NUMAPNBCFK_link := gcc
-#NUMAPNBCBL_value := src/datatypes/nb_umb/numap/busyloop.o src/datatypes/nb_umb/numap/mapping_nb.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
-#NUMAPNBCBL_link := gcc
+NUMAPNBC_value := src/datatypes/nb_umb/numap/base.o src/datatypes/nb_umb/numap/mapping_nb.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMAPNBC_link := gcc
+NUMAPNBCFK_value := src/datatypes/nb_umb/numap/fake.o src/datatypes/nb_umb/numap/mapping_nb.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMAPNBCFK_link := gcc
+NUMAPNBCBL_value := src/datatypes/nb_umb/numap/busyloop.o src/datatypes/nb_umb/numap/mapping_nb.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMAPNBCBL_link := gcc
 
 NUMAPFNB_value := src/datatypes/nb_umb/numap_fnb/base.o src/datatypes/nb_umb/numap_fnb/mapping_nb.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMAPFNB_link := gcc

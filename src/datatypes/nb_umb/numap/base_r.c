@@ -166,27 +166,26 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
  * @param q: pointer to the queueu
  * @param timestamp: the key associated with the value
  * @param payload: the value to be enqueued
+ * @param  override: Flag to tel whether ignore Locality Policy
  * @return true if the event is inserted in the set table else false
  */
-int do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
+int do_pq_enqueue(void* q, pkey_t timestamp, void* payload, int override, unsigned int* new_dest)
 {
+	assertf(timestamp < MIN || timestamp >= INFTY, "Key out of range %s\n", "");
 
 	nb_calqueue* queue = (nb_calqueue*) q; 	
-
+	critical_enter();
 	nbc_bucket_node *bucket, *new_node = numa_node_malloc(payload, timestamp, 0, NID);
 	table * h = NULL;		
 	unsigned int index, size;
 	unsigned long long newIndex = 0;
-	
+	unsigned long dest_node;
 	
 	// get configuration of the queue
 	double pub = queue->perc_used_bucket;
 	unsigned int epb = queue->elem_per_bucket;
 	unsigned int th = queue->threshold;
 	
-	int dest_node;
-	bool remote = false; // tells whether the enqueue touched a remote node
-
 	int res, con_en = 0;
 	
 
@@ -199,29 +198,36 @@ int do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
 		// It is the first iteration or a node marked as MOV has been met (a resize is occurring)
 		if(res == MOV_FOUND){
 			
-			//free the old node
-			node_free(new_node);
-			
 			// check for a resize
 			h = read_table(&queue->hashtable, th, epb, pub);
 			// get actual size
 			size = h->size;
 	        // read the actual epoch
-        	//new_node->epoch = (h->current & MASK_EPOCH);
+        	new_node->epoch = (h->current & MASK_EPOCH);
 			// compute the index of the virtual bucket
 			newIndex = hash(timestamp, h->bucket_width);
-			
+
 			// compute the index of the physical bucket
-			index = ((unsigned int) newIndex) % size;	
+			index = ((unsigned int) newIndex) % size;
 
 			dest_node = NODE_HASH(index);
+			
 			if (dest_node != NID)
-				remote = true;
+			{	
+				node_free(new_node);
+				if (override)
+				{
+					new_node = numa_node_malloc(payload, timestamp, 0, dest_node);
+				}
+				else
+				{
+					*new_dest = dest_node;
+					return -1;
+				}
+			}
 
-			// allocate a new node on numa node
-			new_node = numa_node_malloc(payload, timestamp, 0, dest_node);
 			new_node->epoch = (h->current & MASK_EPOCH);
-	
+			
 			// get the bucket
 			bucket = h->array + index;
 			// read the number of executed enqueues for statistics purposes
@@ -264,15 +270,9 @@ int do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
   #if KEY_TYPE != DOUBLE
   out:
   #endif
-
-	// check if local or not
-	if (!remote)
-		local_enq++;
-	else
-		remote_enq++;
-	
-
+	critical_exit();
 	return res;
+
 }
 
 /**
@@ -280,13 +280,14 @@ int do_pq_enqueue(void* q, pkey_t timestamp, void* payload)
  * The cost of this operation when succeeds should be O(1)
  *
  * @param  q: pointer to the interested queue
+ * @param  timestamp: location to save returned timestamp
  * @param  result: location to save payload address
+ * @param  override: Flag to tel whether ignore Locality Policy
  * @return the highest priority 
  *
  */
-pkey_t do_pq_dequeue(void *q, void** result)
+int do_pq_dequeue(void *q, pkey_t* timestamp, void** result, int override, unsigned int* new_dest)
 {
-
 	nb_calqueue *queue = (nb_calqueue*)q;
 	nbc_bucket_node *min, *min_next, 
 					*left_node, *left_node_next, 
@@ -296,9 +297,10 @@ pkey_t do_pq_dequeue(void *q, void** result)
 	unsigned long long current, old_current, new_current;
 	unsigned long long index;
 	unsigned long long epoch;
-	
+	unsigned long dest_node;
+
 	unsigned int size, attempts = 0;
-	unsigned int counter, dest_node;
+	unsigned int counter;
 	pkey_t left_ts;
 	double bucket_width, left_limit, right_limit;
 
@@ -311,7 +313,7 @@ pkey_t do_pq_dequeue(void *q, void** result)
 	tail = queue->tail;
 	performed_dequeue++;
 	
-	bool remote = false;
+	critical_enter();
 
 begin:
 	// Get the current set table
@@ -337,15 +339,17 @@ begin:
 		index = current >> 32;
 		epoch = current & MASK_EPOCH;
 
+		dest_node = NODE_HASH(index % (size));
+		if (!override && dest_node != NID)
+		{
+			*new_dest = dest_node;
+			return -1; // locality has changed
+		}
 
 		// get the physical bucket
 		min = array + (index % (size));
 		left_node = min_next = min->next;
 		
-		dest_node = NODE_HASH(index % (size));
-		if (dest_node != NID)
-			remote = true;
-
 		// get the left limit
 		left_limit = ((double)index)*bucket_width;
 
@@ -403,14 +407,10 @@ begin:
 			concurrent_dequeue += (unsigned long long) (__sync_fetch_and_add(&h->d_counter.count, 1) - con_de);
 
 			*result = left_node->payload;
-				
-			// check if local or not
-			if (!remote)
-				local_deq++;
-			else
-				remote_deq++;
+			*timestamp = left_ts;
+			critical_exit();
 
-			return left_ts;
+			return 1;
 										
 		}while( (left_node = get_unmarked(left_node_next)));
 		
@@ -418,8 +418,10 @@ begin:
 		// if i'm here it means that the virtual bucket was empty. Check for queue emptyness
 		if(left_node == tail && size == 1 && !is_marked(min->next, MOV))
 		{
+			critical_exit();
 			*result = NULL;
-			return INFTY;
+			*timestamp = INFTY;
+			return 1;
 		}
 				
 		new_current = h->current;
@@ -427,6 +429,8 @@ begin:
 
 			if(prob_overflow && h->e_counter.count == 0) goto begin;
 			
+
+
 			assertf(prob_overflow, "\nOVERFLOW INDEX:%llu" "BW:%.10f"  "SIZE:%u TAIL:%p TABLE:%p\n", index, bucket_width, size, tail, h);
 			//assertf((index - (last_curr >> 32) -1) <= dist, "%s\n", "PROVA");
 
@@ -444,7 +448,7 @@ begin:
 		
 	}while(1);
 	
-	return INFTY;
+	return -1;
 }
 
 static inline int handle_ops(void* q) 
@@ -452,8 +456,8 @@ static inline int handle_ops(void* q)
 	int i, ret, count ;
 	
 	unsigned int type;
-	unsigned int node;
-
+	unsigned int new_dest;
+	unsigned int read_node;
 	pkey_t ts;
 	void *pld;
 
@@ -464,22 +468,36 @@ static inline int handle_ops(void* q)
 	{
 		i = i % ACTIVE_NUMA_NODES;
 	
-		to_me 	= get_req_slot_from_node(i);
+		to_me = get_req_slot_from_node(i);
 
-		if (read_slot(to_me, &type, &ret, &ts, &pld, &node))
+		if (read_slot(to_me, &type, &ret, &ts, &pld, &read_node))
 		{
-			from_me = get_res_slot_to_node(i);
-
-			if (type == OP_PQ_ENQ) 
-				ret = do_pq_enqueue(q, ts, pld);
+			new_dest = read_node;
+			if (type == OP_PQ_ENQ)
+			{ 
+				ret = do_pq_enqueue(q, ts, pld, 0, &new_dest);
+			}
 			else 
-				ts = do_pq_dequeue(q, &pld);
-			
-			if (!write_slot(from_me, type, ret, ts, pld, node))
+			{
+				ret = do_pq_dequeue(q, &ts, &pld, 0, &new_dest);
+			}
+
+			// se l'operazione ha successo o è fallita devo comunicarlo al richiedente
+			from_me = get_res_slot_to_node(i);
+			if (!write_slot(from_me, type, ret, ts, pld, new_dest))
 			{
 				abort_line();
 			}
 			count++;
+			
+			// l'operazione ha cambaito località - posto sul nodo giusto
+			// sperabilmente sono più vicino del richiedente
+			if (ret < 0)
+			{
+				from_me = get_req_slot_from_to_node(i, new_dest);
+				if (!write_slot(from_me, type, 0, ts, pld, new_dest))
+					abort_line();
+			}
 		}
 	}
 
@@ -526,7 +544,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	// if NID execute
 	if (dest_node == NID)
 	{
-		int ret = do_pq_enqueue(q, timestamp, payload);
+		ret = do_pq_enqueue(q, timestamp, payload, 1, NULL);
 		critical_exit();
 		return ret;
 	}
@@ -557,7 +575,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 
 				if (new_dest_node == dest_node || new_dest_node == NID)
 				{
-					ret = do_pq_enqueue(q, timestamp, payload);
+					// do my op
+					ret = do_pq_enqueue(q, timestamp, payload, 1, NULL);
 					break;
 				}
 				dest_node = new_dest_node;
@@ -585,7 +604,16 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 
 		// check response
 		if (read_slot(resp, &type, &ret, &ts, &pld, &new_dest_node))
-			break;
+		{
+			if (ret < 0)
+			{				
+				dest_node = new_dest_node;
+				from_me = get_req_slot_to_node(dest_node);
+				resp = get_res_slot_from_node(dest_node);
+			}
+			else
+				break;
+		}
 	} while(1);
 
 	critical_exit();
@@ -627,9 +655,9 @@ pkey_t pq_dequeue(void *q, void** result)
 	dest_node = NODE_HASH(((h->current)>>32)%(h->size));
 
 	if (dest_node == NID) {
-		pkey_t ret = do_pq_dequeue(q, result);
+		ret = do_pq_dequeue(q, &ts, result, 1, NULL);
 		critical_exit();
-		return ret;
+		return ts;
 	}
 	
 	// posting the operation
@@ -660,7 +688,7 @@ pkey_t pq_dequeue(void *q, void** result)
 				// if the dest node is mine or is unchanged
 				if (new_dest_node == NID || new_dest_node == dest_node)
 				{
-					ts = do_pq_dequeue(q, &pld);
+					ret = do_pq_dequeue(q, &ts, &pld, 1, NULL);
 					break;
 				}
 
@@ -689,7 +717,16 @@ pkey_t pq_dequeue(void *q, void** result)
 
 		// check response
 		if (read_slot(resp, &type, &ret, &ts, &pld, &new_dest_node))
-			break;
+		{
+			if (ret < 0)
+			{
+				dest_node = new_dest_node;
+				from_me = get_req_slot_to_node(dest_node);
+				resp = get_res_slot_from_node(dest_node);
+			}
+			else
+				break;
+		}
 	} while(1);
 
 	*result = pld;
