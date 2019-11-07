@@ -249,7 +249,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	op_slot *resp,		// pointer to slot on which someone will post a response 
 			*from_me;	// pointer to slot on which I will post my operation or my response
 
-	operation_t *oper, *read_oper;
+	operation_t oper, *read_oper;
 
 	int ret;
 	unsigned int type;
@@ -287,14 +287,17 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 		return ret;
 	}
 
-	oper = operation_malloc(OP_PQ_ENQ, 0, timestamp, payload, NID);
+	oper.type = OP_PQ_ENQ;
+	oper.ret_value = 0;
+	oper.timestamp = timestamp;
+	oper.payload = payload;
 
 	// posting the operation
 	from_me = get_req_slot_to_node(dest_node);
 	resp = get_res_slot_from_node(dest_node);
 	//read_slot(resp, &type, &ret, &ts, &pld);
 	
-	if (!write_slot(from_me, oper))
+	if (!write_slot(from_me, &oper))
 	{
 		abort_line();
 	}
@@ -324,7 +327,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 				from_me = get_req_slot_to_node(dest_node);
 				resp = get_res_slot_from_node(dest_node);
 				
-				if (!write_slot(from_me, oper))
+				if (!write_slot(from_me, &oper))
 				{
 					abort_line();
 				}
@@ -349,7 +352,6 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 		}
 	} while(1);
 
-	operation_free(oper);
 	critical_exit();
 	return ret;	
 }
@@ -364,7 +366,7 @@ pkey_t pq_dequeue(void *q, void** result)
 	op_slot *resp,		// pointer to slot on which someone will post a response 
 			*from_me;	// pointer to slot on which I will post my operation or my response
 
-	operation_t *oper, *read_oper;
+	operation_t oper, *read_oper;
 
 	int ret;
 
@@ -399,14 +401,15 @@ pkey_t pq_dequeue(void *q, void** result)
 		return ret;
 	}
 	
-	oper = operation_malloc(OP_PQ_DEQ, 0, 0, 0, NID);
-
+	oper.type = OP_PQ_DEQ;
+	oper.ret_value = 0;
+	
 	// posting the operation
 	from_me = get_req_slot_to_node(dest_node);
 	resp = get_res_slot_from_node(dest_node);
 	//read_slot(resp, &type, &ret, &ts, &pld);
 
-	if (!write_slot(from_me, oper))
+	if (!write_slot(from_me, &oper))
 	{
 		abort_line();
 	}
@@ -438,7 +441,7 @@ pkey_t pq_dequeue(void *q, void** result)
 				from_me = get_req_slot_to_node(dest_node);
 				resp = get_res_slot_from_node(dest_node);
 
-				if (!write_slot(from_me, oper))
+				if (!write_slot(from_me, &oper))
 				{			
 					abort_line();
 				}
@@ -456,17 +459,16 @@ pkey_t pq_dequeue(void *q, void** result)
 			attempts=0;
 
 		// check response
-		if (read_slot(resp, &oper))
+		if (read_slot(resp, &read_oper))
 		{
-			pld = oper->payload;
-			ts = oper->timestamp;
+			pld = read_oper->payload;
+			ts = read_oper->timestamp;
 			break;
 		}
 	} while(1);
 
 	*result = pld;
 
-	operation_free(oper);
 	critical_exit();
 	return ts;
 }

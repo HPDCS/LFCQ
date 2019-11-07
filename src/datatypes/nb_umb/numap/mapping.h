@@ -22,8 +22,6 @@ typedef struct __op_slot op_slot;
 
 void init_mapping();
 
-operation_t* operation_malloc(unsigned int type, int ret_value, pkey_t timestamp, void* payload, unsigned int node);
-void operation_free(void* op_ptr);
 
 /* Get a pointer to the operation posted by twin thread on numa node
  * The memory area is local to numa node 

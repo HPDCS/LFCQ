@@ -9,8 +9,6 @@
 #define L_FREE 0x0
 #endif
 
-int gc_id[1];
-
 struct __op_slot
 {
 	#ifdef _NM_USE_SPINLOCK
@@ -35,8 +33,6 @@ void init_mapping()
     unsigned int max_threads = _NUMA_NODES * num_cpus_per_node;
     int i, j;
 
-    gc_id[0] = gc_add_allocator(sizeof(operation_t));
-
     for (i = 0; i < _NUMA_NODES; ++i) 
     {
         req_mapping[i] = numa_alloc_onnode(sizeof(op_slot)*max_threads, i);
@@ -57,28 +53,6 @@ void init_mapping()
         }
     }
     LOG("init_mapping() done! %s\n","(mapping)");
-}
-
-operation_t* operation_malloc(unsigned int type, int ret_value, pkey_t timestamp, void* payload, unsigned int node)
-{
-    operation_t* res = gc_alloc_node(ptst, gc_aid[0], node);
-    if (unlikely(is_marked(res) || res == NULL))
-	{
-		LOG("%d - Not aligned Node or No memory\n", TID);
-		abort();
-	}
-
-    res->type = type;
-    res->ret_value = ret_value;
-    res->timestamp = timestamp; 
-    res->payload = payload;
-
-    return res;
-}
-
-void operation_free(void* op_ptr) 
-{
-    gc_free(ptst, op_ptr, gc_id[0]);
 }
 
 op_slot* get_req_slot_from_node(unsigned int numa_node)
