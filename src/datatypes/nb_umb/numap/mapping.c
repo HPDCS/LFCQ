@@ -9,7 +9,9 @@
 #define L_FREE 0x0
 #endif
 
-struct __op_load
+int gc_id[1];
+
+struct __op_slot
 {
 	#ifdef _NM_USE_SPINLOCK
 	spinlock_t spin;
@@ -20,31 +22,25 @@ struct __op_load
 	
 	char pad0[56];
 
-	unsigned int type;			// ENQ | DEQ
-	int ret_value;
-	pkey_t timestamp;			// ts of node to enqueue
- 	void *payload;				// paylod to enqueue | dequeued payload
-	//24
-	char pad[48 - sizeof(pkey_t) ];
+    operation_t* volatile content;
+
+	char pad1[56];
 };
 
-op_node *res_mapping[_NUMA_NODES];
-op_node *req_mapping[_NUMA_NODES];
-
-//__thread op_node** req_out_slots  = NULL; // slot per "postare" la richiesta su altri nodi
-//__thread op_node** req_in_slots   = NULL; // slot per "leggere" la richiesta da altri nodi
-
-//__thread op_node** res_out_slots  = NULL; // slot per "postare" la risposta su nodi 
-//__thread op_node** res_in_slots   = NULL; // slot per "leggere" la risposta da nodi 
+op_slot *res_mapping[_NUMA_NODES];
+op_slot *req_mapping[_NUMA_NODES];
 
 void init_mapping() 
 {
     unsigned int max_threads = _NUMA_NODES * num_cpus_per_node;
     int i, j;
+
+    gc_id[0] = gc_add_allocator(sizeof(operation_t));
+
     for (i = 0; i < _NUMA_NODES; ++i) 
     {
-        req_mapping[i] = numa_alloc_onnode(sizeof(op_node)*max_threads, i);
-        res_mapping[i] = numa_alloc_onnode(sizeof(op_node)*max_threads, i);
+        req_mapping[i] = numa_alloc_onnode(sizeof(op_slot)*max_threads, i);
+        res_mapping[i] = numa_alloc_onnode(sizeof(op_slot)*max_threads, i);
         
         for (j = 0; j < max_threads; ++j) 
         {
@@ -63,74 +59,39 @@ void init_mapping()
     LOG("init_mapping() done! %s\n","(mapping)");
 }
 
-/*
-static inline void init_local_mapping() 
+operation_t* operation_malloc(unsigned int type, int ret_value, pkey_t timestamp, void* payload, unsigned int node)
 {
-    req_in_slots  = numa_alloc_onnode(sizeof(op_node*)*_NUMA_NODES, NID);
-    req_out_slots = numa_alloc_onnode(sizeof(op_node*)*_NUMA_NODES, NID);
+    operation_t* res = gc_alloc_node(ptst, gc_aid[0], node);
+    if (unlikely(is_marked(res) || res == NULL))
+	{
+		LOG("%d - Not aligned Node or No memory\n", TID);
+		abort();
+	}
 
-    res_slots  = numa_alloc_onnode(sizeof(op_node*)*_NUMA_NODES, NID); // tutti su nodi numa diversi
+    res->type = type;
+    res->ret_value = ret_value;
+    res->timestamp = timestamp; 
+    res->payload = payload;
 
-    //res_in_slots  = numa_alloc_onnode(sizeof(op_node*)*_NUMA_NODES, NID); // tutti su nodi numa diversi
-    //res_out_slots = numa_alloc_onnode(sizeof(op_node*)*_NUMA_NODES, NID); // tutti su nodi numa diversi
-
-    int i, j = LTID;
-    
-    for (i = 0; i < ACTIVE_NUMA_NODES; ++i) 
-    {
-        req_in_slots[i]    = &req_mapping[NID][j];
-
-        req_out_slots[i]   = &req_mapping[i][TID];
-        
-        res_slots[i]       = &req_mapping[i][j];
-
-        //res_in_slots[i]    = &res_mapping[NID][j];
-       
-        //res_out_slots[i]   = &res_mapping[i][TID];
-
-
-        j += num_cpus_per_node;
-    }
+    return res;
 }
-*/
 
-op_node* get_req_slot_from_node(unsigned int numa_node)
+void operation_free(void* op_ptr) 
 {
-    /*
-    if (unlikely(req_in_slots==NULL))
-        init_local_mapping();
-    
-    return req_in_slots[numa_node];
-    */
+    gc_free(ptst, op_ptr, gc_id[0]);
+}
+
+op_slot* get_req_slot_from_node(unsigned int numa_node)
+{
     return &req_mapping[NID][(numa_node * num_cpus_per_node) + LTID];
 }
 
-op_node* get_req_slot_to_node(unsigned int numa_node)
+op_slot* get_req_slot_to_node(unsigned int numa_node)
 {
-    /*
-    if (unlikely(req_out_slots==NULL))
-        init_local_mapping();
-
-    return req_out_slots[numa_node];
-    */
     return &req_mapping[numa_node][TID];
 }
 
-/*
-op_node* get_res_slot(unsigned int numa_node)
-{
-    
-    // if (unlikely(res_slots==NULL))
-    //     init_local_mapping();
-
-    // return res_slots[numa_node];
-    
-    return &req_mapping[numa_node][(numa_node * num_cpus_per_node) + LTID];
-}
-*/
-
-
-op_node* get_res_slot_from_node(unsigned int numa_node)
+op_slot* get_res_slot_from_node(unsigned int numa_node)
 {
     // if (unlikely(res_in_slots==NULL))
     //     init_local_mapping();
@@ -139,20 +100,12 @@ op_node* get_res_slot_from_node(unsigned int numa_node)
     return &res_mapping[NID][(numa_node * num_cpus_per_node) + LTID];
 }
 
-op_node* get_res_slot_to_node(unsigned int numa_node)
+op_slot* get_res_slot_to_node(unsigned int numa_node)
 {
-    // if (unlikely(res_out_slots==NULL))
-    //     init_local_mapping();
-
-    // return res_out_slots[numa_node];
     return &res_mapping[numa_node][TID];
 }
 
-bool read_slot(op_node* slot, 
-    unsigned int* type, 
-    int *ret_value, 
-    pkey_t *timestamp, 
-    void** payload) 
+bool read_slot(op_slot* slot, operation_t** operation) 
 {
     
     int val;
@@ -176,13 +129,8 @@ bool read_slot(op_node* slot,
         return false;
     }
 
-    *type = slot->type;
-    *ret_value = slot->ret_value;
-    *timestamp = slot->timestamp; 
-    *payload = slot->payload;
+    *operation = slot->content;
 
-    
-    
     #ifdef _NM_USE_SPINLOCK
     spin_unlock_x86(&(slot->spin));
     #else
@@ -193,11 +141,8 @@ bool read_slot(op_node* slot,
     return true;
 }
 
-bool write_slot(op_node* slot, 
-    unsigned int type, 
-    int ret_value, 
-    pkey_t timestamp, 
-    void* payload)
+bool write_slot(op_slot* slot, 
+    operation_t* operation)
 {
 
     int val;
@@ -208,10 +153,9 @@ bool write_slot(op_node* slot,
     while(!__sync_bool_compare_and_swap(&(slot->busy), L_FREE, W_BUSY));
     #endif
 
-    slot->type = type;
-    slot->ret_value = ret_value;
-    slot->timestamp = timestamp; 
-    slot->payload = payload;
+    operation_t* old_op = slot->content;
+    if (!BOOL_CAS(&slot->content, old_op, operation))
+        return false;
 
     val = __sync_fetch_and_and(&(slot->response), 0);
 
@@ -225,4 +169,3 @@ bool write_slot(op_node* slot,
     else 
         return false;
 }
-

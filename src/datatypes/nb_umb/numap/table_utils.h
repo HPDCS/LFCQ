@@ -412,7 +412,7 @@ static inline void set_new_table(table* h, unsigned int threshold, double pub, u
 
 		new_h->pad = ((double)concurrent_dequeue)/((double)performed_dequeue) + ((double)concurrent_enqueue)/((double)performed_enqueue);
 		new_h->pad = new_h->pad < 1 ? 1 : new_h->pad;
-		new_h->pad *= 4;  // @ TODO TUNE THIS
+		new_h->pad *= 4; //<- THIS VALUE IS DATA STRUCTURE DEPENDANT
 
 		for (i = 0; i < new_size; i++)
 		{
