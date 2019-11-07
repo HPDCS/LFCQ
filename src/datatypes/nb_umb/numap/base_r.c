@@ -202,7 +202,7 @@ int do_pq_enqueue(void* q, pkey_t timestamp, void* payload, int override, unsign
 			// get actual size
 			size = h->size;
 	        // read the actual epoch
-        	new_node->epoch = (h->current & MASK_EPOCH);
+        	//new_node->epoch = (h->current & MASK_EPOCH);
 			// compute the index of the virtual bucket
 			newIndex = hash(timestamp, h->bucket_width);
 
@@ -469,13 +469,9 @@ static inline int handle_ops(void* q)
 		{
 			new_dest = read_node;
 			if (type == OP_PQ_ENQ)
-			{ 
 				ret = do_pq_enqueue(q, ts, pld, 0, &new_dest);
-			}
 			else 
-			{
 				ret = do_pq_dequeue(q, &ts, &pld, 0, &new_dest);
-			}
 
 			// se l'operazione ha successo o è fallita devo comunicarlo al richiedente
 			from_me = get_res_slot_to_node(i);

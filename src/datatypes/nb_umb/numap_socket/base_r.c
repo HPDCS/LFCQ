@@ -111,10 +111,10 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	int res_mem_posix = 0;
 	nb_calqueue* res = NULL;
 
-	init_mapping();
-
 	// init fraser garbage collector/allocator //maybe using basic allocator will be better
 	_init_gc_subsystem();
+	init_mapping();
+
 	// add allocator of nbc_bucket_node
 	gc_aid[0] = gc_add_allocator(sizeof(nbc_bucket_node));
 	// add callback for set tables and array of nodes whene a grace period has been identified
@@ -182,16 +182,13 @@ int do_pq_enqueue(void* q, pkey_t timestamp, void* payload, int override, unsign
 	table * h = NULL;		
 	unsigned int index, size;
 	unsigned long long newIndex = 0;
-	
+	unsigned int dest_node;
 	
 	// get configuration of the queue
 	double pub = queue->perc_used_bucket;
 	unsigned int epb = queue->elem_per_bucket;
 	unsigned int th = queue->threshold;
 	
-	int dest_node;
-	bool remote = false; // tells whether the enqueue touched a remote node
-
 	int res, con_en = 0;
 	
 
@@ -203,10 +200,7 @@ int do_pq_enqueue(void* q, pkey_t timestamp, void* payload, int override, unsign
 		
 		// It is the first iteration or a node marked as MOV has been met (a resize is occurring)
 		if(res == MOV_FOUND){
-			
-			//free the old node
-			node_free(new_node);
-			
+						
 			// check for a resize
 			h = read_table(&queue->hashtable, th, epb, pub);
 			// get actual size
@@ -280,13 +274,6 @@ int do_pq_enqueue(void* q, pkey_t timestamp, void* payload, int override, unsign
   out:
   #endif
 
-	// check if local or not
-	if (!remote)
-		local_enq++;
-	else
-		remote_enq++;
-	
-
 	return res;
 }
 
@@ -311,9 +298,10 @@ int do_pq_dequeue(void *q, pkey_t* timestamp, void** result, int override, unsig
 	unsigned long long current, old_current, new_current;
 	unsigned long long index;
 	unsigned long long epoch;
-	
+	unsigned long dest_node;
+
 	unsigned int size, attempts = 0;
-	unsigned int counter, dest_node;
+	unsigned int counter;
 	pkey_t left_ts;
 	double bucket_width, left_limit, right_limit;
 
@@ -325,8 +313,6 @@ int do_pq_dequeue(void *q, pkey_t* timestamp, void** result, int override, unsig
 	bool prob_overflow = false;
 	tail = queue->tail;
 	performed_dequeue++;
-	
-	bool remote = false;
 
 begin:
 	// Get the current set table
@@ -358,14 +344,10 @@ begin:
 		left_node = min_next = min->next;
 		
 		dest_node = NODE_HASH(index % (size));
-		if ((dest_node>>1) != SID)
+		if (!override && (dest_node>>1) != SID)
 		{
-			remote = true;
-			if (!override)
-			{
-				*new_dest = dest_node;
-				return -1; // locality has changed
-			}	
+			*new_dest = dest_node;
+			return -1; // locality has changed	
 		}
 
 		// get the left limit
@@ -427,12 +409,6 @@ begin:
 			*result = left_node->payload;
 			*timestamp = left_ts;
 
-			// check if local or not
-			if (!remote)
-				local_deq++;
-			else
-				remote_deq++;
-
 			return 1;
 										
 		}while( (left_node = get_unmarked(left_node_next)));
@@ -489,7 +465,7 @@ static inline int handle_ops(void* q)
 	{
 		i = i % ACTIVE_NUMA_NODES;
 	
-		to_me 	= get_req_slot_from_node(i);
+		to_me	= get_req_slot_from_node(i);
 
 		if (read_slot(to_me, &type, &ret, &ts, &pld, &read_node))
 		{
@@ -557,7 +533,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	// if NID execute
 	if ((dest_node>>1) == SID)
 	{
-		int ret = do_pq_enqueue(q, timestamp, payload, 1, NULL);
+		ret = do_pq_enqueue(q, timestamp, payload, 1, NULL);
 		critical_exit();
 		return ret;
 	}
@@ -659,7 +635,7 @@ pkey_t pq_dequeue(void *q, void** result)
 	
 	unsigned int dest_node, new_dest_node;
 	
-	//count = handle_ops(q); // clean pending op 
+	count = handle_ops(q); // clean pending op 
 	
 	// read table
 	h = read_table(&queue->hashtable, th, epb, pub);
