@@ -464,7 +464,8 @@ static inline int handle_ops(void* q)
 	op_node *to_me, *from_me;
 
 	count = 0;
-	for (i = NID+1; i % ACTIVE_NUMA_NODES != NID; i++)
+
+	for (i = NID; i % ACTIVE_NUMA_NODES != NID; i++)
 	{
 		i = i % ACTIVE_NUMA_NODES;
 	
@@ -485,9 +486,7 @@ static inline int handle_ops(void* q)
 			// se l'operazione ha successo o è fallita devo comunicarlo al richiedente
 			from_me = get_res_slot_to_node(i);
 			if (!write_slot(from_me, type, ret, ts, pld, new_dest))
-			{
 				abort_line();
-			}
 			count++;
 			
 			// l'operazione ha cambaito località - posto sul nodo giusto
