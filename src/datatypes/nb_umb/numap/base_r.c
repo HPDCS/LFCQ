@@ -173,8 +173,7 @@ int do_pq_enqueue(void* q, pkey_t timestamp, void* payload, int override, unsign
 {
 	assertf(timestamp < MIN || timestamp >= INFTY, "Key out of range %s\n", "");
 
-	nb_calqueue* queue = (nb_calqueue*) q; 	
-	critical_enter();
+	nb_calqueue* queue = (nb_calqueue*) q; 
 	nbc_bucket_node *bucket, *new_node = numa_node_malloc(payload, timestamp, 0, NID);
 	table * h = NULL;		
 	unsigned int index, size;
@@ -270,7 +269,6 @@ int do_pq_enqueue(void* q, pkey_t timestamp, void* payload, int override, unsign
   #if KEY_TYPE != DOUBLE
   out:
   #endif
-	critical_exit();
 	return res;
 
 }
@@ -312,8 +310,6 @@ int do_pq_dequeue(void *q, pkey_t* timestamp, void** result, int override, unsig
 	bool prob_overflow = false;
 	tail = queue->tail;
 	performed_dequeue++;
-	
-	critical_enter();
 
 begin:
 	// Get the current set table
@@ -408,7 +404,6 @@ begin:
 
 			*result = left_node->payload;
 			*timestamp = left_ts;
-			critical_exit();
 
 			return 1;
 										
@@ -418,7 +413,6 @@ begin:
 		// if i'm here it means that the virtual bucket was empty. Check for queue emptyness
 		if(left_node == tail && size == 1 && !is_marked(min->next, MOV))
 		{
-			critical_exit();
 			*result = NULL;
 			*timestamp = INFTY;
 			return 1;

@@ -211,6 +211,7 @@ static inline int handle_ops(void* q)
 	int i, ret, count ;
 	
 	unsigned int type;
+	unsigned int node;
 
 	pkey_t ts;
 	void *pld;
@@ -224,7 +225,7 @@ static inline int handle_ops(void* q)
 	
 		to_me 	= get_req_slot_from_node(i);
 
-		if (read_slot(to_me, &type, &ret, &ts, &pld))
+		if (read_slot(to_me, &type, &ret, &ts, &pld, &node))
 		{
 			from_me = get_res_slot_to_node(i);
 
@@ -233,7 +234,7 @@ static inline int handle_ops(void* q)
 			else 
 				ts = do_pq_dequeue(q, &pld);
 			
-			if (!write_slot(from_me, type, ret, ts, pld))
+			if (!write_slot(from_me, type, ret, ts, pld, node))
 			{
 				abort_line();
 			}
@@ -294,7 +295,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	resp = get_res_slot_from_node(dest_node);
 	//read_slot(resp, &type, &ret, &ts, &pld);
 	
-	if (!write_slot(from_me, OP_PQ_ENQ, 0, timestamp, payload))
+	if (!write_slot(from_me, OP_PQ_ENQ, 0, timestamp, payload, dest_node))
 	{
 		abort_line();
 	}
@@ -306,7 +307,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 		{
 			enq_steal_attempt++;
 			//from_me = get_req_slot_to_node(dest_node);
-			if (read_slot(from_me, &type, &ret, &ts, &pld))
+			if (read_slot(from_me, &type, &ret, &ts, &pld, &new_dest_node))
 			{
 				enq_steal_done++;
 
@@ -324,7 +325,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 				from_me = get_req_slot_to_node(dest_node);
 				resp = get_res_slot_from_node(dest_node);
 				
-				if (!write_slot(from_me, OP_PQ_ENQ, 0, timestamp, payload))
+				if (!write_slot(from_me, OP_PQ_ENQ, 0, timestamp, payload, dest_node))
 				{
 					abort_line();
 				}
@@ -342,7 +343,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 			attempts=0;
 
 		// check response
-		if (read_slot(resp, &type, &ret, &ts, &pld))
+		if (read_slot(resp, &type, &ret, &ts, &pld, &new_dest_node))
 			break;
 	} while(1);
 
@@ -397,7 +398,7 @@ pkey_t pq_dequeue(void *q, void** result)
 	resp = get_res_slot_from_node(dest_node);
 	//read_slot(resp, &type, &ret, &ts, &pld);
 
-	if (!write_slot(from_me, OP_PQ_DEQ, 0, 0, 0))
+	if (!write_slot(from_me, OP_PQ_DEQ, 0, 0, 0, dest_node))
 	{
 		abort_line();
 	}
@@ -410,7 +411,7 @@ pkey_t pq_dequeue(void *q, void** result)
 		{
 			deq_steal_attempt++;
 			//from_me = get_req_slot_to_node(dest_node);
-			if (read_slot(from_me, &type, &ret, &ts, &pld))
+			if (read_slot(from_me, &type, &ret, &ts, &pld, &new_dest_node))
 			{
 				deq_steal_done++;
 
@@ -429,7 +430,7 @@ pkey_t pq_dequeue(void *q, void** result)
 				from_me = get_req_slot_to_node(dest_node);
 				resp = get_res_slot_from_node(dest_node);
 
-				if (!write_slot(from_me, OP_PQ_DEQ, 0, 0, 0))
+				if (!write_slot(from_me, OP_PQ_DEQ, 0, 0, 0, dest_node))
 				{			
 					abort_line();
 				}
@@ -448,7 +449,7 @@ pkey_t pq_dequeue(void *q, void** result)
 			attempts=0;
 
 		// check response
-		if (read_slot(resp, &type, &ret, &ts, &pld))
+		if (read_slot(resp, &type, &ret, &ts, &pld, &new_dest_node))
 			break;
 	} while(1);
 

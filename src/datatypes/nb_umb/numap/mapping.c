@@ -115,7 +115,6 @@ bool read_slot(op_node* slot,
     *timestamp = slot->timestamp; 
     *payload = slot->payload;
     
-    
     #ifdef _NM_USE_SPINLOCK
     spin_unlock_x86(&(slot->spin));
     #else

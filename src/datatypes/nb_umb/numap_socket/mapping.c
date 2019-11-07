@@ -20,6 +20,7 @@ struct __op_load
 	
 	char pad0[56];
 
+    unsigned int dest_node;
 	unsigned int type;			// ENQ | DEQ
 	int ret_value;
 	pkey_t timestamp;			// ts of node to enqueue
@@ -69,6 +70,11 @@ op_node* get_req_slot_to_node(unsigned int numa_node)
     return &req_mapping[(numa_node>>1)][TID];
 }
 
+op_node* get_req_slot_from_to_node(unsigned int src_node, unsigned int dst_node)
+{
+    return &req_mapping[(dst_node>>1)][((src_node>>1) * CPU_PER_SOCKET) + LSID];
+}
+
 op_node* get_res_slot_from_node(unsigned int numa_node)
 {
     return &res_mapping[SID][((numa_node>>1) * CPU_PER_SOCKET) + LSID];
@@ -83,7 +89,8 @@ bool read_slot(op_node* slot,
     unsigned int* type, 
     int *ret_value, 
     pkey_t *timestamp, 
-    void** payload) 
+    void** payload,
+    unsigned int *node) 
 {
     
     int val;
@@ -107,13 +114,12 @@ bool read_slot(op_node* slot,
         return false;
     }
 
+    *node = slot->dest_node;
     *type = slot->type;
     *ret_value = slot->ret_value;
     *timestamp = slot->timestamp; 
     *payload = slot->payload;
 
-    
-    
     #ifdef _NM_USE_SPINLOCK
     spin_unlock_x86(&(slot->spin));
     #else
@@ -128,7 +134,8 @@ bool write_slot(op_node* slot,
     unsigned int type, 
     int ret_value, 
     pkey_t timestamp, 
-    void* payload)
+    void* payload,
+    unsigned int node)
 {
 
     int val;
@@ -139,6 +146,7 @@ bool write_slot(op_node* slot,
     while(!__sync_bool_compare_and_swap(&(slot->busy), L_FREE, W_BUSY));
     #endif
 
+    slot->dest_node = node;
     slot->type = type;
     slot->ret_value = ret_value;
     slot->timestamp = timestamp; 

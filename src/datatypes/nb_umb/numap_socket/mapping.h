@@ -20,9 +20,9 @@ op_node* get_req_slot_from_node(unsigned int numa_node);
  * */
 op_node* get_req_slot_to_node(unsigned int numa_node);
 
-/* Get a pointer to a slot where we can read/write the result of an operation
+/* Get a pointer to a slot where we can post the operation requested by someone else
  * */
-//op_node* get_res_slot(unsigned int numa_node);
+op_node* get_req_slot_from_to_node(unsigned int src_node, unsigned int dst_node);
 
 /* Get a pointer to a slot where we can read the result of an operation
  * */
@@ -32,8 +32,7 @@ op_node* get_res_slot_from_node(unsigned int numa_node);
  * */
 op_node* get_res_slot_to_node(unsigned int numa_node);
 
-bool read_slot(op_node* slot, unsigned int* type, int *ret_value, pkey_t *timestamp, void** payload);
+bool read_slot(op_node* slot, unsigned int* type, int *ret_value, pkey_t *timestamp, void** payload, unsigned int *node);
 
-bool write_slot(op_node* slot, unsigned int type, int ret_value, pkey_t timestamp, void* payload);
-
+bool write_slot(op_node* slot, unsigned int type, int ret_value, pkey_t timestamp, void* payload, unsigned int node);
 #endif /* _NUMA_MAPPING */
