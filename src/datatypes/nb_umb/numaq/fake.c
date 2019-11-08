@@ -122,6 +122,7 @@ void *pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	res->hashtable->e_counter.count = 0;
 	res->hashtable->d_counter.count = 0;
 	res->hashtable->read_table_period = res->read_table_period;
+	res->hashtable->pad = 3;
 
 	for (i = 0; i < MINIMUM_SIZE; i++)
 	{
@@ -215,30 +216,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 			// need to move to another queue?
 			if (dest_node != NID) 
 			{
-				/*
-				// The node has been extracted from a non optimal queue
-				new_operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
-				new_operation->op_id = operation->op_id;
-				new_operation->type = operation->type;
-				new_operation->timestamp = operation->timestamp;
-				new_operation->payload = operation->payload;
-				new_operation->response = operation->response;
-				new_operation->candidate = operation->candidate;
-				new_operation->requestor = operation->requestor;
-					
-				do
-				{
-					tmp = *(new_operation->requestor);
-				} while(!BOOL_CAS(new_operation->requestor, tmp,new_operation));
-
-				// publish op on right queue
-				tq_enqueue(&op_queue[dest_node], (void *)new_operation, dest_node);
-				gc_free(ptst, operation, gc_aid[GC_OPNODE]);
-				operation = NULL; // yeld the op since is no longer for us.
-				*/
 				tq_enqueue(&op_queue[dest_node], (void *)operation, dest_node);
 				operation = NULL;
-
 			}
 			// here we keep the operation if it is not null
 		}
@@ -366,27 +345,6 @@ pkey_t pq_dequeue(void *q, void **result)
 			// need to move to another queue?
 			if (dest_node != NID) 
 			{
-				/*
-				// The node has been extracted from a non optimal queue
-				new_operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
-				new_operation->op_id = operation->op_id;
-				new_operation->type = operation->type;
-				new_operation->timestamp = operation->timestamp;
-				new_operation->payload = operation->payload;
-				new_operation->response = operation->response;
-				new_operation->candidate = operation->candidate;
-				new_operation->requestor = operation->requestor;
-					
-				do
-				{
-					tmp = *(new_operation->requestor);
-				} while(!BOOL_CAS(new_operation->requestor, tmp,new_operation));
-
-				// publish op on right queue
-				tq_enqueue(&op_queue[dest_node], (void *)new_operation, dest_node);
-				gc_free(ptst, operation, gc_aid[GC_OPNODE]);
-				operation = NULL; // yeld the op since is no longer for us.
-				*/
 				tq_enqueue(&op_queue[dest_node], (void *)operation, dest_node);
 				operation = NULL; // yeld the op since is no longer for us.
 
@@ -444,7 +402,7 @@ pkey_t pq_dequeue(void *q, void **result)
 		{
 			ret = single_step_pq_dequeue(h, queue, &ret_ts, &new_payload, handling_op->op_id, &handling_op->candidate);
 			if (ret != -1)
-			{ //dequeue failed
+			{
 				performed_dequeue++;
 				handling_op->payload = new_payload;
 				handling_op->timestamp = ret_ts;

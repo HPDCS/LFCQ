@@ -10,7 +10,8 @@ USER_OBJS :=
 
 LIBS := -lpthread -lm -lnuma -lrt -mrtm
 SRC_DIR := src
-TARGETS := ACRCQ NUMAP RNUMAP NUMAPFK NUMAPBL NUMAPSKT RNUMAPSKT NUMAPSKTFK NUMAPSKTBL#NUMAQ NUMAQBLK NUMAFK NUMAFKBL NUMAP NUMAPNOP NUMAPBL NUMAPSKT NUMAPSKTFK NUMAPSKTBL NUMAPNBCSKT NUMAPNBCSKTFK NUMAPNBCSKTBL # NUMAPNBC NUMAPNBCFK NUMAPNBCBL NUMAPFNB NUMA2Q NUMA2QFK NUMA2QBL NUMA2QBLK # #NBCQ LIND MARO CBCQ SLCQ NBVB 2CAS VBPQ ACRCQ #V2CQ NUMA WORK
+TARGETS := ACRCQ NUMAP RNUMAP NUMAPFK NUMAPBL NUMAPSKT RNUMAPSKT NUMAPSKTFK NUMAPSKTBL NUMAQ RNUMAQ NUMAQFK NUMAQBL
+		#NUMAQ NUMAQBLK NUMAFK NUMAFKBL NUMAP NUMAPNOP NUMAPBL NUMAPSKT NUMAPSKTFK NUMAPSKTBL NUMAPNBCSKT NUMAPNBCSKTFK NUMAPNBCSKTBL # NUMAPNBC NUMAPNBCFK NUMAPNBCBL NUMAPFNB NUMA2Q NUMA2QFK NUMA2QBL NUMA2QBLK # #NBCQ LIND MARO CBCQ SLCQ NBVB 2CAS VBPQ ACRCQ #V2CQ NUMA WORK
 		# NUMA2Q no cache to see difference + ACRCQH + Cache to other structures
 UTIL_value := src/utils/common.o src/utils/hpdcs_math.o 
 GACO_value := src/gc/gc.o src/gc/ptst.o
@@ -50,14 +51,22 @@ NUMAPSKTBL_link := gcc
 
 # NUMAQ + SKT
 
+NUMAQ_value := $(TQ_value) src/datatypes/nb_umb/numaq/base.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMAQ_link := gcc
+
+RNUMAQ_value := $(TQ_value) src/datatypes/nb_umb/numaq/base_r.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+RNUMAQ_link := gcc
+
+NUMAQFK_value := $(TQ_value) src/datatypes/nb_umb/numaq/fake.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMAQFK_link := gcc
+
+NUMAQBL_value := $(TQ_value) src/datatypes/nb_umb/numaq/busyloop.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMAQBL_link := gcc
+
+
 ########
 
-NUMAQ_value := $(TQ_value) src/datatypes/nb_umb/numaq/base.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
-NUMAFK_value := $(TQ_value) src/datatypes/nb_umb/numaq/fake.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
-NUMAFKBL_value := $(TQ_value) src/datatypes/nb_umb/numaq/busyloop.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
-NUMAQ_link := gcc
-NUMAFK_link := gcc
-NUMAFKBL_link := gcc
+# add socket verison
 
 ########
 
