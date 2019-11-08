@@ -177,7 +177,7 @@ struct __op_load
 	volatile int response;		// -1 waiting for resp | 1 responsed
 	// 32
 	nbc_bucket_node * volatile candidate;	// need of candidate node
-	op_node ** requestor;
+	op_node * requestor;
 	// 48
 };
 
@@ -236,6 +236,8 @@ extern __thread unsigned int NID;
 
 extern __thread struct drand48_data seedT;
 
+extern __thread unsigned long long concurrent_enqueue;
+extern __thread unsigned long long performed_enqueue;
 extern __thread unsigned long long concurrent_dequeue;
 extern __thread unsigned long long performed_dequeue;
 extern __thread unsigned long long scan_list_length;
