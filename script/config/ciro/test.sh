@@ -36,7 +36,14 @@ elem_per_bucket_NUMAPSKT="1"
 elem_per_bucket_RNUMAPSKT="1"
 elem_per_bucket_NUMAPSKTFK="1"
 elem_per_bucket_NUMAPSKTBL="1"
-
+elem_per_bucket_NUMAQ="1"
+elem_per_bucket_RNUMAQ="1"
+elem_per_bucket_NUMAQFK="1"
+elem_per_bucket_NUMAQBL="1"
+elem_per_bucket_NUMAQSKT="1"
+elem_per_bucket_RNUMAQSKT="1"
+elem_per_bucket_NUMAQSKTFK="1"
+elem_per_bucket_NUMAQSKTBL="1"
 
 #############################
 # compile parameters
