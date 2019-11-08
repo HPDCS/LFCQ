@@ -310,14 +310,14 @@ pkey_t pq_dequeue(void *q, void **result)
 		// read table
 		h = read_table(&queue->hashtable, th, epb, pub);
 
-		if (operation != NULL)
+		if (operation != NULL && !mine)
 		{
 			// compute vb
 			vb_index = (h->current) >> 32;
 			dest_node = NODE_HASH(next_node_deq);
 			
 			// need to move to another queue?
-			if (dest_node != NID && !mine) 
+			if (dest_node != NID) 
 			{
 				tq_enqueue(&deq_queue[dest_node], (void *) operation, dest_node);
 				operation = NULL; // need to extract another op

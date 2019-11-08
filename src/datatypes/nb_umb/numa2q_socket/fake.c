@@ -37,8 +37,8 @@ int gc_aid[32];
 int gc_hid[4];
 
 unsigned long op_counter = 2;
-task_queue enq_queue[_NUMA_NODES]; // (!new) per numa node queue
-task_queue deq_queue[_NUMA_NODES];
+task_queue enq_queue[NUM_SOCKETS]; // (!new) per numa node queue
+task_queue deq_queue[NUM_SOCKETS];
 
 /*************************************
  * THREAD LOCAL VARIABLES			 *
@@ -69,6 +69,8 @@ void std_free_hook(ptst_t *p, void *ptr) { free(ptr); }
  */
 void *pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket)
 {
+	ACTIVE_SOCKETS = (((THREADS * NUM_SOCKETS)) / NUM_CPUS) + ((((THREADS * NUM_SOCKETS)) % NUM_CPUS) != 0);
+	ACTIVE_SOCKETS = ACTIVE_SOCKETS < NUM_SOCKETS? ACTIVE_SOCKETS:NUM_SOCKETS;
 
 	ACTIVE_NUMA_NODES = (((THREADS * _NUMA_NODES)) / NUM_CPUS) + ((((THREADS * _NUMA_NODES)) % NUM_CPUS) != 0); // (!new) compute the number of active numa nodes 
 	ACTIVE_NUMA_NODES = ACTIVE_NUMA_NODES < _NUMA_NODES? ACTIVE_NUMA_NODES:_NUMA_NODES;
@@ -110,10 +112,10 @@ void *pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	res->tail->next = NULL;
 
 	// (!new) initialize numa queues
-	for (i = 0; i < _NUMA_NODES; i++)
+	for (i = 0; i < ACTIVE_SOCKETS; i++)
 	{
-		init_tq(&enq_queue[i], i);
-		init_tq(&deq_queue[i], i);
+		init_tq(&enq_queue[i], i<<1);
+		init_tq(&deq_queue[i], i<<1);
 	}
 
 	res->hashtable->bucket_width = 1.0;
@@ -166,7 +168,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	op_node *operation, *extracted_op,
 		*requested_op, *handling_op;
 
-	unsigned int dest_node;	 
+	unsigned int dest_node,
+		dest_socket;	 
 	int ret;
 	
 	bool mine = false;
@@ -202,12 +205,12 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 		{
 			// compute vb
 			dest_node = NODE_HASH((unsigned long) operation->timestamp);	
-			
+			dest_socket = dest_node >> 1;
 			// need to move to another queue?
-			if (dest_node != NID) 
+			if (dest_socket != SID) 
 			{
 				// publish op on right queue
-				tq_enqueue(&enq_queue[dest_node], (void *) operation, dest_node);
+				tq_enqueue(&enq_queue[dest_socket], (void *) operation, dest_node);
 				
 				//gc_free(ptst, operation, gc_aid[GC_OPNODE]);
 				operation = NULL; // need to extract another op			
@@ -227,7 +230,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 				return ret;
 			}
 
-			if (!tq_dequeue(&enq_queue[NID], &extracted_op)) 
+			if (!tq_dequeue(&enq_queue[SID], &extracted_op)) 
 			{
 				extracted_op = requested_op;
 				mine = true;
@@ -268,7 +271,8 @@ pkey_t pq_dequeue(void *q, void **result)
 		*requested_op, *handling_op;
 
 	unsigned long long vb_index;
-	unsigned int dest_node;	 
+	unsigned int dest_node,
+		dest_socket;	 
 	int ret;
 	pkey_t ret_ts;
 	void* new_payload;
@@ -309,12 +313,13 @@ pkey_t pq_dequeue(void *q, void **result)
 			// compute vb
 			vb_index = (h->current) >> 32;
 			dest_node = NODE_HASH(next_node_deq);
-			
+			dest_socket = dest_node >> 1;
+
 			// need to move to another queue?
-			if (dest_node != NID) 
+			if (dest_socket != SID) 
 			{
 				// publish op on right queue
-				tq_enqueue(&deq_queue[dest_node], (void *) operation, dest_node);
+				tq_enqueue(&deq_queue[dest_socket], (void *) operation, dest_node);
 				operation = NULL; // need to extract another op
 			
 			}
@@ -328,7 +333,7 @@ pkey_t pq_dequeue(void *q, void **result)
 		// dequeue one op
 		if (extracted_op == NULL)
 		{
-			if (!tq_dequeue(&deq_queue[NID], &extracted_op)) 
+			if (!tq_dequeue(&deq_queue[SID], &extracted_op)) 
 			{
 				if ((ret = __sync_fetch_and_add(&(requested_op->response), 0)) != -1)
 				{
