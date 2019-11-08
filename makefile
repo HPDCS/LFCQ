@@ -48,8 +48,16 @@ NUMAPSKTFK_link := gcc
 NUMAPSKTBL_value := src/datatypes/nb_umb/numap_socket/busyloop.o src/datatypes/nb_umb/numap_socket/mapping.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMAPSKTBL_link := gcc
 
+# NUMAQ + SKT
+
 ########
 
+NUMAQ_value := $(TQ_value) src/datatypes/nb_umb/numaq/base.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMAFK_value := $(TQ_value) src/datatypes/nb_umb/numaq/fake.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMAFKBL_value := $(TQ_value) src/datatypes/nb_umb/numaq/busyloop.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMAQ_link := gcc
+NUMAFK_link := gcc
+NUMAFKBL_link := gcc
 
 ########
 
@@ -72,14 +80,6 @@ NUMAPNBCBL_link := gcc
 
 NUMAPFNB_value := src/datatypes/nb_umb/numap_fnb/base.o src/datatypes/nb_umb/numap_fnb/mapping_nb.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMAPFNB_link := gcc
-
-NUMAQ_value := $(TQ_value) src/datatypes/nb_umb/numaq/base.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
-NUMAFK_value := $(TQ_value) src/datatypes/nb_umb/numaq/fake.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
-NUMAFKBL_value := $(TQ_value) src/datatypes/nb_umb/numaq/busyloop.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
-NUMAQ_link := gcc
-NUMAFK_link := gcc
-NUMAFKBL_link := gcc
-
 
 NUMAPNBCSKT_value := src/datatypes/nb_umb/numap_socket/base.o src/datatypes/nb_umb/numap_socket/mapping_nb.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMAPNBCSKTFK_value := src/datatypes/nb_umb/numap_socket/fake.o src/datatypes/nb_umb/numap_socket/mapping_nb.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
