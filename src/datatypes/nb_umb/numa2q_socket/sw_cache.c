@@ -33,11 +33,10 @@ nbc_bucket_node* read_last_min(nbc_bucket_node *left_node)
     }
     else if (last_min)
         return last_min;
-    
-    return left_node;
-    #else
-    return NULL;
     #endif
+
+    return left_node;
+    
 }
 
 // setta l'ultimo min letto
