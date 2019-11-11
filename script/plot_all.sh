@@ -25,11 +25,15 @@ for DIST in $distributions; do
 			echo $file
 			out=$input/$file
 			gnuplot -e "out='$output'" -e "file='$out'" -e "queue='$s-$e'" realtime.gnuplot
-			for p in $data_types; do
-				file=$input/"$version-$cmd-$p-1-$DIST-0.3-$SIZE-$DIST-0.5-$OPS-$DIST-0-0-$u-0-$MODE-$TIME.dat"
-				echo gnuplot -e "out='$output'" -e "file='$out'" -e "queue='$s'" -e "start='$p'" -e "input='$file'"   surface.gnuplot
-				gnuplot -e "out='$output'" -e "file='$out'" -e "queue='$s'" -e "start='$p'" -e "input='$file'"   surface.gnuplot
-			done
+			file_sorted=$out"-sorted"
+			echo $file_sorted
+			sort -k1n $out > $file_sorted
+			gnuplot -e "out='$output'" -e "file='$file_sorted'" -e "queue='$s-$e'" barplot.gnuplot
+			#for p in $data_types; do
+			#	file=$input/"$version-$cmd-$p-1-$DIST-0.3-$SIZE-$DIST-0.5-$OPS-$DIST-0-0-$u-0-$MODE-$TIME.dat"
+			#	echo gnuplot -e "out='$output'" -e "file='$out'" -e "queue='$s'" -e "start='$p'" -e "input='$file'"   surface.gnuplot
+			#	gnuplot -e "out='$output'" -e "file='$out'" -e "queue='$s'" -e "start='$p'" -e "input='$file'"   surface.gnuplot
+			#done
 		done
 	done
 done
