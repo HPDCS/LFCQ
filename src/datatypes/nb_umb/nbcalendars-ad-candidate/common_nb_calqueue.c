@@ -392,7 +392,10 @@ int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, unsigned int tie_
 				scan_list_length_en += len;
 			}
 			if (counter > 0)
-				connect_to_be_freed_node_list(left_next, counter);
+			{
+				search(left_next, -1.0, 0, &lnode, &rnode, flag);
+				//connect_to_be_freed_node_list(left_next, counter);
+			}
 			return OK;
 		}
 		

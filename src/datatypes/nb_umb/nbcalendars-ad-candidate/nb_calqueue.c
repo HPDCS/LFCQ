@@ -179,7 +179,7 @@ begin:
 					{
 						// no, try to reset the candidate and restart
 						BOOL_CAS(candidate, current_candidate, NULL);
-						continue;
+						goto begin;
 					}
 				}
 			}
