@@ -470,7 +470,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 			// need to move to another queue? 
 			if (dest_node != NID) 
 			{
-				if (!BOOL_CAS(&operation->response, OP_HANDLING, OP_CLEAN))
+				ret = VAL_CAS(&operation->response, OP_HANDLING, OP_CLEAN);
+				if (ret != OP_CLEAN && ret != OP_HANDLING)
 				{	
 					LOG("%d ENQ - Cannot repost", TID);
 					abort();
@@ -609,7 +610,8 @@ pkey_t pq_dequeue(void *q, void **result)
 			// need to move to another queue?
 			if (dest_node != NID) 
 			{
-				if (!BOOL_CAS(&operation->response, OP_HANDLING, OP_CLEAN))
+				ret = VAL_CAS(&operation->response, OP_HANDLING, OP_CLEAN);
+				if (ret != OP_CLEAN && ret != OP_HANDLING)
 				{	
 					LOG("%d ENQ - Cannot repost", TID);
 					abort();
