@@ -470,12 +470,6 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 			// need to move to another queue? 
 			if (dest_node != NID) 
 			{
-				ret = VAL_CAS(&operation->response, OP_HANDLING, OP_CLEAN);
-				if (ret != OP_CLEAN && ret != OP_HANDLING)
-				{	
-					LOG("%d ENQ - Cannot repost", TID);
-					abort();
-				}
 				tq_enqueue(&op_queue[dest_node], (void*) operation, dest_node);
                 operation = NULL;
 			}
@@ -504,10 +498,11 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 		}
 
 		// STEP 3 EXECUTION	
-		if (!BOOL_CAS(&operation->response, OP_CLEAN, OP_HANDLING))
+		ret = VAL_CAS(&operation->response, OP_CLEAN, OP_HANDLING);
+		if (ret != OP_CLEAN)
 		{
 			// the op is in handling by someone else or already done
-			if (mine)
+			if (mine || ret == OP_DONE)
 			{
 				mine = false;
 			}
@@ -610,12 +605,6 @@ pkey_t pq_dequeue(void *q, void **result)
 			// need to move to another queue?
 			if (dest_node != NID) 
 			{
-				ret = VAL_CAS(&operation->response, OP_HANDLING, OP_CLEAN);
-				if (ret != OP_CLEAN && ret != OP_HANDLING)
-				{	
-					LOG("%d ENQ - Cannot repost", TID);
-					abort();
-				}
 				// The node has been extracted from a non optimal queue
 				tq_enqueue(&op_queue[dest_node], (void*) operation, dest_node);
 				operation = NULL; // yeld the op since is no longer for us.
@@ -647,10 +636,11 @@ pkey_t pq_dequeue(void *q, void **result)
 		}	
 		
 		// execute op
-		if (!BOOL_CAS(&operation->response, OP_CLEAN, OP_HANDLING))
+		ret = VAL_CAS(&operation->response, OP_CLEAN, OP_HANDLING);
+		if (ret != OP_CLEAN)
 		{
 			// the op is in handling by someone else or already done
-			if (mine)
+			if (mine || ret == OP_DONE)
 			{
 				mine = false;
 			}
