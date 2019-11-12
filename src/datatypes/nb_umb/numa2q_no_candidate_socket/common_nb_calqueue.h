@@ -42,6 +42,7 @@ extern int gc_aid[];
 extern int gc_hid[];
 
 unsigned int ACTIVE_NUMA_NODES;
+unsigned int ACTIVE_SOCKETS;
 #define NODE_HASH(bucket_id) ((bucket_id >> 2ull) % ACTIVE_NUMA_NODES)
 
 #define GC_BUCKETNODE 2
@@ -50,10 +51,10 @@ unsigned int ACTIVE_NUMA_NODES;
 #define SAMPLE_SIZE 50
 #define HEAD_ID 0
 //#define MAXIMUM_SIZE 1048576 //524288 //262144 //131072 //65536 //32768
-#define MINIMUM_SIZE 1
+//#define MINIMUM_SIZE 1
 #define MAX_NUMA_NODES 16
 
-#define ENABLE_EXPANSION 1
+//#define ENABLE_EXPANSION 1
 #define READTABLE_PERIOD 63
 #define COMPACT_RANDOM_ENQUEUE 1
 
@@ -70,6 +71,7 @@ unsigned int ACTIVE_NUMA_NODES;
 
 #define TID tid
 #define NID nid
+#define SID sid
 
 #define BOOL_CAS_ALE(addr, old, new) CAS_x86(        \
 	UNION_CAST(addr, volatile unsigned long long *), \
@@ -131,6 +133,11 @@ unsigned int ACTIVE_NUMA_NODES;
 #define OP_PQ_ENQ 0x0
 #define OP_PQ_DEQ 0x1
 
+#define OP_CLEAN -1
+#define OP_HANDLING 0
+#define OP_DONE 1
+
+
 
 typedef struct __op_load op_node; //maybe a union is better?
 /**
@@ -156,15 +163,26 @@ struct __bucket_node
 	//64
 };
 
+
 struct __op_load
 {
 	void *payload;				// paylod to enqueue | dequeued payload
 	pkey_t timestamp;			// ts of node to enqueue | lower ts of bucket to dequeue | returned ts
 	char pad[8-sizeof(pkey_t)];
 	unsigned int type;			// ENQ | DEQ
-	op_node ** requestor;
-	volatile int response;		// -1 waiting for resp | 1 responsed
-};
+	volatile int response;		// -1 waiting for resp | 1 responsed | 0 in handling
+	unsigned long padd;
+	// 32
+	};
+
+typedef union {
+	volatile __uint128_t widenext;
+	struct
+	{
+		nbc_bucket_node *volatile next;
+		volatile unsigned long op_id;
+	};
+} wideptr; // used for assignement
 
 //extern nbc_bucket_node *g_tail;
 
@@ -209,9 +227,12 @@ extern unsigned int THREADS; // (!new) number of threads in execution
 
 extern __thread unsigned int TID;
 extern __thread unsigned int NID;
+extern __thread unsigned int SID;
 
 extern __thread struct drand48_data seedT;
 
+extern __thread unsigned long long concurrent_enqueue;
+extern __thread unsigned long long performed_enqueue;
 extern __thread unsigned long long concurrent_dequeue;
 extern __thread unsigned long long performed_dequeue;
 extern __thread unsigned long long scan_list_length;

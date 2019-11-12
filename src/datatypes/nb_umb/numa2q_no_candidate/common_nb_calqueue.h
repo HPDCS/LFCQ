@@ -131,6 +131,11 @@ unsigned int ACTIVE_NUMA_NODES;
 #define OP_PQ_ENQ 0x0
 #define OP_PQ_DEQ 0x1
 
+#define OP_CLEAN -1
+#define OP_HANDLING 0
+#define OP_DONE 1
+
+
 
 typedef struct __op_load op_node; //maybe a union is better?
 /**
@@ -163,9 +168,19 @@ struct __op_load
 	pkey_t timestamp;			// ts of node to enqueue | lower ts of bucket to dequeue | returned ts
 	char pad[8-sizeof(pkey_t)];
 	unsigned int type;			// ENQ | DEQ
-	volatile int response;		// -1 waiting for resp | 1 responsed
-	op_node ** requestor;
-};
+	volatile int response;		// -1 waiting for resp | 1 responsed | 0 in handling
+	unsigned long padd;
+	// 32
+	};
+
+typedef union {
+	volatile __uint128_t widenext;
+	struct
+	{
+		nbc_bucket_node *volatile next;
+		volatile unsigned long op_id;
+	};
+} wideptr; // used for assignement
 
 //extern nbc_bucket_node *g_tail;
 
@@ -213,6 +228,8 @@ extern __thread unsigned int NID;
 
 extern __thread struct drand48_data seedT;
 
+extern __thread unsigned long long concurrent_enqueue;
+extern __thread unsigned long long performed_enqueue;
 extern __thread unsigned long long concurrent_dequeue;
 extern __thread unsigned long long performed_dequeue;
 extern __thread unsigned long long scan_list_length;

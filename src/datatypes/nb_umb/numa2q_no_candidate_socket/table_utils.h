@@ -283,7 +283,7 @@ static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, uns
 
 		// mark the to-be.inserted node as INV if flag == REMOVE_DEL
 		new_node_pointer->next = get_marked(tmp, INV & (-(!is_new_key)));
-
+		//LOG("%p\n",new_node_pointer->next);
 		// set the tie_breaker to:
 		// 1+T1 		IF K1 == timestamp AND flag == REMOVE_DEL_INV
 		// 1			IF K1 != timestamp AND flag == REMOVE_DEL_INV
@@ -316,8 +316,10 @@ static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, uns
 				scan_list_length_en += len;
 			}
 			if (counter > 0)
-				//connect_to_be_freed_node_list(left_next, counter);
-				search(head, -1.0, 0, &lnode, &rnode, flag);
+			{
+				connect_to_be_freed_node_list(left_next, counter);
+				//search(head, -1.0, 0, &lnode, &rnode, flag);	
+			}
 			return OK;
 		}
 
@@ -337,7 +339,8 @@ static inline void set_new_table(table *h, unsigned int threshold, double pub, u
 
 	nbc_bucket_node *tail;
 	table *new_h = NULL;
-	double current_num_items = pub * epb * h->size;
+	//double current_num_items = pub * epb * h->size;
+	double current_num_items = pub * h->pad * h->size;
 	int res = 0;
 	unsigned int i = 0;
 	unsigned int size = h->size;
@@ -400,6 +403,10 @@ static inline void set_new_table(table *h, unsigned int threshold, double pub, u
 		new_h->current = ((unsigned long long)-1) << 32;
 		new_h->read_table_period = h->read_table_period;
 
+		new_h->pad = ((double)concurrent_dequeue)/((double)performed_dequeue) + ((double)concurrent_enqueue)/((double)performed_enqueue);
+		new_h->pad = new_h->pad < 1 ? 1 : new_h->pad;
+		new_h->pad *= 4;  //4 TUNA TIS
+
 		for (i = 0; i < new_size; i++)
 		{
 			new_h->array[i].next = tail;
@@ -416,7 +423,10 @@ static inline void set_new_table(table *h, unsigned int threshold, double pub, u
 			free(new_h);
 		}
 		else
+		{
 			LOG("%u - CHANGE SIZE from %u to %u, items %u OLD_TABLE:%p NEW_TABLE:%p\n", TID, size, new_size, counter, h, new_h);
+			LOG("%f %f %u\n", ((double)concurrent_dequeue)/((double)performed_dequeue), ((double)concurrent_enqueue)/((double)performed_enqueue), new_h->pad);
+		}
 	}
 }
 
@@ -567,8 +577,11 @@ static inline double compute_mean_separation_time(table *h,
 		}
 	}
 
+	double epb = h->pad;
+    newaverage = (newaverage / j) * epb;
+
 	// Compute new width
-	newaverage = (newaverage / j) * elem_per_bucket; /* this is the new width */
+	//newaverage = (newaverage / j) * elem_per_bucket; /* this is the new width */
 	//	LOG("%d- my new bucket %.10f for %p\n", TID, newaverage, h);
 
 	if (newaverage <= 0.0)
@@ -584,65 +597,63 @@ static inline double compute_mean_separation_time(table *h,
 
 static inline void migrate_node(nbc_bucket_node *right_node, table *new_h)
 {
-nbc_bucket_node *replica;
-	nbc_bucket_node** new_node;
+	nbc_bucket_node *replica;
+	nbc_bucket_node **new_node;
 	nbc_bucket_node *right_replica_field, *right_node_next;
-	
+
 	nbc_bucket_node *bucket, *new_node_pointer;
 	unsigned int index;
 
-	unsigned int new_node_counter 	;
-	pkey_t 		 new_node_timestamp ;
+	unsigned int new_node_counter;
+	pkey_t new_node_timestamp;
 
-	
 	int res = 0;
-	
+
+	//Create a new node to be inserted in the new table as as INValid
 	new_node_timestamp = right_node->timestamp;
 	index = hash(new_node_timestamp, new_h->bucket_width);
 
-	//Create a new node to be inserted in the new table as as INValid
-	replica = numa_node_malloc(right_node->payload, new_node_timestamp,  right_node->counter, NODE_HASH(index%new_h->size));
-	
-	new_node 			= &replica;
-	new_node_pointer 	= (*new_node);
-	new_node_counter 	= new_node_pointer->counter;
-	//new_node_timestamp 	= new_node_pointer->timestamp;
+	replica = numa_node_malloc(right_node->payload, new_node_timestamp, right_node->counter, NODE_HASH(index % new_h->size));
+	new_node = &replica;
+	new_node_pointer = (*new_node);
+	new_node_counter = new_node_pointer->counter;
+	new_node_timestamp = new_node_pointer->timestamp;
 
 	// node to be added in the hashtable
 	bucket = new_h->array + (index % new_h->size);
-	         
-    do{	right_replica_field = right_node->replica; } 
-    // try to insert the replica in the new table       
-	while(right_replica_field == NULL && (res = 
-	search_and_insert(bucket, new_node_timestamp, new_node_counter, REMOVE_DEL, new_node_pointer, new_node)
-	) == ABORT);
+
+	do
+	{
+		right_replica_field = right_node->replica;
+	}
+	// try to insert the replica in the new table
+	while (right_replica_field == NULL && (res =
+											   search_and_insert(bucket, new_node_timestamp, new_node_counter, REMOVE_DEL, new_node_pointer, new_node)) == ABORT);
 	// at this point we have at least one replica into the new table
 
 	// try to decide which is the right replica and if I won the challenge increase the counter of enqueued items into the new set table
-	if( right_replica_field == NULL && 
-			BOOL_CAS(
-				&(right_node->replica),
-				NULL,
-				replica
-				)
-		)
+	if (right_replica_field == NULL &&
+		BOOL_CAS(
+			&(right_node->replica),
+			NULL,
+			replica))
 		ATOMIC_INC(&(new_h->e_counter));
-             
+
 	right_replica_field = right_node->replica;
 
 	// make the replica being valid
-	do{	right_node_next = right_replica_field->next;}
-	while( 
-		is_marked(right_node_next, INV) && 
-		!BOOL_CAS(	&(right_replica_field->next),
-					right_node_next,
-					get_unmarked(right_node_next)
-				)
-		);
+	do
+	{
+		right_node_next = right_replica_field->next;
+	} while (
+		is_marked(right_node_next, INV) &&
+		!BOOL_CAS(&(right_replica_field->next),
+				  right_node_next,
+				  get_unmarked(right_node_next)));
 
 	// now the insertion is completed so flush the current of the new table
 	flush_current(new_h, index, right_replica_field);
-	
+
 	// invalidate the node MOV to DEL (11->01)
 	right_node_next = FETCH_AND_AND(&(right_node->next), MASK_DEL);
 }
