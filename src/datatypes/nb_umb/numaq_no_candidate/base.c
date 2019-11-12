@@ -459,12 +459,12 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 			if (op_type == OP_PQ_ENQ) 
 			{
 				vb_index  = hash(operation->timestamp, h->bucket_width);
-				dest_node = NODE_HASH(vb_index);	
+				dest_node = NODE_HASH(vb_index % h->size);	
 			}
 			else 
 			{
 				vb_index = (h->current) >> 32;
-				dest_node = NODE_HASH(vb_index);
+				dest_node = NODE_HASH(vb_index % h->size);
 			}
 
 			// need to move to another queue? 
@@ -598,13 +598,13 @@ pkey_t pq_dequeue(void *q, void **result)
 			{
 
 				vb_index  = hash(operation->timestamp, h->bucket_width);
-				dest_node = NODE_HASH(vb_index);
+				dest_node = NODE_HASH(vb_index % h->size);
 				
 			}
 			else 
 			{
 				vb_index = (h->current) >> 32;
-				dest_node = NODE_HASH(vb_index);
+				dest_node = NODE_HASH(vb_index % h->size);
 			}
 
 			// need to move to another queue?
