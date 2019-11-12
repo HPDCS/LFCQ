@@ -107,14 +107,20 @@ NUMA2QSKTBL_link := gcc
 
 ########
 
-# OTHER STRUCTS
+# BLOCKING NUMAQ + SKT
 
 ########
 
-NUMAQ_value := $(TQ_value) src/datatypes/nb_umb/numaq_no_candidate_socket/base.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMAQ_value := $(TQ_value) src/datatypes/nb_umb/numaq_no_candidate/base.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMAQ_link := gcc
 
-RNUMAQ_value := $(TQ_value) src/datatypes/nb_umb/numaq_no_candidate_socket/base_r.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMAQFK_value := $(TQ_value) src/datatypes/nb_umb/numaq_no_candidate/fake.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMAQFK_link := gcc
+
+NUMAQBL_value := $(TQ_value) src/datatypes/nb_umb/numaq_no_candidate/busyloop.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMAQBL_link := gcc
+
+RNUMAQ_value := $(TQ_value) src/datatypes/nb_umb/numaq_no_candidate/base_r.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 RNUMAQ_link := gcc
 
 NUMAQSKT_value := $(TQ_value) src/datatypes/nb_umb/numaq_no_candidate_socket/base.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
@@ -122,6 +128,18 @@ NUMAQSKT_link := gcc
 
 RNUMAQSKT_value := $(TQ_value) src/datatypes/nb_umb/numaq_no_candidate_socket/base_r.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 RNUMAQSKT_link := gcc
+
+NUMAQSKTFK_value := $(TQ_value) src/datatypes/nb_umb/numaq_no_candidate_socket/fake.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMAQSKTFK_link := gcc
+
+NUMAQSKTBL_value := $(TQ_value) src/datatypes/nb_umb/numaq_no_candidate_socket/busyloop.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMAQSKTBL_link := gcc
+
+######
+
+# OTHER DATA
+
+######
 
 CACRCQ_value := src/datatypes/nb_umb/nbcalendars-ad-candidate/nb_calqueue.o src/datatypes/nb_umb/nbcalendars-ad-candidate/common_nb_calqueue.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 CACRCQ_link := gcc
