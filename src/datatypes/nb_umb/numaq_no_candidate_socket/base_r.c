@@ -485,7 +485,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 		if (operation == NULL)
 		{	
 			// check if my op was done - done here since we don't want to remove someone op from queues
-			if ((ret = __sync_fetch_and_add(&(requested_op->response), 0)) != -1)
+			if ((ret = __sync_fetch_and_add(&(requested_op->response), 0)) == OP_DONE)
 			{
 				gc_free(ptst, requested_op, gc_aid[GC_OPNODE]);
 				critical_exit();
@@ -624,7 +624,7 @@ pkey_t pq_dequeue(void *q, void **result)
 		{
 			
 			// check if my op was done // we could lose op
-			if ((ret = __sync_fetch_and_add(&(requested_op->response), 0)) != -1)
+			if ((ret = __sync_fetch_and_add(&(requested_op->response), 0)) == OP_DONE)
 			{
 				*result = requested_op->payload;
 				ret_ts = requested_op->timestamp;
