@@ -67,6 +67,7 @@ unsigned int ACTIVE_NUMA_NODES;
 
 #define TID tid
 #define NID nid
+#define SID sid
 
 #define BOOL_CAS_ALE(addr, old, new)  CAS_x86(\
 										UNION_CAST(addr, volatile unsigned long long *),\
