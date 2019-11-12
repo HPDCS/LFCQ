@@ -358,7 +358,7 @@ void* process(void *arg)
 
 	my_id 		=  *((int*)(arg));
 	(TID) 		= my_id;
-	int cpu 	= numa_mapping[my_id];
+	int cpu 	= numa_mapping[my_id%num_cpus];
 	(NID) 		= numa_node_of_cpu(cpu);
 	(LTID)		= my_id % num_cpus_per_node;
 	(SID)		= socket_mapping[cpu];
