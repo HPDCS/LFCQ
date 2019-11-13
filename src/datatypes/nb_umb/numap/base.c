@@ -79,6 +79,7 @@ __thread unsigned long long deq_steal_attempt = 0ULL;
 
 __thread unsigned long long local_enq = 0ULL;
 __thread unsigned long long local_deq = 0ULL;
+
 __thread unsigned long long remote_enq = 0ULL;
 __thread unsigned long long remote_deq = 0ULL;
 

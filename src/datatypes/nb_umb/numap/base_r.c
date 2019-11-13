@@ -458,7 +458,7 @@ static inline int handle_ops(void* q)
 	op_node *to_me, *from_me;
 
 	count = 0;
-	for (i = NID; i % ACTIVE_NUMA_NODES != NID; i++)
+	for (i = NID+1; i % ACTIVE_NUMA_NODES != NID; i++)
 	{
 		i = i % ACTIVE_NUMA_NODES;
 	
@@ -475,18 +475,21 @@ static inline int handle_ops(void* q)
 
 			// se l'operazione ha successo o è fallita devo comunicarlo al richiedente
 			from_me = get_res_slot_to_node(i);
-			if (!write_slot(from_me, type, ret, ts, pld, new_dest))
+			if (!write_slot(from_me, type, ret, ts, pld, new_dest)) // il ricevente potrebbe non aver letto
 				abort_line();
 			count++;
 			
 			// l'operazione ha cambaito località - posto sul nodo giusto
 			// sperabilmente sono più vicino del richiedente
+			/*
 			if (ret < 0)
 			{
+				// ha senso? Oppure è meglio che lo faccia fare al richiedente? (Pago 2 volte il costo - ma non ho inconsistenze sulle scritture)
 				from_me = get_req_slot_from_to_node(i, new_dest);
 				if (!write_slot(from_me, type, 0, ts, pld, new_dest))
 					abort_line();
 			}
+			*/
 		}
 	}
 
@@ -595,9 +598,13 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 		if (read_slot(resp, &type, &ret, &ts, &pld, &new_dest_node))
 		{
 			if (ret < 0)
-			{				
+			{
 				dest_node = new_dest_node;
 				from_me = get_req_slot_to_node(dest_node);
+				if (!write_slot(from_me, OP_PQ_ENQ, 0, timestamp, payload, dest_node))
+				{	
+					abort_line();
+				}
 				resp = get_res_slot_from_node(dest_node);
 			}
 			else
@@ -687,7 +694,7 @@ pkey_t pq_dequeue(void *q, void** result)
 				resp = get_res_slot_from_node(dest_node);
 
 				if (!write_slot(from_me, OP_PQ_DEQ, 0, 0, 0, dest_node))
-				{			
+				{
 					abort_line();
 				}
 				repost_deq++;
@@ -711,6 +718,10 @@ pkey_t pq_dequeue(void *q, void** result)
 			{
 				dest_node = new_dest_node;
 				from_me = get_req_slot_to_node(dest_node);
+				if (!write_slot(from_me, OP_PQ_DEQ, 0, 0, 0, dest_node))
+				{
+					abort_line();
+				}
 				resp = get_res_slot_from_node(dest_node);
 			}
 			else
@@ -741,7 +752,7 @@ void pq_report(int TID)
 			num_cas, num_cas_useful,
 			deq_steal_attempt, deq_steal_done, repost_deq,
 			near,
-			read_table_count	  ,
+			read_table_count,
 			malloc_count,
 			local_enq, local_deq, remote_enq, remote_deq);
 }
@@ -749,7 +760,7 @@ void pq_report(int TID)
 void pq_reset_statistics(){
 		near = 0;
 		num_cas = 0;
-		num_cas_useful = 0;	
+		num_cas_useful = 0;
 }
 
 unsigned int pq_num_malloc(){ return (unsigned int) malloc_count; }
