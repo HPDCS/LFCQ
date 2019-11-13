@@ -447,7 +447,7 @@ begin:
 
 static inline int handle_ops(void* q) 
 {
-	int i, ret, count ;
+	int i, j, ret, count ;
 	
 	unsigned int type;
 	unsigned int new_dest;
@@ -458,9 +458,9 @@ static inline int handle_ops(void* q)
 	op_node *to_me, *from_me;
 
 	count = 0;
-	for (i = NID; i % ACTIVE_NUMA_NODES != NID; i++)
+	for (j = 0; j < ACTIVE_NUMA_NODES; j++)
 	{
-		i = i % ACTIVE_NUMA_NODES;
+		i = (j+NID) % ACTIVE_NUMA_NODES;
 	
 		to_me	= get_req_slot_from_node(i);
 
@@ -479,12 +479,14 @@ static inline int handle_ops(void* q)
 				abort_line();
 			count++;
 
+			/*
 			if (ret < 0)
 			{
 				from_me = get_req_slot_from_to_node(i, new_dest);
 				if (!write_slot(from_me, type, 0, ts, pld, new_dest))
 					abort_line();
 			}
+			*/
 		}
 	}
 
@@ -595,7 +597,12 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 			{				
 				dest_node = new_dest_node;
 				from_me = get_req_slot_to_node(dest_node);
+				if (!write_slot(from_me, OP_PQ_ENQ, 0, timestamp, payload, dest_node))
+				{	
+					abort_line();
+				}
 				resp = get_res_slot_from_node(dest_node);
+				attempts = 0;
 			}
 			else
 				break;
@@ -708,7 +715,12 @@ pkey_t pq_dequeue(void *q, void** result)
 			{
 				dest_node = new_dest_node;
 				from_me = get_req_slot_to_node(dest_node);
+				if (!write_slot(from_me, OP_PQ_DEQ, 0, 0, 0, dest_node))
+				{
+					abort_line();
+				}
 				resp = get_res_slot_from_node(dest_node);
+				attempts = 0;
 			}
 			else
 				break;

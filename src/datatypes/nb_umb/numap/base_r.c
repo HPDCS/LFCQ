@@ -447,7 +447,7 @@ begin:
 
 static inline int handle_ops(void* q) 
 {
-	int i, ret, count ;
+	int i, j, ret, count ;
 	
 	unsigned int type;
 	unsigned int new_dest;
@@ -458,9 +458,9 @@ static inline int handle_ops(void* q)
 	op_node *to_me, *from_me;
 
 	count = 0;
-	for (i = NID+1; i % ACTIVE_NUMA_NODES != NID; i++)
+	for (j = 0; j < ACTIVE_NUMA_NODES; j++)
 	{
-		i = i % ACTIVE_NUMA_NODES;
+		i = (j+NID) % ACTIVE_NUMA_NODES;
 	
 		to_me = get_req_slot_from_node(i);
 
@@ -606,6 +606,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 					abort_line();
 				}
 				resp = get_res_slot_from_node(dest_node);
+				attempts = 0;
 			}
 			else
 				break;
@@ -723,6 +724,7 @@ pkey_t pq_dequeue(void *q, void** result)
 					abort_line();
 				}
 				resp = get_res_slot_from_node(dest_node);
+				attempts = 0;
 			}
 			else
 				break;
