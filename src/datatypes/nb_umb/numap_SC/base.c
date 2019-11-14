@@ -520,6 +520,18 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 
 	//count = handle_ops(q);	// execute pending op, useful in case this is the last op.
 
+	if (likely(enq_from_me != NULL && enq_resp != NULL))
+	{
+		if (read_slot(enq_from_me, &type, &ret, &ts, &pld, &new_dest_node))
+			do_pq_enqueue(q, ts, pld); // e passa la paura
+		// aspetto la risposta o no?
+		else
+			while(!read_slot(enq_resp, &type, &ret, &ts, &pld, &new_dest_node));
+		
+		enq_from_me = NULL;
+		enq_resp = NULL;
+	}
+
 	// read table
 	h = read_table(&queue->hashtable, th, epb, pub);
 	
@@ -529,7 +541,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	// if NID execute
 	if (dest_node == NID)
 	{
-		int ret = do_pq_enqueue(q, timestamp, payload);
+		ret = do_pq_enqueue(q, timestamp, payload);
 		critical_exit();
 		return ret;
 	}
@@ -589,20 +601,29 @@ pkey_t pq_dequeue(void *q, void** result)
 	unsigned int dest_node, new_dest_node;
 	
 	//count = handle_ops(q); // clean pending op 
+	/*
+	 Execute pending enq
+	 */
+	// check from
+	if (likely(enq_from_me != NULL && enq_resp != NULL))
+	{
+		if (read_slot(enq_from_me, &type, &ret, &ts, &pld, &new_dest_node))
+			do_pq_enqueue(q, ts, pld); // e passa la paura
+		// aspetto la risposta o no?
+		else
+			while(!read_slot(enq_resp, &type, &ret, &ts, &pld, &new_dest_node));
+		enq_from_me = NULL;
+		enq_resp = NULL;
+	}
 	
+
+
 	// read table
 	h = read_table(&queue->hashtable, th, epb, pub);
 	// check destination
 	dest_node = NODE_HASH(((h->current)>>32)%(h->size));
 
-	/*
-	 Execute pending enq
-	 */
-	// check from
-	if (enq_from_me != NULL && read_slot(enq_from_me, &type, &ret, &ts, &pld, &new_dest_node))
-		do_pq_enqueue(q, ts, pld); // e passa la paura
-	// aspetto la risposta o no?
-	while(enq_resp!= NULL && !read_slot(enq_resp, &type, &ret, &ts, &pld, &new_dest_node));
+	
 	
 	if (dest_node == NID) {
 		pkey_t ret = do_pq_dequeue(q, result);
