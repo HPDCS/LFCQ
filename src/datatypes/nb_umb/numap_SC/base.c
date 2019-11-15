@@ -72,19 +72,29 @@ __thread unsigned long long near = 0;
 __thread unsigned int 		acc = 0;
 __thread unsigned int 		acc_counter = 0;
 
-__thread unsigned long long enq_steal_done = 0ULL;
-__thread unsigned long long enq_steal_attempt = 0ULL;
-__thread unsigned long long deq_steal_done = 0ULL;
-__thread unsigned long long deq_steal_attempt = 0ULL;
-
 __thread unsigned long long local_enq = 0ULL;
 __thread unsigned long long local_deq = 0ULL;
 
 __thread unsigned long long remote_enq = 0ULL;
 __thread unsigned long long remote_deq = 0ULL;
 
-__thread unsigned long long repost_enq = 0ULL;
-__thread unsigned long long repost_deq = 0ULL;
+//////////
+
+__thread unsigned long long wait_enq = 0ULL;
+__thread unsigned long long wait_deq = 0ULL;
+
+__thread unsigned long long enq_length = 0ULL;
+__thread unsigned long long deq_length = 0ULL;
+
+__thread unsigned long long enq_pre_st = 0ULL;
+__thread unsigned long long deq_pre_st = 0ULL;
+
+__thread unsigned long long enq_pre_wait_len = 0ULL;
+__thread unsigned long long deq_pre_wait_len = 0ULL;
+
+__thread unsigned long long above_thresh = 0ULL;
+__thread unsigned long long steal_done = 0ULL;
+__thread unsigned long long repost = 0ULL;
 
 void std_free_hook(ptst_t *p, void *ptr){	free(ptr); }
 
@@ -450,7 +460,7 @@ begin:
 
 static inline int handle_ops(void* q) 
 {
-	int i, ret, count ;
+	int i, j,ret, count ;
 	
 	unsigned int type;
 	unsigned int node;
@@ -461,9 +471,9 @@ static inline int handle_ops(void* q)
 	op_node *to_me, *from_me;
 
 	count = 0;
-	for (i = NID+1; i % ACTIVE_NUMA_NODES != NID; i++)
+	for (j = 0; j < ACTIVE_NUMA_NODES; j++)
 	{
-		i = i % ACTIVE_NUMA_NODES;
+		i = (NID + j) % ACTIVE_NUMA_NODES;
 	
 		to_me 	= get_req_slot_from_node(i);
 
@@ -505,8 +515,6 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	
 	void* pld;
 
-	unsigned long attempts, count;
-
 	critical_enter();
 
 	table * h = NULL;
@@ -523,10 +531,17 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	if (likely(enq_from_me != NULL && enq_resp != NULL))
 	{
 		if (read_slot(enq_from_me, &type, &ret, &ts, &pld, &new_dest_node))
+		{
 			do_pq_enqueue(q, ts, pld); // e passa la paura
+			enq_pre_st++;
+		}
 		// aspetto la risposta o no?
 		else
-			while(!read_slot(enq_resp, &type, &ret, &ts, &pld, &new_dest_node));
+			while(!read_slot(enq_resp, &type, &ret, &ts, &pld, &new_dest_node))
+			{	
+				handle_ops(q);
+				enq_pre_wait_len++;
+			}
 		
 		enq_from_me = NULL;
 		enq_resp = NULL;
@@ -538,13 +553,17 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	// check destination
 	dest_node = NODE_HASH(hash(timestamp, h->bucket_width) % (h->size));
 
-	// if NID execute
+	// if NID execute - No, pubblica e basta, TROIA!
+
+	
 	if (dest_node == NID)
 	{
 		ret = do_pq_enqueue(q, timestamp, payload);
 		critical_exit();
 		return ret;
 	}
+
+	wait_enq++;
 
 	// posting the operation
 	from_me = get_req_slot_to_node(dest_node);
@@ -556,15 +575,10 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 		abort_line();
 	}
 
-	do { 
-		// do all ops
-		count = handle_ops(q);	
-		
-		if (count == 0)
-			break;
+	wait_enq++;
 
-		// check response
-	} while(1);
+	while(handle_ops(q) != 0)
+		enq_length++;
 
 	enq_from_me = from_me;
 	enq_resp = resp;
@@ -608,29 +622,35 @@ pkey_t pq_dequeue(void *q, void** result)
 	if (likely(enq_from_me != NULL && enq_resp != NULL))
 	{
 		if (read_slot(enq_from_me, &type, &ret, &ts, &pld, &new_dest_node))
+		{
 			do_pq_enqueue(q, ts, pld); // e passa la paura
-		// aspetto la risposta o no?
+			deq_pre_st++;
+		}
+		// aspetto la risposta o no? - devo per pulire il canale
 		else
-			while(!read_slot(enq_resp, &type, &ret, &ts, &pld, &new_dest_node));
+			while(!read_slot(enq_resp, &type, &ret, &ts, &pld, &new_dest_node))
+			{	
+				handle_ops(q);
+				deq_pre_wait_len++;
+			}
+		
 		enq_from_me = NULL;
 		enq_resp = NULL;
 	}
-	
-
 
 	// read table
 	h = read_table(&queue->hashtable, th, epb, pub);
 	// check destination
 	dest_node = NODE_HASH(((h->current)>>32)%(h->size));
+	
 
-	
-	
 	if (dest_node == NID) {
 		pkey_t ret = do_pq_dequeue(q, result);
 		critical_exit();
 		return ret;
 	}
-	
+
+
 	// posting the operation
 	from_me = get_req_slot_to_node(dest_node);
 	resp = get_res_slot_from_node(dest_node);
@@ -641,24 +661,25 @@ pkey_t pq_dequeue(void *q, void** result)
 		abort_line();
 	}
 
+	wait_deq++;
 
 	attempts = 0;
 	do {
 		
 		if (attempts > DEQ_MAX_WAIT_ATTEMPTS) 
 		{
-			deq_steal_attempt++;
+			above_thresh++;
 			//from_me = get_req_slot_to_node(dest_node);
 			if (read_slot(from_me, &type, &ret, &ts, &pld, &new_dest_node))
 			{
-				deq_steal_done++;
-
+				
 				h = read_table(&queue->hashtable, th, epb, pub);
 				new_dest_node = NODE_HASH(((h->current)>>32)%(h->size));
 
 				// if the dest node is mine or is unchanged
 				if (new_dest_node == NID || new_dest_node == dest_node)
 				{
+					steal_done++;
 					ts = do_pq_dequeue(q, &pld);
 					break;
 				}
@@ -672,8 +693,7 @@ pkey_t pq_dequeue(void *q, void** result)
 				{			
 					abort_line();
 				}
-				repost_deq++;
-			
+				repost++;
 			}
 			attempts = 0;
 		}
@@ -685,6 +705,8 @@ pkey_t pq_dequeue(void *q, void** result)
 			attempts++;
 		else
 			attempts=0;
+
+		deq_length++;
 
 		// check response
 		if (read_slot(resp, &type, &ret, &ts, &pld, &new_dest_node))
@@ -700,21 +722,22 @@ void pq_report(int TID)
 {
 	
 	printf("%d- "
-	"Enqueue: %.10f LEN: %.10f ST: %llu : %llu : %llu ### "
-	"Dequeue: %.10f LEN: %.10f NUMCAS: %llu : %llu ST: %llu : %llu : %llu ### "
+	"Enqueue: %.10f LEN: %.10f WAIT: %llu W_LEN: %llu PST: %llu PS_LEN: %llu ### "
+	"Dequeue: %.10f LEN: %.10f WAIT: %llu W_LEN: %llu PST: %llu PS_LEN: %llu ST %llu : %llu : %llu NUMCAS: %llu : %llu ### "
 	"NEAR: %llu "
 	"RTC:%d, M:%lld, "
 	"Local ENQ: %llu DEQ: %llu, Remote ENQ: %llu DEQ: %llu\n",
 			TID,
 			((float)concurrent_enqueue) /((float)performed_enqueue),
 			((float)scan_list_length_en)/((float)performed_enqueue),
-			enq_steal_attempt, enq_steal_done, repost_enq,
+			wait_enq, enq_length, enq_pre_st, enq_pre_wait_len,
 			((float)concurrent_dequeue) /((float)performed_dequeue),
 			((float)scan_list_length)   /((float)performed_dequeue),
+			wait_deq, deq_length, deq_pre_st, deq_pre_wait_len,
+			above_thresh, steal_done, repost,
 			num_cas, num_cas_useful,
-			deq_steal_attempt, deq_steal_done, repost_deq,
 			near,
-			read_table_count	  ,
+			read_table_count,
 			malloc_count,
 			local_enq, local_deq, remote_enq, remote_deq);
 }

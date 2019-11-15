@@ -59,27 +59,27 @@ void init_mapping()
     LOG("init_mapping() done! %s\n","(mapping)");
 }
 
-op_node* get_req_slot_from_node(unsigned int numa_node)
+inline op_node* get_req_slot_from_node(unsigned int numa_node)
 {
     return &req_mapping[NID][(numa_node * num_cpus_per_node) + LTID];
 }
 
-op_node* get_req_slot_to_node(unsigned int numa_node)
+inline op_node* get_req_slot_to_node(unsigned int numa_node)
 {
     return &req_mapping[numa_node][TID];
 }
 
-op_node* get_req_slot_from_to_node(unsigned int src_node, unsigned int dst_node)
+inline op_node* get_req_slot_from_to_node(unsigned int src_node, unsigned int dst_node)
 {
     return &req_mapping[dst_node][(src_node * num_cpus_per_node) + LTID];
 }
 
-op_node* get_res_slot_from_node(unsigned int numa_node)
+inline op_node* get_res_slot_from_node(unsigned int numa_node)
 {
     return &res_mapping[NID][(numa_node * num_cpus_per_node) + LTID];
 }
 
-op_node* get_res_slot_to_node(unsigned int numa_node)
+inline op_node* get_res_slot_to_node(unsigned int numa_node)
 {
     return &res_mapping[numa_node][TID];
 }
