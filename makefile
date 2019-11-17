@@ -173,7 +173,7 @@ NUMA2QSKTBL_link := gcc
 
 ######
 
-SCNUMAP_value := src/datatypes/nb_umb/numap_SC/base.o src/datatypes/nb_umb/numap_SC/mapping.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+SCNUMAP_value := $(TQ_value) src/datatypes/nb_umb/numap_SC/base.o src/datatypes/nb_umb/numap_SC/mapping.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 SCNUMAP_link := gcc
 
 CACRCQ_value := src/datatypes/nb_umb/nbcalendars-ad-candidate/nb_calqueue.o src/datatypes/nb_umb/nbcalendars-ad-candidate/common_nb_calqueue.o $(UTIL_value) $(ARCH_value) $(NGACO_value)

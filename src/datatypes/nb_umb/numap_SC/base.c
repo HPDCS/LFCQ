@@ -553,17 +553,12 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	// check destination
 	dest_node = NODE_HASH(hash(timestamp, h->bucket_width) % (h->size));
 
-	// if NID execute - No, pubblica e basta, TROIA!
-
-	
 	if (dest_node == NID)
 	{
 		ret = do_pq_enqueue(q, timestamp, payload);
 		critical_exit();
 		return ret;
 	}
-
-	wait_enq++;
 
 	// posting the operation
 	from_me = get_req_slot_to_node(dest_node);
@@ -614,7 +609,6 @@ pkey_t pq_dequeue(void *q, void** result)
 	
 	unsigned int dest_node, new_dest_node;
 	
-	//count = handle_ops(q); // clean pending op 
 	/*
 	 Execute pending enq
 	 */
