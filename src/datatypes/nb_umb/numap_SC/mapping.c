@@ -2,8 +2,6 @@
 #include <numaif.h>
 
 #include "mapping.h"
-#include "../op_queue/task_queue.h"
-#include "../gc/ptst.h"
 
 #ifndef _NM_USE_SPINLOCK
 #define R_BUSY 0x2
@@ -11,21 +9,25 @@
 #define L_FREE 0x0
 #endif
 
-static int gc_id[1];
-
-typedef struct _operation_s
+struct __op_load
 {
+	#ifdef _NM_USE_SPINLOCK
+	spinlock_t spin;
+	#else
+	volatile int busy;
+	#endif
+	volatile int response; 		// 0 posted/wait to be executed; >=1 read/executed;
+	
+	char pad0[56];
+
     unsigned int dest_node;
 	unsigned int type;			// ENQ | DEQ
 	int ret_value;
 	pkey_t timestamp;			// ts of node to enqueue
  	void *payload;				// paylod to enqueue | dequeued payload
+	//24
+	char pad[48 - sizeof(pkey_t) ];
 
-} operation_t;
-
-struct __op_load
-{
-	task_queue queue;
 };
 
 op_node *res_mapping[_NUMA_NODES];
@@ -33,9 +35,6 @@ op_node *req_mapping[_NUMA_NODES];
 
 void init_mapping() 
 {
-
-    gc_id[0] = gc_add_allocator(sizeof(operation_t));
-    critical_enter();
     unsigned int max_threads = _NUMA_NODES * num_cpus_per_node;
     int i, j;
     for (i = 0; i < _NUMA_NODES; ++i) 
@@ -45,12 +44,19 @@ void init_mapping()
         
         for (j = 0; j < max_threads; ++j) 
         {
-            init_tq(&req_mapping[i][j].queue, i);
-            init_tq(&res_mapping[i][j].queue, i);
+            #ifdef _NM_USE_SPINLOCK
+            spinlock_init(&(req_mapping[i][j].spin));
+            spinlock_init(&(res_mapping[i][j].spin));
+            #else
+            req_mapping[i][j].busy = L_FREE;
+            res_mapping[i][j].busy = L_FREE;
+            #endif
+
+            res_mapping[i][j].response = 1;
+            req_mapping[i][j].response = 1;
         }
     }
-    critical_exit();
-    LOG("init_mapping() done! %s\n","(slots are LCRQ)");
+    LOG("init_mapping() done! %s\n","(mapping)");
 }
 
 op_node* get_req_slot_from_node(unsigned int numa_node)
@@ -85,22 +91,36 @@ bool read_slot(op_node* slot,
     void** payload,
     unsigned int *node) 
 {
-    operation_t* extracted;
-    critical_enter();
-    if (!tq_dequeue(&slot->queue, extracted))
-    {    
-        critical_exit();
+    
+    int val;
+
+    #ifdef _NM_USE_SPINLOCK
+    if (!spin_trylock_x86(&(slot->spin)))
+        return false;
+    #else
+    if (!__sync_bool_compare_and_swap(&(slot->busy), L_FREE, R_BUSY))
+        return false;
+    #endif
+
+    val = __sync_fetch_and_add(&(slot->response), 1);
+    if (val != 0)
+    {
+        slot->busy = L_FREE;
         return false;
     }
 
-    *type = extracted->type;
-    *ret_value = extracted->ret_value;
-    *timestamp = extracted->timestamp;
-    *payload = extracted->payload;
-    *node = extracted->dest_node;
+    *node = slot->dest_node;
+    *type = slot->type;
+    *ret_value = slot->ret_value;
+    *timestamp = slot->timestamp; 
+    *payload = slot->payload;
+    
+    #ifdef _NM_USE_SPINLOCK
+    spin_unlock_x86(&(slot->spin));
+    #else
+    slot->busy = L_FREE;
+    #endif
 
-    gc_free(ptst, extracted, gc_id[0]);
-    critical_exit();
     return true;
 }
 
@@ -111,22 +131,31 @@ bool write_slot(op_node* slot,
     void* payload,
     unsigned int node)
 {
-    operation_t* insert;
-    
-    critical_enter();
-    insert = gc_alloc_node(ptst, gc_id[0], node);
 
-    insert->type = type;
-    insert->ret_value = ret_value;
-    insert->timestamp = timestamp;
-    insert->payload = payload;
-    insert->dest_node = node;
+    int val;
 
-    tq_enqueue(&slot->queue, insert, node);
+    #ifdef _NM_USE_SPINLOCK
+    spin_lock_x86(&(slot->spin));
+    #else
+    while(!__sync_bool_compare_and_swap(&(slot->busy), L_FREE, W_BUSY));
+    #endif
 
-    critical_exit();
+    slot->dest_node = node;
+    slot->type = type;
+    slot->ret_value = ret_value;
+    slot->timestamp = timestamp; 
+    slot->payload = payload;
 
-    return true;
+    val = __sync_fetch_and_and(&(slot->response), 0);
 
+    #ifdef _NM_USE_SPINLOCK
+    spin_unlock_x86(&(slot->spin));
+    #else
+    slot->busy = L_FREE;
+    #endif
+    if (val != 0)
+        return true;
+    else 
+        return false;
 }
 
