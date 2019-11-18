@@ -158,4 +158,3 @@ bool write_slot(op_node* slot,
     else 
         return false;
 }
-
