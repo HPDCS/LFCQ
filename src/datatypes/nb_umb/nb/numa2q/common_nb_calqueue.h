@@ -30,12 +30,12 @@
 #include <float.h>
 #include <math.h>
 
-#include "../../../key_type.h"
-#include "../../../arch/atomic.h"
-#include "../../../utils/hpdcs_utils.h"
-#include "../gc/ptst.h"
+#include "../../../../key_type.h"
+#include "../../../../arch/atomic.h"
+#include "../../../../utils/hpdcs_utils.h"
+#include "../../gc/ptst.h"
 
-#include "../op_queue/task_queue.h"
+#include "../../op_queue/task_queue.h"
 
 extern __thread ptst_t *ptst;
 extern int gc_aid[];

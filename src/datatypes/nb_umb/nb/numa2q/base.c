@@ -84,7 +84,8 @@ void *pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	// init fraser garbage collector/allocator
 	_init_gc_subsystem();
 	_init_gc_tq();
-
+	_init_gc_cache();
+	
 	// add allocator of nbc_bucket_node
 	gc_aid[GC_BUCKETNODE] = gc_add_allocator(sizeof(nbc_bucket_node));
 	gc_aid[GC_OPNODE] = gc_add_allocator(sizeof(op_node));
@@ -320,6 +321,8 @@ begin:
 	con_de = h->d_counter.count;
 	attempts = 0;
 
+	validate_cache(h, current);
+
 	do
 	{	
 		// To many attempts: there is some problem? recheck the table
@@ -339,6 +342,7 @@ begin:
 		// get the physical bucket
 		min = array + (index % (size));
 		left_node = min_next = min->next;
+		left_node = read_last_min(left_node);
 		
 		dest_node = NODE_HASH(index % (size));
 		if (dest_node != NID)
@@ -486,6 +490,8 @@ begin:
 			*result = left_node->payload;
 			*ret_ts = left_ts;
 			
+			update_last_min(left_node);
+
 			// check if local or not
 			if (!remote)
 				local_deq++;
@@ -527,6 +533,8 @@ begin:
 		}
 		else
 			current = new_current;
+
+		validate_cache(h, current);
 		
 	}while(1);
 	
