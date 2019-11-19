@@ -7,25 +7,24 @@
 
 
 typedef struct _op_payload {
-    volatile long counter; // read count
-
-    char pad0[56];
-
-    unsigned int dest_node;
-    unsigned int type;						// ENQ | DEQ
+    	volatile long counter; // read count
+    	unsigned int dest_node;
+	unsigned int type;						// ENQ | DEQ
 	int ret_value;
 	pkey_t timestamp;						// ts of node to enqueue
  	char tspad[8 - sizeof(pkey_t) ];
 	void *payload;							// paylod to enqueue | dequeued payload
 
-    char pad0[36];
+    	char pad[28];
 
 } op_payload;
 
 struct __op_load{
-    unsigned long current;
-
-    op_payload slots[SLOT_NUMBER];
+    	volatile unsigned long current;
+	char pad0[56];
+   	volatile unsigned long last_updated;
+	char pad1[56];
+    	op_payload slots[SLOT_NUMBER];
 };
 
 op_node *res_mapping[_NUMA_NODES];
@@ -43,8 +42,11 @@ void init_mapping()
         for (j = 0; j < max_threads; ++j) 
         {
             req_mapping[i][j].current = 0;
-            res_mapping[i][j].current = 0;
-            
+            req_mapping[i][j].last_updated = 0;
+	    
+	    res_mapping[i][j].current = 0;
+            res_mapping[i][j].last_updated = 0;
+
             for (k = 0; k < SLOT_NUMBER; ++k)
             {
             
@@ -85,8 +87,11 @@ bool read_slot(op_node* slot,
     unsigned int *node) 
 {
     unsigned long current = slot->current;
+    unsigned long last_update = slot->last_updated;
     unsigned long val, new_current;
     op_payload *slot_arr = slot->slots;
+
+    int i;
 
     // first attempt - Try to read current slot
     val = __sync_fetch_and_add(&(slot_arr[current].counter), 1);
@@ -100,19 +105,20 @@ bool read_slot(op_node* slot,
         return true;
     }
 
+    if (last_update == current)
+	    return false;
+
     // current slot has been already read - increase the current
     new_current = (current + 1) % SLOT_NUMBER;
     
     if (slot_arr[new_current].counter != 0)
-	    return false;                       // change this in find next valid slot
+	return false;                       // change this in find next valid slot
     
-
     if (!BOOL_CAS(&slot->current, current, new_current))
     {    
         //printf("CANNOT READ - unset current");
-        return false;
+       	return false;
     }
-
 
     current = new_current;
 
@@ -120,16 +126,14 @@ bool read_slot(op_node* slot,
     val = __sync_fetch_and_add(&(slot_arr[current].counter), 1);
     if (val == 0)
     {
-        *type       = slot_arr[current].type;
-        *ret_value  = slot_arr[current].ret_value;
-        *timestamp  = slot_arr[current].timestamp; 
-        *payload    = slot_arr[current].payload;
-        *node       = slot_arr[current].dest_node;
+        	*type       = slot_arr[current].type;
+        	*ret_value  = slot_arr[current].ret_value;
+        	*timestamp  = slot_arr[current].timestamp; 
+        	*payload    = slot_arr[current].payload;
+        	*node       = slot_arr[current].dest_node;
 
-        return true;
-    }
-
-    // try to read from all slots? 
+        	return true;
+    	}
     return false;
 
 }
@@ -143,6 +147,7 @@ bool write_slot(op_node* slot,
 {
     
     unsigned long i, index, new_index, val, current = slot->current;
+    unsigned long last_written = slot->last_updated;
 
     op_payload *slot_arr = slot->slots;
 
@@ -151,7 +156,7 @@ bool write_slot(op_node* slot,
     // get free slot
     for (i = 0; i < SLOT_NUMBER; i++) 
     {
-        index = (current + i) % SLOT_NUMBER;
+        index = (last_written + i) % SLOT_NUMBER;
         if (index != current)
 	{
 		if(slot_arr[index].counter != 0)
@@ -189,8 +194,10 @@ bool write_slot(op_node* slot,
 
     // nobody has read the current slot - cannot move to next current
     if (slot_arr[current].counter == 0)
-        return true;
-	
+    {
+        BOOL_CAS(&slot->last_updated, last_written, index);
+	    return true;
+    }	
     val = VAL_CAS(&slot->current, current, new_index);
 
     // the current slot is stale - update the current
