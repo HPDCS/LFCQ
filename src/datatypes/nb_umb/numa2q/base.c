@@ -84,7 +84,7 @@ void *pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	// init fraser garbage collector/allocator
 	_init_gc_subsystem();
 	_init_gc_tq();
-	_init_gc_cache();
+
 	// add allocator of nbc_bucket_node
 	gc_aid[GC_BUCKETNODE] = gc_add_allocator(sizeof(nbc_bucket_node));
 	gc_aid[GC_OPNODE] = gc_add_allocator(sizeof(op_node));
@@ -255,7 +255,7 @@ int do_pq_enqueue(void *q, pkey_t timestamp, void *payload, nbc_bucket_node* vol
 	
 	concurrent_enqueue += (unsigned long long) (__sync_fetch_and_add(&h->e_counter.count, 1) - con_en);
 	
-	#if COMPACT_RANDOM_ENQUEUE == 1
+	#if COMPACT_RANDOM_ENQUEUE == 0
 	// clean a random bucket
 	unsigned long long oldCur = h->current;
 	unsigned long long oldIndex = oldCur >> 32;
@@ -573,7 +573,6 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	requested_op->candidate = NULL;
 	requested_op->requestor = requested_op;
 
-
 	do {
 		// read table
 		h = read_table(&queue->hashtable, th, epb, pub);
@@ -582,7 +581,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 		{
 			// compute vb
 			vb_index  = hash(operation->timestamp, h->bucket_width);
-			dest_node = NODE_HASH(vb_index);	
+			dest_node = NODE_HASH(vb_index % h->size);	
 
 			// need to move to another queue?
 			if (dest_node != NID) 
@@ -694,9 +693,6 @@ pkey_t pq_dequeue(void *q, void **result)
 	requested_op->candidate = NULL;
 	requested_op->requestor = requested_op;
 
-	unsigned long succ = 0;
-	unsigned long total = 0;
-	unsigned long num = 0;
 	do {
 
 		// read table
@@ -706,7 +702,7 @@ pkey_t pq_dequeue(void *q, void **result)
 		{
 			
 			vb_index = (h->current) >> 32;
-			dest_node = NODE_HASH(vb_index);
+			dest_node = NODE_HASH(vb_index % h->size);
 			
 			// need to move to another queue?
 			if (dest_node != NID) 
@@ -732,12 +728,6 @@ pkey_t pq_dequeue(void *q, void **result)
 				//gc_free(ptst, operation, gc_aid[GC_OPNODE]);
 				operation = NULL; // need to extract another op
 
-				if (succ != 0)
-				{
-					total += succ;
-					num += 1;
-					succ = 0;
-				}
 			}			
 		}
 
@@ -757,14 +747,6 @@ pkey_t pq_dequeue(void *q, void **result)
 					critical_exit();
 					requested_op = NULL;
 					// dovrebbe essere come se il thread fosse stato deschedulato prima della return
-					
-					total += succ;
-					num++;
-					
-					/*
-					if (total > 1)
-						LOG("Series: len %llu, num %llu \n", (unsigned long) total/num, num);
-					*/
 					return ret_ts; // someone did my op, we can return
 				}
 				extracted_op = requested_op;
@@ -784,7 +766,6 @@ pkey_t pq_dequeue(void *q, void **result)
 		ret = do_pq_dequeue(q, &ret_ts, &new_payload, handling_op->op_id, &handling_op->candidate);
 		if (ret != -1)
 		{ //dequeue failed
-			succ++;
 			performed_dequeue++;
 			handling_op->payload = new_payload;
 			handling_op->timestamp = ret_ts;

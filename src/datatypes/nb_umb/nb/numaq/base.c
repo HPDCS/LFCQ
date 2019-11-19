@@ -37,7 +37,7 @@ int gc_aid[32];
 int gc_hid[4];
 
 unsigned long op_counter = 2;
-task_queue op_queue[NUM_SOCKETS]; // (!new) per numa node queue
+task_queue op_queue[_NUMA_NODES]; // (!new) per numa node queue
 
 /*************************************
  * THREAD LOCAL VARIABLES			 *
@@ -71,8 +71,6 @@ void std_free_hook(ptst_t *p, void *ptr) { free(ptr); }
  */
 void *pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket)
 {
-	ACTIVE_SOCKETS = (((THREADS * NUM_SOCKETS)) / NUM_CPUS) + ((((THREADS * NUM_SOCKETS)) % NUM_CPUS) != 0);
-	ACTIVE_SOCKETS = ACTIVE_SOCKETS < NUM_SOCKETS? ACTIVE_SOCKETS:NUM_SOCKETS;
 
 	ACTIVE_NUMA_NODES = (((THREADS * _NUMA_NODES)) / NUM_CPUS) + ((((THREADS * _NUMA_NODES)) % NUM_CPUS) != 0); // (!new) compute the number of active numa nodes 
 	ACTIVE_NUMA_NODES = ACTIVE_NUMA_NODES < _NUMA_NODES? ACTIVE_NUMA_NODES:_NUMA_NODES;
@@ -113,9 +111,9 @@ void *pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	res->tail->next = NULL;
 
 	// (!new) initialize numa queues
-	for (i = 0; i < ACTIVE_SOCKETS; i++)
+	for (i = 0; i < _NUMA_NODES; i++)
 	{
-		init_tq(&op_queue[i], (i<<1));
+		init_tq(&op_queue[i], i);
 	}
 
 	res->hashtable->bucket_width = 1.0;
@@ -255,7 +253,7 @@ int do_pq_enqueue(void *q, pkey_t timestamp, void *payload, nbc_bucket_node* vol
 	
 	concurrent_enqueue += (unsigned long long) (__sync_fetch_and_add(&h->e_counter.count, 1) - con_en);
 	
-	#if COMPACT_RANDOM_ENQUEUE == 1
+	#if COMPACT_RANDOM_ENQUEUE == 0
 	// clean a random bucket
 	unsigned long long oldCur = h->current;
 	unsigned long long oldIndex = oldCur >> 32;
@@ -440,8 +438,6 @@ begin:
 				new.op_id = op_id; //add our id
 			} while(!(res = BOOL_CAS(&left_node->widenext, lnn.widenext, new.widenext)));
 			
-
-
 			//int res = atomic_test_and_set_x64(UNION_CAST(&left_node->next, unsigned long long*));
 
 			// the extraction is failed
@@ -546,7 +542,6 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 
 	unsigned long long vb_index;
 	unsigned int dest_node;	 
-	unsigned int dest_socket;
 	unsigned int op_type;
 	int ret;
 	
@@ -577,15 +572,11 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	requested_op->candidate = NULL;
 	requested_op->requestor = requested_op;
 
-	operation = requested_op;
-
-	// we should enqueue it, otherwise we cannot publish it!
-
 	do {
 		// read table
 		h = read_table(&queue->hashtable, th, epb, pub);
 
-		// STEP 1 - ENQUEUE/HOLD
+		// STEP 1 - ENQUEUE/HOLD - In this version is not needed
 		if (operation != NULL && !mine) //(If I'm handling my op I don't need to re-enqueue it - except for first iteration)
 		{
 			// compute vb
@@ -593,20 +584,18 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 			if (op_type == OP_PQ_ENQ) 
 			{
 				vb_index  = hash(operation->timestamp, h->bucket_width);
-				dest_node = NODE_HASH(vb_index);	
+				dest_node = NODE_HASH(vb_index % h->size);	
 			}
 			else 
 			{
 				vb_index = (h->current) >> 32;
-				dest_node = NODE_HASH(vb_index);
+				dest_node = NODE_HASH(vb_index % h->size);
 			}
-			
-			dest_socket = dest_node >> 1;
 
 			// need to move to another queue? 
-			if (dest_socket != SID) 
+			if (dest_node != NID) 
 			{
-				tq_enqueue(&op_queue[dest_socket], (void*) operation, dest_node);
+				tq_enqueue(&op_queue[dest_node], (void*) operation, dest_node);
                 operation = NULL;
 			}
 			// the operation is still for us, we keep it!
@@ -626,7 +615,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 				return ret; // someone did my op, we can return
 			}
 
-			if (!tq_dequeue(&op_queue[SID], &extracted_op)) 
+			if (!tq_dequeue(&op_queue[NID], &extracted_op)) 
 			{
 				extracted_op = requested_op;
 				mine = true;
@@ -682,7 +671,7 @@ pkey_t pq_dequeue(void *q, void **result)
 	 *handling_op, *requested_op;
 
 	unsigned long long vb_index;
-	unsigned int dest_node, dest_socket;	 
+	unsigned int dest_node;	 
 	unsigned int op_type;
 	int ret;
 	pkey_t ret_ts;
@@ -728,22 +717,20 @@ pkey_t pq_dequeue(void *q, void **result)
 			{
 
 				vb_index  = hash(operation->timestamp, h->bucket_width);
-				dest_node = NODE_HASH(vb_index);
+				dest_node = NODE_HASH(vb_index % h->size);
 				
 			}
 			else 
 			{
 				vb_index = (h->current) >> 32;
-				dest_node = NODE_HASH(vb_index);
+				dest_node = NODE_HASH(vb_index % h->size);
 			}
 
-			dest_socket = dest_node >> 1;
-
 			// need to move to another queue?
-			if (dest_socket != SID) 
+			if (dest_node != NID) 
 			{
 				// The node has been extracted from a non optimal queue
-				tq_enqueue(&op_queue[dest_socket], (void*) operation, dest_node);
+				tq_enqueue(&op_queue[dest_node], (void*) operation, dest_node);
 				operation = NULL; // yeld the op since is no longer for us.
 			}
 			// keep the operation	
@@ -766,7 +753,7 @@ pkey_t pq_dequeue(void *q, void **result)
 				return ret_ts; // someone did my op, we can return
 			}
 
-			if (!tq_dequeue(&op_queue[SID], &extracted_op)) {
+			if (!tq_dequeue(&op_queue[NID], &extracted_op)) {
 				extracted_op = requested_op;
 				mine = true;
 			}

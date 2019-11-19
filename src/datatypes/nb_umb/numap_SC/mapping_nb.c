@@ -5,15 +5,14 @@
 
 #define SLOT_NUMBER 4
 
-
-typedef struct _op_payload {
-
+typedef struct _op_payload 
+{
     volatile long counter;                  // read count
     unsigned int dest_node;
 	unsigned int type;						// ENQ | DEQ
 	int ret_value;
 	pkey_t timestamp;						// ts of node to enqueue
- 	char tspad[8 - sizeof(pkey_t) ];
+ 	char tspad[8 - sizeof(pkey_t)];
 	void *payload;							// paylod to enqueue | dequeued payload
 
     char pad[28];
@@ -104,7 +103,7 @@ bool read_slot(op_node* slot,
         *ret_value    = slot_arr[current].ret_value;
         *timestamp    = slot_arr[current].timestamp; 
         *payload      = slot_arr[current].payload;
-        *node    = slot_arr[current].dest_node;
+        *node         = slot_arr[current].dest_node;
         return true;
     }
 
@@ -129,14 +128,14 @@ bool read_slot(op_node* slot,
     val = __sync_fetch_and_add(&(slot_arr[current].counter), 1);
     if (val == 0)
     {
-        	*type       = slot_arr[current].type;
-        	*ret_value  = slot_arr[current].ret_value;
-        	*timestamp  = slot_arr[current].timestamp; 
-        	*payload    = slot_arr[current].payload;
-        	*node       = slot_arr[current].dest_node;
+        *type       = slot_arr[current].type;
+        *ret_value  = slot_arr[current].ret_value;
+        *timestamp  = slot_arr[current].timestamp; 
+        *payload    = slot_arr[current].payload;
+        *node       = slot_arr[current].dest_node;
 
-        	return true;
-    	}
+        return true;
+    }
     return false;
 
 }
