@@ -87,6 +87,7 @@ void *pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	_init_gc_subsystem();
 	_init_gc_tq();
 	_init_gc_cache();
+	
 	// add allocator of nbc_bucket_node
 	gc_aid[GC_BUCKETNODE] = gc_add_allocator(sizeof(nbc_bucket_node));
 	gc_aid[GC_OPNODE] = gc_add_allocator(sizeof(op_node));
@@ -143,7 +144,7 @@ void *pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	return res;
 }
 
-int do_pq_enqueue(void *q, pkey_t timestamp, void *payload, nbc_bucket_node* volatile * candidate, op_node *operation)
+int do_pq_enqueue(void *q, pkey_t timestamp, void *payload, nbc_bucket_node* volatile * candidate, op_node *operation, int override, unsigned int* new_dest)
 {
 	assertf(timestamp < MIN || timestamp >= INFTY, "Key out of range %s\n", "");
 
@@ -167,6 +168,9 @@ int do_pq_enqueue(void *q, pkey_t timestamp, void *payload, nbc_bucket_node* vol
 	
 	bool remote = false;
 
+	new_node->op_id = 0x1ull;
+	new_node->requestor = &operation->requestor;
+
 	//init the result
 	res = MOV_FOUND;
 	
@@ -176,7 +180,7 @@ int do_pq_enqueue(void *q, pkey_t timestamp, void *payload, nbc_bucket_node* vol
 		// It is the first iteration or a node marked as MOV has been met (a resize is occurring)
 		if(res == MOV_FOUND){
 
-			node_free(new_node);
+			//node_free(new_node);
 
 			// check for a resize
 			h = read_table(&queue->hashtable, th, epb, pub);
@@ -190,12 +194,27 @@ int do_pq_enqueue(void *q, pkey_t timestamp, void *payload, nbc_bucket_node* vol
 			index = ((unsigned int) newIndex) % size;
 
 			dest_node = NODE_HASH(index);
-			if (dest_node != NID)
+			if ((dest_node>>1) != SID)
+			{
 				remote = true;
+				node_free(new_node);
 
-			new_node = numa_node_malloc(payload, timestamp, 0, dest_node);
-			new_node->op_id = 0x1ull;
-			new_node->requestor = &operation->requestor;
+				if (override)
+				{
+					new_node = numa_node_malloc(payload, timestamp, 0, dest_node);
+					new_node->op_id = 0x1ull;
+					new_node->requestor = &operation->requestor;
+				}
+				else
+				{
+					*new_dest = dest_node;
+					return -1;
+				}
+			}
+
+			//new_node = numa_node_malloc(payload, timestamp, 0, dest_node);
+			//new_node->op_id = 0x1ull;
+			//new_node->requestor = &operation->requestor;
 			// read the actual epoch
 			new_node->epoch = (h->current & MASK_EPOCH);
 
@@ -257,7 +276,7 @@ int do_pq_enqueue(void *q, pkey_t timestamp, void *payload, nbc_bucket_node* vol
 	
 	concurrent_enqueue += (unsigned long long) (__sync_fetch_and_add(&h->e_counter.count, 1) - con_en);
 	
-	#if COMPACT_RANDOM_ENQUEUE == 1
+	#if COMPACT_RANDOM_ENQUEUE == 0
 	// clean a random bucket
 	unsigned long long oldCur = h->current;
 	unsigned long long oldIndex = oldCur >> 32;
@@ -275,7 +294,7 @@ int do_pq_enqueue(void *q, pkey_t timestamp, void *payload, nbc_bucket_node* vol
 
 }
 
-int do_pq_dequeue(void *q, pkey_t* ret_ts, void **result, unsigned long op_id, nbc_bucket_node* volatile *candidate)
+int do_pq_dequeue(void *q, pkey_t* ret_ts, void **result, unsigned long op_id, nbc_bucket_node* volatile *candidate, int override, unsigned int* new_dest)
 {
 
 	nb_calqueue *queue = (nb_calqueue*)q;
@@ -322,6 +341,8 @@ begin:
 	con_de = h->d_counter.count;
 	attempts = 0;
 
+	validate_cache(h, current);
+
 	do
 	{	
 		// To many attempts: there is some problem? recheck the table
@@ -341,10 +362,20 @@ begin:
 		// get the physical bucket
 		min = array + (index % (size));
 		left_node = min_next = min->next;
+		left_node = read_last_min(left_node);
 		
 		dest_node = NODE_HASH(index % (size));
-		if (dest_node != NID)
+		if ((dest_node>>1) != SID)
+		{
 			remote = true;
+
+			if (!override) 
+			{
+				*new_dest = dest_node;
+				return -1; // locality has changed
+			}
+		}
+
 
 		// get the left limit
 		left_limit = ((double)index)*bucket_width;
@@ -488,6 +519,8 @@ begin:
 			*result = left_node->payload;
 			*ret_ts = left_ts;
 			
+			update_last_min(left_node);
+
 			// check if local or not
 			if (!remote)
 				local_deq++;
@@ -529,6 +562,8 @@ begin:
 		}
 		else
 			current = new_current;
+
+		validate_cache(h, current);
 		
 	}while(1);
 	
@@ -546,8 +581,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 		*requested_op, *handling_op;
 	
 	unsigned long long vb_index;
-	unsigned int dest_node,
-		dest_socket;	 
+	unsigned int dest_node, dest_socket, new_dest;	 
 	int ret;
 	
 	bool mine = false;
@@ -576,7 +610,6 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 	requested_op->candidate = NULL;
 	requested_op->requestor = requested_op;
 
-
 	do {
 		// read table
 		h = read_table(&queue->hashtable, th, epb, pub);
@@ -585,12 +618,30 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 		{
 			// compute vb
 			vb_index  = hash(operation->timestamp, h->bucket_width);
-			dest_node = NODE_HASH(vb_index);	
+			dest_node = NODE_HASH(vb_index % h->size);	
 			dest_socket = dest_node>>1;
 			// need to move to another queue?
 			if (dest_socket != SID) 
 			{
+				/*
+				// The node has been extracted from a non optimal queue
+				new_operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
+				new_operation->op_id = operation->op_id;
+				new_operation->type = operation->type;
+				new_operation->timestamp = operation->timestamp;
+				new_operation->payload = operation->payload;
+				new_operation->response = operation->response;
+				new_operation->candidate = operation->candidate;
+				new_operation->requestor = operation->requestor;
+					
+				do{
+					tmp = *(new_operation->requestor);
+				} while(!BOOL_CAS(new_operation->requestor, tmp, new_operation));
+				*/
+				// publish op on right queue
 				tq_enqueue(&enq_queue[dest_socket], (void *)operation, dest_node);
+				
+				//gc_free(ptst, operation, gc_aid[GC_OPNODE]);
 				operation = NULL; // need to extract another op
 			}
 			// here we keep the operation if it is not null
@@ -624,7 +675,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void *payload)
 			continue;
 		}
 		
-		ret = do_pq_enqueue(q, handling_op->timestamp, handling_op->payload, &handling_op->candidate, handling_op);
+		ret = do_pq_enqueue(q, handling_op->timestamp, handling_op->payload, &handling_op->candidate, handling_op, mine, &new_dest);
 		if (ret != -1) //enqueue succesful
 		{
 			__sync_bool_compare_and_swap(&(handling_op->response), -1, ret); /* Is this an overkill? */
@@ -648,8 +699,7 @@ pkey_t pq_dequeue(void *q, void **result)
 		*requested_op, *handling_op;
 
 	unsigned long long vb_index;
-	unsigned int dest_node,
-		dest_socket;	 
+	unsigned int dest_node, dest_socket, new_dest;	 
 	int ret;
 	pkey_t ret_ts;
 	void* new_payload;
@@ -680,9 +730,6 @@ pkey_t pq_dequeue(void *q, void **result)
 	requested_op->candidate = NULL;
 	requested_op->requestor = requested_op;
 
-	unsigned long succ = 0;
-	unsigned long total = 0;
-	unsigned long num = 0;
 	do {
 
 		// read table
@@ -692,20 +739,32 @@ pkey_t pq_dequeue(void *q, void **result)
 		{
 			
 			vb_index = (h->current) >> 32;
-			dest_node = NODE_HASH(vb_index);
-			dest_socket = dest_node >> 1;
+			dest_node = NODE_HASH(vb_index % h->size);
+			dest_socket = dest_node>>1;
 			// need to move to another queue?
 			if (dest_socket != SID) 
 			{
+				/*
+				// The node has been extracted from a non optimal queue
+				new_operation = gc_alloc_node(ptst, gc_aid[GC_OPNODE], dest_node);
+				new_operation->op_id = operation->op_id;
+				new_operation->type = operation->type;
+				new_operation->timestamp = operation->timestamp;
+				new_operation->payload = operation->payload;
+				new_operation->response = operation->response;
+				new_operation->candidate = operation->candidate;
+				new_operation->requestor = operation->requestor;
+					
+				do{
+					tmp = *(new_operation->requestor);
+				} while(!BOOL_CAS(new_operation->requestor, tmp, new_operation));
+				*/
+				// publish op on right queue
 				tq_enqueue(&deq_queue[dest_socket], (void *)operation, dest_node);
+				
+				//gc_free(ptst, operation, gc_aid[GC_OPNODE]);
 				operation = NULL; // need to extract another op
 
-				if (succ != 0)
-				{
-					total += succ;
-					num += 1;
-					succ = 0;
-				}
 			}			
 		}
 
@@ -725,14 +784,6 @@ pkey_t pq_dequeue(void *q, void **result)
 					critical_exit();
 					requested_op = NULL;
 					// dovrebbe essere come se il thread fosse stato deschedulato prima della return
-					
-					total += succ;
-					num++;
-					
-					/*
-					if (total > 1)
-						LOG("Series: len %llu, num %llu \n", (unsigned long) total/num, num);
-					*/
 					return ret_ts; // someone did my op, we can return
 				}
 				extracted_op = requested_op;
@@ -749,10 +800,9 @@ pkey_t pq_dequeue(void *q, void **result)
 			continue;
 		}
 
-		ret = do_pq_dequeue(q, &ret_ts, &new_payload, handling_op->op_id, &handling_op->candidate);
+		ret = do_pq_dequeue(q, &ret_ts, &new_payload, handling_op->op_id, &handling_op->candidate, mine, &new_dest);
 		if (ret != -1)
 		{ //dequeue failed
-			succ++;
 			performed_dequeue++;
 			handling_op->payload = new_payload;
 			handling_op->timestamp = ret_ts;

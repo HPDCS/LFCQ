@@ -10,7 +10,7 @@ USER_OBJS :=
 
 LIBS := -lpthread -lm -lnuma -lrt -mrtm
 SRC_DIR := src
-TARGETS := ACRCQ NUMAP RNUMAP NUMAPFK NUMAPBL NUMAPSKT RNUMAPSKT NUMAPSKTFK NUMAPSKTBL NUMAQ RNUMAQ NUMAQFK NUMAQBL NUMAQSKT RNUMAQSKT NUMAQSKTFK NUMAQSKTBL NUMA2Q RNUMA2Q NUMA2QFK NUMA2QBL NUMA2QSKT RNUMA2QSKT NUMA2QSKTFK NUMA2QSKTBL NBNUMAQ NBRNUMAQ NBNUMAQSKT NBRNUMAQSKT NBNUMA2Q NBRNUMA2Q NBNUMAP
+TARGETS := ACRCQ NUMAP RNUMAP NUMAPFK NUMAPBL NUMAPSKT RNUMAPSKT NUMAPSKTFK NUMAPSKTBL NUMAQ RNUMAQ NUMAQFK NUMAQBL NUMAQSKT RNUMAQSKT NUMAQSKTFK NUMAQSKTBL NUMA2Q RNUMA2Q NUMA2QFK NUMA2QBL NUMA2QSKT RNUMA2QSKT NUMA2QSKTFK NUMA2QSKTBL NBNUMAQ NBRNUMAQ NBNUMAQSKT NBRNUMAQSKT NBNUMA2Q NBRNUMA2Q NBNUMA2QSKT NBRNUMA2QSKT NBNUMAP
 
 		# CACRCQ 		
 		# SCNUMAP SCNUMAPFK NUMAPNBC NUMAPNBCFK NUMAPNBCBL
@@ -156,61 +156,19 @@ NBRNUMAQSKT_link := gcc
 
 ## NUMA2Q + SKT
 
-#NBNUMA2QSKT_value := $(TQ_value) src/datatypes/nb_umb/nb/numa2q_socket/base.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
-#NBNUMA2QSKT_link := gcc
+NBNUMA2QSKT_value := $(TQ_value) src/datatypes/nb_umb/nb/numa2q_socket/base.o src/datatypes/nb_umb/nb/numa2q_socket/enq_sw_cache.o src/datatypes/nb_umb/nb/numa2q_socket/sw_cache.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NBNUMA2QSKT_link := gcc
 
-#NBRNUMA2QSKT_value :=
-#NBRNUMA2QSKT_link := gcc
+NBRNUMA2QSKT_value := $(TQ_value) src/datatypes/nb_umb/nb/numa2q_socket/base_r.o src/datatypes/nb_umb/nb/numa2q_socket/enq_sw_cache.o src/datatypes/nb_umb/nb/numa2q_socket/sw_cache.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NBRNUMA2QSKT_link := gcc
 
 
 # TODO
 
-# NUMAQ
-
-#RNUMAQ_value := $(TQ_value) src/datatypes/nb_umb/numaq/base_r.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
-#RNUMAQ_link := gcc
-
-# NUMAQ + SKT
-
-#NUMAQSKT_value := $(TQ_value) src/datatypes/nb_umb/numaq_socket/base.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
-#NUMAQSKT_link := gcc
-
-#RNUMAQSKT_value := $(TQ_value) src/datatypes/nb_umb/numaq_socket/base_r.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
-#RNUMAQSKT_link := gcc
-
-#NUMAQSKTFK_value := $(TQ_value) src/datatypes/nb_umb/numaq_socket/fake.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
-#NUMAQSKTFK_link := gcc
-
-#NUMAQSKTBL_value := $(TQ_value) src/datatypes/nb_umb/numaq_socket/busyloop.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
-#NUMAQSKTBL_link := gcc
-
-# NUMA2Q
-
-#NUMA2Q_value := $(TQ_value) $(SET_value) src/datatypes/nb_umb/numa2q/base.o src/datatypes/nb_umb/numa2q/sw_cache.o src/datatypes/nb_umb/numa2q/enq_sw_cache.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
-#NUMA2Q_link := gcc
-
-#RNUMA2Q_value := $(TQ_value) $(SET_value) src/datatypes/nb_umb/numa2q/base_r.o src/datatypes/nb_umb/numa2q/sw_cache.o src/datatypes/nb_umb/numa2q/enq_sw_cache.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
-#RNUMA2Q_link := gcc
-
-#NUMA2QFK_value := $(TQ_value) $(SET_value) src/datatypes/nb_umb/numa2q/fake.o src/datatypes/nb_umb/numa2q/sw_cache.o src/datatypes/nb_umb/numa2q/enq_sw_cache.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
-#NUMA2QFK_link := gcc
-
-#NUMA2QBL_value := $(TQ_value) $(SET_value) src/datatypes/nb_umb/numa2q/busyloop.o src/datatypes/nb_umb/numa2q/sw_cache.o src/datatypes/nb_umb/numa2q/enq_sw_cache.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
-#NUMA2QBL_link := gcc
-
 # NUMA2Q + SKT
-
-#NUMA2QSKT_value := $(TQ_value) $(SET_value) src/datatypes/nb_umb/numa2q_socket/base.o src/datatypes/nb_umb/numa2q_socket/sw_cache.o src/datatypes/nb_umb/numa2q_socket/enq_sw_cache.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
-#NUMA2QSKT_link := gcc
 
 #RNUMA2QSKT_value := $(TQ_value) $(SET_value) src/datatypes/nb_umb/numa2q_socket/base_r.o src/datatypes/nb_umb/numa2q_socket/sw_cache.o src/datatypes/nb_umb/numa2q_socket/enq_sw_cache.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 #RNUMA2QSKT_link := gcc
-
-#NUMA2QSKTFK_value := $(TQ_value) $(SET_value) src/datatypes/nb_umb/numa2q_socket/fake.o src/datatypes/nb_umb/numa2q_socket/sw_cache.o src/datatypes/nb_umb/numa2q_socket/enq_sw_cache.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
-#NUMA2QSKTFK_link := gcc
-
-#NUMA2QSKTBL_value := $(TQ_value) $(SET_value) src/datatypes/nb_umb/numa2q_socket/busyloop.o src/datatypes/nb_umb/numa2q_socket/sw_cache.o src/datatypes/nb_umb/numa2q_socket/enq_sw_cache.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
-#NUMA2QSKTBL_link := gcc
 
 ######
 
@@ -429,7 +387,7 @@ endif
 -funswitch-loops \
 -fvect-cost-model 
 
-C_SUBDIRS		:= src src/datatypes/nbcalendars-ad src/datatypes/nbcalendars src/datatypes/nbcalendars_with_vb src/datatypes/nbcalendars_with_vb2 src/datatypes/nbcalendars_with_vb_2CAS  src/datatypes/nbskiplists src/datatypes/slcalqueue  src/arch src/gc src/utils src/datatypes/nb_umb/op_queue src/datatypes/nb_umb/gc src/datatypes/nb_umb/numap src/datatypes/nb_umb/numap_socket src/datatypes/nb_umb/numaq_no_candidate src/datatypes/nb_umb/numaq_no_candidate_socket src/datatypes/nb_umb/numa2q_no_candidate src/datatypes/nb_umb/numa2q_no_candidate_socket src/datatypes/nb_umb/nb/numaq src/datatypes/nb_umb/nb/numaq_socket src/datatypes/nb_umb/nb/numa2q #src/datatypes/nb_umb/nb/numa2q_socket src/datatypes/nb_umb/nb/numap_socket src/datatypes/nb_umb/nb/numap
+C_SUBDIRS		:= src src/datatypes/nbcalendars-ad src/datatypes/nbcalendars src/datatypes/nbcalendars_with_vb src/datatypes/nbcalendars_with_vb2 src/datatypes/nbcalendars_with_vb_2CAS  src/datatypes/nbskiplists src/datatypes/slcalqueue  src/arch src/gc src/utils src/datatypes/nb_umb/op_queue src/datatypes/nb_umb/gc src/datatypes/nb_umb/numap src/datatypes/nb_umb/numap_socket src/datatypes/nb_umb/numaq_no_candidate src/datatypes/nb_umb/numaq_no_candidate_socket src/datatypes/nb_umb/numa2q_no_candidate src/datatypes/nb_umb/numa2q_no_candidate_socket src/datatypes/nb_umb/nb/numaq src/datatypes/nb_umb/nb/numaq_socket src/datatypes/nb_umb/nb/numa2q src/datatypes/nb_umb/nb/numa2q_socket #src/datatypes/nb_umb/nb/numap_socket src/datatypes/nb_umb/nb/numap
 
 #src/datatypes/nb_umb/unbcq src/datatypes/nb_umb/numa2q src/datatypes/nb_umb/numa2q_socket   src/datatypes/nb_umb/numaq src/datatypes/nb_umb/numaq_socket src/datatypes/nb_umb/nbcq_phy src/datatypes/nb_umb/numap_fnb src/datatypes/nb_umb/nbcalendars-ad-candidate src/datatypes/nb_umb/numap_SC
 

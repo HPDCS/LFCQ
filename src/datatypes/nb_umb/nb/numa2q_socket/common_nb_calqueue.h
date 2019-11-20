@@ -30,12 +30,12 @@
 #include <float.h>
 #include <math.h>
 
-#include "../../../key_type.h"
-#include "../../../arch/atomic.h"
-#include "../../../utils/hpdcs_utils.h"
-#include "../gc/ptst.h"
+#include "../../../../key_type.h"
+#include "../../../../arch/atomic.h"
+#include "../../../../utils/hpdcs_utils.h"
+#include "../../gc/ptst.h"
 
-#include "../op_queue/task_queue.h"
+#include "../../op_queue/task_queue.h"
 
 extern __thread ptst_t *ptst;
 extern int gc_aid[];
@@ -43,6 +43,7 @@ extern int gc_hid[];
 
 unsigned int ACTIVE_NUMA_NODES;
 unsigned int ACTIVE_SOCKETS;
+
 #define NODE_HASH(bucket_id) ((bucket_id >> 2ull) % ACTIVE_NUMA_NODES)
 
 #define GC_BUCKETNODE 2

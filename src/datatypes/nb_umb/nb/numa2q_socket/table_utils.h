@@ -201,7 +201,7 @@ static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, uns
 					  int flag, nbc_bucket_node *new_node_pointer, nbc_bucket_node **new_node, table *h)
 {
 	nbc_bucket_node *left, *left_next, *tmp, *tmp_next, *tail, *cached, *to_cache;
-	unsigned long vb_index;
+	unsigned int vb_index;
 	unsigned int counter;
 	unsigned int left_tie_breaker, tmp_tie_breaker;
 	unsigned int len;
@@ -210,8 +210,6 @@ static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, uns
 	bool marked, ts_equal, tie_lower, go_to_next;
 	bool is_new_key = flag == REMOVE_DEL_INV;
 	drand48_r(&seedT, &rand);
-
-	to_cache = NULL;
 
 	// clean the heading zone of the bucket
 	nbc_bucket_node *lnode, *rnode;
@@ -344,8 +342,8 @@ static inline int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, uns
 			}
 			if (counter > 0)
 			{
-					//connect_to_be_freed_node_list(left_next, counter);
-				search(head, -1.0, 0, &lnode, &rnode, flag);	
+				//connect_to_be_freed_node_list(left_next, counter);
+				search(left_next, -1.0, 0, &lnode, &rnode, flag);	
 			}
 			return OK;
 		}
@@ -366,7 +364,7 @@ static inline void set_new_table(table *h, unsigned int threshold, double pub, u
 
 	nbc_bucket_node *tail;
 	table *new_h = NULL;
-	// double current_num_items = pub * epb * h->size;
+	//double current_num_items = pub * epb * h->size;
 	double current_num_items = pub * h->pad * h->size;
 	int res = 0;
 	unsigned int i = 0;
@@ -608,7 +606,7 @@ static inline double compute_mean_separation_time(table *h,
     newaverage = (newaverage / j) * epb;
 
 	// Compute new width
-	// newaverage = (newaverage / j) * elem_per_bucket; /* this is the new width */
+	//newaverage = (newaverage / j) * elem_per_bucket; /* this is the new width */
 	//	LOG("%d- my new bucket %.10f for %p\n", TID, newaverage, h);
 
 	if (newaverage <= 0.0)
