@@ -190,7 +190,7 @@ int do_pq_enqueue(void *q, pkey_t timestamp, void *payload, nbc_bucket_node* vol
 
 			new_node = numa_node_malloc(payload, timestamp, 0, dest_node);
 			new_node->op_id = 0x1ull;
-			new_node->requestor = &operation->requestor;
+			new_node->requestor = operation->requestor;
 			// read the actual epoch
 			new_node->epoch = (h->current & MASK_EPOCH);
 
@@ -318,6 +318,40 @@ begin:
 	con_de = h->d_counter.count;
 	attempts = 0;
 
+	current_candidate = *candidate;
+	if (current_candidate != NULL)
+	{
+		if (current_candidate == (void*) 0x1ULL)
+		{
+			*result = NULL;
+			*ret_ts = INFTY;
+			return 1;
+		}
+
+		// help to extract the node
+		lnn.next = current_candidate->next;
+		lnn.op_id = 0;
+
+		new.next = get_marked(current_candidate->next, DEL);//((unsigned long) current_candidate->next) | DEL;
+		new.op_id = op_id; //add our id
+
+		BOOL_CAS(&current_candidate->widenext, lnn.widenext, new.widenext);
+
+		// check if someone extracted the candidate
+		if (is_marked(current_candidate->next, DEL))
+		{
+			// was I?
+			if (current_candidate->op_id == op_id)
+			{
+				*result = current_candidate->payload;
+				*ret_ts = current_candidate->timestamp;
+				return 1;
+			}
+			else
+				BOOL_CAS(candidate, current_candidate, NULL);
+		}
+	}
+
 	do
 	{	
 		// To many attempts: there is some problem? recheck the table
@@ -338,10 +372,6 @@ begin:
 		min = array + (index % (size));
 		left_node = min_next = min->next;
 		
-		dest_node = NODE_HASH(index % (size));
-		if (dest_node != NID)
-			remote = true;
-
 		// get the left limit
 		left_limit = ((double)index)*bucket_width;
 
@@ -385,6 +415,7 @@ begin:
 			current_candidate = VAL_CAS(candidate, NULL, left_node);
 			if (current_candidate == NULL) current_candidate = left_node;
 			
+			// se il nodo è già stato rimosso e la coda è vuota qui potrei non arrivarci mai
 			if (current_candidate != left_node)
 			{
 				if (((unsigned long long) current_candidate) == 0x1ull)
@@ -394,6 +425,7 @@ begin:
 					*ret_ts = INFTY;
 					return 1;
 				}
+
 				// try to extract the candidate then 
 				lnn.next = current_candidate->next;
 				lnn.op_id = 0;
@@ -494,9 +526,10 @@ begin:
 		
 
 		// if i'm here it means that the virtual bucket was empty. Check for queue emptyness
-		if(left_node == tail && size == 1 && !is_marked(min->next, MOV) && *candidate == NULL)
+		if(left_node == tail && size == 1 && !is_marked(min->next, MOV))
 		{
-			if (BOOL_CAS(candidate, NULL, 1))
+			nbc_bucket_node* v = VAL_CAS(candidate, NULL, 1);
+			if (v == NULL || v == 1)
 			{
 				*result = NULL;
 				*ret_ts = INFTY;

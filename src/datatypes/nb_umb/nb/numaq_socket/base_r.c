@@ -338,6 +338,40 @@ begin:
 	con_de = h->d_counter.count;
 	attempts = 0;
 
+	current_candidate = *candidate;
+	if (current_candidate != NULL)
+	{
+		if (current_candidate == (void*) 0x1ULL)
+		{
+			*result = NULL;
+			*ret_ts = INFTY;
+			return 1;
+		}
+
+		// help to extract the node
+		lnn.next = current_candidate->next;
+		lnn.op_id = 0;
+
+		new.next = get_marked(current_candidate->next, DEL);//((unsigned long) current_candidate->next) | DEL;
+		new.op_id = op_id; //add our id
+
+		BOOL_CAS(&current_candidate->widenext, lnn.widenext, new.widenext);
+
+		// check if someone extracted the candidate
+		if (is_marked(current_candidate->next, DEL))
+		{
+			// was I?
+			if (current_candidate->op_id == op_id)
+			{
+				*result = current_candidate->payload;
+				*ret_ts = current_candidate->timestamp;
+				return 1;
+			}
+			else
+				BOOL_CAS(candidate, current_candidate, NULL);
+		}
+	}
+
 	do
 	{	
 		// To many attempts: there is some problem? recheck the table
@@ -522,9 +556,10 @@ begin:
 		
 
 		// if i'm here it means that the virtual bucket was empty. Check for queue emptyness
-		if(left_node == tail && size == 1 && !is_marked(min->next, MOV) && *candidate == NULL)
+		if(left_node == tail && size == 1 && !is_marked(min->next, MOV))
 		{
-			if (BOOL_CAS(candidate, NULL, 1))
+			nbc_bucket_node* v = VAL_CAS(candidate, NULL, 1);
+			if (v == NULL || v == 1)
 			{
 				*result = NULL;
 				*ret_ts = INFTY;

@@ -625,7 +625,7 @@ static inline void migrate_node(nbc_bucket_node *right_node, table *new_h)
 	//}
 	
 	if (right_node->op_id == 1) {
-		op_node * op = *(right_node->requestor);
+		op_node * op = (right_node->requestor);
 		if (!__sync_bool_compare_and_swap(&(op->candidate), NULL, right_node))
 		{
 			wideptr curr_state, new_state;

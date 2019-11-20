@@ -163,7 +163,7 @@ struct __bucket_node
 	nbc_bucket_node *volatile replica; // pointer to the replica
 									   //nbc_bucket_node * volatile next_next;
 									   //64
-	op_node ** requestor;
+	op_node * requestor;
 };
 
 
