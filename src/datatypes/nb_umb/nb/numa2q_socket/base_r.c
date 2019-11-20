@@ -390,15 +390,6 @@ begin:
 		epoch = current & MASK_EPOCH;
 
 		dest_node = NODE_HASH(index % (size));
-		if (dest_node != NID)
-			remote = true;
-
-		// get the physical bucket
-		min = array + (index % (size));
-		left_node = min_next = min->next;
-		left_node = read_last_min(left_node);
-		
-		dest_node = NODE_HASH(index % (size));
 		if ((dest_node>>1) != SID)
 		{
 			remote = true;
@@ -410,7 +401,11 @@ begin:
 			}
 		}
 
-
+		// get the physical bucket
+		min = array + (index % (size));
+		left_node = min_next = min->next;
+		left_node = read_last_min(left_node);
+		
 		// get the left limit
 		left_limit = ((double)index)*bucket_width;
 

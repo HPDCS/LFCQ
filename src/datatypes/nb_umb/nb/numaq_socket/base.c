@@ -374,10 +374,6 @@ begin:
 		min = array + (index % (size));
 		left_node = min_next = min->next;
 		
-		dest_node = NODE_HASH(index % (size));
-		if (dest_node != NID)
-			remote = true;
-
 		// get the left limit
 		left_limit = ((double)index)*bucket_width;
 

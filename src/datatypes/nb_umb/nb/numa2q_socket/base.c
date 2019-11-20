@@ -380,10 +380,6 @@ begin:
 		left_node = min_next = min->next;
 		left_node = read_last_min(left_node);
 		
-		dest_node = NODE_HASH(index % (size));
-		if (dest_node != NID)
-			remote = true;
-
 		// get the left limit
 		left_limit = ((double)index)*bucket_width;
 
