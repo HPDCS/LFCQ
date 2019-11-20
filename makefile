@@ -116,8 +116,8 @@ NUMA2QSKTBL_link := gcc
 
 ## NUMAP
 
-#NBNUMAP_value :=
-#NBNUMAP_link := gcc
+NBNUMAP_value := src/datatypes/nb_umb/nb/numap/base.o src/datatypes/nb_umb/nb/numap/mapping_nb.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NBNUMAP_link := gcc
 
 #NBRNUMAP_value :=
 #NBRNUMAP_link := gcc
@@ -387,7 +387,7 @@ endif
 -funswitch-loops \
 -fvect-cost-model 
 
-C_SUBDIRS		:= src src/datatypes/nbcalendars-ad src/datatypes/nbcalendars src/datatypes/nbcalendars_with_vb src/datatypes/nbcalendars_with_vb2 src/datatypes/nbcalendars_with_vb_2CAS  src/datatypes/nbskiplists src/datatypes/slcalqueue  src/arch src/gc src/utils src/datatypes/nb_umb/op_queue src/datatypes/nb_umb/gc src/datatypes/nb_umb/numap src/datatypes/nb_umb/numap_socket src/datatypes/nb_umb/numaq_no_candidate src/datatypes/nb_umb/numaq_no_candidate_socket src/datatypes/nb_umb/numa2q_no_candidate src/datatypes/nb_umb/numa2q_no_candidate_socket src/datatypes/nb_umb/nb/numaq src/datatypes/nb_umb/nb/numaq_socket src/datatypes/nb_umb/nb/numa2q src/datatypes/nb_umb/nb/numa2q_socket #src/datatypes/nb_umb/nb/numap_socket src/datatypes/nb_umb/nb/numap
+C_SUBDIRS		:= src src/datatypes/nbcalendars-ad src/datatypes/nbcalendars src/datatypes/nbcalendars_with_vb src/datatypes/nbcalendars_with_vb2 src/datatypes/nbcalendars_with_vb_2CAS  src/datatypes/nbskiplists src/datatypes/slcalqueue  src/arch src/gc src/utils src/datatypes/nb_umb/op_queue src/datatypes/nb_umb/gc src/datatypes/nb_umb/numap src/datatypes/nb_umb/numap_socket src/datatypes/nb_umb/numaq_no_candidate src/datatypes/nb_umb/numaq_no_candidate_socket src/datatypes/nb_umb/numa2q_no_candidate src/datatypes/nb_umb/numa2q_no_candidate_socket src/datatypes/nb_umb/nb/numaq src/datatypes/nb_umb/nb/numaq_socket src/datatypes/nb_umb/nb/numa2q src/datatypes/nb_umb/nb/numa2q_socket src/datatypes/nb_umb/nb/numap #src/datatypes/nb_umb/nb/numap_socket 
 
 #src/datatypes/nb_umb/unbcq src/datatypes/nb_umb/numa2q src/datatypes/nb_umb/numa2q_socket   src/datatypes/nb_umb/numaq src/datatypes/nb_umb/numaq_socket src/datatypes/nb_umb/nbcq_phy src/datatypes/nb_umb/numap_fnb src/datatypes/nb_umb/nbcalendars-ad-candidate src/datatypes/nb_umb/numap_SC
 
