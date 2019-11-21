@@ -84,7 +84,6 @@ bool read_slot(op_node* slot,
     if (val == 0)
     {
         *operation = slot_arr[current].operation;
-
         return true;
     }
 
@@ -104,7 +103,6 @@ bool read_slot(op_node* slot,
         return false;
     }
 
-
     current = new_current;
 
     // second attempt - Read new slot
@@ -112,7 +110,6 @@ bool read_slot(op_node* slot,
     if (val == 0)
     {
         *operation = slot_arr[current].operation;
-
         return true;
     }
 
@@ -173,15 +170,15 @@ bool write_slot(op_node* slot,
 	    return true;
     }	
     val = VAL_CAS(&slot->current, current, new_index);
-
+    return true; // if this fails maybe some read already updated the currentz
     // the current slot is stale - update the current
-    if (val == current || val == new_index)
+    /*if (val == current || val == new_index)
         return true;
     else
     {
        // printf("CURRENT NOT SET - old_value %lu, new_value %lu, current %lu\n", val, new_index, current ); // we have only one writer this cannot happen
 	    return false;
-    }
+    }*/
     
 }
 

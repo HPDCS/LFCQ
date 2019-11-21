@@ -43,8 +43,6 @@ extern __thread ptst_t *ptst;
 extern int gc_aid[];
 extern int gc_hid[];
 
-unsigned int ACTIVE_NUMA_NODES;
-#define NODE_HASH(bucket_id) ((bucket_id >> 2ull) % ACTIVE_NUMA_NODES)
 
 #define GC_BUCKETNODE 2
 #define GC_OPNODE 3
@@ -75,6 +73,8 @@ unsigned int ACTIVE_NUMA_NODES;
 #define TID tid
 #define NID nid
 #define LTID ltid
+#define SID sid
+#define LSID lsid
 
 #define BOOL_CAS_ALE(addr, old, new)  CAS_x86(\
 										UNION_CAST(addr, volatile unsigned long long *),\
@@ -229,15 +229,19 @@ struct nb_calqueue
 };
 
 extern unsigned int THREADS;
+
+extern unsigned int ACTIVE_SOCKETS;
 extern unsigned int ACTIVE_NUMA_NODES;
+
 extern int num_cpus_per_node;
 
 #define NODE_HASH(bucket_id) ((bucket_id >> 2ull) % ACTIVE_NUMA_NODES)
 
 extern __thread unsigned int TID;
 extern __thread unsigned int NID;
-
+extern __thread unsigned int SID;
 extern __thread unsigned int LTID;
+extern __thread unsigned int LSID;
 
 extern __thread struct drand48_data seedT;
 
