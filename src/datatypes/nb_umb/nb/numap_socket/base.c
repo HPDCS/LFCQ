@@ -766,6 +766,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 
 		// check response
 		if (read_slot(resp, &read_operation)) {
+			assertf(read_operation != my_operation, "Wrong aswer to request%s\n","");
 			ret = read_operation->response;
 			break;
 		}
@@ -895,6 +896,7 @@ pkey_t pq_dequeue(void *q, void** result)
 		// check response
 		if (read_slot(resp, &read_operation))
 		{
+			assertf(read_operation != my_operation, "Wrong aswer to request%s\n","");
 			ts = read_operation->timestamp;
 			pld = read_operation->payload;
 			break;
