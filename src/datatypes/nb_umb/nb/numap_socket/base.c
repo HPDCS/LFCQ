@@ -615,6 +615,7 @@ static inline int handle_ops(void* q)
 
 		if (read_slot(to_me, &operation))
 		{
+			count++;
 			from_me = get_res_slot_to_node(i);
 			type = operation->type;
 			candidate = &operation->candidate;
@@ -624,7 +625,7 @@ static inline int handle_ops(void* q)
 				ts = operation->timestamp;
 				pld = operation->payload;
 				ret = do_pq_enqueue(q, ts, pld, candidate, operation);
-				operation->response = ret;
+				//operation->response = ret;
 			}
 			else 
 			{
@@ -633,13 +634,14 @@ static inline int handle_ops(void* q)
 				ret = do_pq_dequeue(q, &ts, &pld, op_id, candidate);
 				operation->timestamp = ts;
 				operation->payload = pld;
-				operation->response = ret; // no needed
+				//operation->response = ret; // no needed
 			}
+			if (!BOOL_CAS(&operation->response, -1, ret))
+				continue;
 			if (!write_slot(from_me, operation))
 			{
 				abort_line();
 			}
-			count++;
 		}
 	}
 
@@ -750,6 +752,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 				
 				enq_steal_done++;
 				ret = do_pq_enqueue(q, timestamp, payload, &my_operation->candidate, my_operation);
+				if (BOOL_CAS(&my_operation->response,-1, ret))
 				break;
 				
 			}
@@ -880,6 +883,7 @@ pkey_t pq_dequeue(void *q, void** result)
 			{
 				deq_steal_done++;
 				ret = do_pq_dequeue(q, &ts, &pld, my_operation->op_id, &my_operation->candidate);
+				if (BOOL_CAS(&my_operation->response, -1, ret))
 				break;
 			}
 			attempts = 0;
