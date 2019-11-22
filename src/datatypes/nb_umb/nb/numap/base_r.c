@@ -611,7 +611,7 @@ begin:
 
 static inline int handle_ops(void* q) 
 {
-	int i, ret, count ;
+	int i, j, ret, count ;
 	
 	unsigned int type;
 	unsigned int new_dest;
@@ -627,9 +627,9 @@ static inline int handle_ops(void* q)
 	op_node *to_me, *from_me;
 
 	count = 0;
-	for (i = NID+1; i % ACTIVE_NUMA_NODES != NID; i++)
+	for (j = 0; j < ACTIVE_NUMA_NODES; j++)
 	{
-		i = i % ACTIVE_NUMA_NODES;
+		i = (NID+j) % ACTIVE_NUMA_NODES;
 	
 		to_me 	= get_req_slot_from_node(i);
 
@@ -656,10 +656,14 @@ static inline int handle_ops(void* q)
 				//operation->response = ret; // no needed
 			}
 
-			operation->dest_node = new_dest;
+			if (ret < 0)
+			{
+				operation->dest_node = new_dest;
+				ret = -2; // locality has changed - comunicate it
+			}
 
 			if (!BOOL_CAS(&operation->response, -1, ret))
-				continue;
+				continue; // the cas failed -> someone already set the response
 
 			if (!write_slot(from_me, operation))
 			{
@@ -681,7 +685,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 	op_node *resp,		// pointer to slot on which someone will post a response 
 			*from_me;	// pointer to slot on which I will post my operation or my response
 
-	int ret;
+	int ret, vret;
 
 	operation_t *my_operation, *read_operation;
 
@@ -778,8 +782,13 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 				
 				enq_steal_done++;
 				ret = do_pq_enqueue(q, timestamp, payload, &my_operation->candidate, my_operation, 1, NULL);
-				break;
-				
+				vret = VAL_CAS(&my_operation->response, -1, 1);
+				if (vret < 0)
+					if (vret == -2)
+						BOOL_CAS(&my_operation->response, -2, 1);
+					else
+						break;
+
 			}
 			attempts = 0;
 		}
@@ -796,8 +805,9 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 		if (read_slot(resp, &read_operation)) {
 			assertf(read_operation != my_operation, "Wrong aswer to request%s\n","");
 			ret = read_operation->response;
-			if (ret<0)
+			if (ret == -2)
 			{
+				read_operation->response = -1;
 				dest_node = read_operation->dest_node;
 				from_me = get_req_slot_to_node(dest_node);
 				if (!write_slot(from_me, my_operation))
@@ -827,7 +837,7 @@ pkey_t pq_dequeue(void *q, void** result)
 	op_node *resp,		// pointer to slot on which someone will post a response 
 			*from_me;	// pointer to slot on which I will post my operation or my response
 
-	int ret;
+	int ret, vret;
 
 	unsigned int	type;
 
@@ -922,7 +932,12 @@ pkey_t pq_dequeue(void *q, void** result)
 			{
 				deq_steal_done++;
 				ret = do_pq_dequeue(q, &ts, &pld, my_operation->op_id, &my_operation->candidate, 1, NULL);
-				break;
+				vret = VAL_CAS(&my_operation->response, -1, 1);
+				if (vret < 0)
+					if (vret == -2)
+						BOOL_CAS(&my_operation->response, -2, 1);
+					else
+						break;
 			}
 			attempts = 0;
 		}
@@ -938,10 +953,11 @@ pkey_t pq_dequeue(void *q, void** result)
 		// check response
 		if (read_slot(resp, &read_operation))
 		{
+			assertf(read_operation != my_operation, "Wrong aswer to request%s\n","");
 			ret = read_operation->response;
-			if (ret < 0)
+			if (ret == -2)
 			{
-				assertf(read_operation != my_operation, "Wrong aswer to request%s\n","");
+				read_operation->response = -1;
 				dest_node = read_operation->dest_node;
 				from_me = get_req_slot_to_node(dest_node);
 				if (!write_slot(from_me, my_operation))

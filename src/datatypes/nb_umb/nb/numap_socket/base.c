@@ -884,7 +884,7 @@ pkey_t pq_dequeue(void *q, void** result)
 				deq_steal_done++;
 				ret = do_pq_dequeue(q, &ts, &pld, my_operation->op_id, &my_operation->candidate);
 				if (BOOL_CAS(&my_operation->response, -1, ret))
-				break;
+					break;
 			}
 			attempts = 0;
 		}
