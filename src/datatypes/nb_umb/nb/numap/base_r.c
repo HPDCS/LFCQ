@@ -644,7 +644,7 @@ static inline int handle_ops(void* q)
 				ts = operation->timestamp;
 				pld = operation->payload;
 				ret = do_pq_enqueue(q, ts, pld, candidate, operation, 0, &new_dest);
-				operation->response = ret;
+				//operation->response = ret;
 			}
 			else 
 			{
@@ -653,10 +653,13 @@ static inline int handle_ops(void* q)
 				ret = do_pq_dequeue(q, &ts, &pld, op_id, candidate, 0, &new_dest);
 				operation->timestamp = ts;
 				operation->payload = pld;
-				operation->response = ret; // no needed
+				//operation->response = ret; // no needed
 			}
 
 			operation->dest_node = new_dest;
+
+			if (!BOOL_CAS(&operation->response, -1, ret))
+				continue;
 
 			if (!write_slot(from_me, operation))
 			{
@@ -703,7 +706,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 
 	my_operation->op_id 	= 1;
 	my_operation->type 		= OP_PQ_ENQ;
-	my_operation->response= -1;
+	my_operation->response	= -1;
 	my_operation->timestamp	= timestamp;
 	my_operation->payload	= payload;
 	my_operation->candidate	= NULL;
@@ -791,10 +794,10 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 
 		// check response
 		if (read_slot(resp, &read_operation)) {
+			assertf(read_operation != my_operation, "Wrong aswer to request%s\n","");
 			ret = read_operation->response;
 			if (ret<0)
 			{
-				assertf(read_operation != my_operation, "Wrong aswer to request%s\n","");
 				dest_node = read_operation->dest_node;
 				from_me = get_req_slot_to_node(dest_node);
 				if (!write_slot(from_me, my_operation))

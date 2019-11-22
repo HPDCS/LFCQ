@@ -748,7 +748,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 				
 				enq_steal_done++;
 				ret = do_pq_enqueue(q, timestamp, payload, &my_operation->candidate, my_operation);
-				if (BOOL_CAS(&my_operation->response, -1, ret))
+				if (BOOL_CAS(&my_operation->response, -1, ret)) // se qualcuno ha pubblicato il risultato ma muore non posso lege
 					break;
 				
 			}
