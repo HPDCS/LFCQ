@@ -634,10 +634,12 @@ static inline int handle_ops(void* q)
 			}
 			if (!BOOL_CAS(&operation->response, -1, ret)) // someone else aready published the result
 				continue;
+			/*
 			if (!write_slot(from_me, operation))
 			{
 				abort_line();
 			}
+			*/
 		}
 	}
 
@@ -764,11 +766,15 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 			attempts=0;
 
 		// check response
-		if (read_slot(resp, &read_operation)) {
-			assertf(read_operation != my_operation, "Wrong aswer to request%s\n","");
+		//if (read_slot(resp, &read_operation)) 
+		if (my_operation->response>=0)
+		{
+			read_operation = my_operation;
+			//assertf(read_operation != my_operation, "Wrong aswer to request%s\n","");
 			ret = read_operation->response;
 			break;
 		}
+		
 	} while(1);
 
 	gc_free(ptst, my_operation, gc_aid[1]);
@@ -894,9 +900,11 @@ pkey_t pq_dequeue(void *q, void** result)
 			attempts=0;
 
 		// check response
-		if (read_slot(resp, &read_operation))
+		//if (read_slot(resp, &read_operation))
+		if (my_operation->response > 0)
 		{
-			assertf(read_operation != my_operation, "Wrong aswer to request%s\n","");
+			read_operation = my_operation;
+			//assertf(read_operation != my_operation, "Wrong aswer to request%s\n","");
 			ts = read_operation->timestamp;
 			pld = read_operation->payload;
 			break;
