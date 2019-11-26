@@ -600,7 +600,7 @@ static inline int handle_ops(void* q)
 	pkey_t ts;
 	void *pld;
 
-	op_node *to_me, *from_me;
+	op_node *to_me; //, *from_me;
 
 	nbc_bucket_node * volatile * candidate;
 
@@ -616,7 +616,7 @@ static inline int handle_ops(void* q)
 		if (read_slot(to_me, &operation))
 		{
 			count++;
-			from_me = get_res_slot_to_node(i);
+			//from_me = get_res_slot_to_node(i);
 			type = operation->type;
 			candidate = &operation->candidate;
 
@@ -638,10 +638,12 @@ static inline int handle_ops(void* q)
 			}
 			if (!BOOL_CAS(&operation->response, -1, ret))
 				continue;
+			/*
 			if (!write_slot(from_me, operation))
 			{
 				abort_line();
 			}
+			*/
 		}
 	}
 
@@ -753,7 +755,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 				enq_steal_done++;
 				ret = do_pq_enqueue(q, timestamp, payload, &my_operation->candidate, my_operation);
 				if (BOOL_CAS(&my_operation->response,-1, ret))
-				break;
+					break;
 				
 			}
 			attempts = 0;
@@ -768,8 +770,11 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 			attempts=0;
 
 		// check response
-		if (read_slot(resp, &read_operation)) {
-			assertf(read_operation != my_operation, "Wrong aswer to request%s\n","");
+		//if (read_slot(resp, &read_operation)) 
+		if (my_operation->response >= 0)
+		{
+			read_operation = my_operation;
+			//assertf(read_operation != my_operation, "Wrong aswer to request%s\n","");
 			ret = read_operation->response;
 			break;
 		}
@@ -898,9 +903,11 @@ pkey_t pq_dequeue(void *q, void** result)
 			attempts=0;
 
 		// check response
-		if (read_slot(resp, &read_operation))
+		//if (read_slot(resp, &read_operation))
+		if (my_operation->response >= 0)
 		{
-			assertf(read_operation != my_operation, "Wrong aswer to request%s\n","");
+			read_operation = my_operation;
+			//assertf(read_operation != my_operation, "Wrong aswer to request%s\n","");
 			ts = read_operation->timestamp;
 			pld = read_operation->payload;
 			break;

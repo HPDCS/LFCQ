@@ -596,7 +596,7 @@ static inline int handle_ops(void* q)
 	pkey_t ts;
 	void *pld;
 
-	op_node *to_me, *from_me;
+	op_node *to_me;//, *from_me;
 
 	nbc_bucket_node * volatile * candidate;
 
@@ -612,7 +612,7 @@ static inline int handle_ops(void* q)
 		if (read_slot(to_me, &operation))
 		{
 			count++;
-			from_me = get_res_slot_to_node(i);
+			//from_me = get_res_slot_to_node(i);
 			type = operation->type;
 			candidate = &operation->candidate;
 
@@ -680,7 +680,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 
 	my_operation->op_id 	= 1;
 	my_operation->type 		= OP_PQ_ENQ;
-	my_operation->response= -1;
+	my_operation->response	= -1;
 	my_operation->timestamp	= timestamp;
 	my_operation->payload	= payload;
 	my_operation->candidate	= NULL;
