@@ -10,7 +10,7 @@ USER_OBJS :=
 
 LIBS := -lpthread -lm -lnuma -lrt -mrtm
 SRC_DIR := src
-TARGETS := ACRCQ NUMAP RNUMAP NUMAPFK NUMAPBL NUMAPSKT RNUMAPSKT NUMAPSKTFK NUMAPSKTBL NUMAQ RNUMAQ NUMAQFK NUMAQBL NUMAQSKT RNUMAQSKT NUMAQSKTFK NUMAQSKTBL NUMA2Q RNUMA2Q NUMA2QFK NUMA2QBL NUMA2QSKT RNUMA2QSKT NUMA2QSKTFK NUMA2QSKTBL NBNUMAQ NBRNUMAQ NBNUMAQSKT NBRNUMAQSKT NBNUMA2Q NBRNUMA2Q NBNUMA2QSKT NBRNUMA2QSKT NBNUMAP NBRNUMAP NBNUMAPSKT NBRNUMAPSKT
+TARGETS := ACRCQ NUMAP RNUMAP NUMAPFK NUMAPBL NUMAPSKT RNUMAPSKT NUMAPSKTFK NUMAPSKTBL NUMAQ RNUMAQ NUMAQFK NUMAQBL NUMAQSKT RNUMAQSKT NUMAQSKTFK NUMAQSKTBL NUMA2Q RNUMA2Q NUMA2QFK NUMA2QBL NUMA2QSKT RNUMA2QSKT NUMA2QSKTFK NUMA2QSKTBL NBNUMAQ NBRNUMAQ NBNUMAQSKT NBRNUMAQSKT NBNUMA2Q NBRNUMA2Q NBNUMA2QSKT NBRNUMA2QSKT NBNUMAP NBRNUMAP NBNUMAPSKT NBRNUMAPSKT FC
 
 		# CACRCQ ACRCQH	
 		# SCNUMAP SCNUMAPFK NUMAPNBC NUMAPNBCFK NUMAPNBCBL
@@ -183,6 +183,9 @@ CACRCQ_link := gcc
 
 ########
 
+FC_value := src/datatypes/FCQueue/C-FCQkiplist.opp src/datatypes/FCQueue/ITest.opp src/datatypes/FCQueue/cpp_framework.opp $(UTIL_value)
+FC_link := g++
+
 NUMAPNBC_value := src/datatypes/nb_umb/numap/base.o src/datatypes/nb_umb/numap/mapping_nb.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMAPNBC_link := gcc
 NUMAPNBCFK_value := src/datatypes/nb_umb/numap/fake.o src/datatypes/nb_umb/numap/mapping_nb.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
@@ -255,7 +258,7 @@ NUMA_NODES := $(shell lscpu | grep -e "NUMA node(s)" | egrep -o [0-9]+)
 NUM_CPUS := $(shell nproc --all)
 CPU_PER_SOCKET := $(shell cat /proc/cpuinfo | grep 'physical id' | uniq -c | head -n1 | xargs | cut -d' ' -f1)
 NUM_SOCKETS := $(shell cat /proc/cpuinfo | grep 'physical id' | uniq -c | wc -l)
-MACRO := -DARCH_X86_64  -DCACHE_LINE_SIZE=$(L1_CACHE_LINE_SIZE) -DINTEL -D_NUMA_NODES=$(NUMA_NODES) -DNUM_CPUS=$(NUM_CPUS) -DCPU_PER_SOCKET=$(CPU_PER_SOCKET) -DNUM_SOCKETS=$(NUM_SOCKETS)
+MACRO := -DARCH_X86_64  -DCACHE_LINE_SIZE=$(L1_CACHE_LINE_SIZE) -DINTEL -D_NUMA_NODES=$(NUMA_NODES) -DNUM_CPUS=$(NUM_CPUS) -DCPU_PER_SOCKET=$(CPU_PER_SOCKET) -DNUM_SOCKETS=$(NUM_SOCKETS) -DINTEL64 -D_REENTRANT
 
 
 FILTER_OUT_C_SRC := src/main.c src/main_2.c
@@ -386,7 +389,7 @@ C_OBJS			:= $(strip $(subst .c,.o, $(C_SRCS)))
 C_DEPS			:= $(patsubst %, $(OBJS_DIR)/%, $(subst .o,.d, $(C_OBJS)))
 
 
-CPP_SUBDIRS 	:= src/datatypes/ChunkBasedPriorityQueue
+CPP_SUBDIRS 	:= src/datatypes/ChunkBasedPriorityQueue src/datatypes/FCQueue
 CPP_SRCS		:= $(shell ls   $(patsubst %, %/*.cpp, $(CPP_SUBDIRS)) )
 CPP_SRCS 		:= $(filter-out $(FILTER_OUT_CPP_SRC), $(CPP_SRCS))
 CPP_OBJS		:= $(strip $(subst .cpp,.opp, $(CPP_SRCS)))
@@ -397,7 +400,6 @@ REAL_TARGETS := $(patsubst %, $(OBJS_DIR)/%-test, $(TARGETS))
 UNIT_TARGETS := $(patsubst %, $(OBJS_DIR)/%-resize-unit-test, $(TARGETS))
 
 FLAGS=-mcx16 -g
-
 RM := rm -rf
 
 ifdef RESIZE_PERIOD_FACTOR

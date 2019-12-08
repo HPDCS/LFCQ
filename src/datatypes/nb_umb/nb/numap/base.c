@@ -227,7 +227,7 @@ int do_pq_enqueue(void *q, pkey_t timestamp, void *payload, nbc_bucket_node* vol
 		if(res == PRESENT)
 		{
 			ins_node = VAL_CAS(candidate, NULL, 1);
-			if (ins_node == 1 || tmp == NULL)
+			if (ins_node == 1 || ins_node == NULL)
 				res = 0;
 			else
 				res = 1;
