@@ -665,10 +665,12 @@ static inline int handle_ops(void* q)
 			if (!BOOL_CAS(&operation->response, -1, ret))
 				continue; // the cas failed -> someone already set the response
 
+			/*
 			if (!write_slot(from_me, operation))
 			{
 				abort_line();
 			}
+			*/
 			count++;
 		}
 	}
@@ -802,9 +804,14 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload) {
 			attempts=0;
 
 		// check response
-		if (read_slot(resp, &read_operation)) {
-			assertf(read_operation != my_operation, "Wrong aswer to request%s\n","");
-			ret = read_operation->response;
+		//if (read_slot(resp, &read_operation)) 
+		ret = my_operation->response;
+		if (ret != -1)
+		{
+			
+			//assertf(read_operation != my_operation, "Wrong aswer to request%s\n","");
+			//ret = read_operation->response;
+			read_operation = my_operation;
 			if (ret == -2)
 			{
 				read_operation->response = -1;
@@ -951,10 +958,13 @@ pkey_t pq_dequeue(void *q, void** result)
 			attempts=0;
 
 		// check response
-		if (read_slot(resp, &read_operation))
+		//if (read_slot(resp, &read_operation))
+		ret = my_operation->response;
+		if (ret != -1)
 		{
-			assertf(read_operation != my_operation, "Wrong aswer to request%s\n","");
-			ret = read_operation->response;
+			//assertf(read_operation != my_operation, "Wrong aswer to request%s\n","");
+			//ret = read_operation->response;
+			read_operation = my_operation;
 			if (ret == -2)
 			{
 				read_operation->response = -1;

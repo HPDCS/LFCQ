@@ -26,7 +26,7 @@ void init_mapping()
     unsigned int node;
     unsigned int max_threads = NUM_SOCKETS*CPU_PER_SOCKET; 
     int i, j, k;
-    for (i = 0; i < ACTIVE_NUMA_NODES; ++i) 
+    for (i = 0; i < ACTIVE_SOCKETS; ++i) 
     {
         node = i << 1;
         req_mapping[i] = numa_alloc_onnode(sizeof(op_node)*max_threads, node);
