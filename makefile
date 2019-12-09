@@ -10,7 +10,7 @@ USER_OBJS :=
 
 LIBS := -lpthread -lm -lnuma -lrt -mrtm
 SRC_DIR := src
-TARGETS := ACRCQ NUMAP RNUMAP NUMAPFK NUMAPBL NUMAPSKT RNUMAPSKT NUMAPSKTFK NUMAPSKTBL NUMAQ RNUMAQ NUMAQFK NUMAQBL NUMAQSKT RNUMAQSKT NUMAQSKTFK NUMAQSKTBL NUMA2Q RNUMA2Q NUMA2QFK NUMA2QBL NUMA2QSKT RNUMA2QSKT NUMA2QSKTFK NUMA2QSKTBL NBNUMAQ NBRNUMAQ NBNUMAQSKT NBRNUMAQSKT NBNUMA2Q NBRNUMA2Q NBNUMA2QSKT NBRNUMA2QSKT NBNUMAP NBRNUMAP NBNUMAPSKT NBRNUMAPSKT FC
+TARGETS := ACRCQ NUMAP RNUMAP NUMAPFK NUMAPBL NUMAPSKT RNUMAPSKT NUMAPSKTFK NUMAPSKTBL NUMAQ RNUMAQ NUMAQFK NUMAQBL NUMAQSKT RNUMAQSKT NUMAQSKTFK NUMAQSKTBL NUMA2Q RNUMA2Q NUMA2QFK NUMA2QBL NUMA2QSKT RNUMA2QSKT NUMA2QSKTFK NUMA2QSKTBL NBNUMAQ NBRNUMAQ NBNUMAQSKT NBRNUMAQSKT NBNUMA2Q NBRNUMA2Q NBNUMA2QSKT NBRNUMA2QSKT NBNUMAP NBRNUMAP NBNUMAPSKT NBRNUMAPSKT FC FCACRCQ
 
 		# CACRCQ ACRCQH	
 		# SCNUMAP SCNUMAPFK NUMAPNBC NUMAPNBCFK NUMAPNBCBL
@@ -185,6 +185,9 @@ CACRCQ_link := gcc
 
 FC_value := src/datatypes/FCQueue/C-FCQkiplist.opp src/datatypes/FCQueue/ITest.opp src/datatypes/FCQueue/cpp_framework.opp $(UTIL_value)
 FC_link := g++
+
+FCACRCQ_value := src/datatypes/nbcalendars-ad-fc/common_nb_calqueue.o src/datatypes/nbcalendars-ad-fc/op_slots.o $(UTIL_value) $(GACO_value) $(ARCH_value)
+FCACRCQ_link := gcc
 
 NUMAPNBC_value := src/datatypes/nb_umb/numap/base.o src/datatypes/nb_umb/numap/mapping_nb.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMAPNBC_link := gcc
@@ -379,7 +382,7 @@ endif
 -funswitch-loops \
 -fvect-cost-model 
 
-C_SUBDIRS		:= src src/datatypes/nbcalendars-ad src/datatypes/nbcalendars src/datatypes/nbcalendars_with_vb src/datatypes/nbcalendars_with_vb2 src/datatypes/nbcalendars_with_vb_2CAS  src/datatypes/nbskiplists src/datatypes/slcalqueue  src/arch src/gc src/utils src/datatypes/nb_umb/op_queue src/datatypes/nb_umb/gc src/datatypes/nb_umb/numap src/datatypes/nb_umb/numap_socket src/datatypes/nb_umb/numaq_no_candidate src/datatypes/nb_umb/numaq_no_candidate_socket src/datatypes/nb_umb/numa2q_no_candidate src/datatypes/nb_umb/numa2q_no_candidate_socket src/datatypes/nb_umb/nb/numaq src/datatypes/nb_umb/nb/numaq_socket src/datatypes/nb_umb/nb/numa2q src/datatypes/nb_umb/nb/numa2q_socket src/datatypes/nb_umb/nb/numap src/datatypes/nb_umb/nb/numap_socket 
+C_SUBDIRS		:= src src/datatypes/nbcalendars-ad src/datatypes/nbcalendars src/datatypes/nbcalendars_with_vb src/datatypes/nbcalendars_with_vb2 src/datatypes/nbcalendars_with_vb_2CAS  src/datatypes/nbskiplists src/datatypes/slcalqueue  src/arch src/gc src/utils src/datatypes/nb_umb/op_queue src/datatypes/nb_umb/gc src/datatypes/nb_umb/numap src/datatypes/nb_umb/numap_socket src/datatypes/nb_umb/numaq_no_candidate src/datatypes/nb_umb/numaq_no_candidate_socket src/datatypes/nb_umb/numa2q_no_candidate src/datatypes/nb_umb/numa2q_no_candidate_socket src/datatypes/nb_umb/nb/numaq src/datatypes/nb_umb/nb/numaq_socket src/datatypes/nb_umb/nb/numa2q src/datatypes/nb_umb/nb/numa2q_socket src/datatypes/nb_umb/nb/numap src/datatypes/nb_umb/nb/numap_socket src src/datatypes/nbcalendars-ad-fc
 
 #src/datatypes/nb_umb/unbcq datatypes/nb_umb/nbcq_phy src/datatypes/nb_umb/nbcalendars-ad-candidate src/datatypes/nb_umb/numap_SC
 
