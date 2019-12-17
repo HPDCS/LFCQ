@@ -57,7 +57,7 @@ NUMAPSKTBL_link := gcc
 
 ## NUMAQ
 
-NUMAQ_value := $(TQ_value) src/datatypes/nb_umb/numaq_no_candidate/base.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
+NUMAQ_value := $(TQ_value) src/datatypes/nb_umb/numaq_no_candidate/base2.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
 NUMAQ_link := gcc
 
 NUMAQFK_value := $(TQ_value) src/datatypes/nb_umb/numaq_no_candidate/fake.o $(UTIL_value) $(ARCH_value) $(NGACO_value)
