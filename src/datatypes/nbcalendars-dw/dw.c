@@ -67,7 +67,7 @@ void dw_block_table(void* q, unsigned int start){
 						doOrd(dw_list_node, vec_size);
 
 					if(dw_list_node->enq_cn - dw_list_node->deq_cn > 0){ // se ci sono elementi a disposizione allora posso estrarre(potrebbe essere che alcuni non sono finalizzati)
-					
+					printf("flush\n");
 						from_block_table = true;
 
 						do{
@@ -141,7 +141,8 @@ int dw_enqueue(void* q, nbc_bucket_node* new_node, unsigned long long new_node_v
 
 	// se la coda è piena cerco di bloccarla
 	if(dw_list_node->enq_cn >= vec_size && DW_GET_STATE(dw_list_node->next) == INS){ // se dw è piena e sto ancora in INS
-		//printf("chiamo block enq\n");
+		//printf("la coda è piena\n");
+		//fflush(stdout);
 		blockIns(dw_list_node, vec_size); // impedisco gli inserimenti
 
 		BOOL_CAS(&dw_list_node->next, DW_SET_STATE(dw_list_node->next, INS), DW_SET_STATE(dw_list_node->next, ORD));	// imposto a ORD
@@ -168,8 +169,12 @@ dwn* dw_dequeue(void* q, unsigned long long index_vb){
 
 	//printf("dw_dequeue %llu \n", index_vb);
 	dw_list_node = list_remove(h->deferred_work->dwls[index_vb % (h->size)], (long)index_vb);
-	if(dw_list_node == NULL) // non ci sono elementi
+
+	if(dw_list_node == NULL){ // non ci sono elementi
+		//printf("Returning NULL\n");
 		return dw_list_node;	
+	}
+	if(index_vb != dw_list_node->index_vb) {printf("Returning a bucket %ld less than current %llu\n", dw_list_node->index_vb, index_vb);}
 	
 	DW_AUDIT{
 		printf("ESTRAZIONE: TID %d: current %d , index_pb %ld\n", TID, dw_list_node->enq_cn, (long)(index_vb % (h->size)));	
@@ -236,7 +241,7 @@ void doOrd(dwn* dw_list_node, int size){
 		printf(" prima di ordinare\n");
 		*/
 		
-		qsort(aus_ord_array, size, sizeof(nbc_bucket_node*), cmp_node);	// ordino
+		qsort(aus_ord_array, dw_list_node->enq_cn/*size*/, sizeof(nbc_bucket_node*), cmp_node);	// ordino
 
 		// cerco di sostituirlo all'originale
 		if(BOOL_CAS(&dw_list_node->dwv, old_dwv, aus_ord_array))
@@ -267,7 +272,7 @@ void blockIns(dwn* dw_list_node, int size){
 	printf(" prima di blocco\n");	
 	*/
 	
-	for(j = 0; j < size; j++){ 
+	for(j = 0; j < dw_list_node->enq_cn/*size*/; j++){ 
 		BOOL_CAS(&dw_list_node->dwv[j], NULL, (nbc_bucket_node*)((unsigned long long)dw_list_node->dwv[j] | BLKN));
 	}
 	
