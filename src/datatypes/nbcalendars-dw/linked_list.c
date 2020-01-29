@@ -9,6 +9,7 @@
 
 //#include "linked_list.h"
 #include "common_nb_calqueue.h"
+
 /*
  * The five following functions handle the low-order mark bit that indicates
  * whether a node is logically deleted (1) or not (0).
@@ -47,6 +48,11 @@ dwn* list_search_2(dwn* left_node_next, dwn* right_node, dwn** left_node){
   }
   else{ // compatta
     if (BOOL_CAS(&((*left_node)->next), left_node_next, DW_SET_STATE(right_node, DW_GET_STATE(left_node_next)))) {
+		while( (left_node_next = DW_GET_PTR(left_node_next)) != right_node){
+			gc_free(ptst, left_node_next, 		 gc_aid[1]);
+			gc_free(ptst, left_node_next->dwv,   gc_aid[2]);
+			left_node_next = left_node_next->next;
+        }
         if (!is_marked_ref(right_node->next)){
           result = right_node;
         }
@@ -88,7 +94,6 @@ dwn* list_search_rm(dwl* set, long val, dwn** left_node) {
     }
 
     right_node = t;
-
     result = list_search_2(left_node_next, right_node, left_node);
     if(result != NULL)
       return result;
@@ -154,22 +159,28 @@ dwn* list_contains(dwl* the_list, long index_vb){
 */
 
 
-dwn* new_node(long index_vb, dwn* next, int vec_size){
+dwn* new_node(long index_vb, dwn* next, int vec_size){ 
 
     dwn* node = NULL;
     int i, res = 0;
 
-    res = posix_memalign((void**)(&node), CACHE_LINE_SIZE, sizeof(dwn));
-    if(res != 0){
+	
+    //res = posix_memalign((void**)(&node), CACHE_LINE_SIZE, sizeof(dwn));
+    node = gc_alloc(ptst, gc_aid[1]);
+    if(res != 0 && node == NULL){
         printf("Non abbastanza memoria per allocare un nodo dwn della lista\n"); 
         return NULL; 
     }
+	
 
     if(vec_size != 0){
-      res = posix_memalign((void**)(&node->dwv), CACHE_LINE_SIZE, vec_size * sizeof(nbc_bucket_node*)); // TODO: da vedere se si può inizializzare subito a zero
-      if(res != 0){
+      //res = posix_memalign((void**)(&node->dwv), CACHE_LINE_SIZE, vec_size * sizeof(nbc_bucket_node*)); // TODO: da vedere se si può inizializzare subito a zero
+      node->dwv = gc_alloc(ptst, gc_aid[2]);
+    
+      if(res != 0 && node->dwv == NULL){
           printf("Non abbastanza memoria per allocare l'array di un nodo dwn\n"); 
-          free(node); // rilascio il nodo
+          if(res != 0)free(node); // rilascio il nodo
+          else gc_free(ptst, node, gc_aid[1]);
           return NULL;
       }
     }

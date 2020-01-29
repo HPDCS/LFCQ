@@ -34,7 +34,7 @@
  * GLOBAL VARIABLES					 *
  ************************************/
 
-int gc_aid[1];
+int gc_aid[3];
 int gc_hid[1];
 
 /*************************************
@@ -467,7 +467,8 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 		if(res != 0) {free(new_h); printf("No enough memory to new table structure\n"); return;}
 
 		#if DW_USAGE
-
+		//if(new_size > 16000)
+		{
 			res = posix_memalign((void**)(&new_h->deferred_work), CACHE_LINE_SIZE, sizeof(dwstr));
 			if(res != 0) {
 				free(new_h->array);	
@@ -485,7 +486,7 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 			}
 			
 			new_h->deferred_work->vec_size = h->deferred_work->vec_size;
-
+		}
 		#endif
 		
 		tail = h->array->tail;
@@ -510,6 +511,8 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 			new_h->array[i].epoch = 0;
 
 			#if DW_USAGE
+			//if(new_size > 16000)
+			{
 				new_h->deferred_work->dwls[i] = list_new(new_h->deferred_work->vec_size);	// alloco una nuova lista
 				
 				if(new_h->deferred_work->dwls[i] == NULL) {
@@ -526,6 +529,7 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 					printf("Non abbastanza memoria per allocare una lista\n");
 					return;
 				}
+			}
 			#endif
 		}
 
@@ -985,6 +989,17 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 		 	// I won the challenge thus I collect memory
 		 	gc_add_ptr_to_hook_list(ptst, h, 		 gc_hid[0]);
 			gc_add_ptr_to_hook_list(ptst, h->array,  gc_hid[0]);
+			
+			/*
+			for(i = 0; i < h->size; i++){
+				gc_add_ptr_to_hook_list(ptst, h->deferred_work->dwls[i]		, gc_hid[0]);
+				gc_add_ptr_to_hook_list(ptst, h->deferred_work->dwls[i]->head, gc_hid[0]);
+				gc_add_ptr_to_hook_list(ptst, h->deferred_work->dwls[i]->tail, gc_hid[0]);
+				
+			}
+			gc_add_ptr_to_hook_list(ptst, h->deferred_work->dwls, gc_hid[0]);
+			gc_add_ptr_to_hook_list(ptst, h->deferred_work, gc_hid[0]);
+			*/
 		 }
 
 		
@@ -1017,6 +1032,8 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	_init_gc_subsystem();
 	// add allocator of nbc_bucket_node
 	gc_aid[0] = gc_add_allocator(sizeof(nbc_bucket_node));
+	gc_aid[1] = gc_add_allocator(sizeof(dwn));
+	gc_aid[2] = gc_add_allocator(VEC_SIZE * sizeof(nbc_bucket_node*));
 	// add callback for set tables and array of nodes whene a grace period has been identified
 	gc_hid[0] = gc_add_hook(std_free_hook);
 	critical_enter();
@@ -1104,7 +1121,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	unsigned long long newIndex = 0;
 
 	nbc_bucket_node *bucket, *new_node;
-
+	
 	#if DW_USAGE	
 		queue_ptr = (nb_calqueue*) q; 	// serve come puntatore da passare alla dw_block_table dalla block_table
 		bool node_from_dw = false;		// non è un nodo dalla coda se rimane false
@@ -1182,7 +1199,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 
 		#if DW_USAGE
 
-			if(!node_from_dw){						// se non è un nodo dalla coda
+			if(!node_from_dw && h->size > 16000){						// se non è un nodo dalla coda
 				if(dw_enqueue(q, new_node, newIndex) == OK){	// se inserimento riuscito
 					//printf("%lld\n",newIndex );
 					res = OK;						// se inserimento complessivo riuscito 
