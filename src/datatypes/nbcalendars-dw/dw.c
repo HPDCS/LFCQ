@@ -211,8 +211,9 @@ void doOrd(dwn* dw_list_node, int size){
 	old_dwv = dw_list_node->dwv;
 
 	// cerco di costruirmi una copia
-	res_mem_posix = posix_memalign((void**)(&aus_ord_array), CACHE_LINE_SIZE, size * sizeof(nbc_bucket_node*));
-	if(res_mem_posix != 0)	error("Non abbastanza memoria per allocare un array dwv in ORD\n");
+	//res_mem_posix = posix_memalign((void**)(&aus_ord_array), CACHE_LINE_SIZE, size * sizeof(nbc_bucket_node*));
+	aus_ord_array = gc_alloc(ptst, gc_aid[2]);
+	if(res_mem_posix != 0 && aus_ord_array == NULL)	error("Non abbastanza memoria per allocare un array dwv in ORD\n");
 	else{
 	
 		/*
@@ -244,10 +245,13 @@ void doOrd(dwn* dw_list_node, int size){
 		qsort(aus_ord_array, dw_list_node->enq_cn/*size*/, sizeof(nbc_bucket_node*), cmp_node);	// ordino
 
 		// cerco di sostituirlo all'originale
-		if(BOOL_CAS(&dw_list_node->dwv, old_dwv, aus_ord_array))
+		if(BOOL_CAS(&dw_list_node->dwv, old_dwv, aus_ord_array)){
 			BOOL_CAS(&dw_list_node->next, DW_SET_STATE(dw_list_node->next, ORD), DW_SET_STATE(dw_list_node->next, EXT));	// imposto a EXT(se ordino da block_table non funzionerà)
+			gc_free(ptst, old_dwv, gc_aid[2]);
+		}
 		else
-			free(aus_ord_array);
+			gc_free(ptst, aus_ord_array, gc_aid[2]);
+			//free(aus_ord_array);
 		
 		/*
 		for(j = 0;j < size;j++){
