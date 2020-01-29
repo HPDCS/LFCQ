@@ -295,7 +295,7 @@ int cmp_node(const void *p1, const void *p2){
 	node_2 = (nbc_bucket_node**)p2;
 
 	if(DW_NODE_IS_BLK(*node_1) && DW_NODE_IS_BLK(*node_2))
-		return 1;
+		return 0;
 	else if(DW_NODE_IS_BLK(*node_1))
 		return 1;
 	else if(DW_NODE_IS_BLK(*node_2))
