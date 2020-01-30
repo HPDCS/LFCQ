@@ -45,6 +45,7 @@
 #define DW_GET_NODE_PTR(node)	((nbc_bucket_node*)((unsigned long long)node & DW_NODE_PTR))
 #define DW_NODE_IS_BLK(node) 	((nbc_bucket_node*)((unsigned long long)node & DW_NODE_BLK))		
 #define DW_NODE_IS_DEL(node) 	((nbc_bucket_node*)((unsigned long long)node & DW_NODE_DEL))
+		
 
 extern int cmp_node(const void *, const void *);
 extern dwn* dw_dequeue(void*, unsigned long long);
