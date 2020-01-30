@@ -34,7 +34,7 @@
  * GLOBAL VARIABLES					 *
  ************************************/
 
-int gc_aid[3];
+int gc_aid[4];
 int gc_hid[1];
 
 /*************************************
@@ -1033,7 +1033,8 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	// add allocator of nbc_bucket_node
 	gc_aid[0] = gc_add_allocator(sizeof(nbc_bucket_node));
 	gc_aid[1] = gc_add_allocator(sizeof(dwn));
-	gc_aid[2] = gc_add_allocator(VEC_SIZE * sizeof(nbc_bucket_node*));
+	gc_aid[2] = gc_add_allocator(VEC_SIZE * sizeof(nbnc*));
+	gc_aid[3] = gc_add_allocator(sizeof(nbnc));
 	// add callback for set tables and array of nodes whene a grace period has been identified
 	gc_hid[0] = gc_add_hook(std_free_hook);
 	critical_enter();
@@ -1203,8 +1204,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 				if(dw_enqueue(q, new_node, newIndex) == OK){	// se inserimento riuscito
 					//printf("%lld\n",newIndex );
 					res = OK;						// se inserimento complessivo riuscito 
-					read_table_count--;				// verrà riaggiornato all'inserimento effettivo
-					__sync_fetch_and_add(&e_to_dq, 1ULL);
+					//read_table_count--;				// verrà riaggiornato all'inserimento effettivo
+					//__sync_fetch_and_add(&e_to_dq, 1ULL);
 				}
 			}
 		
@@ -1215,7 +1216,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 		// search the two adjacent nodes that surround the new key and try to insert with a CAS 
 	    res = search_and_insert(bucket, timestamp, 0, REMOVE_DEL_INV, new_node, &new_node);
 	}
-	__sync_fetch_and_add(&e_to_cq, 1ULL);
+	//__sync_fetch_and_add(&e_to_cq, 1ULL);
 				
 
 	// the CAS succeeds, thus we want to ensure that the insertion becomes visible
@@ -1256,7 +1257,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	return res;
 
 }
-
+extern int chiamate;
 void pq_report(int TID)
 {
 	
@@ -1277,7 +1278,7 @@ void pq_report(int TID)
 	/*if(TID == 0){
 		printf("E-CQ %lu E-DQ %lu D-CQ %lu D-DQ %lu\n", e_to_cq, e_to_dq, d_to_cq+d_to_dq, d_to_dq);
 	}*/
-	printf("TID %d, conflitti %ld\n",TID, conflitti );
+	printf("TID %d, chiamate cmp_node %dd\n",TID, chiamate );
 }
 
 void pq_reset_statistics(){

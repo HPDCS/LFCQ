@@ -19,10 +19,16 @@
 #include <stdint.h>
 
 
+typedef struct nbc_bucket_node_container nbnc;
+struct nbc_bucket_node_container{
+	nbc_bucket_node* node;	// puntatore al nodo
+	pkey_t timestamp;  		// relativo timestamp			
+};
+
 typedef struct deferred_work_node dwn;
 struct deferred_work_node{
 	long index_vb;			// 8
-	nbc_bucket_node** dwv;	// 16
+	nbnc** dwv;	// 16
 	dwn* next;				// 24
 //	char c1[40];
 	int deq_cn;			

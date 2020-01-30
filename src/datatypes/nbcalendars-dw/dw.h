@@ -25,7 +25,7 @@
 
 #define DW_NODE_PTR			(0xfffffffffffffffc)	// per togliere solo gli ultimi due bit, quindi BLK o DEL
 
-#define VEC_SIZE 10
+#define VEC_SIZE 20
 
 #define FETCH_AND_ADD 				__sync_fetch_and_add
 #define ADD_AND_FETCH				__sync_add_and_fetch
@@ -39,7 +39,7 @@
 
 
 #define DW_GET_PTR(dwnp) ((dwn*)((unsigned long long)dwnp & DW_PTR))
-#define DW_GET_NODE_PTR(node)	((nbc_bucket_node*)((unsigned long long)node & DW_NODE_PTR))
+#define DW_GET_NODE_PTR(node)	((nbnc*)((unsigned long long)node & DW_NODE_PTR))
 
 #define DW_NODE_IS_BLK(node) 	((bool)((unsigned long long)node & BLKN))	// verifica se un elemeno dell'array dw è bloccato	
 #define DW_NODE_IS_DEL(node) 	((bool)((unsigned long long)node & DELN))	// verifica se un elemeno dell'array dw è stato estratto
@@ -49,5 +49,6 @@ extern int cmp_node(const void *, const void *);
 extern dwn* dw_dequeue(void*, unsigned long long);
 extern int dw_enqueue(void*, nbc_bucket_node*, unsigned long long);
 extern void dw_block_table(void*, unsigned int);
+extern void insertionSort(nbnc**, int);
 
 #endif // DEFERRED_WORK

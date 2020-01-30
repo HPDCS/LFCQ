@@ -75,16 +75,16 @@ dwn* list_search_rm(dwl* set, long val, dwn** left_node) {
   left_node_next = right_node = NULL;
   dwn* result;
 
-/*              
+ /*             
   dwn *t = set->head->next;
 
-  printf("valore %ld | ", val);
+  printf("RM: valore %ld | ", val);
   while(t != set->tail){
     printf("%p %ld %d %lld | ", t, t->index_vb, (int)is_marked_ref(t->next), DW_GET_STATE(t->next));  
     t = DW_GET_PTR(get_unmarked_ref(t->next));
   }
+  printf("\n");
 */
-
   while(1) {
     dwn *t = set->head;             
     dwn *t_next = set->head->next; 
@@ -112,15 +112,17 @@ dwn* list_search_add(dwl* set, long val, dwn** left_node) {
   left_node_next = right_node = NULL;
   dwn* result;
 
-/*              
+  /*            
   dwn *t = set->head->next;
 
-  printf("valore %ld | ", val);
+  printf("ADD: valore %ld | ", val);
   while(t != set->tail){
     printf("%p %ld %d %lld | ", t, t->index_vb, (int)is_marked_ref(t->next), DW_GET_STATE(t->next));  
     t = DW_GET_PTR(get_unmarked_ref(t->next));
   }
-*/
+
+  printf("\n");
+  */
   while(1) {
     dwn *t = set->head;             
     dwn *t_next = set->head->next; 
@@ -170,7 +172,6 @@ dwn* new_node(long index_vb, dwn* next, int vec_size){
 
     dwn* node = NULL;
     int i, res = 0;
-
 	
     //res = posix_memalign((void**)(&node), CACHE_LINE_SIZE, sizeof(dwn));
     node = gc_alloc(ptst, gc_aid[1]);
@@ -180,7 +181,6 @@ dwn* new_node(long index_vb, dwn* next, int vec_size){
         return NULL; 
     }
 	
-
     if(vec_size != 0){
       //res = posix_memalign((void**)(&node->dwv), CACHE_LINE_SIZE, vec_size * sizeof(nbc_bucket_node*)); // TODO: da vedere se si può inizializzare subito a zero
       node->dwv = gc_alloc(ptst, gc_aid[2]);
@@ -299,7 +299,8 @@ dwn* list_remove(dwl *the_list, long index_vb){
 
       //printf("Ho chiesto %ld, provo a marcare %ld", index_vb, right->index_vb);
       //fflush(stdout);
-      if (VAL_CAS(&(right->next), right_succ, get_marked_ref(right_succ)) == right_succ){// dopo averlo marcato non ritorno 
+      if (VAL_CAS(&(right->next), right_succ, get_marked_ref(right_succ)) == right_succ){// dopo averlo marcato ritorno se cerco uno in particolare
+    //list_search_rm(the_list, index_vb+1, &left);
         //FETCH_AND_SUB(&(the_list->size), 1);
         //return 1;
         //printf(" , marcato %ld\n", right->index_vb);
