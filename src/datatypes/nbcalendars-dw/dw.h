@@ -16,18 +16,14 @@
 //#define END (4ULL)
 
 // stati nodo in dw
-#define VALN (0ULL)
 #define DELN (1ULL)
 #define BLKN (2ULL)
 
-#define DW_PTR				(0xfffffffffffffff0)// vengono utilizzati gli ultimi 4 bit per contenere delle info(3bit di stato array | 1 stato del nodo nella lista)
-#define DW_PTR_LIST_STATE	(0xfffffffffffffff1)
-#define DW_STATE			(0x000000000000000e)
+#define DW_PTR				(0xfffffffffffffff0)    // vengono utilizzati gli ultimi 4 bit per contenere delle info(3bit di stato array | 1 stato del nodo nella lista)
+#define DW_PTR_LIST_STATE	(0xfffffffffffffff1)	// per pulire completamente lo stato DW senza toccare un eventuale marcatura
+#define DW_STATE			(0x000000000000000e)	// per prendere solo lo stato riferito a DW
 
-#define DW_NODE_PTR			(0xfffffffffffffffc)
-#define DW_NODE_DEL			(0x0000000000000001)
-#define DW_NODE_BLK	    	(0x0000000000000002)
-#define DW_NODE_BLK_MASK 	(0xfffffffffffffffd)
+#define DW_NODE_PTR			(0xfffffffffffffffc)	// per togliere solo gli ultimi due bit, quindi BLK o DEL
 
 #define VEC_SIZE 10
 
@@ -37,14 +33,16 @@
 #define FETCH_AND_SUB				__sync_fetch_and_sub
 
 #define DW_SET_STATE(dwnp, state) \
-		(((unsigned long long)dwnp & DW_PTR_LIST_STATE) | (state << 1))
+		(((unsigned long long)dwnp & DW_PTR_LIST_STATE) | (state << 1))	// aggiunge lo stato passato come parametro al puntatore senza sovrascrivere un eventuale bit di marcatura
 
-#define DW_GET_STATE(dwnp) (((unsigned long long)dwnp & DW_STATE) >> 1)
+#define DW_GET_STATE(dwnp) (((unsigned long long)dwnp & DW_STATE) >> 1)	// ritorna uno tra INS, ORD, EXT, BLK
+
+
 #define DW_GET_PTR(dwnp) ((dwn*)((unsigned long long)dwnp & DW_PTR))
-
 #define DW_GET_NODE_PTR(node)	((nbc_bucket_node*)((unsigned long long)node & DW_NODE_PTR))
-#define DW_NODE_IS_BLK(node) 	((nbc_bucket_node*)((unsigned long long)node & DW_NODE_BLK))		
-#define DW_NODE_IS_DEL(node) 	((nbc_bucket_node*)((unsigned long long)node & DW_NODE_DEL))
+
+#define DW_NODE_IS_BLK(node) 	((bool)((unsigned long long)node & BLKN))	// verifica se un elemeno dell'array dw è bloccato	
+#define DW_NODE_IS_DEL(node) 	((bool)((unsigned long long)node & DELN))	// verifica se un elemeno dell'array dw è stato estratto
 		
 
 extern int cmp_node(const void *, const void *);

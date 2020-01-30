@@ -51,17 +51,21 @@ dwn* get_marked_ref(dwn*);
 
 dwl* list_new(int);
 //return 0 if not found, positive number otherwise
-dwn* list_contains(dwl*, long);
+//dwn* list_contains(dwl*, long);
 //return 0 if value already in the list, positive number otherwise
 dwn* list_add(dwl*, long, int);
 //return 0 if value already in the list, positive number otherwise
 dwn* list_remove(dwl*, long);
 void list_delete(dwl*);
-int list_size(dwl*);
+//int list_size(dwl*);
 
 
 dwn* new_node(long, dwn*, int);
-dwn* list_search(dwl*, long, dwn**);
+//dwn* list_search(dwl*, long, dwn**);
+
+dwn* list_search_2(dwn*, dwn*, dwn**);
+dwn* list_search_rm(dwl*, long, dwn**);
+dwn* list_search_add(dwl*, long, dwn**);
 
 
 #endif

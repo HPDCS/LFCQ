@@ -208,6 +208,7 @@ begin:
 							concurrent_dequeue += (unsigned long long) (__sync_fetch_and_add(&h->d_counter.count, 1) - con_de);
 
 							*result = extracted_dw_node->payload;
+							node_free(extracted_dw_node);
 							//__sync_fetch_and_add(&d_to_dq, 1ULL);
 							/*
 							if(dw_node_ts < 5.0){

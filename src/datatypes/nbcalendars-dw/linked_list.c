@@ -29,29 +29,26 @@ dwn* get_marked_ref(dwn* node_p) {
   return (dwn*) ((unsigned long long)(node_p) | 0x1ULL);
 }
 
-/*
- * list_search looks for value val, it
- *  - returns right_node owning val (if present) or its immediately higher 
- *    value present in the list (otherwise) and 
- *  - sets the left_node to the node owning the value immediately lower than val. 
- * Encountered nodes that are marked as logically deleted are physically removed
- * from the list, yet not garbage collected.
- */
-// lo stato di un nodo è mantenuto nel puntatore a next
-
 
 dwn* list_search_2(dwn* left_node_next, dwn* right_node, dwn** left_node){
   dwn* result = NULL;
+  int i;
 
   if (DW_GET_PTR(left_node_next) == right_node){   // se tra sinistro e destro non ci sono altri nodi(dovrebbero essere marcati) allora non compatto
          result = right_node;
   }
   else{ // compatta
     if (BOOL_CAS(&((*left_node)->next), left_node_next, DW_SET_STATE(right_node, DW_GET_STATE(left_node_next)))) {
-		while( (left_node_next = DW_GET_PTR(left_node_next)) != right_node){
-			gc_free(ptst, left_node_next, 		 gc_aid[1]);
-			gc_free(ptst, left_node_next->dwv,   gc_aid[2]);
-			left_node_next = left_node_next->next;
+    while( (left_node_next = DW_GET_PTR(left_node_next)) != right_node){
+      /*
+      for(i = 0;i < left_node_next->enq_cn; i++){
+        if(DW_GET_PTR(left_node_next->dwv[i]) != NULL)
+          node_free(DW_GET_PTR(left_node_next->dwv[i]));
+      }*/
+
+      gc_free(ptst, left_node_next,      gc_aid[1]);
+      gc_free(ptst, left_node_next->dwv,   gc_aid[2]);
+      left_node_next = left_node_next->next;
         }
         if (!is_marked_ref(right_node->next)){
           result = right_node;
@@ -62,6 +59,16 @@ dwn* list_search_2(dwn* left_node_next, dwn* right_node, dwn** left_node){
   return result;
 }
 
+
+/*
+ * list_search looks for value val, it
+ *  - returns right_node owning val (if present) or its immediately higher 
+ *    value present in the list (otherwise) and 
+ *  - sets the left_node to the node owning the value immediately lower than val. 
+ * Encountered nodes that are marked as logically deleted are physically removed
+ * from the list, yet not garbage collected.
+ */
+// lo stato di un nodo è mantenuto nel puntatore a next
 
 dwn* list_search_rm(dwl* set, long val, dwn** left_node) {
   dwn *left_node_next, *right_node;
@@ -88,9 +95,9 @@ dwn* list_search_rm(dwl* set, long val, dwn** left_node) {
         left_node_next = t_next;
       }
 
-      t = DW_GET_PTR(get_unmarked_ref(t_next));             // tolgo la marcatura e anche lo stato dw eventualmente
-      if (t == set->tail) break;                            // se il successivo è la coda mi fermo(potrebbe anche ritornarla come risultato)
-      t_next = t->next;                                     // alrimenti valuto il nodo successivo
+      t = DW_GET_PTR(t_next);             // ottengo solo il puntatore
+      if (t == set->tail) break;          // se il successivo è la coda mi fermo(potrebbe anche ritornarla come risultato)
+      t_next = t->next;                   // alrimenti valuto il nodo successivo
     }
 
     right_node = t;
@@ -124,9 +131,9 @@ dwn* list_search_add(dwl* set, long val, dwn** left_node) {
         left_node_next = t_next;
       }
 
-      t = DW_GET_PTR(get_unmarked_ref(t_next));             // tolgo la marcatura e anche lo stato dw eventualmente
-      if (t == set->tail) break;                            // se il successivo è la coda mi fermo(potrebbe anche ritornarla come risultato)
-      t_next = t->next;                                     // alrimenti valuto il nodo successivo
+      t = DW_GET_PTR(t_next);             // ottengo solo il puntatore
+      if (t == set->tail) break;          // se il successivo è la coda mi fermo(potrebbe anche ritornarla come risultato)
+      t_next = t->next;                   // alrimenti valuto il nodo successivo
     }
 
     right_node = t;
@@ -167,7 +174,8 @@ dwn* new_node(long index_vb, dwn* next, int vec_size){
 	
     //res = posix_memalign((void**)(&node), CACHE_LINE_SIZE, sizeof(dwn));
     node = gc_alloc(ptst, gc_aid[1]);
-    if(res != 0 && node == NULL){
+    //if(res != 0 && node == NULL){
+    if(node == NULL){
         printf("Non abbastanza memoria per allocare un nodo dwn della lista\n"); 
         return NULL; 
     }
@@ -177,10 +185,12 @@ dwn* new_node(long index_vb, dwn* next, int vec_size){
       //res = posix_memalign((void**)(&node->dwv), CACHE_LINE_SIZE, vec_size * sizeof(nbc_bucket_node*)); // TODO: da vedere se si può inizializzare subito a zero
       node->dwv = gc_alloc(ptst, gc_aid[2]);
     
-      if(res != 0 && node->dwv == NULL){
+      //if(res != 0 && node->dwv == NULL){
+      if(node->dwv == NULL){
           printf("Non abbastanza memoria per allocare l'array di un nodo dwn\n"); 
-          if(res != 0)free(node); // rilascio il nodo
-          else gc_free(ptst, node, gc_aid[1]);
+          //if(res != 0)free(node); // rilascio il nodo
+          //else gc_free(ptst, node, gc_aid[1]);
+          gc_free(ptst, node, gc_aid[1]);
           return NULL;
       }
     }

@@ -206,14 +206,13 @@ dwn* dw_dequeue(void* q, unsigned long long index_vb){
 
 void doOrd(dwn* dw_list_node, int size){
 	nbc_bucket_node **old_dwv, **aus_ord_array;
-	int res_mem_posix;
 
 	old_dwv = dw_list_node->dwv;
 
 	// cerco di costruirmi una copia
 	//res_mem_posix = posix_memalign((void**)(&aus_ord_array), CACHE_LINE_SIZE, size * sizeof(nbc_bucket_node*));
 	aus_ord_array = gc_alloc(ptst, gc_aid[2]);
-	if(res_mem_posix != 0 && aus_ord_array == NULL)	error("Non abbastanza memoria per allocare un array dwv in ORD\n");
+	if(aus_ord_array == NULL)	error("Non abbastanza memoria per allocare un array dwv in ORD\n");
 	else{
 	
 		/*
