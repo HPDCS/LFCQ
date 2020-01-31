@@ -40,11 +40,11 @@ dwn* list_search_2(dwn* left_node_next, dwn* right_node, dwn** left_node){
   else{ // compatta
     if (BOOL_CAS(&((*left_node)->next), left_node_next, DW_SET_STATE(right_node, DW_GET_STATE(left_node_next)))) {
     while( (left_node_next = DW_GET_PTR(left_node_next)) != right_node){
-      /*
+      
       for(i = 0;i < left_node_next->enq_cn; i++){
-        if(DW_GET_PTR(left_node_next->dwv[i]) != NULL)
-          node_free(DW_GET_PTR(left_node_next->dwv[i]));
-      }*/
+        if(DW_GET_PTR(left_node_next->dwv[i].node) != NULL)
+          node_free(DW_GET_PTR(left_node_next->dwv[i].node));
+      }
 
       gc_free(ptst, left_node_next,      gc_aid[1]);
       gc_free(ptst, left_node_next->dwv,   gc_aid[2]);
@@ -195,8 +195,10 @@ dwn* new_node(long index_vb, dwn* next, int vec_size){
       }
     }
     
-    for(i = 0; i < vec_size; i++)
-        node->dwv[i] = NULL; // inizializzo le entry del vettore
+    for(i = 0; i < vec_size; i++){
+        node->dwv[i].node = NULL; // inizializzo le entry del vettore
+        node->dwv[i].timestamp = INFTY;
+      }
 
     node->deq_cn = 0;
     node->enq_cn = 0;

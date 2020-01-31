@@ -25,7 +25,7 @@
 
 #define DW_NODE_PTR			(0xfffffffffffffffc)	// per togliere solo gli ultimi due bit, quindi BLK o DEL
 
-#define VEC_SIZE 20
+#define VEC_SIZE 10
 
 #define FETCH_AND_ADD 				__sync_fetch_and_add
 #define ADD_AND_FETCH				__sync_add_and_fetch

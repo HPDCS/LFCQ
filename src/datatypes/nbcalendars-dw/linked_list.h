@@ -28,7 +28,7 @@ struct nbc_bucket_node_container{
 typedef struct deferred_work_node dwn;
 struct deferred_work_node{
 	long index_vb;			// 8
-	nbnc** dwv;	// 16
+	nbnc* dwv;	// 16
 	dwn* next;				// 24
 //	char c1[40];
 	int deq_cn;			

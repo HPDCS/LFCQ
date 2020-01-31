@@ -83,7 +83,7 @@ begin:
 
 	#if DW_USAGE	
 		
-		nbnc *dw_node, *extracted_dw_node;
+		nbnc dw_node, extracted_dw_node;
 		dwn* dw_list_node = NULL;
 		pkey_t dw_node_ts;
 		bool no_cq_node, no_dw_node_curr_vb, no_dw_node;
@@ -181,7 +181,8 @@ begin:
 
 				// cerco un possibile candidato
 				while(cn < dw_list_node->enq_cn && DW_GET_STATE(dw_list_node->next) == EXT 
-					&& (DW_NODE_IS_DEL(dw_list_node->dwv[cn]) || DW_NODE_IS_BLK(dw_list_node->dwv[cn]))){
+					&& dw_list_node->dwv[cn].node == NULL
+					/*&& (DW_NODE_IS_DEL(dw_list_node->dwv[cn]) || DW_NODE_IS_BLK(dw_list_node->dwv[cn]))*/){
 					if(!BOOL_CAS(&dw_list_node->deq_cn, cn, cn + 1))//	FETCH_AND_ADD(&dw_list_node->deq_cn, 1);
 						conflitti++;	
 					cn = dw_list_node->deq_cn;
@@ -193,23 +194,25 @@ begin:
 				if(cn >= dw_list_node->enq_cn){
 					no_dw_node_curr_vb = true;
 				}else{
-					dw_node = DW_GET_NODE_PTR(dw_list_node->dwv[cn]);// per impedire l'estrazione di uno già estratto
-					dw_node_ts = dw_node->timestamp;
+					//dw_node = DW_GET_NODE_PTR(dw_list_node->dwv[cn]);// per impedire l'estrazione di uno già estratto
+					dw_node = dw_list_node->dwv[cn];
+					dw_node_ts = dw_node.timestamp;
 
 					// provo a fare l'estrazione se il nodo della dw viene prima 
 					if(dw_node_ts <= left_ts){
 
-						extracted_dw_node = VAL_CAS(&dw_list_node->dwv[cn], dw_node, (nbnc*)((unsigned long long)dw_node | DELN));
+						//extracted_dw_node = VAL_CAS(&dw_list_node->dwv[cn], dw_node, (nbnc*)((unsigned long long)dw_node | DELN));
+						extracted_dw_node = dw_node;
 
-						if(extracted_dw_node == dw_node){// se estrazione riuscita
+						if(/*extracted_dw_node == dw_node*/true){// se estrazione riuscita
 							if(!BOOL_CAS(&dw_list_node->deq_cn, cn, cn + 1))
 								conflitti++;
 
 							concurrent_dequeue += (unsigned long long) (__sync_fetch_and_add(&h->d_counter.count, 1) - con_de);
 
-							*result = extracted_dw_node->node->payload;
-							node_free(extracted_dw_node->node);
-							gc_free(ptst, extracted_dw_node, gc_aid[3]);
+							*result = extracted_dw_node.node->payload;
+							//node_free(extracted_dw_node->node);
+							//gc_free(ptst, extracted_dw_node, gc_aid[3]);
 							//__sync_fetch_and_add(&d_to_dq, 1ULL);
 							/*
 							if(dw_node_ts < 5.0){
@@ -219,7 +222,7 @@ begin:
 							
 						//printf("dequeu %p %f \n", extracted_dw_node, extracted_dw_node->timestamp );
 							DW_AUDIT{
-								printf("ESTRAZIONE_ESTERNA: TID %d: cn %d , index %lld, node %p, timestamp %f\n", TID, cn, index - 1, extracted_dw_node, extracted_dw_node->timestamp);	
+								//printf("ESTRAZIONE_ESTERNA: TID %d: cn %d , index %lld, node %p, timestamp %f\n", TID, cn, index - 1, extracted_dw_node, extracted_dw_node->timestamp);	
 								fflush(stdout);	
 							}
 							critical_exit();

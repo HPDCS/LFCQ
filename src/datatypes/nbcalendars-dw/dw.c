@@ -4,14 +4,29 @@
 void blockIns(dwn*, int);
 void doOrd(dwn*, int);
 void insertionSort(nbnc**, int);
+void printDWV(int, nbnc*);
 
 extern __thread bool from_block_table;
 //extern __thread int 		estratti;
 
 #if DW_USAGE
+void printDWV(int size, nbnc *vect){
+	int j;
+
+	for(j = 0; j < size; j++){
+					
+		if(vect[j].node != NULL)
+			printf("%p %f ", vect[j].node, vect[j].timestamp);
+		else
+			printf("%p ", vect[j].node);
+	}	
+
+	fflush(stdout);	
+}
+
 void dw_block_table(void* q, unsigned int start){
 	
-	nbnc *node_cont;
+	nbnc node_cont;
 	nb_calqueue* queue;
 	table* h;
 	dwn* dw_list_node = NULL;
@@ -59,10 +74,10 @@ void dw_block_table(void* q, unsigned int start){
 					if(prev_state == INS){ // può darsi che ci fosse qualcuno che stava inserendo in questo momento
 
 						// impedisco gli inserimenti
-						blockIns(dw_list_node, vec_size);
+						//blockIns(dw_list_node, vec_size);
 
 						// eseguo un ordinamento diretto, nessun'altro poteva entrare in concorrenza a me
-						qsort(dw_list_node->dwv, dw_list_node->enq_cn, sizeof(nbnc *), cmp_node);
+						qsort(dw_list_node->dwv, dw_list_node->enq_cn, sizeof(nbnc), cmp_node);
 
 					}else if(prev_state == ORD)
 						doOrd(dw_list_node, vec_size);
@@ -84,8 +99,8 @@ void dw_block_table(void* q, unsigned int start){
 							else{
 								node_cont = dw_list_node->dwv[cn];
 
-								if(node_cont != NULL && !DW_NODE_IS_DEL(node_cont) && !DW_NODE_IS_BLK(node_cont)){
-									pq_enqueue(queue, -1.0, node_cont->node);	// chiamo la funzione per l'inserimento effettivo nella coda finale
+								if(node_cont.node != NULL/* && !DW_NODE_IS_DEL(node_cont) && !DW_NODE_IS_BLK(node_cont)*/){
+									pq_enqueue(queue, -1.0, node_cont.node);	// chiamo la funzione per l'inserimento effettivo nella coda finale
 
 									//__sync_fetch_and_add(&h->e_counter.count, 1); // aggiorno il contatore degli inserimenti
 								}
@@ -108,7 +123,7 @@ int dw_enqueue(void* q, nbc_bucket_node* new_node, unsigned long long new_node_v
 	table *h;
 	unsigned int cn;
 	int vec_size, result = ABORT;	// di default non riuscito
-	nbnc* new_node_cont = NULL;
+	//nbnc new_node_cont;
 				
 	h = queue->hashtable;
 	vec_size = h->deferred_work->vec_size;
@@ -130,15 +145,20 @@ int dw_enqueue(void* q, nbc_bucket_node* new_node, unsigned long long new_node_v
 				fflush(stdout);
 			}
 
-			new_node_cont = gc_alloc(ptst, gc_aid[3]);
-			new_node_cont->node = new_node;
-			new_node_cont->timestamp = new_node->timestamp;
+			//new_node_cont = gc_alloc(ptst, gc_aid[3]);
+			//new_node_cont.node = new_node;
+			//new_node_cont.timestamp = new_node->timestamp;
 
-			if(BOOL_CAS(&dw_list_node->dwv[cn], NULL, new_node_cont)){ // cerco di inserire l'elemento
+			dw_list_node->dwv[cn].node = new_node;
+			dw_list_node->dwv[cn].timestamp = new_node->timestamp;
+
+			//if(BOOL_CAS(&dw_list_node->dwv[cn], NULL, new_node_cont)){ // cerco di inserire l'elemento
 				result = OK; 
 				break;
-			}else
+			//}
+			/*else
 				gc_free(ptst, new_node_cont, gc_aid[3]);
+				*/
 		}
 
 		// DEBUG
@@ -151,7 +171,7 @@ int dw_enqueue(void* q, nbc_bucket_node* new_node, unsigned long long new_node_v
 	if(dw_list_node->enq_cn >= vec_size && DW_GET_STATE(dw_list_node->next) == INS){ // se dw è piena e sto ancora in INS
 		//printf("la coda è piena\n");
 		//fflush(stdout);
-		blockIns(dw_list_node, vec_size); // impedisco gli inserimenti
+		//blockIns(dw_list_node, vec_size); // impedisco gli inserimenti
 
 		BOOL_CAS(&dw_list_node->next, DW_SET_STATE(dw_list_node->next, INS), DW_SET_STATE(dw_list_node->next, ORD));	// imposto a ORD
 	}
@@ -182,6 +202,7 @@ dwn* dw_dequeue(void* q, unsigned long long index_vb){
 		//printf("Returning NULL\n");
 		return dw_list_node;	
 	}
+
 	if(index_vb != dw_list_node->index_vb) {printf("Returning a bucket %ld less than current %llu\n", dw_list_node->index_vb, index_vb);}
 	
 	DW_AUDIT{
@@ -199,12 +220,17 @@ dwn* dw_dequeue(void* q, unsigned long long index_vb){
 
 		if(DW_GET_STATE(dw_list_node->next) == INS){ // se sto in INS
 			//printf("chiamo blockIns deq %lld\n",index_vb);
-			blockIns(dw_list_node, vec_size);// impedisco gli inserimenti
+			//blockIns(dw_list_node, vec_size);// impedisco gli inserimenti
 			BOOL_CAS(&dw_list_node->next, DW_SET_STATE(dw_list_node->next, INS), DW_SET_STATE(dw_list_node->next, ORD));	// imposto a ORD
 		}
 
 		if(DW_GET_STATE(dw_list_node->next) == ORD){
 			//printf("chiamo ord deq\n");
+			/*
+			printf("prima di doOrd()\n");
+			printDWV(vec_size, dw_list_node->dwv);
+			printf("\n");
+			*/
 			doOrd(dw_list_node, vec_size);
 		}
 	}
@@ -213,7 +239,8 @@ dwn* dw_dequeue(void* q, unsigned long long index_vb){
 }
 
 void doOrd(dwn* dw_list_node, int size){
-	nbnc **old_dwv, **aus_ord_array;
+	nbnc *old_dwv, *aus_ord_array;
+	int j;
 
 	old_dwv = dw_list_node->dwv;
 
@@ -222,36 +249,22 @@ void doOrd(dwn* dw_list_node, int size){
 	aus_ord_array = gc_alloc(ptst, gc_aid[2]);
 	if(aus_ord_array == NULL)	error("Non abbastanza memoria per allocare un array dwv in ORD\n");
 	else{
-	
-		/*
-		printf("%ld\n", dw_list_node->index_vb);
-		int j;
-				for(j = 0;j < size;j++){
-					if((unsigned long long) (dw_list_node->dwv[j]) > 0x4)
-						printf("%p %f ", dw_list_node->dwv[j], dw_list_node->dwv[j]->timestamp);
-					else
-						printf("%p ", dw_list_node->dwv[j]);
-				}
-				
-				printf(" prima di memcpy\n");
-		*/
-
-		memcpy(aus_ord_array, dw_list_node->dwv, size * sizeof(nbnc*));
-
-		/*	
-		for(j = 0;j < size;j++){
-			if((unsigned long long) (aus_ord_array[j]) > 0x4)
-				printf("%p %f ", aus_ord_array[j], aus_ord_array[j]->timestamp);
-			else
-				printf("%p ", aus_ord_array[j]);
-		}
-		
-		printf(" prima di ordinare\n");
-		*/
-		
-		qsort(aus_ord_array, dw_list_node->enq_cn/*size*/, sizeof(nbnc*), cmp_node);	// ordino
+	/*
+		printf("index: %ld, numero elementi: %d\n", dw_list_node->index_vb, dw_list_node->enq_cn);
+		printDWV(size, dw_list_node->dwv);
+		printf(" prima di memcpy\n");
+*/
+		memcpy(aus_ord_array, dw_list_node->dwv, size * sizeof(nbnc));
+/*
+		printDWV(size, aus_ord_array);
+		printf(" dopo memcpy, prima di ordinare\n");
+*/		
+		qsort(aus_ord_array, dw_list_node->enq_cn/*size*/, sizeof(nbnc), cmp_node);	// ordino
 		//insertionSort(aus_ord_array, dw_list_node->enq_cn);
-
+/*
+		printDWV(size, aus_ord_array);
+		printf(" dopo l'ordinamento\n");
+*/
 		// cerco di sostituirlo all'originale
 		if(BOOL_CAS(&dw_list_node->dwv, old_dwv, aus_ord_array)){
 			BOOL_CAS(&dw_list_node->next, DW_SET_STATE(dw_list_node->next, ORD), DW_SET_STATE(dw_list_node->next, EXT));	// imposto a EXT(se ordino da block_table non funzionerà)
@@ -259,18 +272,7 @@ void doOrd(dwn* dw_list_node, int size){
 		}
 		else
 			gc_free(ptst, aus_ord_array, gc_aid[2]);
-			//free(aus_ord_array);
-		
-		/*
-		for(j = 0;j < size;j++){
-			if((unsigned long long) dw_list_node->dwv[j] > 0x4)
-				printf("%p %f ", aus_ord_array[j], aus_ord_array[j]->timestamp);
-			else
-				printf("%p ", dw_list_node->dwv[j]);
-		}
-		
-		printf(" dopo l'ordinamento\n");		
-		*/
+			//free(aus_ord_array);		
 	}	
 }
 
@@ -285,7 +287,7 @@ void blockIns(dwn* dw_list_node, int size){
 	*/
 	
 	for(j = 0; j < dw_list_node->enq_cn/*size*/; j++){ 
-		BOOL_CAS(&dw_list_node->dwv[j], NULL, (nbnc*)((unsigned long long)dw_list_node->dwv[j] | BLKN));
+		//BOOL_CAS(&dw_list_node->dwv[j], NULL, (nbnc*)((unsigned long long)dw_list_node->dwv[j] | BLKN));
 	}
 	
 	/*
@@ -301,8 +303,9 @@ int chiamate = 0;
 int cmp_node(const void *p1, const void *p2){
 	//nbnc **node_1, **node_2;
 	pkey_t tmp;
-	nbnc *node_1 = (*(nbnc**)p1);
-	nbnc *node_2 = (*(nbnc**)p2);
+	//unsigned long long t;
+	nbnc *node_1 = (nbnc*)p1;
+	nbnc *node_2 = (nbnc*)p2;
 	//node_2 = (nbnc**)p2;
 	chiamate++;
 
@@ -313,13 +316,16 @@ int cmp_node(const void *p1, const void *p2){
 	else if(DW_NODE_IS_BLK(*node_2))
 		return -1;
 	else*/
-	if(DW_NODE_IS_BLK(node_1) || DW_NODE_IS_BLK(node_2))
-		return (DW_NODE_IS_BLK(node_1) - DW_NODE_IS_BLK(node_2));
-	else{
+	//if(DW_NODE_IS_BLK(node_1) || DW_NODE_IS_BLK(node_2))
+	//	return (DW_NODE_IS_BLK(node_1) - DW_NODE_IS_BLK(node_2));
+	//if(node_1->node == NULL || node_2->node == NULL)
+	//	return ((node_1->node == NULL) - (node_2->node == NULL));
+	//else{
 		tmp = (node_1->timestamp - node_2->timestamp);
   		//return (node_1->timestamp - node_2->timestamp) > 0.0 ? 1 : -1; // crescente
+  		//while(1);
 		return (tmp > 0.0) - (tmp < 0.0);
-	}
+	//}
 }
 
 /*

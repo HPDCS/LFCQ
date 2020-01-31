@@ -1033,8 +1033,8 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	// add allocator of nbc_bucket_node
 	gc_aid[0] = gc_add_allocator(sizeof(nbc_bucket_node));
 	gc_aid[1] = gc_add_allocator(sizeof(dwn));
-	gc_aid[2] = gc_add_allocator(VEC_SIZE * sizeof(nbnc*));
-	gc_aid[3] = gc_add_allocator(sizeof(nbnc));
+	gc_aid[2] = gc_add_allocator(VEC_SIZE * sizeof(nbnc));
+	//gc_aid[3] = gc_add_allocator(sizeof(nbnc));
 	// add callback for set tables and array of nodes whene a grace period has been identified
 	gc_hid[0] = gc_add_hook(std_free_hook);
 	critical_enter();
@@ -1278,7 +1278,7 @@ void pq_report(int TID)
 	/*if(TID == 0){
 		printf("E-CQ %lu E-DQ %lu D-CQ %lu D-DQ %lu\n", e_to_cq, e_to_dq, d_to_cq+d_to_dq, d_to_dq);
 	}*/
-	printf("TID %d, chiamate cmp_node %dd\n",TID, chiamate );
+	printf("TID %d, chiamate cmp_node %d\n",TID, chiamate );
 }
 
 void pq_reset_statistics(){
