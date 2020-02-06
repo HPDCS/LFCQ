@@ -34,7 +34,7 @@
  * GLOBAL VARIABLES					 *
  ************************************/
 
-int gc_aid[4];
+int gc_aid[3];
 int gc_hid[1];
 
 /*************************************
@@ -56,19 +56,10 @@ __thread unsigned int 		acc_counter = 0;
 
 __thread double last_bw = 0.0;
 
-
-//__thread int 		inseriti = 0;// da cancellare
-#if DW_USAGE
-//__thread int 		estratti = 0;
-__thread bool 		from_block_table = false;
-
-//__thread int 		ins_e = 0; 
-//__thread int 		ins_d = 0;
-//__thread int 		ins_bt = 0;
-//__thread int 		inseriti = 0;
-//__thread int        ins_from_dw = 0;
-__thread void*		queue_ptr;
-#endif
+__thread long ins = 0;
+__thread long estr = 0;
+__thread long conflitti_ins = 0;
+__thread long conflitti_estr = 0;
 
 /**
  * This function commits a value in the current field of a queue. It retries until the timestamp
@@ -466,9 +457,8 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 		res = posix_memalign((void**)&new_h->array, CACHE_LINE_SIZE, new_size*sizeof(nbc_bucket_node));
 		if(res != 0) {free(new_h); printf("No enough memory to new table structure\n"); return;}
 
-		#if DW_USAGE
-		//if(new_size > 16000)
-		{
+		if(new_size > DIM_TH){
+
 			res = posix_memalign((void**)(&new_h->deferred_work), CACHE_LINE_SIZE, sizeof(dwstr));
 			if(res != 0) {
 				free(new_h->array);	
@@ -476,18 +466,18 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 				printf("Non abbastanza memoria per allocare la struttura globale dwstr\n"); 
 				return;
 			}
-			res = posix_memalign((void**)(&new_h->deferred_work->dwls), CACHE_LINE_SIZE, new_size*sizeof(dwl*));
+
+			res = posix_memalign((void**)(&new_h->deferred_work->dwls), CACHE_LINE_SIZE, new_size*sizeof(dwl));
 			if(res != 0) {
 				free(new_h->deferred_work);	
 				free(new_h->array);	
 				free(new_h);
-				printf("Non abbastanza memoria per allocare l'array di puntatori a dwl\n");
+				printf("Non abbastanza memoria per allocare l'array di dwl\n");
 				return;
 			}
 			
-			new_h->deferred_work->vec_size = h->deferred_work->vec_size;
+			new_h->deferred_work->vec_size = VEC_SIZE;
 		}
-		#endif
 		
 		tail = h->array->tail;
 		new_h->bucket_width  = -1.0;
@@ -510,52 +500,50 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 			new_h->array[i].counter = 0;
 			new_h->array[i].epoch = 0;
 
-			#if DW_USAGE
-			//if(new_size > 16000)
-			{
-				new_h->deferred_work->dwls[i] = list_new(new_h->deferred_work->vec_size);	// alloco una nuova lista
-				
-				if(new_h->deferred_work->dwls[i] == NULL) {
-					if(i > 0){
-						for(i--; i >= 0; i--)
-							free(new_h->deferred_work->dwls[i]);
-					}
+			if(new_size > DIM_TH){
 
+				res = new_list(&new_h->deferred_work->dwls[i]);
+
+				assertf(new_h->deferred_work->dwls[i].head == NULL || new_h->deferred_work->dwls[i].tail == NULL, 
+					"set_new_table(): tail o head nulli %s\n", "");
+				
+				if(res != 0){
+					for(i--; i >= 0; i--){
+						gc_free(ptst, new_h->deferred_work->dwls[i].head, gc_aid[1]);
+						gc_free(ptst, new_h->deferred_work->dwls[i].tail, gc_aid[1]);
+					}
+				
 					free(new_h->deferred_work->dwls);
 					free(new_h->deferred_work);	
 					free(new_h->array);	
 					free(new_h);
 					
-					printf("Non abbastanza memoria per allocare una lista\n");
+					printf("Non abbastanza memoria per allocare un bucket\n");
 					return;
 				}
 			}
-			#endif
 		}
-
+		
 		// try to publish the table
 		if(!BOOL_CAS(&(h->new_table), NULL,	new_h))
 		{
-			#if DW_USAGE
-				for(i = 0; i < new_size; i++)
-					free(new_h->deferred_work->dwls[i]);
+			if(new_size > DIM_TH){
+				for(i = 0; i < new_size; i++){
+					gc_free(ptst, new_h->deferred_work->dwls[i].head, gc_aid[1]);
+					gc_free(ptst, new_h->deferred_work->dwls[i].tail, gc_aid[1]);
+				}
 
+				// attempt failed, thus release memory
 				free(new_h->deferred_work->dwls);
 				free(new_h->deferred_work);	
-			#endif
-
-			// attempt failed, thus release memory
+			}
+			
 			free(new_h->array);
 			free(new_h);
 		}
 		else{
 			LOG("%u - CHANGE SIZE from %u to %u, items %u OLD_TABLE:%p NEW_TABLE:%p\n", TID, size, new_size, counter, h, new_h);
 			printf("%f %f %u\n", ((double)concurrent_dequeue)/((double)performed_dequeue), ((double)concurrent_enqueue)/((double)performed_enqueue), new_h->pad);
-			
-			#if DW_USAGE
-				DW_AUDIT
-					printf("\n DW: riallocato %d strutture con %d elementi ognuna\n",new_size, VEC_SIZE);
-			#endif
 		}
 	}
 }
@@ -576,10 +564,6 @@ void block_table(table* h)
 	drand48_r(&seedT, &rand); 
 	// start blocking table from a random physical bucket
 	start = (unsigned int) rand * size;	
-
-	#if DW_USAGE
-		dw_block_table(queue_ptr, start);
-	#endif
 
 	for(i = 0; i < size; i++)
 	{
@@ -646,10 +630,6 @@ double compute_mean_separation_time(table* h,
 	//if(new_size < threashold*2)
 	//	return 1.0;
 
-	#if DW_USAGE
-	//printf("inseriti in dw %d, e %d, d %d, bt %d, somma estratti:%d\n",inseriti, ins_e, ins_d, ins_bt, ins_e + ins_d + ins_bt);
-	//ins_e = ins_d = ins_bt = inseriti = 0;
-	#endif
 	//printf("current %llu\n", h->current>>32);
 
 	sample_size = (new_size <= 5) ? (new_size/2) : (5 + (unsigned int)((double)new_size / 10));
@@ -842,16 +822,6 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 						+ 
 						( ((unsigned int)( -(read_table_count != UINT_MAX) )) 	& read_table_count	);
 
-//printf("%d: counter %d\n",TID, read_table_count);
-  	#if DW_USAGE
-		if(from_block_table){
-			//printf("DALLA BLOCK_TABLE\n");
-			read_table_count++;
-			return *curr_table_ptr;
-		}
-  	#endif
-
-
 
 	// after READTABLE_PERIOD iterations check if a new set table is required 
 	if(read_table_count++ % h->read_table_period == 0)
@@ -1031,10 +1001,9 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	// init fraser garbage collector/allocator 
 	_init_gc_subsystem();
 	// add allocator of nbc_bucket_node
-	gc_aid[0] = gc_add_allocator(sizeof(nbc_bucket_node));
-	gc_aid[1] = gc_add_allocator(sizeof(dwn));
-	gc_aid[2] = gc_add_allocator(VEC_SIZE * sizeof(nbnc));
-	//gc_aid[3] = gc_add_allocator(sizeof(nbnc));
+	gc_aid[0] = gc_add_allocator(sizeof(nbc_bucket_node));	// nodo della cq
+	gc_aid[1] = gc_add_allocator(sizeof(dwb));				// bucket virtuale dw		
+	gc_aid[2] = gc_add_allocator(VEC_SIZE * sizeof(nbnc));	// vettore dei contenitori in bucket virtuale dw
 	// add callback for set tables and array of nodes whene a grace period has been identified
 	gc_hid[0] = gc_add_hook(std_free_hook);
 	critical_enter();
@@ -1047,15 +1016,6 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	if(res_mem_posix != 0)	error("No enough memory to allocate set table\n");
 	res_mem_posix = posix_memalign((void**)(&res->hashtable->array), CACHE_LINE_SIZE, MINIMUM_SIZE*sizeof(nbc_bucket_node));
 	if(res_mem_posix != 0)	error("No enough memory to allocate array of heads\n");
-	
-	#if DW_USAGE
-		res_mem_posix = posix_memalign((void**)(&res->hashtable->deferred_work), CACHE_LINE_SIZE, sizeof(dwstr));
-		if(res_mem_posix != 0)	error("Non abbastanza memoria per allocare la struttura globale dwstr.\n");
-		res_mem_posix = posix_memalign((void**)(&res->hashtable->deferred_work->dwls), CACHE_LINE_SIZE, MINIMUM_SIZE*sizeof(dwl*));
-		if(res_mem_posix != 0)	error("Non abbastanza memoria per allocare l'array di puntatori alle liste dwl.\n");
-
-		res->hashtable->deferred_work->vec_size = VEC_SIZE;	// setto numero di elementi in un array di deferred work
-	#endif
 		
 	res->threshold = threshold;
 	res->perc_used_bucket = perc_used_bucket;
@@ -1082,15 +1042,7 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 		res->hashtable->array[i].tail = res->tail;
 		res->hashtable->array[i].timestamp = (pkey_t)i;
 		res->hashtable->array[i].counter = 0;
-
-		#if DW_USAGE
-			res->hashtable->deferred_work->dwls[i] = list_new(VEC_SIZE); // alloco una nuova lista in un certo elemento dell'array
-		#endif
 	}
-	#if DW_USAGE
-		DW_AUDIT
-			printf("\n DW: allocato %d strutture con %d elementi ognuna\n",MINIMUM_SIZE, VEC_SIZE);
-	#endif
 
 	return res;
 }
@@ -1106,14 +1058,6 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
  * @return true if the event is inserted in the set table else false
  */
 
-
-unsigned long long e_to_cq = 0;
-unsigned long long e_to_dq = 0;
-unsigned long long d_to_cq = 0;
-unsigned long long d_to_dq = 0;
-long conflitti = 0;
-
-
 int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 {
 
@@ -1123,33 +1067,13 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 
 	nbc_bucket_node *bucket, *new_node;
 	
-	#if DW_USAGE	
-		queue_ptr = (nb_calqueue*) q; 	// serve come puntatore da passare alla dw_block_table dalla block_table
-		bool node_from_dw = false;		// non è un nodo dalla coda se rimane false
-		
-		if(timestamp >= 0.0)			// questa è necessaria perchè passo un evento con timestamp -1.0 quando proviene dalla dw
-	#endif
-		assertf(timestamp < MIN || timestamp >= INFTY, "Key out of range %s\n", "");
+	assertf(timestamp < MIN || timestamp >= INFTY, "Key out of range %s\n", "");
 
 	nb_calqueue* queue = (nb_calqueue*) q; 	
 
 	critical_enter();
 
-	#if !DW_USAGE
-		//inseriti++;
-		new_node = node_malloc(payload, timestamp, 0);
-	#else
-
-		if(timestamp == -1.0){		// inserimento dalla coda dw(può arrivare solo da block_table)
-			node_from_dw = true;	// si tratta di un nodo dalla coda
-			new_node = (nbc_bucket_node*)payload;	// dalla block_table passo il nodo precedentemente allocato tramite il parametro payload
-			timestamp = new_node->timestamp;	
-		}else{	// inserimento nella coda(ci prova almeno)
-			//inseriti++;
-			new_node = node_malloc(payload, timestamp, 0);
-		}
-
-	#endif
+	new_node = node_malloc(payload, timestamp, 0);
 	
 	// get configuration of the queue
 	double pub = queue->perc_used_bucket;
@@ -1157,6 +1081,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	unsigned int th = queue->threshold;
 	
 	int res, con_en = 0;
+	int dw_enqueue_result = -1;
 	
 	//init the result
 	res = MOV_FOUND;
@@ -1173,11 +1098,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			// get actual size
 			size = h->size;
 	        // read the actual epoch
-	        #if DW_USAGE
-	        	if(!node_from_dw)	// esegui il calcolo dell'epoca solo se si tratta di un evento nuovo, non dalla dw
-	        #endif
         	new_node->epoch = (h->current & MASK_EPOCH);
-
 			// compute the index of the virtual bucket
 			newIndex = hash(timestamp, h->bucket_width);
 
@@ -1198,46 +1119,27 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 		}
 		#endif
 
-		#if DW_USAGE
+		if(size > DIM_TH && dw_enqueue_result == -1){
+			dw_enqueue_result = dw_enqueue(h, newIndex, new_node);
 
-			if(!node_from_dw && h->size > 16000){						// se non è un nodo dalla coda
-				if(dw_enqueue(q, new_node, newIndex) == OK){	// se inserimento riuscito
-					//printf("%lld\n",newIndex );
-					res = OK;						// se inserimento complessivo riuscito 
-					//read_table_count--;				// verrà riaggiornato all'inserimento effettivo
-					//__sync_fetch_and_add(&e_to_dq, 1ULL);
-				}
-			}
-		
-			if(res != OK)	// se non inserito in precedenza in dw, o provato e fallito => inserimento diretto
-		
-		#endif
-		
-		// search the two adjacent nodes that surround the new key and try to insert with a CAS 
-	    res = search_and_insert(bucket, timestamp, 0, REMOVE_DEL_INV, new_node, &new_node);
-	}
-	//__sync_fetch_and_add(&e_to_cq, 1ULL);
-				
+			if(dw_enqueue_result != OK)
+				// search the two adjacent nodes that surround the new key and try to insert with a CAS 
+		    	res = search_and_insert(bucket, timestamp, 0, REMOVE_DEL_INV, new_node, &new_node);
+		    else
+		    	res = OK;
+		}else
+			res = search_and_insert(bucket, timestamp, 0, REMOVE_DEL_INV, new_node, &new_node);
+	}				
 
 	// the CAS succeeds, thus we want to ensure that the insertion becomes visible
-	
-	#if DW_USAGE
-	  	if(!node_from_dw){
-	#endif		
-			flush_current(h, newIndex, new_node);
-			performed_enqueue++;
-			//printf("aggiornamento %lld\n",newIndex );
-	#if DW_USAGE
-		}
-	#endif
+			
+	flush_current(h, newIndex, new_node);
+	performed_enqueue++;
 
 	res=1;
 	
 	// updates for statistics
-	#if DW_USAGE
-	if(!node_from_dw)
-	#endif
-		concurrent_enqueue += (unsigned long long) (__sync_fetch_and_add(&h->e_counter.count, 1) - con_en);
+	concurrent_enqueue += (unsigned long long) (__sync_fetch_and_add(&h->e_counter.count, 1) - con_en);
 	
 	#if COMPACT_RANDOM_ENQUEUE == 1
 	// clean a random bucket
@@ -1257,7 +1159,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	return res;
 
 }
-extern int chiamate;
+
 void pq_report(int TID)
 {
 	
@@ -1275,10 +1177,8 @@ void pq_report(int TID)
 			near,
 			read_table_count	  ,
 			malloc_count, last_bw);
-	/*if(TID == 0){
-		printf("E-CQ %lu E-DQ %lu D-CQ %lu D-DQ %lu\n", e_to_cq, e_to_dq, d_to_cq+d_to_dq, d_to_dq);
-	}*/
-	printf("TID %d, chiamate cmp_node %d\n",TID, chiamate );
+
+	printf("TID - %d :ins %ld, estr %ld, conflitti_ins %ld, conflitti_estr %ld\n", TID, ins, estr, conflitti_ins, conflitti_estr);
 }
 
 void pq_reset_statistics(){

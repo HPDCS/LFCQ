@@ -165,12 +165,8 @@ struct table
 	unsigned int read_table_period; 
 	unsigned int last_resize_count; //40
 	unsigned int resize_count; 		//44
-	#if DW_USAGE
-		dwstr* deferred_work;			//52
-		char zpad4[12];				
-	#else
-		char zpad4[20];
-	#endif
+	dwstr* deferred_work;			//52
+	char zpad4[12];				
 	atomic_t e_counter;
 	char zpad3[60];
 	atomic_t d_counter;

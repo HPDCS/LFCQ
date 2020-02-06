@@ -18,60 +18,46 @@
 #include <time.h>
 #include <stdint.h>
 
-
+// container contnente un evento da gestire
 typedef struct nbc_bucket_node_container nbnc;
 struct nbc_bucket_node_container{
 	nbc_bucket_node* node;	// puntatore al nodo
 	pkey_t timestamp;  		// relativo timestamp			
 };
 
-typedef struct deferred_work_node dwn;
-struct deferred_work_node{
-	long index_vb;			// 8
-	nbnc* dwv;	// 16
-	dwn* next;				// 24
-//	char c1[40];
-	int deq_cn;			
-//	char c2[56];
-	int enq_cn;
-	
+// virtual bucket
+typedef struct deferred_work_node dwb;
+struct deferred_work_node{	
+	int volatile indexes;	// inserimento|estrazione
+	nbnc* volatile dwv;		// array di eventi deferred
+	dwb* volatile next;		// puntatore al prossimo elemento
+	int volatile cicle_limit;
+	/*
+	int indexes;	// inserimento|estrazione
+	nbnc* dwv;		// array di eventi deferred
+	dwb* next;		// puntatore al prossimo elemento
+	int cicle_limit;
+	*/
+	unsigned long long index_vb;
+	//char pad[32];
 };
 
-
+// lista dei virtual bucket di un physical bucket
 typedef struct deferred_work_list dwl;
-struct deferred_work_list{
-	dwn *head;
-	dwn *tail;
-	//int size;
+struct deferred_work_list{	
+	dwb* head;
+	dwb* tail;		
 };
 
+// struttura di deferred work 
 typedef struct deferred_work_structure dwstr;
 struct deferred_work_structure{
-	dwl** dwls; 
+	dwl* dwls; 
 	int vec_size;
 };
 
-bool is_marked_ref(dwn*);
-dwn* get_unmarked_ref(dwn*);
-dwn* get_marked_ref(dwn*);
-
-dwl* list_new(int);
-//return 0 if not found, positive number otherwise
-//dwn* list_contains(dwl*, long);
-//return 0 if value already in the list, positive number otherwise
-dwn* list_add(dwl*, long, int);
-//return 0 if value already in the list, positive number otherwise
-dwn* list_remove(dwl*, long);
-void list_delete(dwl*);
-//int list_size(dwl*);
-
-
-dwn* new_node(long, dwn*, int);
-//dwn* list_search(dwl*, long, dwn**);
-
-dwn* list_search_2(dwn*, dwn*, dwn**);
-dwn* list_search_rm(dwl*, long, dwn**);
-dwn* list_search_add(dwl*, long, dwn**);
-
+int new_list(dwl*);
+dwb* list_add(dwl, unsigned long long);
+dwb* list_remove(dwl, unsigned long long);
 
 #endif

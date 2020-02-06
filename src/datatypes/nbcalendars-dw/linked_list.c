@@ -1,317 +1,197 @@
-/*
- *  linkedlist.c
- *
- *  Description:
- *   Lock-free linkedlist implementation of Harris' algorithm
- *   "A Pragmatic Implementation of Non-Blocking Linked Lists" 
- *   T. Harris, p. 300-314, DISC 2001.
- */
-
-//#include "linked_list.h"
 #include "common_nb_calqueue.h"
+#include "linked_list.h"
 
-/*
- * The five following functions handle the low-order mark bit that indicates
- * whether a node is logically deleted (1) or not (0).
- *  - is_marked_ref returns whether it is marked, 
- *  - (un)set_marked changes the mark,
- *  - get_(un)marked_ref sets the mark before returning the node.
- */
-bool is_marked_ref(dwn* node_p){
-  return (bool) ((unsigned long long)(node_p) & 0x1ULL);
-}
+dwb* new_node(unsigned long long, dwb*, bool);
+dwb* list_search(dwl, unsigned long long, dwb**, int);
+bool is_marked_ref(dwb*);
+dwb* get_marked_ref(dwb*);
 
-dwn* get_unmarked_ref(dwn* node_p) {
-  return (dwn*) ((unsigned long long)(node_p) & 0xfffffffffffffffe);
-}
+extern unsigned long long getBucketState(dwb*);
+extern dwb* setBucketState(dwb*, unsigned long long);
+extern dwb* getBucketPointer(dwb*);
+extern nbc_bucket_node* getNodePointer(nbc_bucket_node*);
+extern int getEnqInd(int);
+extern int getDeqInd(int);
 
-dwn* get_marked_ref(dwn* node_p) {
-  return (dwn*) ((unsigned long long)(node_p) | 0x1ULL);
-}
+bool is_marked_ref(dwb* bucket){return (bool)((unsigned long long)bucket & 0x1ULL);}
+dwb* get_marked_ref(dwb* bucket){return (dwb*)((unsigned long long)bucket | 0x1ULL);}
 
+dwb* list_search(dwl the_list, unsigned long long index_vb, dwb** left_node, int mode) {
+ 	dwb *left_node_next, *right_node;
+ 	int i;
+  	left_node_next = right_node = NULL;
 
-dwn* list_search_2(dwn* left_node_next, dwn* right_node, dwn** left_node){
-  dwn* result = NULL;
-  int i;
+  if(mode){	              
+	  dwb *t = the_list.head->next;
 
-  if (DW_GET_PTR(left_node_next) == right_node){   // se tra sinistro e destro non ci sono altri nodi(dovrebbero essere marcati) allora non compatto
-         result = right_node;
-  }
-  else{ // compatta
-    if (BOOL_CAS(&((*left_node)->next), left_node_next, DW_SET_STATE(right_node, DW_GET_STATE(left_node_next)))) {
-    while( (left_node_next = DW_GET_PTR(left_node_next)) != right_node){
+	  printf("%d: valore %llu | ",	TID, index_vb);
+	  while(t != the_list.tail){
+	    printf("%p %llu %d %lld %d %d| ", t, t->index_vb, (int)is_marked_ref(t->next), getBucketState(t->next), t->cicle_limit, getDeqInd(t->indexes));  
+	    t = getBucketPointer(t->next);
+	  }
+	  printf("\n");
+	  fflush(stdout);
+	}
+
+  
+  	while(1) {
+  		//printf("%llu\n", index_vb);
+    	dwb *t = the_list.head;
+    	dwb *t_next = the_list.head->next;
+    
+    	while (is_marked_ref(t_next) || (t->index_vb < index_vb)) {
+      	
+      		if (!is_marked_ref(t_next)) {
+        		(*left_node) = t;
+        		left_node_next = t_next;
+      		}
       
-      for(i = 0;i < left_node_next->enq_cn; i++){
-        if(DW_GET_PTR(left_node_next->dwv[i].node) != NULL)
-          node_free(DW_GET_PTR(left_node_next->dwv[i].node));
-      }
+      		t = getBucketPointer(t_next);
+      		
+      		if (t == the_list.tail) break;
+      		t_next = t->next;
+    	}
+    	
+    	right_node = t;
 
-      gc_free(ptst, left_node_next,      gc_aid[1]);
-      gc_free(ptst, left_node_next->dwv,   gc_aid[2]);
-      left_node_next = left_node_next->next;
-        }
-        if (!is_marked_ref(right_node->next)){
-          result = right_node;
-        }
-    }
-  }
+    	if(getBucketPointer(left_node_next) == right_node){
+    		if(!is_marked_ref(right_node->next)){
+   // 			assertf(is_marked_ref(right_node->next), "list_search(): nodo marcato %s\n", "");
+    			//printf("%llu\n", index_vb);
+         		return right_node;
+         	}
+    	}
+    	else{
+    		//printf("pippo1");
+	      	if(BOOL_CAS(&((*left_node)->next), left_node_next, setBucketState(right_node, getBucketState(left_node_next)))) {
+	      		//int limit;
+				//printf("%p\n", left_node_next);
+	      		while((left_node_next = getBucketPointer(left_node_next)) != right_node){
+	      			//printf("pippo2");
+      				//limit = getEnqInd(left_node_next->indexes) - VEC_SIZE;
+      				//if(limit < 0)
+      				//	while(1);
+      				//assertf(limit < 0 || limit > VEC_SIZE, "list_remove(): indice di estrazione fuori range %d\n", limit);
 
-  return result;
+			    	for(i = 0; i < left_node_next->cicle_limit; i++){
+			        	if(getNodePointer(left_node_next->dwv[i].node) != NULL)
+			          		node_free(getNodePointer(left_node_next->dwv[i].node));
+			      	}
+
+			      	gc_free(ptst, left_node_next->dwv, gc_aid[2]);
+			      	gc_free(ptst, left_node_next, gc_aid[1]);			      	
+			      	
+			      	left_node_next = left_node_next->next;
+			    }
+
+	        	if (!is_marked_ref(right_node->next))
+	          		return right_node;
+	      	}
+    	}
+  	}
 }
 
+dwb* new_node(unsigned long long index_vb, dwb *next, bool allocate_dwv){
+	int i;
+//printf("TID: %d, index_vb = %llu\n", TID, index_vb);
+  	dwb* node = gc_alloc(ptst, gc_aid[1]);
+  	
+  	if(node != NULL){
+  		if(allocate_dwv){
+  			node->dwv = gc_alloc(ptst, gc_aid[2]);
 
-/*
- * list_search looks for value val, it
- *  - returns right_node owning val (if present) or its immediately higher 
- *    value present in the list (otherwise) and 
- *  - sets the left_node to the node owning the value immediately lower than val. 
- * Encountered nodes that are marked as logically deleted are physically removed
- * from the list, yet not garbage collected.
- */
-// lo stato di un nodo è mantenuto nel puntatore a next
+  			if(node->dwv == NULL){
+  				gc_free(ptst, node, gc_aid[1]);
+  				return NULL;
+  			}
 
-dwn* list_search_rm(dwl* set, long val, dwn** left_node) {
-  dwn *left_node_next, *right_node;
-  left_node_next = right_node = NULL;
-  dwn* result;
+  			// inizializzazione dell'array allocato
+			node->indexes = 0;
+			node->cicle_limit = VEC_SIZE;
 
- /*             
-  dwn *t = set->head->next;
+			for(i = 0; i < VEC_SIZE; i++){
+				node->dwv[i].node = NULL;
+				node->dwv[i].timestamp = INFTY;	
+			}
+  		}
 
-  printf("RM: valore %ld | ", val);
-  while(t != set->tail){
-    printf("%p %ld %d %lld | ", t, t->index_vb, (int)is_marked_ref(t->next), DW_GET_STATE(t->next));  
-    t = DW_GET_PTR(get_unmarked_ref(t->next));
-  }
-  printf("\n");
-*/
-  while(1) {
-    dwn *t = set->head;             
-    dwn *t_next = set->head->next; 
-
-    while (is_marked_ref(t_next) || (t->index_vb < val)) {  // se il nodo attuale è marcato o il valore è minore di quello che cerco proseguo
-      if (!is_marked_ref(t_next)) {                         // se non marcato salvo i valori del nodo di sinistra(il nodo sinistro si sposta solo se non marcato)
-        (*left_node) = t;
-        left_node_next = t_next;
-      }
-
-      t = DW_GET_PTR(t_next);             // ottengo solo il puntatore
-      if (t == set->tail) break;          // se il successivo è la coda mi fermo(potrebbe anche ritornarla come risultato)
-      t_next = t->next;                   // alrimenti valuto il nodo successivo
-    }
-
-    right_node = t;
-    result = list_search_2(left_node_next, right_node, left_node);
-    if(result != NULL)
-      return result;
-  }
+  		node->index_vb = index_vb;
+  		node->next = next;
+	}
+  	
+  	return node;
 }
 
-dwn* list_search_add(dwl* set, long val, dwn** left_node) {
-  dwn *left_node_next, *right_node;
-  left_node_next = right_node = NULL;
-  dwn* result;
+int new_list(dwl* list){
+	int result = 0;
 
-  /*            
-  dwn *t = set->head->next;
-
-  printf("ADD: valore %ld | ", val);
-  while(t != set->tail){
-    printf("%p %ld %d %lld | ", t, t->index_vb, (int)is_marked_ref(t->next), DW_GET_STATE(t->next));  
-    t = DW_GET_PTR(get_unmarked_ref(t->next));
-  }
-
-  printf("\n");
-  */
-  while(1) {
-    dwn *t = set->head;             
-    dwn *t_next = set->head->next; 
-
-    while (is_marked_ref(t_next) || (t->index_vb < val)) {  // se il nodo attuale è marcato o il valore è minore di quello che cerco proseguo
-      if (!is_marked_ref(t_next)) {                         // se non marcato salvo i valori del nodo di sinistra(il nodo sinistro si sposta solo se non marcato)
-        (*left_node) = t;
-        left_node_next = t_next;
-      }
-
-      t = DW_GET_PTR(t_next);             // ottengo solo il puntatore
-      if (t == set->tail) break;          // se il successivo è la coda mi fermo(potrebbe anche ritornarla come risultato)
-      t_next = t->next;                   // alrimenti valuto il nodo successivo
-    }
-
-    right_node = t;
-
-    result = list_search_2(left_node_next, right_node, left_node);
-    if(result != NULL)
-      return result;
-  }
+  	// inizializzazione
+  	list->head = new_node(0, NULL, false);
+  	list->tail = new_node(ULLONG_MAX, NULL, false);
+  	
+  	if(list->head == NULL || list->tail == NULL)
+  		result = 1;
+  	else
+  		list->head->next = list->tail;
+  	
+  	return result;
 }
 
-/*
- * list_contains returns a value different from 0 whether there is a node in the list owning value val.
- */
-/*
-dwn* list_contains(dwl* the_list, long index_vb){
-//printf("%d\n",the_list->size);
-  dwn* iterator = DW_GET_PTR(get_unmarked_ref(the_list->head->next)); 
-  while(iterator != the_list->tail){ 
-    if (!is_marked_ref(iterator->next) && iterator->index_vb >= index_vb){ 
-      // either we found it, or found the first larger element
-      if (iterator->index_vb == index_vb) return iterator;
-      else return NULL;
-    }
+dwb* list_add(dwl the_list, unsigned long long index_vb){
 
-    // always get unmarked pointer
-    iterator = DW_GET_PTR(get_unmarked_ref(iterator->next));
-  }  
-  return NULL; 
+	unsigned long long state;
+	dwb *right, *left, *new_elem;
+  	right = left = new_elem = NULL;
+
+  	while(1){
+    	right = list_search(the_list, index_vb, &left, 0);
+    	if (right != the_list.tail && right->index_vb == index_vb){
+      		return right;
+    	}
+
+    	if(new_elem == NULL)
+    		new_elem = new_node(index_vb, NULL, true);
+
+    	new_elem->next = right;
+
+    	state = getBucketState(left->next);
+
+    	if (BOOL_CAS(&(left->next), setBucketState(right, state) , setBucketState(new_elem, state))){
+      		return new_elem;
+    	}
+  	}
 }
-*/
 
+dwb* list_remove(dwl the_list, unsigned long long index_vb){
 
-dwn* new_node(long index_vb, dwn* next, int vec_size){ 
+  	dwb* right, *left, *right_succ;
+  	right = left = right_succ = NULL;
 
-    dwn* node = NULL;
-    int i, res = 0;
-	
-    //res = posix_memalign((void**)(&node), CACHE_LINE_SIZE, sizeof(dwn));
-    node = gc_alloc(ptst, gc_aid[1]);
-    //if(res != 0 && node == NULL){
-    if(node == NULL){
-        printf("Non abbastanza memoria per allocare un nodo dwn della lista\n"); 
-        return NULL; 
-    }
-	
-    if(vec_size != 0){
-      //res = posix_memalign((void**)(&node->dwv), CACHE_LINE_SIZE, vec_size * sizeof(nbc_bucket_node*)); // TODO: da vedere se si può inizializzare subito a zero
-      node->dwv = gc_alloc(ptst, gc_aid[2]);
+  	while(1){
+    	right = list_search(the_list, index_vb, &left, 0);
     
-      //if(res != 0 && node->dwv == NULL){
-      if(node->dwv == NULL){
-          printf("Non abbastanza memoria per allocare l'array di un nodo dwn\n"); 
-          //if(res != 0)free(node); // rilascio il nodo
-          //else gc_free(ptst, node, gc_aid[1]);
-          gc_free(ptst, node, gc_aid[1]);
-          return NULL;
-      }
-    }
+    	// check if we found our node
+    	if (right == the_list.tail || right->index_vb != index_vb){
+      		return NULL;
+    	}
     
-    for(i = 0; i < vec_size; i++){
-        node->dwv[i].node = NULL; // inizializzo le entry del vettore
-        node->dwv[i].timestamp = INFTY;
-      }
+    	right_succ = right->next;
+    	//assertf(is_marked_ref(right_succ), "list_remove(): ritornato un nodo marcato %s\n", "");
 
-    node->deq_cn = 0;
-    node->enq_cn = 0;
-    node->index_vb = index_vb;
-    node->next = next;
-
-    return node;
-}
-
-dwl* list_new(int vec_size){
-
-    int res = 0;
-    dwl* the_list = NULL;
-    
-    // allocate list
-    res = posix_memalign((void**)(&the_list), CACHE_LINE_SIZE, sizeof(dwl));
-
-    if(res != 0)
-        printf("Non abbastanza memoria per allocare una lista\n"); 
-    else{
-        // now need to create the sentinel node
-        the_list->head = new_node(LONG_MIN, NULL, 0);
-        the_list->tail = new_node(LONG_MAX, NULL, 0);
-        the_list->head->next = the_list->tail;
-        //the_list->size = 0; // head e tail non contano per la dimensione
-    }
-
-    return the_list;
-}
-/*
-int list_size(dwl* the_list) { 
-  return the_list->size; 
-} */
-
-/*
- * list_add inserts a new node with the given value val in the list
- * (if the value was absent) or does nothing (if the value is already present).
- */
-
-dwn* list_add(dwl *the_list, long index_vb, int vec_size){
-
-  dwn *right, *left, *new_elem;
-  unsigned long long state;
-  right = left = new_elem = NULL;
-
-
-  //right = list_search(the_list, -1, &left);
-
-  //dwn* new_elem = new_node(index_vb, NULL, vec_size);// TODO: verificare se deve per forza stare qui(non credo)
-  while(1){
-  //  printf("Add ");
-    right = list_search_add(the_list, index_vb, &left);
-    if (right != the_list->tail && right->index_vb == index_vb){ // trovato, già esistente
-      return right;
-    }
-
-    //printf("next precedente %p\n", left->next);
-    if(new_elem == NULL)
-      new_elem = new_node(index_vb, NULL, vec_size);
-
-    new_elem->next = right;   
-    state = DW_GET_STATE(left->next);  
-
-    // cerco di inserire quello nuovo
-    if (BOOL_CAS(&(left->next), DW_SET_STATE(right, state), DW_SET_STATE(new_elem, state))/* == right*/){
-      //printf("aggiunto un nodo, next precedente %p\n", left->next);
-      //FETCH_AND_ADD(&(the_list->size), 1);
-      return new_elem;
-    }
-  }
-}
-
-/*
- * list_remove deletes a node with the given value val (if the value is present) 
- * or does nothing (if the value is already present).
- * The deletion is logical and consists of setting the node mark bit to 1.
- */
-dwn* list_remove(dwl *the_list, long index_vb){
-
-  dwn* right, *left, *right_succ;
-  right = left = right_succ = NULL;
-
-  //printf("dw_dequeue %ld \n", index_vb);
-  while(1){
-    //printf("Remove ");
-    right = list_search_rm(the_list, index_vb, &left);
-    // check if we found our node
-    if (right == the_list->tail || (index_vb >= 0 && right->index_vb != index_vb)){// se vuota o non c'è il nodo cercato
-      //return 0;
-      //printf("ritorno prima\n");
-    //fflush(stdout);
-      return NULL;
-    }
-
-    right_succ = right->next;
-    // se l'indice dell'estrazione arriva all'indice dell'inserimento e non ancora marcato allora marcalo
-    //printf("%d, %d, %ld \n", right->enq_cn, right->deq_cn, index_vb);
-    //fflush(stdout);
-    if (!is_marked_ref(right_succ) && right->enq_cn <= right->deq_cn){
-
-      //printf("Ho chiesto %ld, provo a marcare %ld", index_vb, right->index_vb);
-      //fflush(stdout);
-      if (VAL_CAS(&(right->next), right_succ, get_marked_ref(right_succ)) == right_succ){// dopo averlo marcato ritorno se cerco uno in particolare
-    //list_search_rm(the_list, index_vb+1, &left);
-        //FETCH_AND_SUB(&(the_list->size), 1);
-        //return 1;
-        //printf(" , marcato %ld\n", right->index_vb);
-        //fflush(stdout);
-        if(index_vb >= 0) // non posso prendere il successivo, cerco un vb in particolare
-          return NULL;
-      }
-    }else if(!is_marked_ref(right_succ))
-      return right;// ritorno il nodo corrente
-  }
-  // we just logically delete it, someone else will invoke search and delete it
+    	//assertf(getEnqInd(right->indexes) > VEC_SIZE && ((getEnqInd(right->indexes) - VEC_SIZE) < getDeqInd(right->indexes)), 
+    	//	"TID %d:list_remove(): indice di estrazione troppo grande: estrazione %d, inserimento %d\n", TID, getDeqInd(right->indexes), (getEnqInd(right->indexes) - VEC_SIZE));
+		//if(right->cicle_limit == getDeqInd(right->indexes))
+		//	printf("TID: %d , index_vb = %llu\n", TID, index_vb);
+		//if(right->cicle_limit == getDeqInd(right->indexes) || (right->cicle_limit - 1) == getDeqInd(right->indexes))
+		//if(getDeqInd(right->indexes) == 0 && right->cicle_limit != VEC_SIZE)
+		//	printf("%d %d %llu\n", right->cicle_limit, getDeqInd(right->indexes), index_vb);
+    	if (!is_marked_ref(right_succ) && (right->cicle_limit == getDeqInd(right->indexes))){
+    		//printf("prima di marcare\n");
+      		if (BOOL_CAS(&(right->next), right_succ, get_marked_ref(right_succ))){
+      		//	printf("marcato %llu\n", index_vb);
+        		return NULL;
+	      	}
+    	}else if(!is_marked_ref(right_succ))
+	      	return right;
+  	}
 }
