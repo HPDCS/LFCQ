@@ -467,18 +467,18 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 				return;
 			}
 
-			res = posix_memalign((void**)(&new_h->deferred_work->dwls), CACHE_LINE_SIZE, new_size*sizeof(dwl));
+			res = posix_memalign((void**)(&new_h->deferred_work->heads), CACHE_LINE_SIZE, new_size*sizeof(dwb));
 			if(res != 0) {
 				free(new_h->deferred_work);	
 				free(new_h->array);	
 				free(new_h);
-				printf("Non abbastanza memoria per allocare l'array di dwl\n");
+				printf("Non abbastanza memoria per allocare l'array di teste\n");
 				return;
 			}
 			
 			new_h->deferred_work->list_tail = gc_alloc(ptst, gc_aid[1]);
 			if(new_h->deferred_work->list_tail == NULL) {
-				free(new_h->deferred_work->dwls);
+				free(new_h->deferred_work->heads);
 				free(new_h->deferred_work);	
 				free(new_h->array);	
 				free(new_h);
@@ -488,6 +488,7 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 
 			new_h->deferred_work->list_tail->index_vb = ULLONG_MAX;
 			new_h->deferred_work->list_tail->next = NULL;
+
 			new_h->deferred_work->vec_size = VEC_SIZE;
 		}
 		
@@ -534,8 +535,8 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 					return;
 				}
 				*/
-				new_h->deferred_work->dwls[i].head.index_vb = 0;
-				new_h->deferred_work->dwls[i].head.next = new_h->deferred_work->list_tail;
+				new_h->deferred_work->heads[i].index_vb = 0;
+				new_h->deferred_work->heads[i].next = new_h->deferred_work->list_tail;
 			}
 		}
 		
@@ -549,7 +550,7 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 				//}
 
 				// attempt failed, thus release memory
-				free(new_h->deferred_work->dwls);
+				free(new_h->deferred_work->heads);
 				free(new_h->deferred_work);	
 			}
 			

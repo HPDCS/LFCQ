@@ -43,22 +43,24 @@ struct deferred_work_bucket{
 };
 
 // lista dei virtual bucket di un physical bucket
+/*
 typedef struct deferred_work_list dwl;
 struct deferred_work_list{	
 	dwb head;
 //	dwb tail;		
 };
+*/
 
 // struttura di deferred work 
 typedef struct deferred_work_structure dwstr;
 struct deferred_work_structure{
-	dwl* dwls; 
+	dwb* heads; 
 	dwb* list_tail;
 	int vec_size;
 };
 
-int new_list(dwl*);
-dwb* list_add(dwl*, unsigned long long, dwb*);
-dwb* list_remove(dwl*, unsigned long long, dwb*);
+//int new_list(dwl*);
+dwb* list_add(dwb*, unsigned long long, dwb*);
+dwb* list_remove(dwb*, unsigned long long, dwb*);
 
 #endif

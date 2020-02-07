@@ -2,7 +2,7 @@
 #include "linked_list.h"
 
 dwb* new_node(unsigned long long, dwb*, bool);
-dwb* list_search(dwl*, unsigned long long, dwb**, int, dwb*);
+dwb* list_search(dwb*, unsigned long long, dwb**, int, dwb*);
 bool is_marked_ref(dwb*);
 dwb* get_marked_ref(dwb*);
 
@@ -16,13 +16,13 @@ extern int getDeqInd(int);
 bool is_marked_ref(dwb* bucket){return (bool)((unsigned long long)bucket & 0x1ULL);}
 dwb* get_marked_ref(dwb* bucket){return (dwb*)((unsigned long long)bucket | 0x1ULL);}
 
-dwb* list_search(dwl *the_list, unsigned long long index_vb, dwb** left_node, int mode, dwb* list_tail) {
- 	dwb *left_node_next, *right_node;
+dwb* list_search(dwb *head, unsigned long long index_vb, dwb** left_node, int mode, dwb* list_tail) {
  	int i;
+ 	dwb *left_node_next, *right_node;
   	left_node_next = right_node = NULL;
 
   if(mode){	              
-	  dwb *t = the_list->head.next;
+	  dwb *t = head->next;
 
 	  printf("%d: valore %llu | ",	TID, index_vb);
 	  while(t != list_tail){
@@ -36,16 +36,8 @@ dwb* list_search(dwl *the_list, unsigned long long index_vb, dwb** left_node, in
   
   	while(1) {
   		//printf("%llu\n", index_vb);
-    	//dwb *t = the_list.head;
-    	//dwb *t_next = the_list.head->next;
-    	
-    	// comincio dal successivo alla testa
-    	dwb *t = the_list->head.next;				// tail se la lista è vuota
-    	dwb *t_next = the_list->head.next->next;	// NULL se la lista è vuota
-
-    	// la testa non dovrebbe mai essere marcata quindi come caso base il nodo di sinistra è la testa
-    	(*left_node) = &(the_list->head);
-        left_node_next = the_list->head.next;
+    	dwb *t = head;
+    	dwb *t_next = head->next;
     
     	while (is_marked_ref(t_next) || (t->index_vb < index_vb)) {
       	
@@ -82,6 +74,7 @@ dwb* list_search(dwl *the_list, unsigned long long index_vb, dwb** left_node, in
       				//assertf(limit < 0 || limit > VEC_SIZE, "list_remove(): indice di estrazione fuori range %d\n", limit);
 
 			    	for(i = 0; i < left_node_next->cicle_limit; i++){
+			    		//printf("nodi\n");
 			        	if(getNodePointer(left_node_next->dwv[i].node) != NULL)
 			          		node_free(getNodePointer(left_node_next->dwv[i].node));
 			      	}
@@ -101,7 +94,7 @@ dwb* list_search(dwl *the_list, unsigned long long index_vb, dwb** left_node, in
 
 dwb* new_node(unsigned long long index_vb, dwb *next, bool allocate_dwv){
 	int i;
-//printf("TID: %d, index_vb = %llu\n", TID, index_vb);
+	//printf("TID: %d, index_vb = %llu\n", TID, index_vb);
   	dwb* node = gc_alloc(ptst, gc_aid[1]);
   	
   	if(node != NULL){
@@ -147,14 +140,14 @@ int new_list(dwl* list){
 }
 */
 
-dwb* list_add(dwl *the_list, unsigned long long index_vb, dwb* list_tail){
+dwb* list_add(dwb *head, unsigned long long index_vb, dwb* list_tail){
 
 	unsigned long long state;
 	dwb *right, *left, *new_elem;
   	right = left = new_elem = NULL;
 
   	while(1){
-    	right = list_search(the_list, index_vb, &left, 0, list_tail);
+    	right = list_search(head, index_vb, &left, 0, list_tail);
     	if (right != list_tail && right->index_vb == index_vb){
       		return right;
     	}
@@ -169,18 +162,17 @@ dwb* list_add(dwl *the_list, unsigned long long index_vb, dwb* list_tail){
     	if (BOOL_CAS(&(left->next), setBucketState(right, state) , setBucketState(new_elem, state))){
     		//printf("eseguito l'inserimento\n");
       		return new_elem;
-    	}else
-    	while(1);
+    	}
   	}
 }
 
-dwb* list_remove(dwl *the_list, unsigned long long index_vb, dwb* list_tail){
+dwb* list_remove(dwb *head, unsigned long long index_vb, dwb* list_tail){
 
   	dwb* right, *left, *right_succ;
   	right = left = right_succ = NULL;
 
   	while(1){
-    	right = list_search(the_list, index_vb, &left, 0, list_tail);
+    	right = list_search(head, index_vb, &left, 0, list_tail);
     
     	// check if we found our node
     	if (right == list_tail || right->index_vb != index_vb){
