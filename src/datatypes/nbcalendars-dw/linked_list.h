@@ -26,8 +26,8 @@ struct nbc_bucket_node_container{
 };
 
 // virtual bucket
-typedef struct deferred_work_node dwb;
-struct deferred_work_node{	
+typedef struct deferred_work_bucket dwb;
+struct deferred_work_bucket{	
 	int volatile indexes;	// inserimento|estrazione
 	nbnc* volatile dwv;		// array di eventi deferred
 	dwb* volatile next;		// puntatore al prossimo elemento
@@ -45,19 +45,20 @@ struct deferred_work_node{
 // lista dei virtual bucket di un physical bucket
 typedef struct deferred_work_list dwl;
 struct deferred_work_list{	
-	dwb* head;
-	dwb* tail;		
+	dwb head;
+//	dwb tail;		
 };
 
 // struttura di deferred work 
 typedef struct deferred_work_structure dwstr;
 struct deferred_work_structure{
 	dwl* dwls; 
+	dwb* list_tail;
 	int vec_size;
 };
 
 int new_list(dwl*);
-dwb* list_add(dwl, unsigned long long);
-dwb* list_remove(dwl, unsigned long long);
+dwb* list_add(dwl*, unsigned long long, dwb*);
+dwb* list_remove(dwl*, unsigned long long, dwb*);
 
 #endif

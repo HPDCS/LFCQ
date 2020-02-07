@@ -2,7 +2,7 @@
 #include "linked_list.h"
 
 dwb* new_node(unsigned long long, dwb*, bool);
-dwb* list_search(dwl, unsigned long long, dwb**, int);
+dwb* list_search(dwl*, unsigned long long, dwb**, int, dwb*);
 bool is_marked_ref(dwb*);
 dwb* get_marked_ref(dwb*);
 
@@ -16,16 +16,16 @@ extern int getDeqInd(int);
 bool is_marked_ref(dwb* bucket){return (bool)((unsigned long long)bucket & 0x1ULL);}
 dwb* get_marked_ref(dwb* bucket){return (dwb*)((unsigned long long)bucket | 0x1ULL);}
 
-dwb* list_search(dwl the_list, unsigned long long index_vb, dwb** left_node, int mode) {
+dwb* list_search(dwl *the_list, unsigned long long index_vb, dwb** left_node, int mode, dwb* list_tail) {
  	dwb *left_node_next, *right_node;
  	int i;
   	left_node_next = right_node = NULL;
 
   if(mode){	              
-	  dwb *t = the_list.head->next;
+	  dwb *t = the_list->head.next;
 
 	  printf("%d: valore %llu | ",	TID, index_vb);
-	  while(t != the_list.tail){
+	  while(t != list_tail){
 	    printf("%p %llu %d %lld %d %d| ", t, t->index_vb, (int)is_marked_ref(t->next), getBucketState(t->next), t->cicle_limit, getDeqInd(t->indexes));  
 	    t = getBucketPointer(t->next);
 	  }
@@ -36,8 +36,16 @@ dwb* list_search(dwl the_list, unsigned long long index_vb, dwb** left_node, int
   
   	while(1) {
   		//printf("%llu\n", index_vb);
-    	dwb *t = the_list.head;
-    	dwb *t_next = the_list.head->next;
+    	//dwb *t = the_list.head;
+    	//dwb *t_next = the_list.head->next;
+    	
+    	// comincio dal successivo alla testa
+    	dwb *t = the_list->head.next;				// tail se la lista è vuota
+    	dwb *t_next = the_list->head.next->next;	// NULL se la lista è vuota
+
+    	// la testa non dovrebbe mai essere marcata quindi come caso base il nodo di sinistra è la testa
+    	(*left_node) = &(the_list->head);
+        left_node_next = the_list->head.next;
     
     	while (is_marked_ref(t_next) || (t->index_vb < index_vb)) {
       	
@@ -48,7 +56,7 @@ dwb* list_search(dwl the_list, unsigned long long index_vb, dwb** left_node, int
       
       		t = getBucketPointer(t_next);
       		
-      		if (t == the_list.tail) break;
+      		if (t == list_tail) break;
       		t_next = t->next;
     	}
     	
@@ -57,7 +65,7 @@ dwb* list_search(dwl the_list, unsigned long long index_vb, dwb** left_node, int
     	if(getBucketPointer(left_node_next) == right_node){
     		if(!is_marked_ref(right_node->next)){
    // 			assertf(is_marked_ref(right_node->next), "list_search(): nodo marcato %s\n", "");
-    			//printf("%llu\n", index_vb);
+    	//		printf("%llu\n", index_vb);
          		return right_node;
          	}
     	}
@@ -122,6 +130,7 @@ dwb* new_node(unsigned long long index_vb, dwb *next, bool allocate_dwv){
   	return node;
 }
 
+/*
 int new_list(dwl* list){
 	int result = 0;
 
@@ -136,16 +145,17 @@ int new_list(dwl* list){
   	
   	return result;
 }
+*/
 
-dwb* list_add(dwl the_list, unsigned long long index_vb){
+dwb* list_add(dwl *the_list, unsigned long long index_vb, dwb* list_tail){
 
 	unsigned long long state;
 	dwb *right, *left, *new_elem;
   	right = left = new_elem = NULL;
 
   	while(1){
-    	right = list_search(the_list, index_vb, &left, 0);
-    	if (right != the_list.tail && right->index_vb == index_vb){
+    	right = list_search(the_list, index_vb, &left, 0, list_tail);
+    	if (right != list_tail && right->index_vb == index_vb){
       		return right;
     	}
 
@@ -157,21 +167,23 @@ dwb* list_add(dwl the_list, unsigned long long index_vb){
     	state = getBucketState(left->next);
 
     	if (BOOL_CAS(&(left->next), setBucketState(right, state) , setBucketState(new_elem, state))){
+    		//printf("eseguito l'inserimento\n");
       		return new_elem;
-    	}
+    	}else
+    	while(1);
   	}
 }
 
-dwb* list_remove(dwl the_list, unsigned long long index_vb){
+dwb* list_remove(dwl *the_list, unsigned long long index_vb, dwb* list_tail){
 
   	dwb* right, *left, *right_succ;
   	right = left = right_succ = NULL;
 
   	while(1){
-    	right = list_search(the_list, index_vb, &left, 0);
+    	right = list_search(the_list, index_vb, &left, 0, list_tail);
     
     	// check if we found our node
-    	if (right == the_list.tail || right->index_vb != index_vb){
+    	if (right == list_tail || right->index_vb != index_vb){
       		return NULL;
     	}
     
@@ -184,7 +196,7 @@ dwb* list_remove(dwl the_list, unsigned long long index_vb){
 		//	printf("TID: %d , index_vb = %llu\n", TID, index_vb);
 		//if(right->cicle_limit == getDeqInd(right->indexes) || (right->cicle_limit - 1) == getDeqInd(right->indexes))
 		//if(getDeqInd(right->indexes) == 0 && right->cicle_limit != VEC_SIZE)
-		//	printf("%d %d %llu\n", right->cicle_limit, getDeqInd(right->indexes), index_vb);
+		//printf("%d %d %llu\n", right->cicle_limit, getDeqInd(right->indexes), index_vb);
     	if (!is_marked_ref(right_succ) && (right->cicle_limit == getDeqInd(right->indexes))){
     		//printf("prima di marcare\n");
       		if (BOOL_CAS(&(right->next), right_succ, get_marked_ref(right_succ))){

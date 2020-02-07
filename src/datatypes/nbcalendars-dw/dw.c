@@ -54,7 +54,7 @@ int dw_enqueue(void *tb, unsigned long long index_vb, nbc_bucket_node *new_node)
 	int result = ABORT;
 	int indexes, enq_cn; 
 
-	bucket_p = getBucketPointer(list_add(str->dwls[index_vb % h->size], index_vb));
+	bucket_p = getBucketPointer(list_add(&str->dwls[index_vb % h->size], index_vb, str->list_tail));
 	assertf(bucket_p == NULL, "dw_eqnqueue(): bucket inesistente %s\n", "");
 
 	//printf("prova %llu\n", bucket_p->index_vb);
@@ -103,7 +103,7 @@ dwb* dw_dequeue(void *tb, unsigned long long index_vb){
 	dwstr *str = h->deferred_work;
 	dwb* bucket_p = NULL;
 
-	bucket_p = getBucketPointer(list_remove(str->dwls[index_vb % h->size], index_vb));
+	bucket_p = getBucketPointer(list_remove(&str->dwls[index_vb % h->size], index_vb, str->list_tail));
 	if(bucket_p == NULL || is_marked_ref(bucket_p->next))
 		return NULL;
 

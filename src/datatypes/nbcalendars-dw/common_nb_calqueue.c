@@ -476,6 +476,18 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 				return;
 			}
 			
+			new_h->deferred_work->list_tail = gc_alloc(ptst, gc_aid[1]);
+			if(new_h->deferred_work->list_tail == NULL) {
+				free(new_h->deferred_work->dwls);
+				free(new_h->deferred_work);	
+				free(new_h->array);	
+				free(new_h);
+				printf("Non abbastanza memoria per allocare la tail delle liste\n");
+				return;
+			}
+
+			new_h->deferred_work->list_tail->index_vb = ULLONG_MAX;
+			new_h->deferred_work->list_tail->next = NULL;
 			new_h->deferred_work->vec_size = VEC_SIZE;
 		}
 		
@@ -501,7 +513,7 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 			new_h->array[i].epoch = 0;
 
 			if(new_size > DIM_TH){
-
+				/*
 				res = new_list(&new_h->deferred_work->dwls[i]);
 
 				assertf(new_h->deferred_work->dwls[i].head == NULL || new_h->deferred_work->dwls[i].tail == NULL, 
@@ -521,6 +533,9 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 					printf("Non abbastanza memoria per allocare un bucket\n");
 					return;
 				}
+				*/
+				new_h->deferred_work->dwls[i].head.index_vb = 0;
+				new_h->deferred_work->dwls[i].head.next = new_h->deferred_work->list_tail;
 			}
 		}
 		
@@ -528,10 +543,10 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 		if(!BOOL_CAS(&(h->new_table), NULL,	new_h))
 		{
 			if(new_size > DIM_TH){
-				for(i = 0; i < new_size; i++){
-					gc_free(ptst, new_h->deferred_work->dwls[i].head, gc_aid[1]);
-					gc_free(ptst, new_h->deferred_work->dwls[i].tail, gc_aid[1]);
-				}
+				//for(i = 0; i < new_size; i++){
+					//gc_free(ptst, new_h->deferred_work->dwls[i].head, gc_aid[1]);
+					gc_free(ptst, new_h->deferred_work->list_tail, gc_aid[1]);
+				//}
 
 				// attempt failed, thus release memory
 				free(new_h->deferred_work->dwls);
