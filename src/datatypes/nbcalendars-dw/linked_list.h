@@ -32,12 +32,6 @@ struct deferred_work_bucket{
 	nbnc* volatile dwv;		// array di eventi deferred
 	dwb* volatile next;		// puntatore al prossimo elemento
 	int volatile cicle_limit;
-	/*
-	int indexes;	// inserimento|estrazione
-	nbnc* dwv;		// array di eventi deferred
-	dwb* next;		// puntatore al prossimo elemento
-	int cicle_limit;
-	*/
 	unsigned long long index_vb;
 	//char pad[32];
 };

@@ -93,7 +93,7 @@ begin:
 	pkey_t dw_node_ts;
 	bool no_cq_node, no_dw_node_curr_vb;
 	int deq_cn;
-	int indexes, indexes_enq;
+	int indexes_enq;
 
 	// Get data from the table
 	size = h->size;
@@ -163,8 +163,10 @@ begin:
 				if(size > DIM_TH){
 					no_cq_node = true;
 
-					if(no_dw_node_curr_vb)
+					if(no_dw_node_curr_vb){
+					//	printf("TID - %d: bucket vuoto: %llu\n",TID, index - 1);
 						break;
+					}
 				}else
 					break;
 			}
@@ -181,23 +183,19 @@ begin:
 
 					// cerco un possibile indice
 					while(deq_cn < bucket_p->cicle_limit && getNodeState(bucket_p->dwv[deq_cn].node) != 0 && !is_marked_ref(bucket_p->next)){
-						indexes = bucket_p->indexes;
-						BOOL_CAS(&bucket_p->indexes, indexes, indexes + 1);	// aggiorno deq
+						BOOL_CAS(&bucket_p->indexes, (indexes_enq + deq_cn), (indexes_enq + deq_cn + 1));	// aggiorno deq
 						deq_cn = getDeqInd(bucket_p->indexes);
 					}
 
 					if(deq_cn >= bucket_p->cicle_limit || is_marked_ref(bucket_p->next)){
-						//if(is_marked_ref(bucket_p->next))
-						//	printf("deq: uscito per nodo marcato\n");
+
 						no_dw_node_curr_vb = true;
 						if(!is_marked_ref(bucket_p->next))
 							BOOL_CAS(&(bucket_p->next), bucket_p->next, (unsigned long long)bucket_p->next | 0x1ULL);
-						//printf("fuori %llu, %d %d\n", index, enq_cn, deq_cn);
-						//fflush(stdout);
+
+					//}else if(bucket_p->dwv[deq_cn].node->epoch > epoch){
+					//	goto begin;
 					}else{
-						//printf("dentro %llu\n", index);
-						//fflush(stdout);
-						//dw_node_ts = dw_node->timestamp;
 
 						// provo a fare l'estrazione se il nodo della dw viene prima 
 						if((dw_node_ts = bucket_p->dwv[deq_cn].timestamp) <= left_ts){
@@ -223,8 +221,10 @@ begin:
 					}
 				}
 
-				if(no_cq_node)// se non c'erano elementi ricominciamo
+				if(no_cq_node){// se non c'erano elementi ricominciamo
+					//no_cq_node = false; // non credo che serve, da verificare
 					break;
+				}
 			}
 
 			// the node is a good candidate for extraction! lets try for it
@@ -251,14 +251,7 @@ begin:
 			*result = left_node->payload;
 				
 			critical_exit();
-			/*
-			if(left_ts < 5.0){
-				printf("TID %d standard %f\n",TID, left_ts);
-				fflush(stdout);
-			}
-			*/
-			
-			//__sync_fetch_and_add(&d_to_cq, 1ULL);
+
 			return left_ts;
 										
 		}while( (left_node = get_unmarked(left_node_next)));
@@ -272,7 +265,7 @@ begin:
 			fflush(stdout);
 			return INFTY;
 		}
-		
+
 		new_current = h->current;
 		if(new_current == current){
 
@@ -292,7 +285,7 @@ begin:
 		}
 		else
 			current = new_current;
-		//printf("TID %d: %llu\n",TID, current>>32 );
+
 	}while(1);
 	
 	return INFTY;
