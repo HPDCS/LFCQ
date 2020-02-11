@@ -1076,20 +1076,14 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 
 int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 {
-
-	table * h = NULL;		
-	unsigned int index, size;
-	unsigned long long newIndex = 0;
-
-	nbc_bucket_node *bucket, *new_node;
-	
 	assertf(timestamp < MIN || timestamp >= INFTY, "Key out of range %s\n", "");
 
 	nb_calqueue* queue = (nb_calqueue*) q; 	
-
 	critical_enter();
-
-	new_node = node_malloc(payload, timestamp, 0);
+	nbc_bucket_node *bucket, *new_node = node_malloc(payload, timestamp, 0);
+	table * h = NULL;		
+	unsigned int index, size;
+	unsigned long long newIndex = 0;
 	
 	// get configuration of the queue
 	double pub = queue->perc_used_bucket;
