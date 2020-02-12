@@ -10,7 +10,7 @@ USER_OBJS :=
 
 LIBS := -lpthread -lm -lnuma -lrt -mrtm
 SRC_DIR := src
-TARGETS := ACRCQ NUMAP RNUMAP NUMAPFK NUMAPBL NUMAPSKT RNUMAPSKT NUMAPSKTFK NUMAPSKTBL NUMAQ RNUMAQ NUMAQFK NUMAQBL NUMAQSKT RNUMAQSKT NUMAQSKTFK NUMAQSKTBL NUMA2Q RNUMA2Q NUMA2QFK NUMA2QBL NUMA2QSKT RNUMA2QSKT NUMA2QSKTFK NUMA2QSKTBL NBNUMAQ NBRNUMAQ NBNUMAQSKT NBRNUMAQSKT NBNUMA2Q NBRNUMA2Q NBNUMA2QSKT NBRNUMA2QSKT NBNUMAP NBRNUMAP NBNUMAPSKT NBRNUMAPSKT FC FCACRCQ NBNUMAPARC
+TARGETS := ACRCQ DWCQ NUMAP RNUMAP NUMAPFK NUMAPBL NUMAPSKT RNUMAPSKT NUMAPSKTFK NUMAPSKTBL NUMAQ RNUMAQ NUMAQFK NUMAQBL NUMAQSKT RNUMAQSKT NUMAQSKTFK NUMAQSKTBL NUMA2Q RNUMA2Q NUMA2QFK NUMA2QBL NUMA2QSKT RNUMA2QSKT NUMA2QSKTFK NUMA2QSKTBL NBNUMAQ NBRNUMAQ NBNUMAQSKT NBRNUMAQSKT NBNUMA2Q NBRNUMA2Q NBNUMA2QSKT NBRNUMA2QSKT NBNUMAP NBRNUMAP NBNUMAPSKT NBRNUMAPSKT FC FCACRCQ NBNUMAPARC
 
 		# CACRCQ ACRCQH	
 		# SCNUMAP SCNUMAPFK NUMAPNBC NUMAPNBCFK NUMAPNBCBL
@@ -24,6 +24,10 @@ ARCH_value := src/arch/x86.o
 NGACO_value := src/datatypes/nb_umb/gc/gc.o src/datatypes/nb_umb/gc/ptst.o
 TQ_value := src/datatypes/nb_umb/op_queue/msq.o src/datatypes/nb_umb/op_queue/stack.o src/datatypes/nb_umb/op_queue/lcrq.o
 SET_value := src/datatypes/nb_umb/gc/skip_cas.o
+
+#DW
+DWGACO_value := src/datatypes/nbcalendars-dw/gc/gc.o src/datatypes/nbcalendars-dw/gc/ptst.o
+DWSET_value := src/datatypes/nbcalendars-dw/gc/skip_cas.o
 
 # BLOCKING SOLUTIONS
 
@@ -223,7 +227,8 @@ SLCQ_value := src/datatypes/slcalqueue/calqueue.o  $(UTIL_value)
 VBPQ_value := src/datatypes/nbcalendars_with_vb2/vbpq.o $(UTIL_value) $(GACO_value) $(ARCH_value)
 
 NBCQ_value := src/datatypes/nbcalendars/nb_calqueue.o src/datatypes/nbcalendars/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
-ACRCQ_value := src/datatypes/nbcalendars-ad/nb_calqueue.o src/datatypes/nbcalendars-ad/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
+ACRCQ_value := src/datatypes/nbcalendars-ad/nb_calqueue.o src/datatypes/nbcalendars-ad/common_nb_calqueue.o  $(UTIL_value) $(GACO_value) $(ARCH_value)
+DWCQ_value := src/datatypes/nbcalendars-dw/nb_calqueue.o src/datatypes/nbcalendars-dw/common_nb_calqueue.o src/datatypes/nbcalendars-dw/dw.o src/datatypes/nbcalendars-dw/linked_list.o $(DWSET_value) $(UTIL_value) $(DWGACO_value) $(ARCH_value)
 NBVB_value := src/datatypes/nbcalendars_with_vb/nb_calqueue.o src/datatypes/nbcalendars_with_vb/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
 2CAS_value := src/datatypes/nbcalendars_with_vb_2CAS/nb_calqueue.o src/datatypes/nbcalendars_with_vb_2CAS/common_nb_calqueue.o src/datatypes/nbcalendars_with_vb_2CAS/bucket.o $(UTIL_value) $(GACO_value) $(ARCH_value)
 
@@ -252,6 +257,7 @@ CBCQ_link := g++
 
 ACRCQH_value := $(ACRCQ_value)
 ACRCQH_link := gcc
+DWCQ_link := gcc
 
 NUMA_link := gcc 
 WORK_link := gcc 
@@ -385,7 +391,7 @@ endif
 -funswitch-loops \
 -fvect-cost-model 
 
-C_SUBDIRS		:= src src/datatypes/nbcalendars-ad src/datatypes/nbcalendars src/datatypes/nbcalendars_with_vb src/datatypes/nbcalendars_with_vb2 src/datatypes/nbcalendars_with_vb_2CAS  src/datatypes/nbskiplists src/datatypes/slcalqueue  src/arch src/gc src/utils src/datatypes/nb_umb/op_queue src/datatypes/nb_umb/gc src/datatypes/nb_umb/numap src/datatypes/nb_umb/numap_socket src/datatypes/nb_umb/numaq_no_candidate src/datatypes/nb_umb/numaq_no_candidate_socket src/datatypes/nb_umb/numa2q_no_candidate src/datatypes/nb_umb/numa2q_no_candidate_socket src/datatypes/nb_umb/nb/numaq src/datatypes/nb_umb/nb/numaq_socket src/datatypes/nb_umb/nb/numa2q src/datatypes/nb_umb/nb/numa2q_socket src/datatypes/nb_umb/nb/numap src/datatypes/nb_umb/nb/numap_socket src src/datatypes/nbcalendars-ad-fc
+C_SUBDIRS		:= src src/datatypes/nbcalendars-ad src/datatypes/nbcalendars-dw src/datatypes/nbcalendars-dw/gc src/datatypes/nbcalendars src/datatypes/nbcalendars_with_vb src/datatypes/nbcalendars_with_vb2 src/datatypes/nbcalendars_with_vb_2CAS  src/datatypes/nbskiplists src/datatypes/slcalqueue  src/arch src/gc src/utils src/datatypes/nb_umb/op_queue src/datatypes/nb_umb/gc src/datatypes/nb_umb/numap src/datatypes/nb_umb/numap_socket src/datatypes/nb_umb/numaq_no_candidate src/datatypes/nb_umb/numaq_no_candidate_socket src/datatypes/nb_umb/numa2q_no_candidate src/datatypes/nb_umb/numa2q_no_candidate_socket src/datatypes/nb_umb/nb/numaq src/datatypes/nb_umb/nb/numaq_socket src/datatypes/nb_umb/nb/numa2q src/datatypes/nb_umb/nb/numa2q_socket src/datatypes/nb_umb/nb/numap src/datatypes/nb_umb/nb/numap_socket src src/datatypes/nbcalendars-ad-fc
 
 #src/datatypes/nb_umb/unbcq datatypes/nb_umb/nbcq_phy src/datatypes/nb_umb/nbcalendars-ad-candidate src/datatypes/nb_umb/numap_SC
 
