@@ -1128,7 +1128,10 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			goto out;
 		}
 		#endif
-
+/*
+		if(newIndex <= h->current>>32)
+			dw_enqueue_result = -2;
+*/
 		if(size > DIM_TH && dw_enqueue_result == -1){
 			dw_enqueue_result = dw_enqueue(h, newIndex, new_node);
 

@@ -182,7 +182,7 @@ begin:
 					deq_cn = getDeqInd(bucket_p->indexes); 
 
 					// cerco un possibile indice
-					while(deq_cn < bucket_p->cicle_limit && getNodeState(bucket_p->dwv[deq_cn].node) != 0 && !is_marked_ref(bucket_p->next)){
+					while(deq_cn < bucket_p->cicle_limit && (getNodeState(bucket_p->dwv[deq_cn].node) != 0ULL/* || bucket_p->dwv[deq_cn].node == NULL*/) && !is_marked_ref(bucket_p->next)){
 						BOOL_CAS(&bucket_p->indexes, (indexes_enq + deq_cn), (indexes_enq + deq_cn + 1));	// aggiorno deq
 						deq_cn = getDeqInd(bucket_p->indexes);
 					}
@@ -196,10 +196,24 @@ begin:
 					//}else if(bucket_p->dwv[deq_cn].node->epoch > epoch){
 					//	goto begin;
 					}else{
+						assertf((getNodeState(bucket_p->dwv[deq_cn].node) & BLKN), "pq_dequeue(): si cerca di estrarre un nodo bloccato. stato nodo %llu, stato bucket %llu\n", getNodeState(bucket_p->dwv[deq_cn].node), getBucketState(bucket_p->next));
+						assertf((bucket_p->dwv[deq_cn].node == NULL), "pq_dequeue(): si cerca di estrarre un nodo nullo." 
+							"\nnumero bucket: %llu"
+							"\nstato bucket virtuale: %llu"
+							"\nbucket marcato: %d"
+							"\nindice estrazione letto: %d"
+							"\nindice estrazione nella struttura: %d"
+							"\nindice inserimento: %d"
+							"\nlimite ciclo: %d"
+							"\npieno da enqueue: %d"
+							"\ntimestamp: %f\n",
+							bucket_p->index_vb, getBucketState(bucket_p->next), is_marked_ref(bucket_p->next), deq_cn, getDeqInd(bucket_p->indexes), 
+							getEnqInd(indexes_enq), bucket_p->cicle_limit, bucket_p->from_enq, bucket_p->dwv[deq_cn].timestamp);
 
 						// provo a fare l'estrazione se il nodo della dw viene prima 
 						if((dw_node_ts = bucket_p->dwv[deq_cn].timestamp) <= left_ts){
 							dw_node = getNodePointer(bucket_p->dwv[deq_cn].node);	// per impedire l'estrazione di uno già estratto
+							assertf((dw_node == NULL), "pq_dequeue(): dw_node è nullo %s\n", "");
 
 							if(BOOL_CAS(&bucket_p->dwv[deq_cn].node, dw_node, (nbc_bucket_node*)((unsigned long long)dw_node | DELN))){// se estrazione riuscita
 								

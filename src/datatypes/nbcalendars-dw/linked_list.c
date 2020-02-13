@@ -78,7 +78,11 @@ dwb* list_search(dwb *head, unsigned long long index_vb, dwb** left_node, int mo
 			        	if(getNodePointer(left_node_next->dwv[i].node) != NULL)
 			          		node_free(getNodePointer(left_node_next->dwv[i].node));
 			      	}
-
+/*
+              left_node_next->indexes = 0;
+              left_node_next->cicle_limit = VEC_SIZE;
+              left_node_next->from_enq = 0;
+*/
 			      	gc_free(ptst, left_node_next->dwv, gc_aid[2]);
 			      	gc_free(ptst, left_node_next, gc_aid[1]);			      	
 			      	
@@ -107,18 +111,19 @@ dwb* new_node(unsigned long long index_vb, dwb *next, bool allocate_dwv){
   			}
 
   			// inizializzazione dell'array allocato
-			node->indexes = 0;
-			node->cicle_limit = VEC_SIZE;
+  			node->indexes = 0;
+  			node->cicle_limit = VEC_SIZE;
+        node->from_enq = -1;
 
-			for(i = 0; i < VEC_SIZE; i++){
-				node->dwv[i].node = NULL;
-				node->dwv[i].timestamp = INFTY;	
-			}
+  			for(i = 0; i < VEC_SIZE; i++){
+  				node->dwv[i].node = NULL;
+  				node->dwv[i].timestamp = INFTY;	
+  			}
   		}
 
   		node->index_vb = index_vb;
   		node->next = next;
-	}
+	 }
   	
   	return node;
 }
