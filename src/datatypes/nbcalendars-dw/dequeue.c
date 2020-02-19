@@ -54,6 +54,7 @@ extern nbc_bucket_node* getNodePointer(nbc_bucket_node*);
 extern dwb* setBucketState(dwb*, unsigned long long);
 extern bool is_marked_ref(dwb*);
 
+__thread unsigned long long no_empty_vb = 0;
 pkey_t pq_dequeue(void *q, void** result)
 {
 	nb_calqueue *queue = (nb_calqueue*)q;
@@ -209,9 +210,9 @@ begin:
 							"\ntimestamp: %f\n",
 							bucket_p->index_vb, getBucketState(bucket_p->next), is_marked_ref(bucket_p->next), deq_cn, getDeqInd(bucket_p->indexes), 
 							getEnqInd(indexes_enq), bucket_p->cicle_limit, bucket_p->from_enq, bucket_p->dwv[deq_cn].timestamp);
-
+						if(!no_cq_node) no_empty_vb++;
 						// provo a fare l'estrazione se il nodo della dw viene prima 
-						if((dw_node_ts = bucket_p->dwv[deq_cn].timestamp) <= left_ts){
+						if((dw_node_ts = bucket_p->dwv[deq_cn].timestamp) != INV_TS && dw_node_ts <= left_ts){
 							dw_node = getNodePointer(bucket_p->dwv[deq_cn].node);	// per impedire l'estrazione di uno già estratto
 							assertf((dw_node == NULL), "pq_dequeue(): dw_node è nullo %s\n", "");
 
