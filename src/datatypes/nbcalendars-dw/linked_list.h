@@ -30,9 +30,10 @@ typedef struct deferred_work_bucket dwb;
 struct deferred_work_bucket{	
 	int volatile indexes;	// inserimento|estrazione
 	nbnc* volatile dwv;		// array di eventi deferred
+	nbnc* volatile dwv_sorted;		// array di eventi deferred
 	dwb* volatile next;		// puntatore al prossimo elemento
 	int volatile cicle_limit;
-	unsigned long long index_vb;
+	long long index_vb;
 	int from_enq;
 	//char pad[32];
 };
@@ -55,7 +56,7 @@ struct deferred_work_structure{
 };
 
 //int new_list(dwl*);
-dwb* list_add(dwb*, unsigned long long, dwb*);
-dwb* list_remove(dwb*, unsigned long long, dwb*);
+dwb* list_add(dwb*, long long, dwb*);
+dwb* list_remove(dwb*, long long, dwb*);
 
 #endif

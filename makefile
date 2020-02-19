@@ -22,7 +22,7 @@ VBPQ_value := src/datatypes/nbcalendars_with_vb2/vbpq.o $(UTIL_value) $(GACO_val
 
 NBCQ_value := src/datatypes/nbcalendars/nb_calqueue.o src/datatypes/nbcalendars/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
 ACRCQ_value := src/datatypes/nbcalendars-ad/nb_calqueue.o src/datatypes/nbcalendars-ad/common_nb_calqueue.o  $(UTIL_value) $(GACO_value) $(ARCH_value)
-DWCQ_value := src/datatypes/nbcalendars-dw/nb_calqueue.o src/datatypes/nbcalendars-dw/common_nb_calqueue.o src/datatypes/nbcalendars-dw/dw.o src/datatypes/nbcalendars-dw/linked_list.o $(UTIL_value) $(GACO_value) $(ARCH_value)
+DWCQ_value := src/datatypes/nbcalendars-dw/dequeue.o src/datatypes/nbcalendars-dw/enqueue.o src/datatypes/nbcalendars-dw/common_nb_calqueue.o src/datatypes/nbcalendars-dw/dw.o src/datatypes/nbcalendars-dw/linked_list.o $(UTIL_value) $(GACO_value) $(ARCH_value)
 NBVB_value := src/datatypes/nbcalendars_with_vb/nb_calqueue.o src/datatypes/nbcalendars_with_vb/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
 2CAS_value := src/datatypes/nbcalendars_with_vb_2CAS/nb_calqueue.o src/datatypes/nbcalendars_with_vb_2CAS/common_nb_calqueue.o src/datatypes/nbcalendars_with_vb_2CAS/bucket.o $(UTIL_value) $(GACO_value) $(ARCH_value)
 

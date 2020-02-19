@@ -58,7 +58,8 @@ int dw_enqueue(void *tb, unsigned long long index_vb, nbc_bucket_node *new_node)
 	assertf(bucket_p == NULL, "dw_enqueue(): bucket inesistente %s\n", "");
 
 	//printf("prova %llu\n", bucket_p->index_vb);
-	if(getBucketState(bucket_p->next) == EXT){
+	if(getBucketState(bucket_p->next) == EXT)
+	{
 		//while(1);
 		return result;
 	}
@@ -75,7 +76,7 @@ int dw_enqueue(void *tb, unsigned long long index_vb, nbc_bucket_node *new_node)
 			// se sto qui enq_cn deve essere quello giusto
 			assertf(enq_cn < 0 || enq_cn > bucket_p->cicle_limit, "dw_enqueue(): indice enqueue fuori range consentito %s\n", "");
 
-			if(BOOL_CAS(&bucket_p->dwv[enq_cn].node, NULL, new_node)){
+			if(BOOL_CAS(&bucket_p->dwv[enq_cn].node, NULL, new_node) && BOOL_CAS_DOUBLE((unsigned long long*)&bucket_p->dwv[enq_cn].timestamp, INV_TS, new_node->timestamp) ){
 				assertf(new_node == NULL, "dw_enqueue(): nuovo nodo nullo %s\n", "");
 				assertf(bucket_p->dwv[enq_cn].node == NULL, "dw_enqueue(): nodo inserito nullo %s\n", "");
 				//while(1);
@@ -169,7 +170,7 @@ void blockIns(dwb* bucket_p, int from){
 	if(getEnqInd(bucket_p->indexes) == VEC_SIZE)
 		BOOL_CAS(&bucket_p->from_enq, -1, from);
 
-	assertf((getEnqInd(bucket_p->indexes) == VEC_SIZE && bucket_p->dwv[VEC_SIZE - 1].node == NULL), "blockIns(): falso bucket virtuale pieno. index = %llu %p %d\n", bucket_p->index_vb, bucket_p->dwv[VEC_SIZE - 1].node, from);
+	//assertf((bucket_p->dwv[VEC_SIZE - 1].node == NULL && getEnqInd(bucket_p->indexes) == VEC_SIZE && bucket_p->dwv[VEC_SIZE - 1].node == NULL), "blockIns(): falso bucket virtuale pieno. index = %llu %p %d\n", bucket_p->index_vb, bucket_p->dwv[VEC_SIZE - 1].node, from);
 	
 	while((enq_cn = getEnqInd(bucket_p->indexes)) < VEC_SIZE){// se non l'ha fatto ancora nessuno
 		assertf(enq_cn == 0, "blockIns(): non ci sono elementi nel bucket. enq_cn = %d\n", enq_cn);
@@ -186,6 +187,7 @@ void blockIns(dwb* bucket_p, int from){
 	for(i = 0; i < bucket_p->cicle_limit; i++){
 		while(bucket_p->dwv[i].node == NULL){
 			BOOL_CAS(&bucket_p->dwv[i].node, NULL, (nbc_bucket_node*)BLKN);
+			BOOL_CAS_DOUBLE(&bucket_p->dwv[i].timestamp,INV_TS,INFTY);
 			//bucket_p->dwv[i].timestamp = -1.0;		
 		}
 		
@@ -236,15 +238,19 @@ int cmp_node(const void *p1, const void *p2){
 	nbnc *node_1 = (nbnc*)p1;
 	nbnc *node_2 = (nbnc*)p2;
 	pkey_t tmp;
-/*
-	assertf(getNodeState(node_1->node) == DELN, "cmp_node(): nodo marcato come eliminato %p %f %f\n", node_1->node, getNodePointer(node_1->node)->timestamp, node_1->timestamp);
-	assertf(getNodeState(node_2->node) == DELN, "cmp_node(): nodo marcato come eliminato %p %f %f\n", node_2->node, getNodePointer(node_2->node)->timestamp, node_2->timestamp);
-*/
-	if(getNodeState(node_1->node) == DELN || getNodeState(node_2->node) == DELN)
-		return 0;
 
-	if(getNodeState(node_1->node) == BLKN || getNodeState(node_2->node) == BLKN)
+	//assertf(getNodeState(node_1->node) == DELN, "cmp_node(): nodo marcato come eliminato %p %f %f\n", node_1->node, getNodePointer(node_1->node)->timestamp, node_1->timestamp);
+	//assertf(getNodeState(node_2->node) == DELN, "cmp_node(): nodo marcato come eliminato %p %f %f\n", node_2->node, getNodePointer(node_2->node)->timestamp, node_2->timestamp);
+
+	if(getNodeState(node_1->node) == DELN || getNodeState(node_2->node) == DELN){
+//		printf("SORTING-NOTO\n");
+		return 0;
+	}
+
+	if(getNodeState(node_1->node) == BLKN || getNodeState(node_2->node) == BLKN){
+	//	printf("SORTING\n");
 		return ((getNodeState(node_1->node) == BLKN) - (getNodeState(node_2->node) == BLKN));
+	}
 	else{
 		tmp = (node_1->timestamp - node_2->timestamp);
 		return (tmp > 0.0) - (tmp < 0.0);

@@ -15,8 +15,10 @@
 #define DELN (1ULL)
 #define BLKN (2ULL)
 
-#define VEC_SIZE 	10
-#define DIM_TH		16000
+#define INV_TS (-1.0)
+
+#define VEC_SIZE 	128
+#define DIM_TH		32000 //(130000) //(130000)
 
 #define BUCKET_STATE_MASK	(6ULL) 				// per lo stato del bucket
 #define BUCKET_MARK_MASK	(1ULL) 				// per la marcatura del bucket

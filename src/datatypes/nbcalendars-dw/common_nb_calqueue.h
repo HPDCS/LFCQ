@@ -49,13 +49,15 @@ extern int gc_hid[];
 
 #define ENABLE_EXPANSION 1
 #define READTABLE_PERIOD 63
-#define COMPACT_RANDOM_ENQUEUE 1
+#define COMPACT_RANDOM_ENQUEUE 0
 
 #define BASE 1000000ULL 
 #ifndef RESIZE_PERIOD_FACTOR 
 #define RESIZE_PERIOD_FACTOR 4ULL //2000ULL
 #endif
 #define RESIZE_PERIOD RESIZE_PERIOD_FACTOR*BASE
+
+#define BW_SCALING 10
 
 
 #define OK			0
@@ -72,6 +74,13 @@ extern int gc_hid[];
 										UNION_CAST(old,  unsigned long long),\
 										UNION_CAST(new,  unsigned long long)\
 									  )
+
+#define BOOL_CAS_DOUBLE(addr, old, new)  __sync_bool_compare_and_swap(\
+										UNION_CAST(addr, volatile unsigned long long *),\
+										UNION_CAST(old,  unsigned long long),\
+										UNION_CAST(new,  unsigned long long)\
+									  )
+
 									  	
 #define BOOL_CAS_GCC(addr, old, new)  __sync_bool_compare_and_swap(\
 										(addr),\
@@ -84,6 +93,8 @@ extern int gc_hid[];
 										(old),\
 										(new)\
 									  )
+
+
 
 #define VAL_CAS  VAL_CAS_GCC 
 #define BOOL_CAS BOOL_CAS_GCC
@@ -195,8 +206,14 @@ struct nb_calqueue
 extern __thread unsigned int TID;
 extern __thread struct drand48_data seedT;
 
+extern __thread double last_bw;
+
+
+extern __thread unsigned long long enq_failed; 
 extern __thread unsigned long long concurrent_dequeue;
 extern __thread unsigned long long performed_dequeue ;
+extern __thread unsigned long long concurrent_enqueue;
+extern __thread unsigned long long performed_enqueue ;
 extern __thread unsigned long long scan_list_length ;
 
 extern __thread unsigned long long malloc_count;
@@ -232,7 +249,7 @@ extern int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, unsigned i
  */
 static inline nbc_bucket_node* node_malloc(void *payload, pkey_t timestamp, unsigned int tie_breaker)
 {
-	nbc_bucket_node* res;
+	nbc_bucket_node* res, *tmp;
 	
 	//res = mm_node_malloc(&malloc_status);
 	
@@ -243,7 +260,8 @@ static inline nbc_bucket_node* node_malloc(void *payload, pkey_t timestamp, unsi
 		error("%lu - Not aligned Node or No memory\n", TID);
 		abort();
 	}
-
+	if(res == 0x7ffff68fff40) printf("[ALLO] Found node double allocated without being freed %f\n", timestamp);
+	if(timestamp == 8.7765882640457473) tmp->timestamp = 0;
 	res->counter = tie_breaker;
 	res->next = NULL;
 	res->replica = NULL;
@@ -253,8 +271,17 @@ static inline nbc_bucket_node* node_malloc(void *payload, pkey_t timestamp, unsi
 
 	return res;
 }
-
+extern __thread unsigned long long check_allocation;
 static inline void node_free(void *ptr){
+	nbc_bucket_node *tmp = NULL;
+	if(0 && ptr == 0x7ffff68fff40){ 
+		printf("[FREE] Found node double allocated without being freed %f\n", ((nbc_bucket_node*)ptr)->timestamp);
+		check_allocation++;
+	}
+	if(0 && ptr == 0x7ffff68fff40 && check_allocation == 4) {
+		printf("[FREE] DANNOOOOOOOOOOOOOO %f\n", ((nbc_bucket_node*)ptr)->timestamp);
+		tmp->timestamp = 0;
+	}
 	gc_free(ptst, ptr, gc_aid[0]);
 }
 
@@ -281,7 +308,8 @@ static inline void connect_to_be_freed_node_list(nbc_bucket_node *start, unsigne
 	while(start != NULL && counter-- != 0)                //<-----NEW
 	{                                                   //<-----NEW
 		tmp_next = start->next;                           //<-----NEW
-		gc_free(ptst, (void *)start, gc_aid[0]);
+		//gc_free(ptst, (void *)start, gc_aid[0]);
+		node_free(start);
 		start =  get_unmarked(tmp_next);                  //<-----NEW
 	}                                                   //<-----NEW
 }

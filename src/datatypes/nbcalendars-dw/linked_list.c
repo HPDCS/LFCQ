@@ -1,8 +1,8 @@
 #include "common_nb_calqueue.h"
 #include "linked_list.h"
 
-dwb* new_node(unsigned long long, dwb*, bool);
-dwb* list_search(dwb*, unsigned long long, dwb**, int, dwb*);
+dwb* new_node(long long, dwb*, bool);
+dwb* list_search(dwb*, long long, dwb**, int, dwb*);
 bool is_marked_ref(dwb*);
 dwb* get_marked_ref(dwb*);
 
@@ -16,7 +16,7 @@ extern int getDeqInd(int);
 bool is_marked_ref(dwb* bucket){return (bool)((unsigned long long)bucket & 0x1ULL);}
 dwb* get_marked_ref(dwb* bucket){return (dwb*)((unsigned long long)bucket | 0x1ULL);}
 
-dwb* list_search(dwb *head, unsigned long long index_vb, dwb** left_node, int mode, dwb* list_tail) {
+dwb* list_search(dwb *head, long long index_vb, dwb** left_node, int mode, dwb* list_tail) {
  	int i;
  	dwb *left_node_next, *right_node;
   	left_node_next = right_node = NULL;
@@ -96,7 +96,7 @@ dwb* list_search(dwb *head, unsigned long long index_vb, dwb** left_node, int mo
   	}
 }
 
-dwb* new_node(unsigned long long index_vb, dwb *next, bool allocate_dwv){
+dwb* new_node(long long index_vb, dwb *next, bool allocate_dwv){
 	int i;
 	//printf("TID: %d, index_vb = %llu\n", TID, index_vb);
   	dwb* node = gc_alloc(ptst, gc_aid[1]);
@@ -113,11 +113,11 @@ dwb* new_node(unsigned long long index_vb, dwb *next, bool allocate_dwv){
   			// inizializzazione dell'array allocato
   			node->indexes = 0;
   			node->cicle_limit = VEC_SIZE;
-        node->from_enq = -1;
+			node->from_enq = -1;
 
   			for(i = 0; i < VEC_SIZE; i++){
   				node->dwv[i].node = NULL;
-  				node->dwv[i].timestamp = INFTY;	
+  				node->dwv[i].timestamp = INV_TS;	
   			}
   		}
 
@@ -145,7 +145,7 @@ int new_list(dwl* list){
 }
 */
 
-dwb* list_add(dwb *head, unsigned long long index_vb, dwb* list_tail){
+dwb* list_add(dwb *head, long long index_vb, dwb* list_tail){
 
 	unsigned long long state;
 	dwb *right, *left, *new_elem;
@@ -171,7 +171,7 @@ dwb* list_add(dwb *head, unsigned long long index_vb, dwb* list_tail){
   	}
 }
 
-dwb* list_remove(dwb *head, unsigned long long index_vb, dwb* list_tail){
+dwb* list_remove(dwb *head, long long index_vb, dwb* list_tail){
 
   	dwb* right, *left, *right_succ;
   	right = left = right_succ = NULL;
