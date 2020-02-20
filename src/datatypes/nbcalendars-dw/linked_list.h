@@ -18,6 +18,9 @@
 #include <time.h>
 #include <stdint.h>
 
+#define NUMA_DW 0	// se 1 allora numa aware
+#define SEL_DW	0	// lavoro differito selettivamente o no(preso in considerazione solo se NUMA_DW è 1)
+
 // container contnente un evento da gestire
 typedef struct nbc_bucket_node_container nbnc;
 struct nbc_bucket_node_container{
@@ -57,7 +60,11 @@ struct deferred_work_structure{
 };
 
 //int new_list(dwl*);
+#if NUMA_DW
+dwb* list_add(dwb*, long long, int, dwb*);
+#else
 dwb* list_add(dwb*, long long, dwb*);
+#endif
 dwb* list_remove(dwb*, long long, dwb*);
 
 #endif

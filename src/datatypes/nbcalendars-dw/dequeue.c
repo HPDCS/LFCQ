@@ -81,6 +81,11 @@ pkey_t pq_dequeue(void *q, void** result)
 	tail = queue->tail;
 	performed_dequeue++;
 
+	#if NUMA_DW
+	unsigned int dest_node;
+	bool remote = false;
+	#endif
+
 	critical_enter();
 
 begin:
@@ -128,6 +133,12 @@ begin:
 		// get the physical bucket
 		min = array + (index % (size));
 		left_node = min_next = min->next;
+
+		#if NUMA_DW
+		dest_node = NODE_HASH(index % (size));
+		if (dest_node != NID)
+			remote = true;
+		#endif
 		
 		// get the left limit
 		left_limit = ((double)index)*bucket_width;
@@ -240,6 +251,12 @@ begin:
 								*result = dw_node->payload;
 
 								critical_exit();
+								#if NUMA_DW
+								if (!remote)
+									local_deq++;
+								else
+									remote_deq++;
+								#endif
 					
 								return dw_node_ts;
 							}else{// provo a vedere se ci sono altri nodi in dw
@@ -280,6 +297,13 @@ begin:
 			*result = left_node->payload;
 				
 			critical_exit();
+
+			#if NUMA_DW
+			if (!remote)
+				local_deq++;
+			else
+				remote_deq++;
+			#endif
 
 			return left_ts;
 										

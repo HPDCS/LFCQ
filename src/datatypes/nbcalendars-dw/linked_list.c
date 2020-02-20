@@ -1,7 +1,11 @@
 #include "common_nb_calqueue.h"
 #include "linked_list.h"
 
+#if NUMA_DW
+dwb* new_node(long long, dwb*, bool, unsigned int);
+#else
 dwb* new_node(long long, dwb*, bool);
+#endif
 dwb* list_search(dwb*, long long, dwb**, int, dwb*);
 bool is_marked_ref(dwb*);
 dwb* get_marked_ref(dwb*);
@@ -99,14 +103,27 @@ dwb* list_search(dwb *head, long long index_vb, dwb** left_node, int mode, dwb* 
   	}
 }
 
-dwb* new_node(long long index_vb, dwb *next, bool allocate_dwv){
+#if NUMA_DW
+dwb* new_node(long long index_vb, dwb *next, bool allocate_dwv, unsigned int numa_node)
+#else
+dwb* new_node(long long index_vb, dwb *next, bool allocate_dwv)
+#endif
+{	
 	int i;
 	//printf("TID: %d, index_vb = %llu\n", TID, index_vb);
+	#if NUMA_DW
+	dwb* node = gc_alloc_node(ptst, gc_aid[1], numa_node);
+	#else
   	dwb* node = gc_alloc(ptst, gc_aid[1]);
-  	
+  	#endif
+
   	if(node != NULL){
   		if(allocate_dwv){
+  			#if NUMA_DW
+  			node->dwv = gc_alloc_node(ptst, gc_aid[2], numa_node);
+  			#else
   			node->dwv = gc_alloc(ptst, gc_aid[2]);
+  			#endif
 			node->dwv_sorted = NULL; 
   			if(node->dwv == NULL){
   				gc_free(ptst, node, gc_aid[1]);
@@ -148,7 +165,12 @@ int new_list(dwl* list){
 }
 */
 
-dwb* list_add(dwb *head, long long index_vb, dwb* list_tail){
+#if NUMA_DW
+dwb* list_add(dwb *head, long long index_vb, int numa_node, dwb* list_tail)
+#else
+dwb* list_add(dwb *head, long long index_vb, dwb* list_tail)
+#endif
+{
 
 	unsigned long long state;
 	dwb *right, *left, *new_elem;
@@ -160,8 +182,13 @@ dwb* list_add(dwb *head, long long index_vb, dwb* list_tail){
       		return right;
     	}
 
-    	if(new_elem == NULL)
+    	if(new_elem == NULL){
+    		#if NUMA_DW
+    		new_elem = new_node(index_vb, NULL, true, numa_node);
+    		#else
     		new_elem = new_node(index_vb, NULL, true);
+    		#endif
+    	}
 
     	new_elem->next = right;
 

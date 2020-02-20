@@ -17,7 +17,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 
 	nb_calqueue* queue = (nb_calqueue*) q; 	
 	critical_enter();
-	nbc_bucket_node *bucket, *new_node = node_malloc(payload, timestamp, 0);
+	nbc_bucket_node *bucket, *new_node = NULL;
 	table * h = NULL;		
 	unsigned int index, size;
 	unsigned long long newIndex = 0;
@@ -28,8 +28,22 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	unsigned int th = queue->threshold;
 	
 	int res, con_en = 0;
-	int dw_enqueue_result = -1;
 	int iters = 0;
+
+	#if NUMA_DW
+
+	int dest_node;
+	bool remote; 
+
+	#if !SEL_DW
+	new_node = node_malloc(payload, timestamp, 0, NID);	// allocazione del nodo vicino al thread che lo sta facendo
+	#else
+	int prev_dest_node = -1;// qui solo per togliere il warning
+	#endif
+
+	#else
+	new_node = node_malloc(payload, timestamp, 0);
+	#endif
 	
 	//init the result
 	res = MOV_FOUND;
@@ -46,14 +60,33 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 
 			// get actual size
 			size = h->size;
-	        // read the actual epoch
-        	new_node->epoch = (h->current & MASK_EPOCH);
 			// compute the index of the virtual bucket
 			newIndex = hash(timestamp, h->bucket_width);
 
 			last_bw = h->bucket_width;
 			// compute the index of the physical bucket
 			index = ((unsigned int) newIndex) % size;
+
+			#if NUMA_DW
+			remote = false;
+			dest_node = NODE_HASH(index);
+			if(dest_node != NID)
+				remote = true;
+			
+			#if SEL_DW
+			if(prev_dest_node == -1)	// prima allocazione
+				new_node = node_malloc(payload, timestamp, 0, dest_node);
+			else if(prev_dest_node != dest_node){// il nodo è cambiato dalla prima allocazione
+				node_free(new_node);// rilascio la precedente allocazione
+				new_node = node_malloc(payload, timestamp, 0, dest_node);
+			}
+				
+			prev_dest_node = dest_node;
+			#endif
+			#endif
+
+			// read the actual epoch
+        	new_node->epoch = (h->current & MASK_EPOCH);
 			// get the bucket
 			bucket = h->array + index;
 			// read the number of executed enqueues for statistics purposes
@@ -67,24 +100,25 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			goto out;
 		}
 		#endif
-/*
-		if(newIndex <= h->current>>32)
-			dw_enqueue_result = -2;
-*/
-		if(size > DIM_TH && dw_enqueue_result == -1){
-			dw_enqueue_result = dw_enqueue(h, newIndex, new_node);
 
-			if(dw_enqueue_result != OK){
-				// search the two adjacent nodes that surround the new key and try to insert with a CAS 
-		    	res = search_and_insert(bucket, timestamp, 0, REMOVE_DEL_INV, new_node, &new_node);
-		    	enq_failed += res==OK;
-		    	//printf("ARGH\n");//exit(1);
-		    }
-		    else
-		    	res = OK;
-		}
-		else
+		#if NUMA_DW
+			#if SEL_DW
+			if(size > DIM_TH && remote)// alloco sulla DW solo se remoto
+			#else
+			if(size > DIM_TH)// altrimenti sempre
+			#endif
+				res = dw_enqueue(h, newIndex, new_node, dest_node);
+		#else
+		if(size > DIM_TH)
+			res = dw_enqueue(h, newIndex, new_node);
+		#endif
+
+		if(res != OK){
+			res = MOV_FOUND;	// rimetto a come era in origine(forse non necessario)
+			enq_failed += res==OK;
+			// search the two adjacent nodes that surround the new key and try to insert with a CAS 
 			res = search_and_insert(bucket, timestamp, 0, REMOVE_DEL_INV, new_node, &new_node);
+		}
 	}				
 
 	// the CAS succeeds, thus we want to ensure that the insertion becomes visible
@@ -115,6 +149,14 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
   #if KEY_TYPE != DOUBLE
   out:
   #endif
+
+	#if NUMA_DW
+  	if (!remote)
+		local_enq++;
+	else
+		remote_enq++;
+	#endif
+
 	critical_exit();
 	return res;
 

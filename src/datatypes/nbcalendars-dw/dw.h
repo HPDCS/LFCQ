@@ -18,7 +18,7 @@
 #define INV_TS (-1.0)
 
 #define VEC_SIZE 	128
-#define DIM_TH		32000 //(130000) //(130000)
+#define DIM_TH		16000 //(130000) //(130000)
 
 #define BUCKET_STATE_MASK	(6ULL) 				// per lo stato del bucket
 #define BUCKET_MARK_MASK	(1ULL) 				// per la marcatura del bucket
@@ -31,7 +31,11 @@
 #define ENQ_BIT_SHIFT	16					// numero di bit da shiftare a destra per ottenere l'indice di inserimento
 #define DEQ_IND_MASK (0x0000ffff)
 
+#if NUMA_DW
+int dw_enqueue(void*, unsigned long long, nbc_bucket_node*, int);
+#else
 int dw_enqueue(void*, unsigned long long, nbc_bucket_node*);
+#endif
 dwb* dw_dequeue(void*, unsigned long long);
 
 #endif // DEFERRED_WORK

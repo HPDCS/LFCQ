@@ -34,12 +34,9 @@
 #include "../../key_type.h"
 #include "../../arch/atomic.h"
 #include "../../utils/hpdcs_utils.h"
-#include "../../gc/ptst.h"
 
-extern __thread ptst_t *ptst;
 extern int gc_aid[];
 extern int gc_hid[];
-
 
 #define SAMPLE_SIZE 50
 #define HEAD_ID 0
@@ -64,7 +61,6 @@ extern int gc_hid[];
 #define ABORT		1
 #define MOV_FOUND 	2
 #define PRESENT		4
-
 
 #define TID tid
 
@@ -164,6 +160,14 @@ struct __bucket_node
 //extern nbc_bucket_node *g_tail;
 
 #include "dw.h"
+#if NUMA_DW
+#include "./gc/ptst.h"
+#define NODE_HASH(bucket_id) (bucket_id % _NUMA_NODES)	// per bucket fisico
+#define NID nid
+#else
+#include "../../gc/ptst.h"
+#endif
+extern __thread ptst_t *ptst;
 
 typedef struct table table;
 struct table
@@ -223,6 +227,14 @@ extern __thread unsigned long long num_cas;
 extern __thread unsigned long long num_cas_useful;
 extern __thread unsigned long long dist;
 
+#if NUMA_DW
+extern __thread unsigned int NID;
+extern __thread unsigned long long local_enq;
+extern __thread unsigned long long local_deq;
+extern __thread unsigned long long remote_enq;
+extern __thread unsigned long long remote_deq;
+#endif
+
 
 extern void set_new_table(table* h, unsigned int threshold, double pub, unsigned int epb, unsigned int counter);
 extern table* read_table(table * volatile *hashtable, unsigned int threshold, unsigned int elem_per_bucket, double perc_used_bucket);
@@ -247,13 +259,21 @@ extern int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, unsigned i
  *  @return the pointer to the allocated node
  *
  */
+#if NUMA_DW
+static inline nbc_bucket_node* node_malloc(void *payload, pkey_t timestamp, unsigned int tie_breaker, unsigned int numa_node)
+#else
 static inline nbc_bucket_node* node_malloc(void *payload, pkey_t timestamp, unsigned int tie_breaker)
+#endif
 {
 	nbc_bucket_node* res, *tmp;
 	
 	//res = mm_node_malloc(&malloc_status);
 	
+	#if NUMA_DW
+	res = gc_alloc_node(ptst, gc_aid[0], numa_node);
+	#else
     res = gc_alloc(ptst, gc_aid[0]);
+    #endif
     
 	if (unlikely(is_marked(res) || res == NULL))
 	{

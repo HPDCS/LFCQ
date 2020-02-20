@@ -18,7 +18,11 @@ dwb* getBucketPointer(dwb*);
 nbc_bucket_node* getNodePointer(nbc_bucket_node*);
 // ausiliarie
 void blockIns(dwb*, int);
+#if NUMA_DW
+void doOrd(dwb*, int);
+#else
 void doOrd(dwb*);
+#endif
 int cmp_node(const void*, const void*);
 void printDWV(int, nbnc*);
 
@@ -47,14 +51,23 @@ void printDWV(int size, nbnc *vect){
 	fflush(stdout);	
 }
 
-int dw_enqueue(void *tb, unsigned long long index_vb, nbc_bucket_node *new_node){
+#if NUMA_DW
+int dw_enqueue(void *tb, unsigned long long index_vb, nbc_bucket_node *new_node, int numa_node)
+#else
+int dw_enqueue(void *tb, unsigned long long index_vb, nbc_bucket_node *new_node)
+#endif
+{
 	table *h = (table*)tb;
 	dwstr *str = h->deferred_work;
 	dwb* bucket_p;
 	int result = ABORT;
 	int indexes, enq_cn; 
 
+	#if NUMA_DW
+	bucket_p = getBucketPointer(list_add(&str->heads[index_vb % h->size], index_vb, numa_node, str->list_tail));
+	#else
 	bucket_p = getBucketPointer(list_add(&str->heads[index_vb % h->size], index_vb, str->list_tail));
+	#endif
 	assertf(bucket_p == NULL, "dw_enqueue(): bucket inesistente %s\n", "");
 
 	//printf("prova %llu\n", bucket_p->index_vb);
@@ -98,8 +111,13 @@ int dw_enqueue(void *tb, unsigned long long index_vb, nbc_bucket_node *new_node)
 	if(getBucketState(bucket_p->next) == INS && getEnqInd(bucket_p->indexes) >= VEC_SIZE)
 		blockIns(bucket_p, 1);
 
-	if(getBucketState(bucket_p->next) == ORD)
+	if(getBucketState(bucket_p->next) == ORD){
+		#if NUMA_DW
+		doOrd(bucket_p, numa_node);
+		#else
 		doOrd(bucket_p);
+		#endif
+	}
 
 //	assertf(getEnqInd(bucket_p->indexes) >= VEC_SIZE && getBucketState(bucket_p->next) != EXT, "dw_enqueue(): bucket pieno e non in estrazione. stato %llu, enq_cn %d, enq_cn salvato %d\n", getBucketState(bucket_p->next), enq_cn, getEnqInd(bucket_p->indexes));
 
@@ -140,8 +158,17 @@ dwb* dw_dequeue(void *tb, unsigned long long index_vb){
 			//while(1);
 		}
 
-		if(getBucketState(bucket_p->next) == ORD)
-			doOrd(bucket_p); 
+		if(getBucketState(bucket_p->next) == ORD){
+			#if NUMA_DW
+				#if SEL_DW
+				doOrd(bucket_p, NODE_HASH(index_vb % h->size));// sta su un nodo remoto
+				#else
+				doOrd(bucket_p, NID);// sta sul mio nodo
+				#endif
+			#else
+			doOrd(bucket_p);
+			#endif 
+		}
 
 	}while(1);
 
@@ -194,7 +221,12 @@ void blockIns(dwb* bucket_p, int from){
 	BOOL_CAS(&bucket_p->next, setBucketState(bucket_p->next, INS), setBucketState(bucket_p->next, ORD));
 }
 
-void doOrd(dwb* bucket_p){
+#if NUMA_DW
+void doOrd(dwb* bucket_p, int numa_node)
+#else
+void doOrd(dwb* bucket_p)
+#endif
+{
 	nbnc *old_dwv, *aus_ord_array;
 
 	assertf(bucket_p->cicle_limit > VEC_SIZE || bucket_p->cicle_limit < 0, "doOrd(): limite del ciclo fuori dal range %s\n", "");
@@ -207,7 +239,11 @@ void doOrd(dwb* bucket_p){
 	old_dwv = bucket_p->dwv;
 	if(bucket_p->dwv_sorted != NULL) return;
 	
+	#if NUMA_DW
+	aus_ord_array = gc_alloc_node(ptst, gc_aid[2], numa_node);
+	#else
 	aus_ord_array = gc_alloc(ptst, gc_aid[2]);
+	#endif
 	if(aus_ord_array == NULL)	error("Non abbastanza memoria per allocare un array dwv in ORD\n");
 	else{
 	/*if(bucket_p->cicle_limit == VEC_SIZE){

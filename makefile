@@ -16,13 +16,22 @@ UTIL_value := src/utils/common.o src/utils/hpdcs_math.o
 GACO_value := src/gc/gc.o src/gc/ptst.o
 ARCH_value := src/arch/x86.o
 
+#DW
+DWGACO_value := src/datatypes/nbcalendars-dw/gc/gc.o src/datatypes/nbcalendars-dw/gc/ptst.o
+DWSET_value := src/datatypes/nbcalendars-dw/gc/skip_cas.o
+
 SLCQ_value := src/datatypes/slcalqueue/calqueue.o  $(UTIL_value)
 
 VBPQ_value := src/datatypes/nbcalendars_with_vb2/vbpq.o $(UTIL_value) $(GACO_value) $(ARCH_value)
 
 NBCQ_value := src/datatypes/nbcalendars/nb_calqueue.o src/datatypes/nbcalendars/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
 ACRCQ_value := src/datatypes/nbcalendars-ad/nb_calqueue.o src/datatypes/nbcalendars-ad/common_nb_calqueue.o  $(UTIL_value) $(GACO_value) $(ARCH_value)
+
+# semplice
 DWCQ_value := src/datatypes/nbcalendars-dw/dequeue.o src/datatypes/nbcalendars-dw/enqueue.o src/datatypes/nbcalendars-dw/common_nb_calqueue.o src/datatypes/nbcalendars-dw/dw.o src/datatypes/nbcalendars-dw/linked_list.o $(UTIL_value) $(GACO_value) $(ARCH_value)
+# NUMA
+#DWCQ_value := src/datatypes/nbcalendars-dw/dequeue.o src/datatypes/nbcalendars-dw/enqueue.o src/datatypes/nbcalendars-dw/common_nb_calqueue.o src/datatypes/nbcalendars-dw/dw.o src/datatypes/nbcalendars-dw/linked_list.o $(DWSET_value) $(UTIL_value) $(DWGACO_value) $(ARCH_value)
+
 NBVB_value := src/datatypes/nbcalendars_with_vb/nb_calqueue.o src/datatypes/nbcalendars_with_vb/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
 2CAS_value := src/datatypes/nbcalendars_with_vb_2CAS/nb_calqueue.o src/datatypes/nbcalendars_with_vb_2CAS/common_nb_calqueue.o src/datatypes/nbcalendars_with_vb_2CAS/bucket.o $(UTIL_value) $(GACO_value) $(ARCH_value)
 
@@ -61,7 +70,9 @@ WORK_value := src/datatypes/worker_queue.o  src/datatypes/common_nb_calqueue.o  
 
 
 L1_CACHE_LINE_SIZE := $(shell getconf LEVEL1_DCACHE_LINESIZE)
-MACRO := -DARCH_X86_64  -DCACHE_LINE_SIZE=$(L1_CACHE_LINE_SIZE) -DINTEL
+NUMA_NODES := $(shell lscpu | grep -e "NUMA node(s)" | egrep -o [0-9]+)
+#MACRO := -DARCH_X86_64  -DCACHE_LINE_SIZE=$(L1_CACHE_LINE_SIZE) -DINTEL
+MACRO := -DARCH_X86_64  -DCACHE_LINE_SIZE=$(L1_CACHE_LINE_SIZE) -DINTEL -D_NUMA_NODES=$(NUMA_NODES)
 DEBUG := -g3
 
 
@@ -192,7 +203,8 @@ endif
 
 
 
-C_SUBDIRS 		:= src src/datatypes/nbcalendars-dw src/datatypes/nbcalendars-ad src/datatypes/nbcalendars src/datatypes/nbcalendars_with_vb src/datatypes/nbcalendars_with_vb2  src/datatypes/nbcalendars_with_vb_2CAS  src/datatypes/nbskiplists src/datatypes/slcalqueue  src/arch src/gc src/utils
+#C_SUBDIRS 		:= src src/datatypes/nbcalendars-dw src/datatypes/nbcalendars-ad src/datatypes/nbcalendars src/datatypes/nbcalendars_with_vb src/datatypes/nbcalendars_with_vb2  src/datatypes/nbcalendars_with_vb_2CAS  src/datatypes/nbskiplists src/datatypes/slcalqueue  src/arch src/gc src/utils
+C_SUBDIRS 		:= src src/datatypes/nbcalendars-dw src/datatypes/nbcalendars-dw/gc src/datatypes/nbcalendars-ad src/datatypes/nbcalendars src/datatypes/nbcalendars_with_vb src/datatypes/nbcalendars_with_vb2  src/datatypes/nbcalendars_with_vb_2CAS  src/datatypes/nbskiplists src/datatypes/slcalqueue  src/arch src/gc src/utils
 C_SRCS			:= $(shell ls   $(patsubst %, %/*.c, $(C_SUBDIRS)) )
 C_SRCS 			:= $(filter-out $(FILTER_OUT_C_SRC), $(C_SRCS))
 C_OBJS			:= $(strip $(subst .c,.o, $(C_SRCS)))

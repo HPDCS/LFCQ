@@ -61,6 +61,14 @@ __thread long estr = 0;
 __thread long conflitti_ins = 0;
 __thread long conflitti_estr = 0;
 
+#if NUMA_DW
+// statistica inserimenti nodi numa
+__thread unsigned long long local_enq = 0ULL;
+__thread unsigned long long local_deq = 0ULL;
+__thread unsigned long long remote_enq = 0ULL;
+__thread unsigned long long remote_deq = 0ULL;
+#endif
+
 /**
  * This function commits a value in the current field of a queue. It retries until the timestamp
  * associated with current is strictly less than the value that has to be committed
@@ -476,7 +484,11 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 				return;
 			}
 			
+			#if NUMA_DW
+			new_h->deferred_work->list_tail = gc_alloc_node(ptst, gc_aid[1], 0); // la tail viene allocata sul nodo 0
+			#else
 			new_h->deferred_work->list_tail = gc_alloc(ptst, gc_aid[1]);
+			#endif
 			if(new_h->deferred_work->list_tail == NULL) {
 				free(new_h->deferred_work->heads);
 				free(new_h->deferred_work);	
@@ -763,7 +775,11 @@ void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 	int res = 0;
 	
 	//Create a new node to be inserted in the new table as as INValid
+	#if NUMA_DW
+	replica = node_malloc(right_node->payload, right_node->timestamp,  right_node->counter, NODE_HASH(hash(right_node->timestamp, new_h->bucket_width)));
+	#else
 	replica = node_malloc(right_node->payload, right_node->timestamp,  right_node->counter);
+	#endif
 	
 	new_node 			= &replica;
 	new_node_pointer 	= (*new_node);
@@ -1040,7 +1056,11 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	res->elem_per_bucket = elem_per_bucket;
 	res->pub_per_epb = perc_used_bucket * elem_per_bucket;
 	res->read_table_period = READTABLE_PERIOD;
+	#if NUMA_DW
+	res->tail = node_malloc(NULL, INFTY, 0, 0);
+	#else
 	res->tail = node_malloc(NULL, INFTY, 0);
+	#endif
 	res->tail->next = NULL;
 
 	res->hashtable->bucket_width = 1.0;
@@ -1087,7 +1107,10 @@ void pq_report(int TID)
 			read_table_count	  ,
 			malloc_count, last_bw);
 
-	printf("TID - %d :ins %ld, estr %ld, conflitti_ins %ld, conflitti_estr %ld\n", TID, ins, estr, conflitti_ins, conflitti_estr);
+	printf("Coda DW: inserimenti %ld, estrazione %ld, conflitti_ins %ld, conflitti_estr %ld\n", ins, estr, conflitti_ins, conflitti_estr);
+	#if NUMA_DW
+	printf("NumaStat: LOC: enq %llu, deq %llu. REM: enq %llu deq %llu\n\n", local_enq, local_deq, remote_enq, remote_deq);
+	#endif
 }
 
 void pq_reset_statistics(){
