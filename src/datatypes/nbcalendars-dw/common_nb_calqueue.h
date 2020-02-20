@@ -260,8 +260,6 @@ static inline nbc_bucket_node* node_malloc(void *payload, pkey_t timestamp, unsi
 		error("%lu - Not aligned Node or No memory\n", TID);
 		abort();
 	}
-	if(res == 0x7ffff68fff40) printf("[ALLO] Found node double allocated without being freed %f\n", timestamp);
-	if(timestamp == 8.7765882640457473) tmp->timestamp = 0;
 	res->counter = tie_breaker;
 	res->next = NULL;
 	res->replica = NULL;
@@ -274,14 +272,6 @@ static inline nbc_bucket_node* node_malloc(void *payload, pkey_t timestamp, unsi
 extern __thread unsigned long long check_allocation;
 static inline void node_free(void *ptr){
 	nbc_bucket_node *tmp = NULL;
-	if(0 && ptr == 0x7ffff68fff40){ 
-		printf("[FREE] Found node double allocated without being freed %f\n", ((nbc_bucket_node*)ptr)->timestamp);
-		check_allocation++;
-	}
-	if(0 && ptr == 0x7ffff68fff40 && check_allocation == 4) {
-		printf("[FREE] DANNOOOOOOOOOOOOOO %f\n", ((nbc_bucket_node*)ptr)->timestamp);
-		tmp->timestamp = 0;
-	}
 	gc_free(ptst, ptr, gc_aid[0]);
 }
 
