@@ -28,12 +28,13 @@ struct nbc_bucket_node_container{
 // virtual bucket
 typedef struct deferred_work_bucket dwb;
 struct deferred_work_bucket{	
-	int volatile indexes;	// inserimento|estrazione
 	nbnc* volatile dwv;		// array di eventi deferred
 	nbnc* volatile dwv_sorted;		// array di eventi deferred
 	dwb* volatile next;		// puntatore al prossimo elemento
-	int volatile cicle_limit;
 	long long index_vb;
+	int volatile cicle_limit;
+	int volatile indexes;	// inserimento|estrazione
+	int volatile num_extractable_items;
 	int from_enq;
 	//char pad[32];
 };

@@ -75,8 +75,10 @@ dwb* list_search(dwb *head, long long index_vb, dwb** left_node, int mode, dwb* 
 
 			    	for(i = 0; i < left_node_next->cicle_limit; i++){
 			    		//printf("nodi\n");
-			        	if(getNodePointer(left_node_next->dwv[i].node) != NULL)
-			          		node_free(getNodePointer(left_node_next->dwv[i].node));
+			    		assertf(left_node_next->dwv_sorted[i].timestamp == INV_TS, "INV_TS while releasing memory\n", ""); 
+
+			        	if(getNodePointer(left_node_next->dwv_sorted[i].node) != NULL && left_node_next->dwv_sorted[i].timestamp != INFTY)
+			          		node_free(getNodePointer(left_node_next->dwv_sorted[i].node));
 			      	}
 /*
               left_node_next->indexes = 0;
@@ -84,6 +86,7 @@ dwb* list_search(dwb *head, long long index_vb, dwb** left_node, int mode, dwb* 
               left_node_next->from_enq = 0;
 */
 			      	gc_free(ptst, left_node_next->dwv, gc_aid[2]);
+			      	gc_free(ptst, left_node_next->dwv_sorted, gc_aid[2]);
 			      	gc_free(ptst, left_node_next, gc_aid[1]);			      	
 			      	
 			      	left_node_next = left_node_next->next;
@@ -104,7 +107,7 @@ dwb* new_node(long long index_vb, dwb *next, bool allocate_dwv){
   	if(node != NULL){
   		if(allocate_dwv){
   			node->dwv = gc_alloc(ptst, gc_aid[2]);
-
+			node->dwv_sorted = NULL; 
   			if(node->dwv == NULL){
   				gc_free(ptst, node, gc_aid[1]);
   				return NULL;
