@@ -185,11 +185,8 @@ void blockIns(dwb* bucket_p, int from){
 	assertf(bucket_p->cicle_limit > VEC_SIZE || bucket_p->cicle_limit < 0, "blockIns(): limite ciclo sbagliato %d\n", enq_cn);
 	assertf(enq_cn < VEC_SIZE, "blockIns(): enq_cn non è stato incrementato %d\n", enq_cn);
 	for(i = 0; i < bucket_p->cicle_limit; i++){
-		while(bucket_p->dwv[i].node == NULL){
-			BOOL_CAS(&bucket_p->dwv[i].node, NULL, (nbc_bucket_node*)BLKN);
-			BOOL_CAS_DOUBLE(&bucket_p->dwv[i].timestamp,INV_TS,INFTY);
-			//bucket_p->dwv[i].timestamp = -1.0;		
-		}
+		if(bucket_p->dwv[i].node == NULL) BOOL_CAS(&bucket_p->dwv[i].node, NULL, (nbc_bucket_node*)BLKN);
+		if(bucket_p->dwv[i].timestamp == INV_TS) BOOL_CAS_DOUBLE(&bucket_p->dwv[i].timestamp,INV_TS,INFTY);
 		
 		assertf(bucket_p->dwv[i].node == NULL, "blockIns(): nodo non marcato come bloccato %p %f\n", bucket_p->dwv[i].node, bucket_p->dwv[i].timestamp);
 	}
@@ -208,7 +205,8 @@ void doOrd(dwb* bucket_p){
 	}
 
 	old_dwv = bucket_p->dwv;
-
+	if(bucket_p->dwv_sorted != NULL) return;
+	
 	aus_ord_array = gc_alloc(ptst, gc_aid[2]);
 	if(aus_ord_array == NULL)	error("Non abbastanza memoria per allocare un array dwv in ORD\n");
 	else{
@@ -225,9 +223,9 @@ void doOrd(dwb* bucket_p){
 			printf(" dopo l'ordinamento\n");
 	}*/
 		// cerco di sostituirlo all'originale
-		if(BOOL_CAS(&bucket_p->dwv, old_dwv, aus_ord_array)){
+		if(BOOL_CAS(&bucket_p->dwv_sorted, NULL, aus_ord_array)){
 			BOOL_CAS(&bucket_p->next, setBucketState(bucket_p->next, ORD), setBucketState(bucket_p->next, EXT));	
-			gc_free(ptst, old_dwv, gc_aid[2]);
+			//gc_free(ptst, old_dwv, gc_aid[2]);
 		}
 		else
 			gc_free(ptst, aus_ord_array, gc_aid[2]);	
@@ -239,9 +237,10 @@ int cmp_node(const void *p1, const void *p2){
 	nbnc *node_2 = (nbnc*)p2;
 	pkey_t tmp;
 
-	//assertf(getNodeState(node_1->node) == DELN, "cmp_node(): nodo marcato come eliminato %p %f %f\n", node_1->node, getNodePointer(node_1->node)->timestamp, node_1->timestamp);
-	//assertf(getNodeState(node_2->node) == DELN, "cmp_node(): nodo marcato come eliminato %p %f %f\n", node_2->node, getNodePointer(node_2->node)->timestamp, node_2->timestamp);
+	assertf(getNodeState(node_1->node) == DELN, "cmp_node(): nodo marcato come eliminato %p %f %f\n", node_1->node, getNodePointer(node_1->node)->timestamp, node_1->timestamp);
+	assertf(getNodeState(node_2->node) == DELN, "cmp_node(): nodo marcato come eliminato %p %f %f\n", node_2->node, getNodePointer(node_2->node)->timestamp, node_2->timestamp);
 
+/*
 	if(getNodeState(node_1->node) == DELN || getNodeState(node_2->node) == DELN){
 //		printf("SORTING-NOTO\n");
 		return 0;
@@ -251,7 +250,9 @@ int cmp_node(const void *p1, const void *p2){
 	//	printf("SORTING\n");
 		return ((getNodeState(node_1->node) == BLKN) - (getNodeState(node_2->node) == BLKN));
 	}
-	else{
+	else
+	*/ 
+	{
 		tmp = (node_1->timestamp - node_2->timestamp);
 		return (tmp > 0.0) - (tmp < 0.0);
 	}

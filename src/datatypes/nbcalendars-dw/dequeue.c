@@ -183,7 +183,12 @@ begin:
 					deq_cn = getDeqInd(bucket_p->indexes); 
 
 					// cerco un possibile indice
-					while(deq_cn < bucket_p->cicle_limit && (getNodeState(bucket_p->dwv[deq_cn].node) != 0ULL/* || bucket_p->dwv[deq_cn].node == NULL*/) && !is_marked_ref(bucket_p->next)){
+					while(
+						deq_cn < bucket_p->cicle_limit && 
+						(getNodeState(bucket_p->dwv_sorted[deq_cn].node) != 0ULL /* || bucket_p->dwv_sorted[deq_cn].node == NULL*/) && 
+						!is_marked_ref(bucket_p->next)
+						)
+					{
 						BOOL_CAS(&bucket_p->indexes, (indexes_enq + deq_cn), (indexes_enq + deq_cn + 1));	// aggiorno deq
 						deq_cn = getDeqInd(bucket_p->indexes);
 					}
@@ -193,12 +198,17 @@ begin:
 						no_dw_node_curr_vb = true;
 						if(!is_marked_ref(bucket_p->next))
 							BOOL_CAS(&(bucket_p->next), bucket_p->next, (unsigned long long)bucket_p->next | 0x1ULL);
-
+					
+					// TODO
 					//}else if(bucket_p->dwv[deq_cn].node->epoch > epoch){
 					//	goto begin;
 					}else{
-						assertf((getNodeState(bucket_p->dwv[deq_cn].node) & BLKN), "pq_dequeue(): si cerca di estrarre un nodo bloccato. stato nodo %llu, stato bucket %llu\n", getNodeState(bucket_p->dwv[deq_cn].node), getBucketState(bucket_p->next));
-						assertf((bucket_p->dwv[deq_cn].node == NULL), "pq_dequeue(): si cerca di estrarre un nodo nullo." 
+						assertf((getNodeState(bucket_p->dwv_sorted[deq_cn].node) & BLKN), 
+								"pq_dequeue(): si cerca di estrarre un nodo bloccato. stato nodo %llu, stato bucket %llu\n", 
+								getNodeState(bucket_p->dwv_sorted[deq_cn].node), 
+								getBucketState(bucket_p->next));
+						assertf((bucket_p->dwv_sorted[deq_cn].node == NULL), 
+							"pq_dequeue(): si cerca di estrarre un nodo nullo." 
 							"\nnumero bucket: %llu"
 							"\nstato bucket virtuale: %llu"
 							"\nbucket marcato: %d"
@@ -209,14 +219,18 @@ begin:
 							"\npieno da enqueue: %d"
 							"\ntimestamp: %f\n",
 							bucket_p->index_vb, getBucketState(bucket_p->next), is_marked_ref(bucket_p->next), deq_cn, getDeqInd(bucket_p->indexes), 
-							getEnqInd(indexes_enq), bucket_p->cicle_limit, bucket_p->from_enq, bucket_p->dwv[deq_cn].timestamp);
+							getEnqInd(indexes_enq), bucket_p->cicle_limit, bucket_p->from_enq, bucket_p->dwv_sorted[deq_cn].timestamp);
 						if(!no_cq_node) no_empty_vb++;
 						// provo a fare l'estrazione se il nodo della dw viene prima 
-						if((dw_node_ts = bucket_p->dwv[deq_cn].timestamp) != INV_TS && dw_node_ts <= left_ts){
-							dw_node = getNodePointer(bucket_p->dwv[deq_cn].node);	// per impedire l'estrazione di uno già estratto
+						
+						// TODO
+						assertf(bucket_p->dwv_sorted[deq_cn].timestamp == INV_TS, "INV_TS in extractions\n", ""); 
+						if((dw_node_ts = bucket_p->dwv_sorted[deq_cn].timestamp) //!= INV_TS && dw_node_ts
+						 <= left_ts){
+							dw_node = getNodePointer(bucket_p->dwv_sorted[deq_cn].node);	// per impedire l'estrazione di uno già estratto
 							assertf((dw_node == NULL), "pq_dequeue(): dw_node è nullo %s\n", "");
 
-							if(BOOL_CAS(&bucket_p->dwv[deq_cn].node, dw_node, (nbc_bucket_node*)((unsigned long long)dw_node | DELN))){// se estrazione riuscita
+							if(BOOL_CAS(&bucket_p->dwv_sorted[deq_cn].node, dw_node, (nbc_bucket_node*)((unsigned long long)dw_node | DELN))){// se estrazione riuscita
 								
 								assertf(getEnqInd(bucket_p->indexes) != getEnqInd(indexes_enq), "pq_dequeue(): indice di inserimento non costante %s\n", "");
 								BOOL_CAS(&bucket_p->indexes, (indexes_enq + deq_cn) , (indexes_enq + deq_cn + 1));
