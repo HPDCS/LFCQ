@@ -2,6 +2,7 @@
 
 extern __thread long ins;
 extern __thread long conflitti_ins;
+extern __thread int blocked;
 
 extern bool is_marked_ref(dwb*);
 
@@ -28,6 +29,8 @@ void printDWV(int, nbnc*);
 
 int inc=0;
 
+bool isDeleted(nbc_bucket_node* node){return (bool)((unsigned long long)node & DELN);}
+bool isBlocked(nbc_bucket_node* node){return (bool)((unsigned long long)node & BLKN);}
 unsigned long long getBucketState(dwb* bucket){return (((unsigned long long)bucket & BUCKET_STATE_MASK) >> 1);}
 unsigned long long getNodeState(nbc_bucket_node* node){return ((unsigned long long)node & NODE_STATE_MASK);}
 dwb* setBucketState(dwb* bucket, unsigned long long state){return (dwb*)(((unsigned long long)bucket & BUCKET_PTR_MASK_WM) | (state << 1));}
@@ -177,6 +180,7 @@ dwb* dw_dequeue(void *tb, unsigned long long index_vb){
 void blockIns(dwb* bucket_p, int from){
 	int i, limit;
 	int enq_cn;
+	int valid_elem = 0;
 
 	//assertf(getDeqInd(bucket_p->indexes) > 0, "blockIns(): deq_cn non nullo %d %p\n", getDeqInd(bucket_p->indexes), bucket_p->next);
 	//if(bucket_p->indexes << ENQ_BIT_SHIFT > 0){
@@ -212,12 +216,19 @@ void blockIns(dwb* bucket_p, int from){
 	assertf(bucket_p->cicle_limit > VEC_SIZE || bucket_p->cicle_limit < 0, "blockIns(): limite ciclo sbagliato %d\n", enq_cn);
 	assertf(enq_cn < VEC_SIZE, "blockIns(): enq_cn non è stato incrementato %d\n", enq_cn);
 	for(i = 0; i < bucket_p->cicle_limit; i++){
+
 		if(bucket_p->dwv[i].node == NULL) BOOL_CAS(&bucket_p->dwv[i].node, NULL, (nbc_bucket_node*)BLKN);
 		if(bucket_p->dwv[i].timestamp == INV_TS) BOOL_CAS_DOUBLE(&bucket_p->dwv[i].timestamp,INV_TS,INFTY);
 		
+		if(!isBlocked(bucket_p->dwv[i].node) && bucket_p->dwv[i].timestamp != INFTY)
+			valid_elem++;
+
 		assertf(bucket_p->dwv[i].node == NULL, "blockIns(): nodo non marcato come bloccato %p %f\n", bucket_p->dwv[i].node, bucket_p->dwv[i].timestamp);
 	}
 
+	if(BOOL_CAS(&bucket_p->valid_elem, VEC_SIZE, valid_elem)){
+		blocked += bucket_p->cicle_limit - bucket_p->valid_elem;// statistica
+	}
 	BOOL_CAS(&bucket_p->next, setBucketState(bucket_p->next, INS), setBucketState(bucket_p->next, ORD));
 }
 
@@ -228,10 +239,11 @@ void doOrd(dwb* bucket_p)
 #endif
 {
 	nbnc *old_dwv, *aus_ord_array;
+	int i, j;
 
 	assertf(bucket_p->cicle_limit > VEC_SIZE || bucket_p->cicle_limit < 0, "doOrd(): limite del ciclo fuori dal range %s\n", "");
 	assertf((bucket_p->cicle_limit == VEC_SIZE && bucket_p->dwv[VEC_SIZE - 1].node == NULL), "doOrd(): falso bucket virtuale pieno. index = %llu\n", bucket_p->index_vb);
-	if(bucket_p->cicle_limit == 0){// nulla da ordinare, ritorno subito
+	if(bucket_p->cicle_limit == 0){// nulla da ordinare, ritorno subito(penso che non dovrebbe succedere)
 		BOOL_CAS(&bucket_p->next, setBucketState(bucket_p->next, ORD), setBucketState(bucket_p->next, EXT));
 		return;
 	}
@@ -252,8 +264,17 @@ void doOrd(dwb* bucket_p)
 		}
 	*/
 		//memcpy(aus_ord_array, bucket_p->dwv, VEC_SIZE * sizeof(nbnc));		// copia dell'array
-		memcpy(aus_ord_array, old_dwv, VEC_SIZE * sizeof(nbnc));
-		qsort(aus_ord_array, bucket_p->cicle_limit, sizeof(nbnc), cmp_node);					// ordino
+		for(i = 0, j = 0; i < bucket_p->cicle_limit; i++){
+			if(!isBlocked(old_dwv[i].node)  && bucket_p->dwv[i].timestamp != INFTY){
+				memcpy(aus_ord_array + j, old_dwv + i, sizeof(nbnc));
+				j++;
+			}
+		}
+		assertf(j != bucket_p->valid_elem, "doOrd(): numero di elementi copiati per essere ordinati non corrisponde %d  %d\n", j, bucket_p->valid_elem);
+		qsort(aus_ord_array, bucket_p->valid_elem, sizeof(nbnc), cmp_node);					// ordino
+	//	memcpy(aus_ord_array, old_dwv, VEC_SIZE * sizeof(nbnc));
+	//	qsort(aus_ord_array, bucket_p->cicle_limit, sizeof(nbnc), cmp_node);					// ordino
+	
 	/*if(bucket_p->cicle_limit == VEC_SIZE){
 			printDWV(VEC_SIZE, aus_ord_array);
 			printf(" dopo l'ordinamento\n");
@@ -273,8 +294,11 @@ int cmp_node(const void *p1, const void *p2){
 	nbnc *node_2 = (nbnc*)p2;
 	pkey_t tmp;
 
-	assertf(getNodeState(node_1->node) == DELN, "cmp_node(): nodo marcato come eliminato %p %f %f\n", node_1->node, getNodePointer(node_1->node)->timestamp, node_1->timestamp);
-	assertf(getNodeState(node_2->node) == DELN, "cmp_node(): nodo marcato come eliminato %p %f %f\n", node_2->node, getNodePointer(node_2->node)->timestamp, node_2->timestamp);
+	assertf(isDeleted(node_1->node), "cmp_node(): nodo marcato come eliminato %p %f %f\n", node_1->node, getNodePointer(node_1->node)->timestamp, node_1->timestamp);
+	assertf(isDeleted(node_2->node), "cmp_node(): nodo marcato come eliminato %p %f %f\n", node_2->node, getNodePointer(node_2->node)->timestamp, node_2->timestamp);
+
+	assertf(isBlocked(node_1->node), "cmp_node(): nodo marcato come bloccato %p %f %f\n", node_1->node, getNodePointer(node_1->node)->timestamp, node_1->timestamp);
+	assertf(isBlocked(node_2->node), "cmp_node(): nodo marcato come bloccato %p %f %f\n", node_2->node, getNodePointer(node_2->node)->timestamp, node_2->timestamp);
 
 /*
 	if(getNodeState(node_1->node) == DELN || getNodeState(node_2->node) == DELN){

@@ -60,6 +60,7 @@ __thread long ins = 0;
 __thread long estr = 0;
 __thread long conflitti_ins = 0;
 __thread long conflitti_estr = 0;
+__thread int blocked = 0;
 
 #if NUMA_DW
 // statistica inserimenti nodi numa
@@ -1108,6 +1109,7 @@ void pq_report(int TID)
 			malloc_count, last_bw);
 
 	printf("Coda DW: inserimenti %ld, estrazione %ld, conflitti_ins %ld, conflitti_estr %ld\n", ins, estr, conflitti_ins, conflitti_estr);
+	printf("TID %d: elementi bloccati %d\n", TID, blocked);
 	#if NUMA_DW
 	printf("NumaStat: LOC: enq %llu, deq %llu. REM: enq %llu deq %llu\n\n", local_enq, local_deq, remote_enq, remote_deq);
 	#endif

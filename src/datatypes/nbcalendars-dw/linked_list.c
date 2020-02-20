@@ -77,13 +77,16 @@ dwb* list_search(dwb *head, long long index_vb, dwb** left_node, int mode, dwb* 
       				//	while(1);
       				//assertf(limit < 0 || limit > VEC_SIZE, "list_remove(): indice di estrazione fuori range %d\n", limit);
 
-			    	for(i = 0; i < left_node_next->cicle_limit; i++){
+			    	for(i = 0; i < left_node_next->valid_elem/*cicle_limit*/; i++){
 			    		//printf("nodi\n");
-			    		assertf(left_node_next->dwv_sorted[i].timestamp == INV_TS, "INV_TS while releasing memory\n", ""); 
+			    		assertf(left_node_next->dwv_sorted[i].timestamp == INV_TS, "INV_TS while releasing memory\n", "");
+              assertf(!isDeleted(left_node_next->dwv_sorted[i].node), "nodo non marcato come eliminato\n", ""); 
+              assertf(getNodePointer(left_node_next->dwv_sorted[i].node) == NULL || left_node_next->dwv_sorted[i].timestamp == INFTY, "nodo non valido per rilascio\n", ""); 
 
-			        	if(getNodePointer(left_node_next->dwv_sorted[i].node) != NULL && left_node_next->dwv_sorted[i].timestamp != INFTY)
-			          		node_free(getNodePointer(left_node_next->dwv_sorted[i].node));
-			      	}
+			        //	if(getNodePointer(left_node_next->dwv_sorted[i].node) != NULL && left_node_next->dwv_sorted[i].timestamp != INFTY)
+          		node_free(getNodePointer(left_node_next->dwv_sorted[i].node));
+
+			      }
 /*
               left_node_next->indexes = 0;
               left_node_next->cicle_limit = VEC_SIZE;
@@ -133,7 +136,8 @@ dwb* new_node(long long index_vb, dwb *next, bool allocate_dwv)
   			// inizializzazione dell'array allocato
   			node->indexes = 0;
   			node->cicle_limit = VEC_SIZE;
-			node->from_enq = -1;
+        node->valid_elem = VEC_SIZE;
+			  node->from_enq = -1;
 
   			for(i = 0; i < VEC_SIZE; i++){
   				node->dwv[i].node = NULL;
@@ -224,7 +228,7 @@ dwb* list_remove(dwb *head, long long index_vb, dwb* list_tail){
 		//if(right->cicle_limit == getDeqInd(right->indexes) || (right->cicle_limit - 1) == getDeqInd(right->indexes))
 		//if(getDeqInd(right->indexes) == 0 && right->cicle_limit != VEC_SIZE)
 		//printf("%d %d %llu\n", right->cicle_limit, getDeqInd(right->indexes), index_vb);
-    	if (!is_marked_ref(right_succ) && (right->cicle_limit == getDeqInd(right->indexes))){
+    	if (!is_marked_ref(right_succ) && (right->valid_elem/*cicle_limit*/ == getDeqInd(right->indexes))){
     		//printf("prima di marcare\n");
       		if (BOOL_CAS(&(right->next), right_succ, get_marked_ref(right_succ))){
       		//	printf("marcato %llu\n", index_vb);

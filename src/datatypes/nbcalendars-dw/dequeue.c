@@ -53,6 +53,8 @@ extern dwb* getBucketPointer(dwb*);
 extern nbc_bucket_node* getNodePointer(nbc_bucket_node*);
 extern dwb* setBucketState(dwb*, unsigned long long);
 extern bool is_marked_ref(dwb*);
+extern bool isDeleted(nbc_bucket_node*);
+extern unsigned long long getBucketState(dwb*);
 
 __thread unsigned long long no_empty_vb = 0;
 pkey_t pq_dequeue(void *q, void** result)
@@ -195,8 +197,9 @@ begin:
 
 					// cerco un possibile indice
 					while(
-						deq_cn < bucket_p->cicle_limit && 
-						(getNodeState(bucket_p->dwv_sorted[deq_cn].node) != 0ULL /* || bucket_p->dwv_sorted[deq_cn].node == NULL*/) && 
+						deq_cn < bucket_p->valid_elem/*cicle_limit*/ && 
+						//(getNodeState(bucket_p->dwv_sorted[deq_cn].node) != 0ULL /* || bucket_p->dwv_sorted[deq_cn].node == NULL*/) && 
+						isDeleted(bucket_p->dwv_sorted[deq_cn].node) &&
 						!is_marked_ref(bucket_p->next)
 						)
 					{
@@ -204,7 +207,7 @@ begin:
 						deq_cn = getDeqInd(bucket_p->indexes);
 					}
 
-					if(deq_cn >= bucket_p->cicle_limit || is_marked_ref(bucket_p->next)){
+					if(deq_cn >= bucket_p->valid_elem/*cicle_limit*/ || is_marked_ref(bucket_p->next)){
 
 						no_dw_node_curr_vb = true;
 						if(!is_marked_ref(bucket_p->next))

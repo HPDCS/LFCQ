@@ -36,6 +36,7 @@ struct deferred_work_bucket{
 	dwb* volatile next;		// puntatore al prossimo elemento
 	long long index_vb;
 	int volatile cicle_limit;
+	int volatile valid_elem;
 	int volatile indexes;	// inserimento|estrazione
 	int volatile num_extractable_items;
 	int from_enq;
