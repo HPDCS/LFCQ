@@ -124,8 +124,6 @@ begin:
 		epoch = current & MASK_EPOCH;
 		
 		if(size > DIM_TH){
-			//printf("index %llu, phb %llu\n",index, index % (unsigned long long)size);
-			//while(1);
 			bucket_p = dw_dequeue(h, index);
 			no_dw_node_curr_vb = (bucket_p == NULL);
 		
@@ -178,7 +176,6 @@ begin:
 					no_cq_node = true;
 
 					if(no_dw_node_curr_vb){
-					//	printf("TID - %d: bucket vuoto: %llu\n",TID, index - 1);
 						break;
 					}
 				}else
@@ -191,13 +188,11 @@ begin:
 					indexes_enq = getEnqInd(bucket_p->indexes) << ENQ_BIT_SHIFT;// solo la parte inserimento di indexes
 					dw_retry:
 					 
-					//enq_cn = bucket_p->cicle_limit;
-					//assertf(enq_cn > VEC_SIZE || enq_cn < 0, "pq_dequeue(): indice inserimento oltre dimensione %s\n", "");
 					deq_cn = getDeqInd(bucket_p->indexes); 
 
 					// cerco un possibile indice
 					while(
-						deq_cn < bucket_p->valid_elem/*cicle_limit*/ && 
+						deq_cn < bucket_p->valid_elem && 
 						//(getNodeState(bucket_p->dwv_sorted[deq_cn].node) != 0ULL /* || bucket_p->dwv_sorted[deq_cn].node == NULL*/) && 
 						isDeleted(bucket_p->dwv_sorted[deq_cn].node) &&
 						!is_marked_ref(bucket_p->next)
@@ -207,7 +202,7 @@ begin:
 						deq_cn = getDeqInd(bucket_p->indexes);
 					}
 
-					if(deq_cn >= bucket_p->valid_elem/*cicle_limit*/ || is_marked_ref(bucket_p->next)){
+					if(deq_cn >= bucket_p->valid_elem || is_marked_ref(bucket_p->next)){
 
 						no_dw_node_curr_vb = true;
 						if(!is_marked_ref(bucket_p->next))
@@ -230,10 +225,10 @@ begin:
 							"\nindice estrazione nella struttura: %d"
 							"\nindice inserimento: %d"
 							"\nlimite ciclo: %d"
-							"\npieno da enqueue: %d"
+							"\nelementi validi: %d"
 							"\ntimestamp: %f\n",
 							bucket_p->index_vb, getBucketState(bucket_p->next), is_marked_ref(bucket_p->next), deq_cn, getDeqInd(bucket_p->indexes), 
-							getEnqInd(indexes_enq), bucket_p->cicle_limit, bucket_p->from_enq, bucket_p->dwv_sorted[deq_cn].timestamp);
+							getEnqInd(indexes_enq), bucket_p->cicle_limit, bucket_p->valid_elem, bucket_p->dwv_sorted[deq_cn].timestamp);
 						if(!no_cq_node) no_empty_vb++;
 						// provo a fare l'estrazione se il nodo della dw viene prima 
 						

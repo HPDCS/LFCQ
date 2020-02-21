@@ -39,7 +39,6 @@ struct deferred_work_bucket{
 	int volatile valid_elem;
 	int volatile indexes;	// inserimento|estrazione
 	int volatile num_extractable_items;
-	int from_enq;
 	//char pad[32];
 };
 
