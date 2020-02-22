@@ -1,7 +1,6 @@
 #ifndef DEFERRED_WORK
 #define DEFERRED_WORK
 
-//#include <stddef.h>
 #include <string.h>
 #include "linked_list.h"
 
@@ -14,19 +13,17 @@
 // stati di un nodo in dw
 #define DELN (1ULL)
 #define BLKN (2ULL)
+#define MOVN (4ULL)
 
 #define INV_TS (-1.0)
 
 #define VEC_SIZE 	128
-#define DIM_TH		16000 //(130000) //(130000)
 
-#define BUCKET_STATE_MASK	(6ULL) 				// per lo stato del bucket
-#define BUCKET_MARK_MASK	(1ULL) 				// per la marcatura del bucket
-#define BUCKET_PTR_MASK	(0xfffffffffffffff8)	// per il puntatore del bucket
-#define BUCKET_PTR_MASK_WM	(0xfffffffffffffff9)	// per il puntatore del bucket
+#define PTR_MASK 	~(7ULL)
 
-#define NODE_PTR_MASK	(0xfffffffffffffffc)
-#define NODE_STATE_MASK	(3ULL) 					// per lo stato del nodo
+#define BUCKET_STATE_MASK	 (6ULL) 	// per lo stato del bucket(LSB 2,3)
+#define BUCKET_PTR_MASK_WM	~(6ULL)		// per il puntatore del bucket mantenendo la marcatura
+#define NODE_STATE_MASK		 (7ULL) 	// per lo stato del nodo
 
 #define ENQ_BIT_SHIFT	16					// numero di bit da shiftare a destra per ottenere l'indice di inserimento
 #define DEQ_IND_MASK (0x0000ffff)

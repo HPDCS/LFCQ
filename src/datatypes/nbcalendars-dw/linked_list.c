@@ -16,6 +16,8 @@ extern dwb* getBucketPointer(dwb*);
 extern nbc_bucket_node* getNodePointer(nbc_bucket_node*);
 extern int getEnqInd(int);
 extern int getDeqInd(int);
+extern bool isDeleted(nbc_bucket_node*);
+extern bool isMoved(nbc_bucket_node*);
 
 bool is_marked_ref(dwb* bucket){return (bool)((unsigned long long)bucket & 0x1ULL);}
 dwb* get_marked_ref(dwb* bucket){return (dwb*)((unsigned long long)bucket | 0x1ULL);}
@@ -72,14 +74,14 @@ dwb* list_search(dwb *head, long long index_vb, dwb** left_node, int mode, dwb* 
 
 			    	for(i = 0; i < left_node_next->valid_elem; i++){
 
-			    		assertf(left_node_next->dwv_sorted[i].timestamp == INV_TS, "INV_TS while releasing memory\n", "");
-              assertf(!isDeleted(left_node_next->dwv_sorted[i].node), "nodo non marcato come eliminato\n", ""); 
-              assertf(getNodePointer(left_node_next->dwv_sorted[i].node) == NULL || left_node_next->dwv_sorted[i].timestamp == INFTY, "nodo non valido per rilascio\n", ""); 
+			    		assertf(left_node_next->dwv_sorted[i].timestamp == INV_TS, "INV_TS while releasing memory%s\n", "");
+                        assertf(!isDeleted(left_node_next->dwv_sorted[i].node) && !isMoved(left_node_next->dwv_sorted[i].node), "nodo non marcato come eliminato o trasferito%s\n", ""); 
+                        assertf(getNodePointer(left_node_next->dwv_sorted[i].node) == NULL || left_node_next->dwv_sorted[i].timestamp == INFTY, "nodo non valido per rilascio%s\n", ""); 
 
-			        //	if(getNodePointer(left_node_next->dwv_sorted[i].node) != NULL && left_node_next->dwv_sorted[i].timestamp != INFTY)
-          		node_free(getNodePointer(left_node_next->dwv_sorted[i].node));
-
-			      }
+            			// if(getNodePointer(left_node_next->dwv_sorted[i].node) != NULL && left_node_next->dwv_sorted[i].timestamp != INFTY)
+                      	if(isDeleted(left_node_next->dwv_sorted[i].node))
+                            node_free(getNodePointer(left_node_next->dwv_sorted[i].node));
+                    }
 
 			      	gc_free(ptst, left_node_next->dwv, gc_aid[2]);
 			      	gc_free(ptst, left_node_next->dwv_sorted, gc_aid[2]);
@@ -200,7 +202,8 @@ dwb* list_remove(dwb *head, long long index_vb, dwb* list_tail){
     	right = list_search(head, index_vb, &left, 0, list_tail);
     
     	// check if we found our node
-    	if (right == list_tail || right->index_vb != index_vb){
+        if (right == list_tail || (index_vb >= 0 && right->index_vb != index_vb)){// se vuota o non c'è il nodo cercato
+    	//if (right == list_tail || right->index_vb != index_vb){
       		return NULL;
     	}
     
@@ -212,7 +215,8 @@ dwb* list_remove(dwb *head, long long index_vb, dwb* list_tail){
     		//printf("prima di marcare\n");
       		if (BOOL_CAS(&(right->next), right_succ, get_marked_ref(right_succ))){
       		//	printf("marcato %llu\n", index_vb);
-        		return NULL;
+                if(index_vb >= 0) // non posso prendere il successivo, cerco un vb in particolare
+            		return NULL;
 	      	}
     	}else if(!is_marked_ref(right_succ))
 	      	return right;

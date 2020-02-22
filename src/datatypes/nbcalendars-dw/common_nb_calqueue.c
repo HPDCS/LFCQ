@@ -61,6 +61,7 @@ __thread long estr = 0;
 __thread long conflitti_ins = 0;
 __thread long conflitti_estr = 0;
 __thread int blocked = 0;
+__thread bool from_block_table = false;
 
 #if NUMA_DW
 // statistica inserimenti nodi numa
@@ -466,44 +467,40 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 		res = posix_memalign((void**)&new_h->array, CACHE_LINE_SIZE, new_size*sizeof(nbc_bucket_node));
 		if(res != 0) {free(new_h); printf("No enough memory to new table structure\n"); return;}
 
-		if(new_size > DIM_TH){
-
-			res = posix_memalign((void**)(&new_h->deferred_work), CACHE_LINE_SIZE, sizeof(dwstr));
-			if(res != 0) {
-				free(new_h->array);	
-				free(new_h);
-				printf("Non abbastanza memoria per allocare la struttura globale dwstr\n"); 
-				return;
-			}
-
-			res = posix_memalign((void**)(&new_h->deferred_work->heads), CACHE_LINE_SIZE, new_size*sizeof(dwb));
-			if(res != 0) {
-				free(new_h->deferred_work);	
-				free(new_h->array);	
-				free(new_h);
-				printf("Non abbastanza memoria per allocare l'array di teste\n");
-				return;
-			}
-			
-			#if NUMA_DW
-			new_h->deferred_work->list_tail = gc_alloc_node(ptst, gc_aid[1], 0); // la tail viene allocata sul nodo 0
-			#else
-			new_h->deferred_work->list_tail = gc_alloc(ptst, gc_aid[1]);
-			#endif
-			if(new_h->deferred_work->list_tail == NULL) {
-				free(new_h->deferred_work->heads);
-				free(new_h->deferred_work);	
-				free(new_h->array);	
-				free(new_h);
-				printf("Non abbastanza memoria per allocare la tail delle liste\n");
-				return;
-			}
-
-			new_h->deferred_work->list_tail->index_vb = ULLONG_MAX;
-			new_h->deferred_work->list_tail->next = NULL;
-
-			new_h->deferred_work->vec_size = VEC_SIZE;
+		res = posix_memalign((void**)(&new_h->deferred_work), CACHE_LINE_SIZE, sizeof(dwstr));
+		if(res != 0) {
+			free(new_h->array);	
+			free(new_h);
+			printf("Non abbastanza memoria per allocare la struttura globale dwstr\n"); 
+			return;
 		}
+
+		res = posix_memalign((void**)(&new_h->deferred_work->heads), CACHE_LINE_SIZE, new_size*sizeof(dwb));
+		if(res != 0) {
+			free(new_h->deferred_work);	
+			free(new_h->array);	
+			free(new_h);
+			printf("Non abbastanza memoria per allocare l'array di teste\n");
+			return;
+		}
+			
+		#if NUMA_DW
+		new_h->deferred_work->list_tail = gc_alloc_node(ptst, gc_aid[1], 0); // la tail viene allocata sul nodo 0
+		#else
+		new_h->deferred_work->list_tail = gc_alloc(ptst, gc_aid[1]);
+		#endif
+		if(new_h->deferred_work->list_tail == NULL) {
+			free(new_h->deferred_work->heads);
+			free(new_h->deferred_work);	
+			free(new_h->array);	
+			free(new_h);
+			printf("Non abbastanza memoria per allocare la tail delle liste\n");
+			return;
+		}
+
+		new_h->deferred_work->list_tail->index_vb = LLONG_MAX;
+		new_h->deferred_work->list_tail->next = NULL;
+		new_h->deferred_work->vec_size = VEC_SIZE;
 		
 		tail = h->array->tail;
 		new_h->bucket_width  = -1.0;
@@ -526,47 +523,19 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 			new_h->array[i].counter = 0;
 			new_h->array[i].epoch = 0;
 
-			if(new_size > DIM_TH){
-				/*
-				res = new_list(&new_h->deferred_work->dwls[i]);
-
-				assertf(new_h->deferred_work->dwls[i].head == NULL || new_h->deferred_work->dwls[i].tail == NULL, 
-					"set_new_table(): tail o head nulli %s\n", "");
-				
-				if(res != 0){
-					for(i--; i >= 0; i--){
-						gc_free(ptst, new_h->deferred_work->dwls[i].head, gc_aid[1]);
-						gc_free(ptst, new_h->deferred_work->dwls[i].tail, gc_aid[1]);
-					}
-				
-					free(new_h->deferred_work->dwls);
-					free(new_h->deferred_work);	
-					free(new_h->array);	
-					free(new_h);
-					
-					printf("Non abbastanza memoria per allocare un bucket\n");
-					return;
-				}
-				*/
-				new_h->deferred_work->heads[i].index_vb = -1LL;
-				new_h->deferred_work->heads[i].next = new_h->deferred_work->list_tail;
-			}
+			//new_h->deferred_work->heads[i].index_vb = -1LL;
+			new_h->deferred_work->heads[i].index_vb = -2LL;
+			new_h->deferred_work->heads[i].next = new_h->deferred_work->list_tail;
 		}
 		
 		// try to publish the table
 		if(!BOOL_CAS(&(h->new_table), NULL,	new_h))
 		{
-			if(new_size > DIM_TH){
-				//for(i = 0; i < new_size; i++){
-					//gc_free(ptst, new_h->deferred_work->dwls[i].head, gc_aid[1]);
-					gc_free(ptst, new_h->deferred_work->list_tail, gc_aid[1]);
-				//}
+			gc_free(ptst, new_h->deferred_work->list_tail, gc_aid[1]);
 
-				// attempt failed, thus release memory
-				free(new_h->deferred_work->heads);
-				free(new_h->deferred_work);	
-			}
-			
+			// attempt failed, thus release memory
+			free(new_h->deferred_work->heads);
+			free(new_h->deferred_work);				
 			free(new_h->array);
 			free(new_h);
 		}
@@ -578,9 +547,10 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 	}
 }
 
-void block_table(table* h)
+void block_table(table* volatile* tb)
 {
 	unsigned int i=0;
+	table* h = *tb;
 	unsigned int size = h->size;
 
 	nbc_bucket_node *array = h->array;
@@ -594,6 +564,8 @@ void block_table(table* h)
 	drand48_r(&seedT, &rand); 
 	// start blocking table from a random physical bucket
 	start = (unsigned int) rand * size;	
+
+	dw_block_table(tb, start);
 
 	for(i = 0; i < size; i++)
 	{
@@ -856,6 +828,8 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 						+ 
 						( ((unsigned int)( -(read_table_count != UINT_MAX) )) 	& read_table_count	);
 
+	if(from_block_table)
+		return *curr_table_ptr;
 
 	// after READTABLE_PERIOD iterations check if a new set table is required 
 	if(read_table_count++ % h->read_table_period == 0)
@@ -895,7 +869,7 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 		if(new_bw < 0)
 		{
 			//printf("vado in block_table\n");
-			block_table(h); 				
+			block_table(curr_table_ptr); 				
 			//printf("calcolo la nuova media\n");
 			//fflush(stdout);										// avoid that extraction can succeed after its completition
 			newaverage = compute_mean_separation_time(h, new_h->size, threshold, elem_per_bucket);	// get the new bucket width
@@ -1051,6 +1025,23 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	if(res_mem_posix != 0)	error("No enough memory to allocate set table\n");
 	res_mem_posix = posix_memalign((void**)(&res->hashtable->array), CACHE_LINE_SIZE, MINIMUM_SIZE*sizeof(nbc_bucket_node));
 	if(res_mem_posix != 0)	error("No enough memory to allocate array of heads\n");
+
+	res_mem_posix = posix_memalign((void**)(&res->hashtable->deferred_work), CACHE_LINE_SIZE, sizeof(dwstr));
+	if(res_mem_posix != 0)	error("Non abbastanza memoria per allocare la struttura globale dwstr.\n");
+	res_mem_posix = posix_memalign((void**)(&res->hashtable->deferred_work->heads), CACHE_LINE_SIZE, MINIMUM_SIZE*sizeof(dwb));
+	if(res_mem_posix != 0)	error("Non abbastanza memoria per allocare l'array di teste.\n");
+
+	#if NUMA_DW
+	res->hashtable->deferred_work->list_tail = gc_alloc_node(ptst, gc_aid[1], 0); // la tail viene allocata sul nodo 0
+	#else
+	res->hashtable->deferred_work->list_tail = gc_alloc(ptst, gc_aid[1]);
+	#endif
+	if(res->hashtable->deferred_work->list_tail == NULL)
+		error("Non abbastanza memoria per allocare la tail.\n");
+
+	res->hashtable->deferred_work->vec_size = VEC_SIZE;	// setto numero di elementi in un array di deferred work
+	res->hashtable->deferred_work->list_tail->index_vb = LLONG_MAX;
+	res->hashtable->deferred_work->list_tail->next = NULL;
 		
 	res->threshold = threshold;
 	res->perc_used_bucket = perc_used_bucket;
@@ -1081,6 +1072,9 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 		res->hashtable->array[i].tail = res->tail;
 		res->hashtable->array[i].timestamp = (pkey_t)i;
 		res->hashtable->array[i].counter = 0;
+
+		res->hashtable->deferred_work->heads[i].index_vb = -2LL;
+		res->hashtable->deferred_work->heads[i].next = res->hashtable->deferred_work->list_tail;
 	}
 
 	return res;

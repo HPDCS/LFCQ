@@ -188,6 +188,7 @@ struct table
 	char zpad1[60];
 	volatile unsigned long long current;
 };
+void dw_block_table(table* volatile*, unsigned int);
 
 typedef struct nb_calqueue nb_calqueue;
 struct nb_calqueue
@@ -238,7 +239,8 @@ extern __thread unsigned long long remote_deq;
 
 extern void set_new_table(table* h, unsigned int threshold, double pub, unsigned int epb, unsigned int counter);
 extern table* read_table(table * volatile *hashtable, unsigned int threshold, unsigned int elem_per_bucket, double perc_used_bucket);
-extern void block_table(table* h);
+//extern void block_table(table* h);
+extern void block_table(table* volatile* h);
 extern double compute_mean_separation_time(table* h, unsigned int new_size, unsigned int threashold, unsigned int elem_per_bucket);
 extern void migrate_node(nbc_bucket_node *right_node,	table *new_h);
 extern void search(nbc_bucket_node *head, pkey_t timestamp, unsigned int tie_breaker, nbc_bucket_node **left_node, nbc_bucket_node **right_node, int flag);
@@ -265,7 +267,7 @@ static inline nbc_bucket_node* node_malloc(void *payload, pkey_t timestamp, unsi
 static inline nbc_bucket_node* node_malloc(void *payload, pkey_t timestamp, unsigned int tie_breaker)
 #endif
 {
-	nbc_bucket_node* res, *tmp;
+	nbc_bucket_node* res;
 	
 	//res = mm_node_malloc(&malloc_status);
 	
@@ -291,7 +293,6 @@ static inline nbc_bucket_node* node_malloc(void *payload, pkey_t timestamp, unsi
 }
 extern __thread unsigned long long check_allocation;
 static inline void node_free(void *ptr){
-	nbc_bucket_node *tmp = NULL;
 	gc_free(ptst, ptr, gc_aid[0]);
 }
 

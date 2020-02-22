@@ -11,6 +11,8 @@
  */
 __thread unsigned long long enq_failed = 0; 
 __thread unsigned long long check_allocation = 0;
+extern __thread unsigned int read_table_count;
+extern __thread bool from_block_table;
 int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 {
 	assertf(timestamp < MIN || timestamp >= INFTY, "Key out of range %s\n", "");
@@ -36,13 +38,19 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	bool remote; 
 
 	#if !SEL_DW
-	new_node = node_malloc(payload, timestamp, 0, NID);	// allocazione del nodo vicino al thread che lo sta facendo
+	if(!from_block_table)
+		new_node = node_malloc(payload, timestamp, 0, NID);	// allocazione del nodo vicino al thread che lo sta facendo
+	else
+		new_node = (nbc_bucket_node*)payload;
 	#else
 	int prev_dest_node = -1;// qui solo per togliere il warning
 	#endif
 
 	#else
-	new_node = node_malloc(payload, timestamp, 0);
+	if(!from_block_table)
+		new_node = node_malloc(payload, timestamp, 0);
+	else
+		new_node = (nbc_bucket_node*)payload;
 	#endif
 	
 	//init the result
@@ -51,7 +59,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	//repeat until a successful insert
 	while(res != OK){
 		iters++;
-		if(timestamp == 8.7765882640457473) h->new_table->new_table = 0;
+		//if(timestamp == 8.7765882640457473) h->new_table->new_table = 0;
 		// It is the first iteration or a node marked as MOV has been met (a resize is occurring)
 		if(res == MOV_FOUND){
 
@@ -68,25 +76,29 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			index = ((unsigned int) newIndex) % size;
 
 			#if NUMA_DW
-			remote = false;
-			dest_node = NODE_HASH(index);
-			if(dest_node != NID)
-				remote = true;
-			
-			#if SEL_DW
-			if(prev_dest_node == -1)	// prima allocazione
-				new_node = node_malloc(payload, timestamp, 0, dest_node);
-			else if(prev_dest_node != dest_node){// il nodo è cambiato dalla prima allocazione
-				node_free(new_node);// rilascio la precedente allocazione
-				new_node = node_malloc(payload, timestamp, 0, dest_node);
-			}
+			if(!from_block_table){// solo se si tratta di un nodo non in movimento
+				remote = false;
+				dest_node = NODE_HASH(index);
+				if(dest_node != NID)
+					remote = true;
 				
-			prev_dest_node = dest_node;
-			#endif
+				#if SEL_DW
+			
+				if(prev_dest_node == -1)	// prima allocazione
+					new_node = node_malloc(payload, timestamp, 0, dest_node);
+				else if(prev_dest_node != dest_node){// il nodo è cambiato dalla prima allocazione
+					node_free(new_node);// rilascio la precedente allocazione
+					new_node = node_malloc(payload, timestamp, 0, dest_node);
+				}
+					
+				prev_dest_node = dest_node;
+				#endif
+			}
 			#endif
 
 			// read the actual epoch
-        	new_node->epoch = (h->current & MASK_EPOCH);
+			if(!from_block_table)
+        		new_node->epoch = (h->current & MASK_EPOCH);// esegui il calcolo dell'epoca solo se si tratta di un evento nuovo, non dalla dw
 			// get the bucket
 			bucket = h->array + index;
 			// read the number of executed enqueues for statistics purposes
@@ -101,35 +113,46 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 		}
 		#endif
 
-		#if NUMA_DW
-			#if SEL_DW
-			if(size > DIM_TH && remote)// alloco sulla DW solo se remoto
+		if(!from_block_table){
+			#if NUMA_DW
+			
+				#if SEL_DW
+				if(remote)// alloco sulla DW solo se remoto
+				#endif
+				{
+					res = dw_enqueue(h, newIndex, new_node, dest_node);
+					if(res == MOV_FOUND)
+						continue;
+				}
 			#else
-			if(size > DIM_TH)// altrimenti sempre
+				res = dw_enqueue(h, newIndex, new_node);
+				if(res == MOV_FOUND)
+					continue;
+			
 			#endif
-				res = dw_enqueue(h, newIndex, new_node, dest_node);
-		#else
-		if(size > DIM_TH)
-			res = dw_enqueue(h, newIndex, new_node);
-		#endif
+		}
 
 		if(res != OK){
+			if(!from_block_table)	// aggiorno questo contatore solo se non si tratta di un nodo già dalla DW
+				enq_failed += res==OK;
+
 			res = MOV_FOUND;	// rimetto a come era in origine(forse non necessario)
-			enq_failed += res==OK;
 			// search the two adjacent nodes that surround the new key and try to insert with a CAS 
 			res = search_and_insert(bucket, timestamp, 0, REMOVE_DEL_INV, new_node, &new_node);
 		}
 	}				
 
 	// the CAS succeeds, thus we want to ensure that the insertion becomes visible
-			
-	flush_current(h, newIndex, new_node);
-	performed_enqueue++;
+	if(!from_block_table){		
+		flush_current(h, newIndex, new_node);
+		performed_enqueue++;
+	}
 
 	res=1;
 	
 	// updates for statistics
-	concurrent_enqueue += (unsigned long long) (__sync_fetch_and_add(&h->e_counter.count, 1) - con_en);
+	if(!from_block_table)
+		concurrent_enqueue += (unsigned long long) (__sync_fetch_and_add(&h->e_counter.count, 1) - con_en);
 	
 	#if COMPACT_RANDOM_ENQUEUE == 1
 	// clean a random bucket
@@ -151,10 +174,12 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
   #endif
 
 	#if NUMA_DW
-  	if (!remote)
-		local_enq++;
-	else
-		remote_enq++;
+  	if(!from_block_table){
+	  	if (!remote)
+			local_enq++;
+		else
+			remote_enq++;
+	}
 	#endif
 
 	critical_exit();

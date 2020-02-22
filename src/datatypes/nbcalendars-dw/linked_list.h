@@ -17,6 +17,7 @@
 #include <sys/time.h>
 #include <time.h>
 #include <stdint.h>
+#include <stddef.h>
 
 #define NUMA_DW 0	// se 1 allora numa aware
 #define SEL_DW	0	// lavoro differito selettivamente o no(preso in considerazione solo se NUMA_DW è 1)
@@ -38,18 +39,8 @@ struct deferred_work_bucket{
 	int volatile cicle_limit;
 	int volatile valid_elem;
 	int volatile indexes;	// inserimento|estrazione
-	int volatile num_extractable_items;
 	//char pad[32];
 };
-
-// lista dei virtual bucket di un physical bucket
-/*
-typedef struct deferred_work_list dwl;
-struct deferred_work_list{	
-	dwb head;
-//	dwb tail;		
-};
-*/
 
 // struttura di deferred work 
 typedef struct deferred_work_structure dwstr;
@@ -58,6 +49,12 @@ struct deferred_work_structure{
 	dwb* list_tail;
 	int vec_size;
 };
+
+#define FETCH_AND_ADD 				__sync_fetch_and_add
+
+#define container_of(ptr, type, member) ({ \
+const typeof(((type *)0)->member) *__mptr = (ptr); \
+(type *)((char *)__mptr - offsetof(type, member)); })
 
 //int new_list(dwl*);
 #if NUMA_DW
