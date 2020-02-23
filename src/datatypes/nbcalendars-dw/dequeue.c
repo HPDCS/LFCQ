@@ -26,7 +26,6 @@
 
 #include <stdarg.h>
 #include <stdio.h>
-//#include <stdlib.h>
 #include <stdbool.h>
 #include <pthread.h>
 #include <math.h>
@@ -49,9 +48,7 @@ extern __thread long conflitti_estr;
 extern int getEnqInd(int);
 extern int getDeqInd(int);
 extern unsigned long long getNodeState(nbc_bucket_node*);
-extern dwb* getBucketPointer(dwb*);
 extern nbc_bucket_node* getNodePointer(nbc_bucket_node*);
-extern dwb* setBucketState(dwb*, unsigned long long);
 extern bool is_marked_ref(dwb*);
 extern bool isDeleted(nbc_bucket_node*);
 extern bool isMoved(nbc_bucket_node*);
@@ -129,6 +126,9 @@ begin:
 			
 		no_cq_node = false;
 
+		if(!no_dw_node_curr_vb && (getBucketState(bucket_p->next) == BLK/* || getBucketState(bucket_p->next) == END*/))
+			goto begin;
+
 		// get the physical bucket
 		min = array + (index % (size));
 		left_node = min_next = min->next;
@@ -166,7 +166,8 @@ begin:
 				
 			// Skip marked nodes, invalid nodes and nodes with timestamp out of range
 			if(is_marked(left_node_next, DEL) || is_marked(left_node_next, INV) || (left_ts < left_limit && left_node != tail)) continue;
-			
+//if(TID == 1)
+//			printf("%llu\n", current>>32);			
 			// Abort the operation since there is a resize or a possible insert in the past
 			if(is_marked(left_node_next, MOV) || left_node->epoch > epoch) goto begin;
 
@@ -177,7 +178,6 @@ begin:
 				if(no_dw_node_curr_vb)
 					break;
 			}
-
 
 			if(!no_dw_node_curr_vb){
 
@@ -197,6 +197,9 @@ begin:
 					BOOL_CAS(&bucket_p->indexes, (indexes_enq + deq_cn), (indexes_enq + deq_cn + 1));	// aggiorno deq
 					deq_cn = getDeqInd(bucket_p->indexes);
 				}
+				/*if(deq_cn == VEC_SIZE)
+					printf("pippo\n\n\n\n\n");
+					*/
 
 				if(isMoved(bucket_p->dwv_sorted[deq_cn].node) || deq_cn > VEC_SIZE)// se esco perchè qualcuno ha cominciato a muovere i nodi
 					goto begin;
@@ -235,13 +238,15 @@ begin:
 					assertf(bucket_p->dwv_sorted[deq_cn].timestamp == INV_TS, "INV_TS in extractions%s\n", ""); 
 					if((dw_node_ts = bucket_p->dwv_sorted[deq_cn].timestamp) //!= INV_TS && dw_node_ts
 					 <= left_ts){
-						dw_node = getNodePointer(bucket_p->dwv_sorted[deq_cn].node);	// per impedire l'estrazione di uno già estratto
+						dw_node = getNodePointer(bucket_p->dwv_sorted[deq_cn].node);	// per impedire l'estrazione di uno già estratto o in movimento
 						assertf((dw_node == NULL), "pq_dequeue(): dw_node è nullo %s\n", "");
 
 						if(BOOL_CAS(&bucket_p->dwv_sorted[deq_cn].node, dw_node, (nbc_bucket_node*)((unsigned long long)dw_node | DELN))){// se estrazione riuscita
-								
+							
+							assertf(deq_cn >= VEC_SIZE, "pq_dequeue(): indice di estrazione fuori range %s\n", "");	
 							assertf(getEnqInd(bucket_p->indexes) != getEnqInd(indexes_enq), "pq_dequeue(): indice di inserimento non costante %s\n", "");
-							BOOL_CAS(&bucket_p->indexes, (indexes_enq + deq_cn) , (indexes_enq + deq_cn + 1));
+							
+							BOOL_CAS(&bucket_p->indexes, (indexes_enq + deq_cn), (indexes_enq + deq_cn + 1));
 							concurrent_dequeue += (unsigned long long) (__sync_fetch_and_add(&h->d_counter.count, 1) - con_de);
 
 							estr++;

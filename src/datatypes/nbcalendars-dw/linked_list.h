@@ -6,17 +6,6 @@
 #ifndef LLIST_H_ 
 #define LLIST_H_
 
-
-#include <assert.h>
-#include <getopt.h>
-#include <limits.h>
-#include <pthread.h>
-#include <signal.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <sys/time.h>
-#include <time.h>
-#include <stdint.h>
 #include <stddef.h>
 
 #define NUMA_DW 0	// se 1 allora numa aware

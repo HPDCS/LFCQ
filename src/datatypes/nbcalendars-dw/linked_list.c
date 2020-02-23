@@ -14,7 +14,6 @@ extern unsigned long long getBucketState(dwb*);
 extern dwb* setBucketState(dwb*, unsigned long long);
 extern dwb* getBucketPointer(dwb*);
 extern nbc_bucket_node* getNodePointer(nbc_bucket_node*);
-extern int getEnqInd(int);
 extern int getDeqInd(int);
 extern bool isDeleted(nbc_bucket_node*);
 extern bool isMoved(nbc_bucket_node*);
@@ -75,7 +74,7 @@ dwb* list_search(dwb *head, long long index_vb, dwb** left_node, int mode, dwb* 
 			    	for(i = 0; i < left_node_next->valid_elem; i++){
 
 			    		assertf(left_node_next->dwv_sorted[i].timestamp == INV_TS, "INV_TS while releasing memory%s\n", "");
-                        assertf(!isDeleted(left_node_next->dwv_sorted[i].node) && !isMoved(left_node_next->dwv_sorted[i].node), "nodo non marcato come eliminato o trasferito%s\n", ""); 
+                        assertf(!isDeleted(left_node_next->dwv_sorted[i].node) && !isMoved(left_node_next->dwv_sorted[i].node), "\n\n\n\n\nnodo non marcato come eliminato o trasferito%s\n", ""); 
                         assertf(getNodePointer(left_node_next->dwv_sorted[i].node) == NULL || left_node_next->dwv_sorted[i].timestamp == INFTY, "nodo non valido per rilascio%s\n", ""); 
 
             			// if(getNodePointer(left_node_next->dwv_sorted[i].node) != NULL && left_node_next->dwv_sorted[i].timestamp != INFTY)
@@ -111,33 +110,33 @@ dwb* new_node(long long index_vb, dwb *next)
   	dwb* node = gc_alloc(ptst, gc_aid[1]);
   	#endif
 
-  	if(node != NULL){
+  	if(node == NULL)
+  		return NULL;
 
-		#if NUMA_DW
-		node->dwv = gc_alloc_node(ptst, gc_aid[2], numa_node);
-		#else
-		node->dwv = gc_alloc(ptst, gc_aid[2]);
-		#endif
+	#if NUMA_DW
+	node->dwv = gc_alloc_node(ptst, gc_aid[2], numa_node);
+	#else
+	node->dwv = gc_alloc(ptst, gc_aid[2]);
+	#endif
         
-  		if(node->dwv == NULL){
-  			gc_free(ptst, node, gc_aid[1]);
-  			return NULL;
-  		}
+	if(node->dwv == NULL){
+		gc_free(ptst, node, gc_aid[1]);
+		return NULL;
+	}
 
-        // inizializzazione dell'array allocato
-    	for(i = 0; i < VEC_SIZE; i++){
-  			node->dwv[i].node = NULL;
-  			node->dwv[i].timestamp = INV_TS;	
-  		}
+    // inizializzazione dell'array allocato
+  	for(i = 0; i < VEC_SIZE; i++){
+		node->dwv[i].node = NULL;
+  		node->dwv[i].timestamp = INV_TS;	
+  	}
 
-        node->indexes = 0;
-        node->cicle_limit = VEC_SIZE;
-        node->valid_elem = VEC_SIZE;
-  		node->index_vb = index_vb;
-  		node->next = next;
-        node->dwv_sorted = NULL; 
-	 }
-  	
+    node->indexes = 0;
+    node->cicle_limit = VEC_SIZE;
+    node->valid_elem = VEC_SIZE;
+  	node->index_vb = index_vb;
+  	node->next = next;
+    node->dwv_sorted = NULL; 
+	  	
   	return node;
 }
 

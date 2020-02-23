@@ -75,30 +75,36 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			// compute the index of the physical bucket
 			index = ((unsigned int) newIndex) % size;
 
-			#if NUMA_DW
 			if(!from_block_table){// solo se si tratta di un nodo non in movimento
-				remote = false;
-				dest_node = NODE_HASH(index);
-				if(dest_node != NID)
-					remote = true;
+				#if NUMA_DW
 				
-				#if SEL_DW
-			
-				if(prev_dest_node == -1)	// prima allocazione
-					new_node = node_malloc(payload, timestamp, 0, dest_node);
-				else if(prev_dest_node != dest_node){// il nodo è cambiato dalla prima allocazione
-					node_free(new_node);// rilascio la precedente allocazione
-					new_node = node_malloc(payload, timestamp, 0, dest_node);
-				}
+					remote = false;
+					dest_node = NODE_HASH(index);
+					if(dest_node != NID)
+						remote = true;
 					
-				prev_dest_node = dest_node;
+					#if SEL_DW
+				
+					if(prev_dest_node == -1)	// prima allocazione
+						new_node = node_malloc(payload, timestamp, 0, dest_node);
+					else if(prev_dest_node != dest_node){// il nodo è cambiato dalla prima allocazione
+						node_free(new_node);// rilascio la precedente allocazione
+						new_node = node_malloc(payload, timestamp, 0, dest_node);
+					}
+						
+					prev_dest_node = dest_node;
+					#endif
+
 				#endif
 			}
-			#endif
 
 			// read the actual epoch
-			if(!from_block_table)
-        		new_node->epoch = (h->current & MASK_EPOCH);// esegui il calcolo dell'epoca solo se si tratta di un evento nuovo, non dalla dw
+			//if(!from_block_table) // esegui il calcolo dell'epoca solo se si tratta di un evento nuovo, non dalla dw
+        		new_node->epoch = (h->current & MASK_EPOCH);
+        	//else
+        	//if((h->current & MASK_EPOCH) < 20)
+        	//	printf("TID: %d %llu %llu %f\n",TID, new_node->epoch, h->current & MASK_EPOCH, timestamp);
+
 			// get the bucket
 			bucket = h->array + index;
 			// read the number of executed enqueues for statistics purposes
@@ -136,9 +142,11 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			if(!from_block_table)	// aggiorno questo contatore solo se non si tratta di un nodo già dalla DW
 				enq_failed += res==OK;
 
-			res = MOV_FOUND;	// rimetto a come era in origine(forse non necessario)
+			//res = MOV_FOUND;	// rimetto a come era in origine(forse non necessario)
 			// search the two adjacent nodes that surround the new key and try to insert with a CAS 
 			res = search_and_insert(bucket, timestamp, 0, REMOVE_DEL_INV, new_node, &new_node);
+			//if(res != OK)
+			//	printf("non riuscito %f\n", timestamp);
 		}
 	}				
 
@@ -173,14 +181,14 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
   out:
   #endif
 
-	#if NUMA_DW
   	if(!from_block_table){
+		#if NUMA_DW
 	  	if (!remote)
 			local_enq++;
 		else
 			remote_enq++;
+		#endif
 	}
-	#endif
 
 	critical_exit();
 	return res;

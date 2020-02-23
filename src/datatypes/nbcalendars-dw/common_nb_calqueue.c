@@ -498,8 +498,15 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 			return;
 		}
 
+		// inizializzazione tail dw
 		new_h->deferred_work->list_tail->index_vb = LLONG_MAX;
 		new_h->deferred_work->list_tail->next = NULL;
+		new_h->deferred_work->list_tail->dwv = NULL;
+		new_h->deferred_work->list_tail->dwv_sorted = NULL;
+		new_h->deferred_work->list_tail->cicle_limit = VEC_SIZE;
+		new_h->deferred_work->list_tail->valid_elem = VEC_SIZE;
+		new_h->deferred_work->list_tail->indexes = 0;
+
 		new_h->deferred_work->vec_size = VEC_SIZE;
 		
 		tail = h->array->tail;
@@ -526,6 +533,11 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 			//new_h->deferred_work->heads[i].index_vb = -1LL;
 			new_h->deferred_work->heads[i].index_vb = -2LL;
 			new_h->deferred_work->heads[i].next = new_h->deferred_work->list_tail;
+			new_h->deferred_work->heads[i].dwv = NULL;
+			new_h->deferred_work->heads[i].dwv_sorted = NULL;
+			new_h->deferred_work->heads[i].cicle_limit = VEC_SIZE;
+			new_h->deferred_work->heads[i].valid_elem = VEC_SIZE;
+			new_h->deferred_work->heads[i].indexes = 0;
 		}
 		
 		// try to publish the table
@@ -543,6 +555,7 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 			//LOG
 			printf("%u - CHANGE SIZE from %u to %u, items %u OLD_TABLE:%p NEW_TABLE:%p\n", TID, size, new_size, counter, h, new_h);
 			printf("%f %f %u\n", ((double)concurrent_dequeue)/((double)performed_dequeue), ((double)concurrent_enqueue)/((double)performed_enqueue), new_h->pad);
+			fflush(stdout);
 		}
 	}
 }
@@ -565,7 +578,11 @@ void block_table(table* volatile* tb)
 	// start blocking table from a random physical bucket
 	start = (unsigned int) rand * size;	
 
+	//fflush(stdout);
 	dw_block_table(tb, start);
+	//fflush(stdout);
+	//printf("TID: %d block table dw finita\n", TID);
+	//fflush(stdout);
 
 	for(i = 0; i < size; i++)
 	{
@@ -702,7 +719,6 @@ double compute_mean_separation_time(table* h,
     
 		// Get the average
 	average = average / (double)(sample_size - 1);
-	//printf("nuova media generale %f, calcolata su %d valori, counter %d\n",average, sample_size, counter);
     
 	int j=0;
 	// Recalculate ignoring large separations
@@ -883,6 +899,7 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 			)
 				//LOG
 				printf("COMPUTE BW -  OLD:%.20f NEW:%.20f %u SAME TS:%u\n", new_bw, newaverage, new_h->size, acc_counter != 0 ? acc/acc_counter : 0);
+				fflush(stdout);
 		}
 
 		//First speculative try: try to migrate the nodes, if a conflict occurs, continue to the next bucket
@@ -1040,8 +1057,15 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 		error("Non abbastanza memoria per allocare la tail.\n");
 
 	res->hashtable->deferred_work->vec_size = VEC_SIZE;	// setto numero di elementi in un array di deferred work
+
+	// inizializzazione tail dw
 	res->hashtable->deferred_work->list_tail->index_vb = LLONG_MAX;
 	res->hashtable->deferred_work->list_tail->next = NULL;
+	res->hashtable->deferred_work->list_tail->dwv = NULL;
+	res->hashtable->deferred_work->list_tail->dwv_sorted = NULL;
+	res->hashtable->deferred_work->list_tail->cicle_limit = VEC_SIZE;
+	res->hashtable->deferred_work->list_tail->valid_elem = VEC_SIZE;
+	res->hashtable->deferred_work->list_tail->indexes = 0;
 		
 	res->threshold = threshold;
 	res->perc_used_bucket = perc_used_bucket;
@@ -1075,6 +1099,11 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 
 		res->hashtable->deferred_work->heads[i].index_vb = -2LL;
 		res->hashtable->deferred_work->heads[i].next = res->hashtable->deferred_work->list_tail;
+		res->hashtable->deferred_work->heads[i].dwv = NULL;
+		res->hashtable->deferred_work->heads[i].dwv_sorted = NULL;
+		res->hashtable->deferred_work->heads[i].cicle_limit = VEC_SIZE;
+		res->hashtable->deferred_work->heads[i].valid_elem = VEC_SIZE;
+		res->hashtable->deferred_work->heads[i].indexes = 0;
 	}
 
 	return res;
