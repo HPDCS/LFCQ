@@ -55,74 +55,66 @@ void printDWV(int size, nbnc *vect){
 	fflush(stdout);	
 }
 
-void dw_block_table(table* volatile* h, unsigned int start){
+void dw_block_table(void* tb, unsigned int start){
 	
 	nbc_bucket_node *dw_node;
-	nb_calqueue* queue;
-
+	table* h = (table*)tb;
 	dwb* bucket_p = NULL;
 	int index_pb, i, j;
 
-	queue = (nb_calqueue*)container_of(h, nb_calqueue, hashtable);
-
-	for(i = 0; i < (*h)->size; i++){	// per ogni bucket fisico
-		index_pb = ((i + start) % (*h)->size); // calcolo l'indice del bucket fisico
+	for(i = 0; i < h->size; i++){	// per ogni bucket fisico
+		index_pb = ((i + start) % h->size); // calcolo l'indice del bucket fisico
 
 		while(1){ // riprovo finche il bucket fisico non ha più bucket virtuali
 			
 			// ottengo il primo bucket virtuale del bucket fisico(passando -1 come indice del bucket virtuale)
 			// TODO: vedere se necessario ottenere il puntatore
-			bucket_p = getBucketPointer(list_remove(&(*h)->deferred_work->heads[index_pb], -1, (*h)->deferred_work->list_tail)); 
+			bucket_p = getBucketPointer(list_remove(&h->deferred_work->heads[index_pb], -1, h->deferred_work->list_tail)); 
 
 			if(bucket_p == NULL)	// non ci sono elementi
 				break;				// prenderò il bucket fisico successivo
 
-			if(is_marked_ref(bucket_p->next)) // bucket virtuale marcato
+			if(is_marked_ref(bucket_p->next) || getBucketState(bucket_p->next) == BLK) // bucket virtuale marcato
 				continue;
 
-			if(getBucketState(bucket_p->next) != BLK){ // se non è già stato contrassegnato come bloccato
+			while(getBucketState(bucket_p->next) != BLK && getBucketState(bucket_p->next) != EXT){
+				if(getBucketState(bucket_p->next) == INS) // può darsi che ci fosse qualcuno che stava inserendo in questo momento
+					blockIns(bucket_p);	// impedisco gli inserimenti
 
-				while(getBucketState(bucket_p->next) != BLK && getBucketState(bucket_p->next) != EXT){
-					if(getBucketState(bucket_p->next) == INS) // può darsi che ci fosse qualcuno che stava inserendo in questo momento
-						blockIns(bucket_p);	// impedisco gli inserimenti
-
-					if(getBucketState(bucket_p->next) == ORD){	// eventuale ordinamento
-						#if NUMA_DW
-						doOrd(bucket_p, NODE_HASH(index_pb));
-						#else
-						doOrd(bucket_p);
-						#endif
-					}
+				if(getBucketState(bucket_p->next) == ORD){	// eventuale ordinamento
+					#if NUMA_DW
+					doOrd(bucket_p, NODE_HASH(index_pb));
+					#else
+					doOrd(bucket_p);
+					#endif
 				}
-				
-				if(getBucketState(bucket_p->next) == BLK)
-					continue;
-				
-				if(getDeqInd(bucket_p->indexes) < VEC_SIZE)
-					FETCH_AND_ADD(&bucket_p->indexes, 2 * VEC_SIZE); // impedisco le estrazioni ed inserimenti
-				
-				assertf(getBucketState(bucket_p->next) != EXT && getBucketState(bucket_p->next) != BLK, "dw_block_table(): bucket non in estrazione %s\n", "");
-
-				from_block_table = true;
-
-				// scorro tutto il bucket bloccando le estrazioni concorrenti già iniziate
-				for(j = 0; j < bucket_p->valid_elem && !is_marked_ref(bucket_p->next); j++){
-					dw_node = bucket_p->dwv_sorted[j].node;
-
-					if(!isDeleted(dw_node) && !isMoved(dw_node)){	// se non è già stato estratto e non è già in movimento
-						dw_node = getNodePointer(dw_node);	// in modo che estrazione e movimento concorrenti non vadano a buon fine
-						
-						if(BOOL_CAS(&bucket_p->dwv_sorted[j].node, dw_node, (nbc_bucket_node*)((unsigned long long)dw_node | MOVN)))// lo marco come in movimento
-							pq_enqueue(queue, bucket_p->dwv_sorted[j].timestamp, getNodePointer(dw_node));	// se ci riesco chiamo la funzione per l'inserimento effettivo nella coda finale
-					}
-				}
-
-				from_block_table = false;
-
-				BOOL_CAS(&bucket_p->next, setBucketState(bucket_p->next, EXT), get_marked_ref(setBucketState(bucket_p->next, BLK)));	// metto il bucket virtuale bloccato
-				assertf(!is_marked_ref(bucket_p->next) || getBucketState(bucket_p->next) != BLK, "dw_block_table(): bucket non marcato %d %llu\n",is_marked_ref(bucket_p->next), getBucketState(bucket_p->next));
-
 			}
+				
+			if(getDeqInd(bucket_p->indexes) < VEC_SIZE)
+				FETCH_AND_ADD(&bucket_p->indexes, 2 * VEC_SIZE); // impedisco le estrazioni ed inserimenti
+			
+			assertf(getBucketState(bucket_p->next) != EXT && getBucketState(bucket_p->next) != BLK, "dw_block_table(): bucket non in estrazione %s\n", "");
+
+			from_block_table = true;
+
+			// scorro tutto il bucket bloccando le estrazioni concorrenti già iniziate
+			for(j = 0; j < bucket_p->valid_elem && !is_marked_ref(bucket_p->next); j++){
+				dw_node = bucket_p->dwv_sorted[j].node;
+
+				if(!isMoved(dw_node)){	// se non è già stato trasferito
+					dw_node = getNodePointer(dw_node);			// in modo che estrazione concorrenti non vadano a buon fine
+
+					BOOL_CAS(&bucket_p->dwv_sorted[j].node, dw_node, (nbc_bucket_node*)((unsigned long long)dw_node | DELN));
+					migrate_node(dw_node, h);
+					dw_node = (nbc_bucket_node*)((unsigned long long)dw_node | DELN);
+					BOOL_CAS(&bucket_p->dwv_sorted[j].node, dw_node, (nbc_bucket_node*)((unsigned long long)dw_node | MOVN));
+				}
+			}
+
+			from_block_table = false;
+
+			BOOL_CAS(&bucket_p->next, setBucketState(bucket_p->next, EXT), get_marked_ref(setBucketState(bucket_p->next, BLK)));	// metto il bucket virtuale bloccato
+			assertf(!is_marked_ref(bucket_p->next) || getBucketState(bucket_p->next) != BLK, "dw_block_table(): bucket non marcato %d %llu\n",is_marked_ref(bucket_p->next), getBucketState(bucket_p->next));
 		}
 	}
 }
@@ -151,7 +143,7 @@ int dw_enqueue(void *tb, unsigned long long index_vb, nbc_bucket_node *new_node)
 	if(getBucketState(bucket_p->next) == EXT)
 		return result;
 
-	if(getBucketState(bucket_p->next) == BLK/* || getBucketState(bucket_p->next) == END*/)
+	if(getBucketState(bucket_p->next) == BLK)
 		result = MOV_FOUND;
 
 	while((enq_cn = getEnqInd(bucket_p->indexes)) < bucket_p->cicle_limit && getBucketState(bucket_p->next) == INS){
@@ -211,7 +203,7 @@ dwb* dw_dequeue(void *tb, unsigned long long index_vb){
 	//assertf(is_marked_ref(bucket_p->next) == 1, "dw_dequeue(): nodo marcato %p\n", bucket_p->next);
 
 	do{		
-		if(getBucketState(bucket_p->next) == EXT || getBucketState(bucket_p->next) == BLK/* || getBucketState(bucket_p->next) == END*/){ 
+		if(getBucketState(bucket_p->next) == EXT || getBucketState(bucket_p->next) == BLK){ 
 			if(is_marked_ref(bucket_p->next))
 				return NULL;
 			else

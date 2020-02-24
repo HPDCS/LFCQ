@@ -126,7 +126,7 @@ begin:
 			
 		no_cq_node = false;
 
-		if(!no_dw_node_curr_vb && (getBucketState(bucket_p->next) == BLK/* || getBucketState(bucket_p->next) == END*/))
+		if(!no_dw_node_curr_vb && (getBucketState(bucket_p->next) == BLK))
 			goto begin;
 
 		// get the physical bucket
@@ -166,8 +166,7 @@ begin:
 				
 			// Skip marked nodes, invalid nodes and nodes with timestamp out of range
 			if(is_marked(left_node_next, DEL) || is_marked(left_node_next, INV) || (left_ts < left_limit && left_node != tail)) continue;
-//if(TID == 1)
-//			printf("%llu\n", current>>32);			
+		
 			// Abort the operation since there is a resize or a possible insert in the past
 			if(is_marked(left_node_next, MOV) || left_node->epoch > epoch) goto begin;
 
@@ -197,9 +196,6 @@ begin:
 					BOOL_CAS(&bucket_p->indexes, (indexes_enq + deq_cn), (indexes_enq + deq_cn + 1));	// aggiorno deq
 					deq_cn = getDeqInd(bucket_p->indexes);
 				}
-				/*if(deq_cn == VEC_SIZE)
-					printf("pippo\n\n\n\n\n");
-					*/
 
 				if(isMoved(bucket_p->dwv_sorted[deq_cn].node) || deq_cn > VEC_SIZE)// se esco perchè qualcuno ha cominciato a muovere i nodi
 					goto begin;

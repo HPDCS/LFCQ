@@ -78,7 +78,7 @@ dwb* list_search(dwb *head, long long index_vb, dwb** left_node, int mode, dwb* 
                         assertf(getNodePointer(left_node_next->dwv_sorted[i].node) == NULL || left_node_next->dwv_sorted[i].timestamp == INFTY, "nodo non valido per rilascio%s\n", ""); 
 
             			// if(getNodePointer(left_node_next->dwv_sorted[i].node) != NULL && left_node_next->dwv_sorted[i].timestamp != INFTY)
-                      	if(isDeleted(left_node_next->dwv_sorted[i].node))
+                  //    	if(isDeleted(left_node_next->dwv_sorted[i].node))
                             node_free(getNodePointer(left_node_next->dwv_sorted[i].node));
                     }
 

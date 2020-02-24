@@ -9,7 +9,6 @@
 #define ORD (1ULL)
 #define EXT (2ULL)
 #define BLK (3ULL)
-//#define END (4ULL)
 
 // stati di un nodo in dw
 #define DELN (1ULL)
@@ -37,5 +36,6 @@ int dw_enqueue(void*, unsigned long long, nbc_bucket_node*, int);
 int dw_enqueue(void*, unsigned long long, nbc_bucket_node*);
 #endif
 dwb* dw_dequeue(void*, unsigned long long);
+void dw_block_table(void*, unsigned int);
 
 #endif // DEFERRED_WORK

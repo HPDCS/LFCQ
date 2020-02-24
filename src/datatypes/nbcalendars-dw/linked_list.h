@@ -6,7 +6,7 @@
 #ifndef LLIST_H_ 
 #define LLIST_H_
 
-#include <stddef.h>
+//#include <stddef.h>
 
 #define NUMA_DW 0	// se 1 allora numa aware
 #define SEL_DW	0	// lavoro differito selettivamente o no(preso in considerazione solo se NUMA_DW è 1)
@@ -40,11 +40,11 @@ struct deferred_work_structure{
 };
 
 #define FETCH_AND_ADD 				__sync_fetch_and_add
-
+/*
 #define container_of(ptr, type, member) ({ \
 const typeof(((type *)0)->member) *__mptr = (ptr); \
 (type *)((char *)__mptr - offsetof(type, member)); })
-
+*/
 //int new_list(dwl*);
 #if NUMA_DW
 dwb* list_add(dwb*, long long, int, dwb*);

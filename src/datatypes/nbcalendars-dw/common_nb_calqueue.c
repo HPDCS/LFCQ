@@ -560,10 +560,9 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 	}
 }
 
-void block_table(table* volatile* tb)
+void block_table(table* h)
 {
 	unsigned int i=0;
-	table* h = *tb;
 	unsigned int size = h->size;
 
 	nbc_bucket_node *array = h->array;
@@ -578,11 +577,7 @@ void block_table(table* volatile* tb)
 	// start blocking table from a random physical bucket
 	start = (unsigned int) rand * size;	
 
-	//fflush(stdout);
-	dw_block_table(tb, start);
-	//fflush(stdout);
-	//printf("TID: %d block table dw finita\n", TID);
-	//fflush(stdout);
+	dw_block_table(h, start);
 
 	for(i = 0; i < size; i++)
 	{
@@ -688,10 +683,7 @@ double compute_mean_separation_time(table* h,
 						!D_EQUAL(tmp_timestamp, sample_array[counter])
 					)
 					{
-						//if(counter < sample_size)// da levare
-							sample_array[++counter] = tmp_timestamp;
-						//else// da levare
-						//	counter++;// da levare
+						sample_array[++counter] = tmp_timestamp;
 					}
 					else if(GEQ(tmp_timestamp, upper_bound) && LESS(tmp_timestamp, min_next_round))
 					{
@@ -794,9 +786,11 @@ void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 				NULL,
 				replica
 				)
-		)
-		ATOMIC_INC(&(new_h->e_counter));
-             
+		){
+			if(!from_block_table)
+				ATOMIC_INC(&(new_h->e_counter));
+		} 
+
 	right_replica_field = right_node->replica;
 
 	// make the replica being valid
@@ -810,10 +804,12 @@ void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 		);
 
 	// now the insertion is completed so flush the current of the new table
-	flush_current(new_h, index, right_replica_field);
-	
-	// invalidate the node MOV to DEL (11->01)
-	right_node_next = FETCH_AND_AND(&(right_node->next), MASK_DEL);
+	if(!from_block_table){
+		flush_current(new_h, index, right_replica_field);
+		
+		// invalidate the node MOV to DEL (11->01)
+		right_node_next = FETCH_AND_AND(&(right_node->next), MASK_DEL);
+	}
 }
 
 table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsigned int elem_per_bucket, double perc_used_bucket)
@@ -844,8 +840,8 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 						+ 
 						( ((unsigned int)( -(read_table_count != UINT_MAX) )) 	& read_table_count	);
 
-	if(from_block_table)
-		return *curr_table_ptr;
+//	if(from_block_table)
+//		return *curr_table_ptr;
 
 	// after READTABLE_PERIOD iterations check if a new set table is required 
 	if(read_table_count++ % h->read_table_period == 0)
@@ -884,10 +880,9 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 
 		if(new_bw < 0)
 		{
-			//printf("vado in block_table\n");
-			block_table(curr_table_ptr); 				
-			//printf("calcolo la nuova media\n");
-			//fflush(stdout);										// avoid that extraction can succeed after its completition
+			block_table(h); 				
+
+			// avoid that extraction can succeed after its completition
 			newaverage = compute_mean_separation_time(h, new_h->size, threshold, elem_per_bucket);	// get the new bucket width
 			if 																						// commit the new bucket width
 			(
