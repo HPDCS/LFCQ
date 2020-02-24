@@ -8,18 +8,26 @@ extern __thread bool from_block_table;
 extern bool is_marked_ref(dwb*);
 extern dwb* get_marked_ref(dwb*);
 
-// stato
+// Bucket
+dwb* getBucketPointer(dwb*);
 unsigned long long getBucketState(dwb*);
-unsigned long long getNodeState(nbc_bucket_node*);
 dwb* setBucketState(dwb*, unsigned long long);
-// indici
+bool isBlocked(nbc_bucket_node*);
+bool isDeleted(nbc_bucket_node*);
+bool isMoving(nbc_bucket_node*);
+bool isMoved(nbc_bucket_node*);
+
+// Nodo
+nbc_bucket_node* getNodePointer(nbc_bucket_node*);
+unsigned long long getNodeState(nbc_bucket_node*);
+nbc_bucket_node* setNodeState(nbc_bucket_node*, unsigned long long);
+
+// Indici
 int getEnqInd(int);
 int getDeqInd(int);
 int addEnqInd(int, int);
-// puntatori
-dwb* getBucketPointer(dwb*);
-nbc_bucket_node* getNodePointer(nbc_bucket_node*);
-// ausiliarie
+
+// Ausiliarie
 void blockIns(dwb*);
 #if NUMA_DW
 void doOrd(dwb*, int);
@@ -29,18 +37,22 @@ void doOrd(dwb*);
 int cmp_node(const void*, const void*);
 void printDWV(int, nbnc*);
 
+nbc_bucket_node* getNodePointer(nbc_bucket_node* node){return (nbc_bucket_node*)((unsigned long long)node & NODE_PTR_MASK);}
+unsigned long long getNodeState(nbc_bucket_node* node){return ((unsigned long long)node & NODE_STATE_MASK);}
+nbc_bucket_node* setNodeState(nbc_bucket_node* node, unsigned long long state){return ((nbc_bucket_node*)((unsigned long long)node | state));}
+
 bool isDeleted(nbc_bucket_node* node){return (bool)((unsigned long long)node & DELN);}
 bool isBlocked(nbc_bucket_node* node){return (bool)((unsigned long long)node & BLKN);}
 bool isMoving(nbc_bucket_node* node){return (bool)((unsigned long long)node & MVGN);}
 bool isMoved(nbc_bucket_node* node){return (bool)((unsigned long long)node & MVDN);}
+
+dwb* getBucketPointer(dwb* bucket){return (dwb*)((unsigned long long)bucket & BUCKET_PTR_MASK);}
 unsigned long long getBucketState(dwb* bucket){return (((unsigned long long)bucket & BUCKET_STATE_MASK) >> 1);}
-unsigned long long getNodeState(nbc_bucket_node* node){return ((unsigned long long)node & NODE_STATE_MASK);}
 dwb* setBucketState(dwb* bucket, unsigned long long state){return (dwb*)(((unsigned long long)bucket & BUCKET_PTR_MASK_WM) | (state << 1));}
+
 int getEnqInd(int indexes){return indexes >> ENQ_BIT_SHIFT;}
 int getDeqInd(int indexes){return indexes & DEQ_IND_MASK;}
 int addEnqInd(int indexes, int num){return indexes + (num << ENQ_BIT_SHIFT);}
-dwb* getBucketPointer(dwb* bucket){return (dwb*)((unsigned long long)bucket & BUCKET_PTR_MASK);}
-nbc_bucket_node* getNodePointer(nbc_bucket_node* node){return (nbc_bucket_node*)((unsigned long long)node & NODE_PTR_MASK);}
 
 void printDWV(int size, nbnc *vect){
 	int j;
@@ -106,15 +118,15 @@ void dw_block_table(void* tb, unsigned int start){
 					dw_node = getNodePointer(bucket_p->dwv_sorted[j].node);	 // prendo soltanto il puntatore
 
 					// metto in trasferimento
-					cas_result = VAL_CAS(&bucket_p->dwv_sorted[j].node, dw_node, (nbc_bucket_node*)((unsigned long long)dw_node | MVGN));//potrebbe fallire perchè nel frattempo passa in DELN, MVDN, MVGN
+					cas_result = VAL_CAS(&bucket_p->dwv_sorted[j].node, dw_node, setNodeState(dw_node, MVGN));//potrebbe fallire perchè nel frattempo passa in DELN, MVDN, MVGN
 
 					if(isMoved(cas_result) || isDeleted(cas_result)) // non basta controllare solo MVGN perchè potrebbe già essere ANCHE in MVGD
 						continue;
 
 					migrate_node(dw_node, h);	// migro
-					dw_node = (nbc_bucket_node*)((unsigned long long)dw_node | MVGN); // cambio stato andrà a buon fine solo se non già marcato MVDN
-					BOOL_CAS(&bucket_p->dwv_sorted[j].node, dw_node, (nbc_bucket_node*)((unsigned long long)dw_node | MVDN));// marco come trasferito(potrebbe fallire se già stato marcato MVDN)
-					assertf(!isMoved(bucket_p->dwv_sorted[j].node) || !isMoving(bucket_p->dwv_sorted[j].node), "dw_block_table(): bucket non marcato estratto %s\n", "");
+					dw_node = setNodeState(dw_node, MVGN); // cambio stato andrà a buon fine solo se non già marcato MVDN
+					BOOL_CAS(&bucket_p->dwv_sorted[j].node, dw_node, setNodeState(dw_node, MVDN));// marco come trasferito(potrebbe fallire se già stato marcato MVDN)
+					assertf(!isMoved(bucket_p->dwv_sorted[j].node) || !isMoving(bucket_p->dwv_sorted[j].node), "dw_block_table(): bucket non marcato come trasferito %s\n", "");
 				}
 			}
 
