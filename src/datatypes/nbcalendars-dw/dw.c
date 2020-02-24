@@ -31,7 +31,8 @@ void printDWV(int, nbnc*);
 
 bool isDeleted(nbc_bucket_node* node){return (bool)((unsigned long long)node & DELN);}
 bool isBlocked(nbc_bucket_node* node){return (bool)((unsigned long long)node & BLKN);}
-bool isMoved(nbc_bucket_node* node){return (bool)((unsigned long long)node & MOVN);}
+bool isMoving(nbc_bucket_node* node){return (bool)((unsigned long long)node & MVGN);}
+bool isMoved(nbc_bucket_node* node){return (bool)((unsigned long long)node & MVDN);}
 unsigned long long getBucketState(dwb* bucket){return (((unsigned long long)bucket & BUCKET_STATE_MASK) >> 1);}
 unsigned long long getNodeState(nbc_bucket_node* node){return ((unsigned long long)node & NODE_STATE_MASK);}
 dwb* setBucketState(dwb* bucket, unsigned long long state){return (dwb*)(((unsigned long long)bucket & BUCKET_PTR_MASK_WM) | (state << 1));}
@@ -57,7 +58,7 @@ void printDWV(int size, nbnc *vect){
 
 void dw_block_table(void* tb, unsigned int start){
 	
-	nbc_bucket_node *dw_node;
+	nbc_bucket_node *dw_node, *cas_result;
 	table* h = (table*)tb;
 	dwb* bucket_p = NULL;
 	int index_pb, i, j;
@@ -97,22 +98,29 @@ void dw_block_table(void* tb, unsigned int start){
 
 			from_block_table = true;
 
-			// scorro tutto il bucket bloccando le estrazioni concorrenti già iniziate
+			// scorro tutto il bucket bloccando le estrazioni concorrenti già iniziate e migrando i nodi non ancora eliminati
 			for(j = 0; j < bucket_p->valid_elem && !is_marked_ref(bucket_p->next); j++){
-				dw_node = bucket_p->dwv_sorted[j].node;
 
-				if(!isMoved(dw_node)){	// se non è già stato trasferito
-					dw_node = getNodePointer(dw_node);			// in modo che estrazione concorrenti non vadano a buon fine
+				if(!isMoved(bucket_p->dwv_sorted[j].node)){	// se non è già stato trasferito posso contribuire
+					
+					dw_node = getNodePointer(bucket_p->dwv_sorted[j].node);	 // prendo soltanto il puntatore
 
-					BOOL_CAS(&bucket_p->dwv_sorted[j].node, dw_node, (nbc_bucket_node*)((unsigned long long)dw_node | DELN));
-					migrate_node(dw_node, h);
-					dw_node = (nbc_bucket_node*)((unsigned long long)dw_node | DELN);
-					BOOL_CAS(&bucket_p->dwv_sorted[j].node, dw_node, (nbc_bucket_node*)((unsigned long long)dw_node | MOVN));
+					// metto in trasferimento
+					cas_result = VAL_CAS(&bucket_p->dwv_sorted[j].node, dw_node, (nbc_bucket_node*)((unsigned long long)dw_node | MVGN));//potrebbe fallire perchè nel frattempo passa in DELN, MVDN, MVGN
+
+					if(isMoved(cas_result) || isDeleted(cas_result)) // non basta controllare solo MVGN perchè potrebbe già essere ANCHE in MVGD
+						continue;
+
+					migrate_node(dw_node, h);	// migro
+					dw_node = (nbc_bucket_node*)((unsigned long long)dw_node | MVGN); // cambio stato andrà a buon fine solo se non già marcato MVDN
+					BOOL_CAS(&bucket_p->dwv_sorted[j].node, dw_node, (nbc_bucket_node*)((unsigned long long)dw_node | MVDN));// marco come trasferito(potrebbe fallire se già stato marcato MVDN)
+					assertf(!isMoved(bucket_p->dwv_sorted[j].node) || !isMoving(bucket_p->dwv_sorted[j].node), "dw_block_table(): bucket non marcato estratto %s\n", "");
 				}
 			}
 
 			from_block_table = false;
 
+			// marco il bucket come nello stato di BLK e possibile da eliminare
 			BOOL_CAS(&bucket_p->next, setBucketState(bucket_p->next, EXT), get_marked_ref(setBucketState(bucket_p->next, BLK)));	// metto il bucket virtuale bloccato
 			assertf(!is_marked_ref(bucket_p->next) || getBucketState(bucket_p->next) != BLK, "dw_block_table(): bucket non marcato %d %llu\n",is_marked_ref(bucket_p->next), getBucketState(bucket_p->next));
 		}

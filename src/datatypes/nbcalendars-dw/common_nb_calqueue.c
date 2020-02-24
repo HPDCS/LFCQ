@@ -894,7 +894,6 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 			)
 				//LOG
 				printf("COMPUTE BW -  OLD:%.20f NEW:%.20f %u SAME TS:%u\n", new_bw, newaverage, new_h->size, acc_counter != 0 ? acc/acc_counter : 0);
-				fflush(stdout);
 		}
 
 		//First speculative try: try to migrate the nodes, if a conflict occurs, continue to the next bucket

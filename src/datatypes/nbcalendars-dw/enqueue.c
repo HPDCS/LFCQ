@@ -62,8 +62,6 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 
 			// get actual size
 			size = h->size;
-			// read the actual epoch
-       		new_node->epoch = (h->current & MASK_EPOCH);
 			// compute the index of the virtual bucket
 			newIndex = hash(timestamp, h->bucket_width);
 
@@ -91,6 +89,9 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 				#endif
 
 			#endif
+
+			// read the actual epoch
+       		new_node->epoch = (h->current & MASK_EPOCH);
 
 			// get the bucket
 			bucket = h->array + index;

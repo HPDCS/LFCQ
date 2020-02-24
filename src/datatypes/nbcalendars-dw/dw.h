@@ -13,7 +13,8 @@
 // stati di un nodo in dw
 #define DELN (1ULL)
 #define BLKN (2ULL)
-#define MOVN (4ULL)
+#define MVGN (4ULL)
+#define MVDN (8ULL)
 
 #define INV_TS (-1.0)
 
@@ -24,8 +25,8 @@
 #define BUCKET_PTR_MASK 	~(0x7ULL)	// per il puntatore senza nessun stato o marcatura del bucket
 #define BUCKET_PTR_MASK_WM	~(6ULL)		// per il puntatore del bucket mantenendo la marcatura
 
-#define NODE_STATE_MASK		 (7ULL) 	// per lo stato del nodo
-#define NODE_PTR_MASK 		~(7ULL)		// per il puntatore senza nessun stato del nodo
+#define NODE_STATE_MASK		 (0xfULL) 	// per lo stato del nodo
+#define NODE_PTR_MASK 		~(0xfULL)		// per il puntatore senza nessun stato del nodo
 
 #define ENQ_BIT_SHIFT	16					// numero di bit da shiftare a destra per ottenere l'indice di inserimento
 #define DEQ_IND_MASK (0x0000ffff)

@@ -74,7 +74,7 @@ dwb* list_search(dwb *head, long long index_vb, dwb** left_node, int mode, dwb* 
 			    	for(i = 0; i < left_node_next->valid_elem; i++){
 
 			    		assertf(left_node_next->dwv_sorted[i].timestamp == INV_TS, "INV_TS while releasing memory%s\n", "");
-                        assertf(!isDeleted(left_node_next->dwv_sorted[i].node) && !isMoved(left_node_next->dwv_sorted[i].node), "\n\n\n\n\nnodo non marcato come eliminato o trasferito%s\n", ""); 
+                        assertf(!isDeleted(left_node_next->dwv_sorted[i].node) && !isMoved(left_node_next->dwv_sorted[i].node), "\n\nodo non marcato come eliminato o trasferito %p\n", left_node_next->dwv_sorted[i].node); 
                         assertf(getNodePointer(left_node_next->dwv_sorted[i].node) == NULL || left_node_next->dwv_sorted[i].timestamp == INFTY, "nodo non valido per rilascio%s\n", ""); 
 
             			// if(getNodePointer(left_node_next->dwv_sorted[i].node) != NULL && left_node_next->dwv_sorted[i].timestamp != INFTY)

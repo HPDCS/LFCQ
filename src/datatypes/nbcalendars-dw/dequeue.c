@@ -51,7 +51,7 @@ extern unsigned long long getNodeState(nbc_bucket_node*);
 extern nbc_bucket_node* getNodePointer(nbc_bucket_node*);
 extern bool is_marked_ref(dwb*);
 extern bool isDeleted(nbc_bucket_node*);
-extern bool isMoved(nbc_bucket_node*);
+extern bool isMoving(nbc_bucket_node*);
 extern unsigned long long getBucketState(dwb*);
 
 __thread unsigned long long no_empty_vb = 0;
@@ -189,7 +189,7 @@ begin:
 				while(
 					deq_cn < bucket_p->valid_elem && 
 					//(getNodeState(bucket_p->dwv_sorted[deq_cn].node) != 0ULL /* || bucket_p->dwv_sorted[deq_cn].node == NULL*/) && 
-					isDeleted(bucket_p->dwv_sorted[deq_cn].node) && !isMoved(bucket_p->dwv_sorted[deq_cn].node) &&
+					isDeleted(bucket_p->dwv_sorted[deq_cn].node) && !isMoving(bucket_p->dwv_sorted[deq_cn].node) &&
 					!is_marked_ref(bucket_p->next)
 					)
 				{
@@ -197,7 +197,7 @@ begin:
 					deq_cn = getDeqInd(bucket_p->indexes);
 				}
 
-				if(isMoved(bucket_p->dwv_sorted[deq_cn].node) || deq_cn > VEC_SIZE)// se esco perchè qualcuno ha cominciato a muovere i nodi
+				if(isMoving(bucket_p->dwv_sorted[deq_cn].node) || deq_cn > VEC_SIZE)// se esco perchè qualcuno ha cominciato a muovere i nodi
 					goto begin;
 
 				if(deq_cn >= bucket_p->valid_elem || is_marked_ref(bucket_p->next)){
@@ -260,7 +260,7 @@ begin:
 						}else{// provo a vedere se ci sono altri nodi in dw
 							conflitti_estr++;
 
-							if(isMoved(bucket_p->dwv_sorted[deq_cn].node)) // se non ci sono riuscito perchè stiamo nella fase di resize
+							if(isMoving(bucket_p->dwv_sorted[deq_cn].node)) // se non ci sono riuscito perchè stiamo nella fase di resize
 								goto begin;
 
 							goto dw_retry;
