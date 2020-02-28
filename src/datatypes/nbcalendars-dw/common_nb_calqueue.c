@@ -787,7 +787,7 @@ void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 				replica
 				)
 		){
-			if(!from_block_table)
+			if(!from_block_table)// se sto facendo il flush della DW questo contatore è già stato aggiornato
 				ATOMIC_INC(&(new_h->e_counter));
 		} 
 
@@ -804,7 +804,7 @@ void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 		);
 
 	// now the insertion is completed so flush the current of the new table
-	if(!from_block_table){
+	if(!from_block_table){// solo per la migrazione della CQ
 		flush_current(new_h, index, right_replica_field);
 		
 		// invalidate the node MOV to DEL (11->01)
@@ -839,9 +839,6 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 	read_table_count = 	( ((unsigned int)( -(read_table_count == UINT_MAX) ))   & TID				) 
 						+ 
 						( ((unsigned int)( -(read_table_count != UINT_MAX) )) 	& read_table_count	);
-
-//	if(from_block_table)
-//		return *curr_table_ptr;
 
 	// after READTABLE_PERIOD iterations check if a new set table is required 
 	if(read_table_count++ % h->read_table_period == 0)

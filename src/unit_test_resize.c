@@ -106,7 +106,7 @@ volatile unsigned int end_phase_3 = 0;
 volatile unsigned int end_test = 0;
 volatile long long final_ops = 0;
 
-#define QSIZE 250
+#define QSIZE 250000
 
 __thread unsigned int stopforcheck = 0;
 

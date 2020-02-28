@@ -12,7 +12,7 @@
 __thread unsigned long long enq_failed = 0; 
 __thread unsigned long long check_allocation = 0;
 extern __thread unsigned int read_table_count;
-extern __thread bool from_block_table;
+
 int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 {
 	assertf(timestamp < MIN || timestamp >= INFTY, "Key out of range %s\n", "");
@@ -53,7 +53,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	//repeat until a successful insert
 	while(res != OK){
 		iters++;
-		//if(timestamp == 8.7765882640457473) h->new_table->new_table = 0;
+
 		// It is the first iteration or a node marked as MOV has been met (a resize is occurring)
 		if(res == MOV_FOUND){
 
@@ -126,8 +126,6 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 
 		if(res != OK){
 			enq_failed += res==OK;
-
-			res = MOV_FOUND;	// rimetto a come era in origine(forse non necessario)
 			// search the two adjacent nodes that surround the new key and try to insert with a CAS 
 			res = search_and_insert(bucket, timestamp, 0, REMOVE_DEL_INV, new_node, &new_node);
 		}

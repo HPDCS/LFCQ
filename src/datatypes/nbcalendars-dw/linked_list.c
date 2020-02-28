@@ -18,8 +18,8 @@ extern int getDeqInd(int);
 extern bool isDeleted(nbc_bucket_node*);
 extern bool isMoved(nbc_bucket_node*);
 
-bool is_marked_ref(dwb* bucket){return (bool)((unsigned long long)bucket & 0x1ULL);}
-dwb* get_marked_ref(dwb* bucket){return (dwb*)((unsigned long long)bucket | 0x1ULL);}
+bool is_marked_ref(dwb* bucket){return (bool)((unsigned long long)bucket & DELH);}
+dwb* get_marked_ref(dwb* bucket){return (dwb*)((unsigned long long)bucket | DELH);}
 
 dwb* list_search(dwb *head, long long index_vb, dwb** left_node, int mode, dwb* list_tail) {
  	int i;
@@ -74,7 +74,7 @@ dwb* list_search(dwb *head, long long index_vb, dwb** left_node, int mode, dwb* 
 			    	for(i = 0; i < left_node_next->valid_elem; i++){
 
 			    		assertf(left_node_next->dwv_sorted[i].timestamp == INV_TS, "INV_TS while releasing memory%s\n", "");
-                        assertf(!isDeleted(left_node_next->dwv_sorted[i].node) && !isMoved(left_node_next->dwv_sorted[i].node), "\n\nodo non marcato come eliminato o trasferito %p\n", left_node_next->dwv_sorted[i].node); 
+                        assertf(!isDeleted(left_node_next->dwv_sorted[i].node) && !isMoved(left_node_next->dwv_sorted[i].node), "\n\nnodo non marcato come eliminato o trasferito %p\n", left_node_next->dwv_sorted[i].node); 
                         assertf(getNodePointer(left_node_next->dwv_sorted[i].node) == NULL || left_node_next->dwv_sorted[i].timestamp == INFTY, "nodo non valido per rilascio%s\n", ""); 
 
             			// if(getNodePointer(left_node_next->dwv_sorted[i].node) != NULL && left_node_next->dwv_sorted[i].timestamp != INFTY)
@@ -183,12 +183,20 @@ dwb* list_add(dwb *head, long long index_vb, dwb* list_tail)
     	}
 
     	new_elem->next = right;
+        
+        if(left != head)
+    	    state = getBucketState(left->next);
+        else
+            state = 0x0ULL;    // per il caso della testa, o non marcata con lo stato => 0x0ULL, o marcata con MOVH
 
-    	state = getBucketState(left->next);
-
-    	if (BOOL_CAS(&(left->next), setBucketState(right, state) , setBucketState(new_elem, state))){
+    	if (BOOL_CAS(&(left->next), setBucketState(right, state), setBucketState(new_elem, state))){
       		return new_elem;
-    	}
+    	}else{ // inserimento fallito
+            if(left == head && getBucketState(head->next) == MOVH){   // se il nodo di sinistra è testa ed è marcata in movimento
+                gc_free(ptst, new_elem, gc_aid[1]);// rilascio il nodo allocato
+                return NULL;
+            }
+        }
   	}
 }
 

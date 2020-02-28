@@ -16,7 +16,7 @@ PROB_DEQUEUE_2=0.5
 
 
 cmd=resize-unit-test
-cmd=test
+#cmd=test
 #version=Release
 version=Debug
 #version=GProf
