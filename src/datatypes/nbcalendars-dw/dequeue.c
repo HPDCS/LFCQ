@@ -47,17 +47,16 @@ extern __thread long conflitti_ins;
 extern __thread long estr;
 extern __thread long conflitti_estr;
 
-extern int getEnqInd(int);
-extern int getDeqInd(int);
-extern unsigned long long getNodeState(nbc_bucket_node*);
-extern nbc_bucket_node* setNodeState(nbc_bucket_node*, unsigned long long);
-extern nbc_bucket_node* getNodePointer(nbc_bucket_node*);
-extern bool isDeleted(nbc_bucket_node*);
-extern bool isMoving(nbc_bucket_node*);
-extern bool isMoved(nbc_bucket_node*);
-extern unsigned long long getBucketState(dwb*);
-extern bool is_marked_ref(dwb*);
-extern dwb* get_marked_ref(dwb*);
+extern int get_enq_ind(int);
+extern int get_deq_ind(int);
+extern nbc_bucket_node* get_marked_node(nbc_bucket_node*, unsigned long long);
+extern nbc_bucket_node* get_node_pointer(nbc_bucket_node*);
+extern bool is_deleted(nbc_bucket_node*);
+extern bool is_blocked(nbc_bucket_node*);
+extern bool is_moving(nbc_bucket_node*);
+extern unsigned long long get_bucket_state(dwb*);
+extern bool is_marked_ref(dwb*, unsigned long long);
+extern dwb* get_marked_ref(dwb*, unsigned long long);
 
 pkey_t pq_dequeue(void *q, void** result)
 {
@@ -130,7 +129,7 @@ begin:
 			
 		no_cq_node = false;
 
-		if(!no_dw_node_curr_vb && (getBucketState(bucket_p->next) == BLK))
+		if(!no_dw_node_curr_vb && (get_bucket_state(bucket_p->next) == BLK))
 			goto begin;
 
 		// get the physical bucket
@@ -184,37 +183,36 @@ begin:
 
 			if(!no_dw_node_curr_vb){
 
-				indexes_enq = getEnqInd(bucket_p->indexes) << ENQ_BIT_SHIFT;// solo la parte inserimento di indexes
+				indexes_enq = get_enq_ind(bucket_p->indexes) << ENQ_BIT_SHIFT;// solo la parte inserimento di indexes
 				dw_retry:
 								 
-				deq_cn = getDeqInd(bucket_p->indexes); 
+				deq_cn = get_deq_ind(bucket_p->indexes); 
 
 				// cerco un possibile indice
-				while(	deq_cn < bucket_p->valid_elem && isDeleted(bucket_p->dwv_sorted[deq_cn].node) && 
-						!isMoving(bucket_p->dwv_sorted[deq_cn].node) && !is_marked_ref(bucket_p->next))
+				while(	deq_cn < bucket_p->valid_elem && is_deleted(bucket_p->dwv_sorted[deq_cn].node) && 
+						!is_moving(bucket_p->dwv_sorted[deq_cn].node) && !is_marked_ref(bucket_p->next, DELB))
 					{
 						BOOL_CAS(&bucket_p->indexes, (indexes_enq + deq_cn), (indexes_enq + deq_cn + 1));	// aggiorno deq
-						deq_cn = getDeqInd(bucket_p->indexes);
+						deq_cn = get_deq_ind(bucket_p->indexes);
 					}
 
 				// controllo se sono uscito perchè è iniziata la resize
-				if(isMoving(bucket_p->dwv_sorted[deq_cn].node))
+				if(is_moving(bucket_p->dwv_sorted[deq_cn].node))
 					goto begin;
 
-				if(deq_cn >= bucket_p->valid_elem || is_marked_ref(bucket_p->next)){
+				if(deq_cn >= bucket_p->valid_elem || is_marked_ref(bucket_p->next, DELB)){
 
 					no_dw_node_curr_vb = true;
-					if(!is_marked_ref(bucket_p->next))
-						BOOL_CAS(&(bucket_p->next), bucket_p->next, get_marked_ref(bucket_p->next));
+					if(!is_marked_ref(bucket_p->next, DELB))
+						BOOL_CAS(&(bucket_p->next), bucket_p->next, get_marked_ref(bucket_p->next, DELB));
 								
 					// TODO
 					//}else if(bucket_p->dwv[deq_cn].node->epoch > epoch){
 					//	goto begin;
 				}else{
-					assertf((getNodeState(bucket_p->dwv_sorted[deq_cn].node) & BLKN), 
-						"pq_dequeue(): si cerca di estrarre un nodo bloccato. stato nodo %llu, stato bucket %llu\n", 
-						getNodeState(bucket_p->dwv_sorted[deq_cn].node), 
-						getBucketState(bucket_p->next));
+					assertf(is_blocked(bucket_p->dwv_sorted[deq_cn].node), 
+						"pq_dequeue(): si cerca di estrarre un nodo bloccato. stato nodo %p, stato bucket %llu\n", 
+						bucket_p->dwv_sorted[deq_cn].node, get_bucket_state(bucket_p->next));
 
 					assertf((bucket_p->dwv_sorted[deq_cn].node == NULL), 
 						"pq_dequeue(): si cerca di estrarre un nodo nullo." 
@@ -227,8 +225,8 @@ begin:
 						"\nlimite ciclo: %d"
 						"\nelementi validi: %d"
 						"\ntimestamp: %f\n",
-						bucket_p->index_vb, getBucketState(bucket_p->next), is_marked_ref(bucket_p->next), deq_cn, getDeqInd(bucket_p->indexes), 
-						getEnqInd(indexes_enq), bucket_p->cicle_limit, bucket_p->valid_elem, bucket_p->dwv_sorted[deq_cn].timestamp);
+						bucket_p->index_vb, get_bucket_state(bucket_p->next), is_marked_ref(bucket_p->next, DELB), deq_cn, get_deq_ind(bucket_p->indexes), 
+						get_enq_ind(indexes_enq), bucket_p->cicle_limit, bucket_p->valid_elem, bucket_p->dwv_sorted[deq_cn].timestamp);
 					
 					if(!no_cq_node) no_empty_vb++;
 					
@@ -238,13 +236,13 @@ begin:
 					assertf(bucket_p->dwv_sorted[deq_cn].timestamp == INV_TS, "INV_TS in extractions%s\n", ""); 
 					if((dw_node_ts = bucket_p->dwv_sorted[deq_cn].timestamp) <= left_ts){
 					
-						dw_node = getNodePointer(bucket_p->dwv_sorted[deq_cn].node);	// per impedire l'estrazione di uno già estratto o in movimento
+						dw_node = get_node_pointer(bucket_p->dwv_sorted[deq_cn].node);	// per impedire l'estrazione di uno già estratto o in movimento
 						assertf((dw_node == NULL), "pq_dequeue(): dw_node è nullo %s\n", "");
 
-						if(BOOL_CAS(&bucket_p->dwv_sorted[deq_cn].node, dw_node, setNodeState(dw_node, DELN))){// se estrazione riuscita
+						if(BOOL_CAS(&bucket_p->dwv_sorted[deq_cn].node, dw_node, get_marked_node(dw_node, DELN))){// se estrazione riuscita
 										
 							assertf(deq_cn >= VEC_SIZE, "pq_dequeue(): indice di estrazione fuori range %s\n", "");	
-							assertf(getEnqInd(bucket_p->indexes) != getEnqInd(indexes_enq), "pq_dequeue(): indice di inserimento non costante %s\n", "");
+							assertf(get_enq_ind(bucket_p->indexes) != get_enq_ind(indexes_enq), "pq_dequeue(): indice di inserimento non costante %s\n", "");
 										
 							BOOL_CAS(&bucket_p->indexes, (indexes_enq + deq_cn), (indexes_enq + deq_cn + 1));
 							concurrent_dequeue += (unsigned long long) (__sync_fetch_and_add(&h->d_counter.count, 1) - con_de);
@@ -265,7 +263,7 @@ begin:
 							conflitti_estr++;
 
 							// controllo se non ci sono riuscito perchè stiamo nella fase di resize
-							if(isMoving(bucket_p->dwv_sorted[deq_cn].node)) 
+							if(is_moving(bucket_p->dwv_sorted[deq_cn].node)) 
 								goto begin;
 
 							goto dw_retry;
