@@ -12,56 +12,6 @@ extern __thread long conflitti_estr;
 extern bool is_marked_ref(dwb*, unsigned long long);
 extern dwb* get_marked_ref(dwb*, unsigned long long);
 
-/*
-// Bucket
-dwb* get_bucket_pointer(dwb*);
-unsigned long long get_bucket_state(dwb*);
-dwb* set_bucket_state(dwb*, unsigned long long);
-bool is_blocked(nbc_bucket_node*);
-bool is_deleted(nbc_bucket_node*);
-bool is_moving(nbc_bucket_node*);
-bool is_moved(nbc_bucket_node*);
-bool is_none(nbc_bucket_node*);
-
-// Nodo
-nbc_bucket_node* get_node_pointer(nbc_bucket_node*);
-unsigned long long getNodeState(nbc_bucket_node*);
-nbc_bucket_node* get_marked_node(nbc_bucket_node*, unsigned long long);
-
-// Indici
-int get_enq_ind(int);
-int get_deq_ind(int);
-int add_enq_ind(int, int);
-
-// Ausiliarie
-void block_ins(dwb*);
-#if NUMA_DW
-void do_ord(dwb*, int);
-#else
-void do_ord(dwb*);
-#endif
-int cmp_node(const void*, const void*);
-void printDWV(int, nbnc*);
-
-nbc_bucket_node* get_node_pointer(nbc_bucket_node* node){return (nbc_bucket_node*)((unsigned long long)node & NODE_PTR_MASK);}
-//unsigned long long getNodeState(nbc_bucket_node* node){return ((unsigned long long)node & NODE_STATE_MASK);}
-nbc_bucket_node* get_marked_node(nbc_bucket_node* node, unsigned long long state){return ((nbc_bucket_node*)((unsigned long long)node | state));}
-
-bool is_deleted(nbc_bucket_node* node){return (bool)((unsigned long long)node & DELN);}
-bool is_blocked(nbc_bucket_node* node){return (bool)((unsigned long long)node & BLKN);}
-bool is_moving(nbc_bucket_node* node){return (bool)((unsigned long long)node & MVGN);}
-bool is_moved(nbc_bucket_node* node){return (bool)((unsigned long long)node & MVDN);}
-bool is_none(nbc_bucket_node* node){return (bool)(((unsigned long long)node & 0xfULL) == 0ULL);}
-
-dwb* get_bucket_pointer(dwb* bucket){return (dwb*)((unsigned long long)bucket & BUCKET_PTR_MASK);}
-unsigned long long get_bucket_state(dwb* bucket){return (((unsigned long long)bucket & BUCKET_STATE_MASK) >> BUCKET_STATE_SHIFT);}
-dwb* set_bucket_state(dwb* bucket, unsigned long long state){return (dwb*)(((unsigned long long)bucket & BUCKET_PTR_MASK_WM) | (state << BUCKET_STATE_SHIFT));}
-
-int get_enq_ind(int indexes){return indexes >> ENQ_BIT_SHIFT;}
-int get_deq_ind(int indexes){return indexes & DEQ_IND_MASK;}
-int add_enq_ind(int indexes, int num){return indexes + (num << ENQ_BIT_SHIFT);}
-*/
-
 // Bucket
 dwb* get_bucket_pointer(dwb*);
 unsigned long long get_bucket_state(dwb*);
