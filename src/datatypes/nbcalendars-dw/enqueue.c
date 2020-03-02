@@ -124,7 +124,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			
 		#endif
 
-		enq_failed += res==OK;
+		enq_failed += res!=OK;
 		if(res != OK){
 			// search the two adjacent nodes that surround the new key and try to insert with a CAS 
 			res = search_and_insert(bucket, timestamp, 0, REMOVE_DEL_INV, new_node, &new_node);

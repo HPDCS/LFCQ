@@ -46,7 +46,7 @@ extern int gc_hid[];
 
 #define ENABLE_EXPANSION 1
 #define READTABLE_PERIOD 63
-#define COMPACT_RANDOM_ENQUEUE 0
+#define COMPACT_RANDOM_ENQUEUE 1
 
 #define BASE 1000000ULL 
 #ifndef RESIZE_PERIOD_FACTOR 
@@ -54,7 +54,7 @@ extern int gc_hid[];
 #endif
 #define RESIZE_PERIOD RESIZE_PERIOD_FACTOR*BASE
 
-#define BW_SCALING 10
+#define BW_SCALING 1
 
 
 #define OK			0

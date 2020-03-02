@@ -426,7 +426,7 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 
 	nbc_bucket_node *tail;
 	table *new_h = NULL;
-	double current_num_items = pub*h->pad*h->size;
+	double current_num_items = pub*epb*h->size;
 	int res = 0;
 	unsigned int i = 0;
 	unsigned int size = h->size;
@@ -723,7 +723,7 @@ double compute_mean_separation_time(table* h,
 	}
 
     double epb = h->pad;
-    newaverage = (newaverage / j) * epb *BW_SCALING; //elem_per_bucket; /* this is the new width */
+    newaverage = (newaverage / j) * elem_per_bucket *BW_SCALING; //elem_per_bucket; /* this is the new width */
 	//printf("OLD %f NEW %f\n", (double)elem_per_bucket, (double)epb );    
 	// Compute new width
 	//newaverage = (newaverage / j) * (concurrent_enqueue+concurrent_dequeue) *3.5; //elem_per_bucket;	/* this is the new width */
