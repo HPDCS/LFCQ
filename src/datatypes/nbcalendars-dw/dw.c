@@ -44,11 +44,6 @@ void print_dwv(int, nbnc*);
 nbc_bucket_node* get_node_pointer(nbc_bucket_node* node){return (nbc_bucket_node*)((unsigned long long)node & NODE_PTR_MASK);}
 nbc_bucket_node* get_marked_node(nbc_bucket_node* node, unsigned long long state){return ((nbc_bucket_node*)((unsigned long long)node | state));}
 
-bool is_deleted(nbc_bucket_node* node){return (bool)((unsigned long long)node & DELN);}
-bool is_blocked(nbc_bucket_node* node){return (bool)((unsigned long long)node & BLKN);}
-bool is_moving(nbc_bucket_node* node){return (bool)((unsigned long long)node & MVGN);}
-bool is_moved(nbc_bucket_node* node){return (bool)((unsigned long long)node & MVDN);}
-bool is_none(nbc_bucket_node* node){return (bool)(((unsigned long long)node & 0xfULL) == 0ULL);}
 
 dwb* get_bucket_pointer(dwb* bucket){return (dwb*)((unsigned long long)bucket & BUCKET_PTR_MASK);}
 unsigned long long get_bucket_state(dwb* bucket){return (((unsigned long long)bucket & BUCKET_STATE_MASK) >> BUCKET_STATE_SHIFT);}

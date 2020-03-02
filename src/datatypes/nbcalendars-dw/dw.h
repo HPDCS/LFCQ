@@ -50,4 +50,11 @@ dwb* dw_dequeue(void*, unsigned long long);
 void dw_block_table(void*, unsigned int);
 pkey_t dw_extraction(dwb*, void**, pkey_t, bool, bool);
 
+
+static inline bool is_deleted(nbc_bucket_node* node){return (bool)((unsigned long long)node & DELN);}
+static inline bool is_blocked(nbc_bucket_node* node){return (bool)((unsigned long long)node & BLKN);}
+static inline bool is_moving(nbc_bucket_node* node){return (bool)((unsigned long long)node & MVGN);}
+static inline bool is_moved(nbc_bucket_node* node){return (bool)((unsigned long long)node & MVDN);}
+static inline bool is_none(nbc_bucket_node* node){return (bool)(((unsigned long long)node & 0xfULL) == 0ULL);}
+
 #endif // DEFERRED_WORK
