@@ -34,6 +34,7 @@
 
 #define ENQ_BIT_SHIFT	16				// numero di bit da shiftare a destra per ottenere l'indice di inserimento
 #define DEQ_IND_MASK (0x0000ffff)		// per ottenere solo l'indice di estrazione
+#define MAXIMUM_NUMBER_OF_THREADS 1024
 
 // Valori ritornati dalla funzione di estrazione
 #define GOTO		-1.0

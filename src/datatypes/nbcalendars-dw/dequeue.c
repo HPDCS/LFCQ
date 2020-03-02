@@ -189,13 +189,23 @@ begin:
 				deq_cn = get_deq_ind(bucket_p->indexes); 
 
 				// cerco un possibile indice
-				while(	deq_cn < bucket_p->valid_elem && is_deleted(bucket_p->dwv_sorted[deq_cn].node) && 
-						!is_moving(bucket_p->dwv_sorted[deq_cn].node) && !is_marked_ref(bucket_p->next, DELB))
-					{
+				if(!no_cq_node){
+					while(	deq_cn < bucket_p->valid_elem && is_deleted(bucket_p->dwv_sorted[deq_cn].node) && 
+							!is_moving(bucket_p->dwv_sorted[deq_cn].node) && !is_marked_ref(bucket_p->next, DELB))
+					{	
 						BOOL_CAS(&bucket_p->indexes, (indexes_enq + deq_cn), (indexes_enq + deq_cn + 1));	// aggiorno deq
 						deq_cn = get_deq_ind(bucket_p->indexes);
 					}
-
+				}
+				else// if(no_cq_node)
+				{
+					if( ((get_deq_ind(bucket_p->indexes)) + MAXIMUM_NUMBER_OF_THREADS) < DEQ_IND_MASK)
+						deq_cn = __sync_fetch_and_add(&bucket_p->indexes, 1);
+					else
+						deq_cn = VEC_SIZE-1;
+					deq_cn = get_deq_ind(deq_cn);
+				}
+				
 				// controllo se sono uscito perchè è iniziata la resize
 				if(is_moving(bucket_p->dwv_sorted[deq_cn].node))
 					goto begin;
@@ -228,7 +238,6 @@ begin:
 						bucket_p->index_vb, get_bucket_state(bucket_p->next), is_marked_ref(bucket_p->next, DELB), deq_cn, get_deq_ind(bucket_p->indexes), 
 						get_enq_ind(indexes_enq), bucket_p->cicle_limit, bucket_p->valid_elem, bucket_p->dwv_sorted[deq_cn].timestamp);
 					
-					if(!no_cq_node) no_empty_vb++;
 					
 					// provo a fare l'estrazione se il nodo della dw viene prima 
 								
@@ -240,11 +249,14 @@ begin:
 						assertf((dw_node == NULL), "pq_dequeue(): dw_node è nullo %s\n", "");
 
 						if(BOOL_CAS(&bucket_p->dwv_sorted[deq_cn].node, dw_node, get_marked_node(dw_node, DELN))){// se estrazione riuscita
-										
+								
+							if(!no_cq_node) no_empty_vb++;
+
 							assertf(deq_cn >= VEC_SIZE, "pq_dequeue(): indice di estrazione fuori range %s\n", "");	
 							assertf(get_enq_ind(bucket_p->indexes) != get_enq_ind(indexes_enq), "pq_dequeue(): indice di inserimento non costante %s\n", "");
-										
-							BOOL_CAS(&bucket_p->indexes, (indexes_enq + deq_cn), (indexes_enq + deq_cn + 1));
+							
+							if(!no_cq_node)	BOOL_CAS(&bucket_p->indexes, (indexes_enq + deq_cn), (indexes_enq + deq_cn + 1));
+							
 							concurrent_dequeue += (unsigned long long) (__sync_fetch_and_add(&h->d_counter.count, 1) - con_de);
 
 							estr++;
