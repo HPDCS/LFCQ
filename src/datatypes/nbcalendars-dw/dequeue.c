@@ -32,6 +32,8 @@
 
 #include "common_nb_calqueue.h"
 
+#define DISABLE_FAD 1
+
 /**
  * This function extract the minimum item from the NBCQ. 
  * The cost of this operation when succeeds should be O(1)
@@ -197,7 +199,7 @@ begin:
 						deq_cn = get_deq_ind(bucket_p->indexes);
 					}
 				}
-				else// if(no_cq_node)
+				else if(!DISABLE_FAD)// if(no_cq_node)
 				{
 					if( ((get_deq_ind(bucket_p->indexes)) + MAXIMUM_NUMBER_OF_THREADS) < DEQ_IND_MASK)
 						deq_cn = __sync_fetch_and_add(&bucket_p->indexes, 1);
@@ -255,7 +257,8 @@ begin:
 							assertf(deq_cn >= VEC_SIZE, "pq_dequeue(): indice di estrazione fuori range %s\n", "");	
 							assertf(get_enq_ind(bucket_p->indexes) != get_enq_ind(indexes_enq), "pq_dequeue(): indice di inserimento non costante %s\n", "");
 							
-							if(!no_cq_node)	BOOL_CAS(&bucket_p->indexes, (indexes_enq + deq_cn), (indexes_enq + deq_cn + 1));
+							if(!no_cq_node || DISABLE_FAD)	
+								BOOL_CAS(&bucket_p->indexes, (indexes_enq + deq_cn), (indexes_enq + deq_cn + 1));
 							
 							concurrent_dequeue += (unsigned long long) (__sync_fetch_and_add(&h->d_counter.count, 1) - con_de);
 

@@ -22,7 +22,7 @@
 #define MOVB (2ULL)	// bucket in movimento
 
 #define INV_TS 		(-1.0)
-#define VEC_SIZE 	128
+#define VEC_SIZE 	256
 
 #define BUCKET_STATE_MASK	 (0xcULL) 	// per lo stato del bucket(LSB 3, 4)
 #define BUCKET_PTR_MASK 	~(0xfULL)	// per il puntatore senza nessuno stato o marcatura del bucket
