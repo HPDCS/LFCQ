@@ -16,9 +16,9 @@ PROB_DEQUEUE_2=0.5
 
 
 cmd=resize-unit-test
-#cmd=test
-#version=Release
-version=Debug
+cmd=test
+version=Release
+#version=Debug
 #version=GProf
 
 if [ "$6" = "G" ]

@@ -477,7 +477,7 @@ pkey_t dw_extraction(dwb* bucket_p, void** result, pkey_t left_ts, bool remote, 
 				*result = dw_node->payload;
 
 				//critical_exit();
-				#if NUMA_DW
+				#if NUMA_DW || SEL_DW
 				if (!remote)
 					local_deq++;
 				else

@@ -84,7 +84,7 @@ pkey_t pq_dequeue(void *q, void** result)
 	tail = queue->tail;
 	performed_dequeue++;
 
-	#if NUMA_DW
+	#if NUMA_DW || SEL_DW
 	unsigned int dest_node;
 	#endif
 	bool remote = false;
@@ -136,7 +136,7 @@ begin:
 		min = array + (index % (size));
 		left_node = min_next = min->next;
 
-		#if NUMA_DW
+		#if NUMA_DW || SEL_DW
 		dest_node = NODE_HASH(index % (size));
 		if (dest_node != NID)
 			remote = true;
@@ -228,8 +228,6 @@ begin:
 						bucket_p->index_vb, get_bucket_state(bucket_p->next), is_marked_ref(bucket_p->next, DELB), deq_cn, get_deq_ind(bucket_p->indexes), 
 						get_enq_ind(indexes_enq), bucket_p->cicle_limit, bucket_p->valid_elem, bucket_p->dwv_sorted[deq_cn].timestamp);
 					
-					if(!no_cq_node) no_empty_vb++;
-					
 					// provo a fare l'estrazione se il nodo della dw viene prima 
 								
 					// TODO
@@ -250,8 +248,10 @@ begin:
 							estr++;
 							*result = dw_node->payload;
 
+							if(!no_cq_node) no_empty_vb++;
+
 							critical_exit();
-							#if NUMA_DW
+							#if NUMA_DW || SEL_DW
 							if (!remote)
 								local_deq++;
 							else
@@ -314,7 +314,7 @@ begin:
 				
 			critical_exit();
 
-			#if NUMA_DW
+			#if NUMA_DW || SEL_DW
 			if (!remote)
 				local_deq++;
 			else
