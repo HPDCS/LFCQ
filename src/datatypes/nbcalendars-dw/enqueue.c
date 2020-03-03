@@ -11,6 +11,7 @@
  */
 __thread unsigned long long enq_failed = 0; 
 __thread unsigned long long check_allocation = 0;
+bool dw_enable = false;
 
 int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 {
@@ -104,17 +105,19 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 		}
 		#endif
 
-		#if SEL_DW
-		if(remote)
-		#endif
-		{
-			#if NUMA_DW
-			res = dw_enqueue(h, newIndex, new_node, dest_node);
-			#else
-			res = dw_enqueue(h, newIndex, new_node);
+		if(dw_enable){
+			#if SEL_DW
+			if(remote)
 			#endif
-			if(res == MOV_FOUND)
-				continue;	
+			{
+				#if NUMA_DW
+				res = dw_enqueue(h, newIndex, new_node, dest_node);
+				#else
+				res = dw_enqueue(h, newIndex, new_node);
+				#endif
+				if(res == MOV_FOUND)
+					continue;	
+			}
 		}
 
 		enq_failed += res!=OK;

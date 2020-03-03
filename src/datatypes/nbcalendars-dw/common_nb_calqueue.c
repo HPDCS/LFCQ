@@ -71,6 +71,8 @@ __thread unsigned long long remote_enq = 0ULL;
 __thread unsigned long long remote_deq = 0ULL;
 #endif
 
+extern bool dw_enable;
+
 /**
  * This function commits a value in the current field of a queue. It retries until the timestamp
  * associated with current is strictly less than the value that has to be committed
@@ -850,16 +852,20 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 			a = ATOMIC_READ( &h->e_counter );
 			samples[i] = a-b;
 		}
-		
+
 		// compute two samples
 		sample_a = abs(samples[0] - ((int)(size*perc_used_bucket)));
 		sample_b = abs(samples[1] - ((int)(size*perc_used_bucket)));
 		
 		// take the minimum of the samples		
 		signed_counter =  (sample_a < sample_b) ? samples[0] : samples[1];
-		
+
 		// take the maximum between the signed_counter and ZERO
 		counter = (unsigned int) ( (-(signed_counter >= 0)) & signed_counter);
+
+		if(counter > DW_USAGE_TH)
+			dw_enable = true;
+
 		//printf("%d: counter %d\n",TID, counter);
 		// call the set_new_table
 		if( h->new_table == NULL)
