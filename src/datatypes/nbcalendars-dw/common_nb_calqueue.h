@@ -165,10 +165,12 @@ struct __bucket_node
 #include "dw.h"
 #if NUMA_DW
 #include "./gc/ptst.h"
-#define NODE_HASH(bucket_id) (bucket_id % _NUMA_NODES)	// per bucket fisico
-#define NID nid
 #else
 #include "../../gc/ptst.h"
+#endif
+#if NUMA_DW || SEL_DW
+#define NODE_HASH(bucket_id) (bucket_id % _NUMA_NODES)	// per bucket fisico
+#define NID nid
 #endif
 extern __thread ptst_t *ptst;
 
@@ -230,8 +232,8 @@ extern __thread unsigned long long num_cas;
 extern __thread unsigned long long num_cas_useful;
 extern __thread unsigned long long dist;
 
-#if NUMA_DW
 extern __thread unsigned int NID;
+#if NUMA_DW || SEL_DW
 extern __thread unsigned long long local_enq;
 extern __thread unsigned long long local_deq;
 extern __thread unsigned long long remote_enq;

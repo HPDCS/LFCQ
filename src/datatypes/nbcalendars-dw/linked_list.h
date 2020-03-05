@@ -8,8 +8,8 @@
 
 //#include <stddef.h>
 
-#define NUMA_DW 0	// se 1 allora numa aware
-#define SEL_DW	0	// lavoro differito selettivamente o no(preso in considerazione solo se NUMA_DW è 1)
+#define NUMA_DW 0	// se 1 allora utilizza allocatore NUMA aware
+#define SEL_DW	0	// se 1 allora lavoro differito solo se la destinazione si trova su un nodo numa remoto
 
 // container contnente un evento da gestire
 typedef struct nbc_bucket_node_container nbnc;

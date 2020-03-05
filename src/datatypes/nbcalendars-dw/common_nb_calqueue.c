@@ -63,13 +63,15 @@ __thread long conflitti_estr = 0;
 __thread int blocked = 0;
 __thread bool from_block_table = false;
 
-#if NUMA_DW
+#if NUMA_DW || SEL_DW
 // statistica inserimenti nodi numa
 __thread unsigned long long local_enq = 0ULL;
 __thread unsigned long long local_deq = 0ULL;
 __thread unsigned long long remote_enq = 0ULL;
 __thread unsigned long long remote_deq = 0ULL;
 #endif
+
+extern bool dw_enable;
 
 /**
  * This function commits a value in the current field of a queue. It retries until the timestamp
@@ -918,16 +920,20 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 			a = ATOMIC_READ( &h->e_counter );
 			samples[i] = a-b;
 		}
-		
+
 		// compute two samples
 		sample_a = abs(samples[0] - ((int)(size*perc_used_bucket)));
 		sample_b = abs(samples[1] - ((int)(size*perc_used_bucket)));
 		
 		// take the minimum of the samples		
 		signed_counter =  (sample_a < sample_b) ? samples[0] : samples[1];
-		
+
 		// take the maximum between the signed_counter and ZERO
 		counter = (unsigned int) ( (-(signed_counter >= 0)) & signed_counter);
+
+		if(counter > DW_USAGE_TH)
+			dw_enable = true;
+
 		//printf("%d: counter %d\n",TID, counter);
 		// call the set_new_table
 		if( h->new_table == NULL)
@@ -1192,8 +1198,8 @@ void pq_report(int TID)
 
 	printf("Coda DW: inserimenti %ld, estrazione %ld, conflitti_ins %ld, conflitti_estr %ld\n", ins, estr, conflitti_ins, conflitti_estr);
 	printf("TID %d: elementi bloccati %d\n", TID, blocked);
-	#if NUMA_DW
-	printf("NumaStat: LOC: enq %llu, deq %llu. REM: enq %llu deq %llu\n\n", local_enq, local_deq, remote_enq, remote_deq);
+	#if NUMA_DW || SEL_DW
+	printf("DWQNumaStat: LOC: enq %llu, deq %llu. REM: enq %llu deq %llu\n\n", local_enq, local_deq, remote_enq, remote_deq);
 	#endif
 }
 

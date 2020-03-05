@@ -11,7 +11,7 @@
  */
 __thread unsigned long long enq_failed = 0; 
 __thread unsigned long long check_allocation = 0;
-extern __thread unsigned int read_table_count;
+bool dw_enable = false;
 
 int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 {
@@ -32,19 +32,17 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	int res, con_en = 0;
 	int iters = 0;
 
-	#if NUMA_DW
-
 	int dest_node;
 	bool remote; 
 
 	#if !SEL_DW
-	new_node = node_malloc(payload, timestamp, 0, NID);	// allocazione del nodo vicino al thread che lo sta facendo
+		#if NUMA_DW
+		new_node = node_malloc(payload, timestamp, 0, NID);	// allocazione del nodo vicino al thread che lo sta facendo
+		#else
+		new_node = node_malloc(payload, timestamp, 0);	// allocazione semplice
+		#endif
 	#else
-	int prev_dest_node = -1;// qui solo per togliere il warning
-	#endif
-
-	#else
-	new_node = node_malloc(payload, timestamp, 0);
+		int prev_dest_node = -1;// qui solo per togliere il warning
 	#endif
 	
 	//init the result
@@ -68,26 +66,26 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			last_bw = h->bucket_width;
 			// compute the index of the physical bucket
 			index = ((unsigned int) newIndex) % size;
-
-			#if NUMA_DW
+			
+			#if NUMA_DW || SEL_DW	
+			remote = false;
+			dest_node = NODE_HASH(index);
+			if(dest_node != NID)
+				remote = true;
+			#endif
+			
+			#if SEL_DW	// !SEL_DW è stato considerato all'inizio
 				
-				remote = false;
-				dest_node = NODE_HASH(index);
-				if(dest_node != NID)
-					remote = true;
-					
-				#if SEL_DW
-				
-				if(prev_dest_node == -1)	// prima allocazione
-					new_node = node_malloc(payload, timestamp, 0, dest_node);
-				else if(prev_dest_node != dest_node){// il nodo è cambiato dalla prima allocazione
+				if(prev_dest_node != -1 && prev_dest_node != dest_node)
 					node_free(new_node);// rilascio la precedente allocazione
-					new_node = node_malloc(payload, timestamp, 0, dest_node);
-				}
-						
-				prev_dest_node = dest_node;
-				#endif
 
+				#if NUMA_DW
+				new_node = node_malloc(payload, timestamp, 0, dest_node);
+				#else
+				new_node = node_malloc(payload, timestamp, 0);
+				#endif
+						
+			prev_dest_node = dest_node;
 			#endif
 
 			// read the actual epoch
@@ -107,22 +105,20 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 		}
 		#endif
 
-		#if NUMA_DW
-			
+		if(dw_enable){
 			#if SEL_DW
-			if(remote)// alloco sulla DW solo se remoto
+			if(remote)
 			#endif
 			{
+				#if NUMA_DW
 				res = dw_enqueue(h, newIndex, new_node, dest_node);
+				#else
+				res = dw_enqueue(h, newIndex, new_node);
+				#endif
 				if(res == MOV_FOUND)
-					continue;
+					continue;	
 			}
-		#else
-			res = dw_enqueue(h, newIndex, new_node);
-			if(res == MOV_FOUND)
-				continue;
-			
-		#endif
+		}
 
 		enq_failed += res!=OK;
 		if(res != OK){
@@ -159,7 +155,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
   out:
   #endif
 
-	#if NUMA_DW
+	#if NUMA_DW	|| SEL_DW
   	if (!remote)
 		local_enq++;
 	else
