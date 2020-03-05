@@ -72,6 +72,7 @@ pkey_t pq_dequeue(void *q, void** result)
 	
 	unsigned int size, attempts = 0;
 	unsigned int counter;
+	unsigned int old_v;
 	pkey_t left_ts;
 	double bucket_width, left_limit, right_limit;
 
@@ -186,15 +187,23 @@ begin:
 				indexes_enq = get_enq_ind(bucket_p->indexes) << ENQ_BIT_SHIFT;// solo la parte inserimento di indexes
 				dw_retry:
 								 
-				deq_cn = get_deq_ind(bucket_p->indexes); 
-
+				old_v = bucket_p->indexes;
+				deq_cn = get_deq_ind(old_v); 
 				// cerco un possibile indice
+				
 				while(	deq_cn < bucket_p->valid_elem && is_deleted(bucket_p->dwv_sorted[deq_cn].node) && 
 						!is_moving(bucket_p->dwv_sorted[deq_cn].node) && !is_marked_ref(bucket_p->next, DELB))
-					{
-						BOOL_CAS(&bucket_p->indexes, (indexes_enq + deq_cn), (indexes_enq + deq_cn + 1));	// aggiorno deq
-						deq_cn = get_deq_ind(bucket_p->indexes);
-					}
+				{
+					//BOOL_CAS(&bucket_p->indexes, (indexes_enq + deq_cn), (indexes_enq + deq_cn + 1));	// aggiorno deq
+					deq_cn = 
+					deq_cn+1;
+					//get_deq_ind(bucket_p->indexes);
+				}
+				
+				old_v = bucket_p->indexes;
+				if(get_deq_ind(old_v) == 0 || get_deq_ind(old_v) < deq_cn ){
+					BOOL_CAS(&bucket_p->indexes, old_v, (indexes_enq + deq_cn));	// aggiorno deq
+				}
 
 				// controllo se sono uscito perchè è iniziata la resize
 				if(is_moving(bucket_p->dwv_sorted[deq_cn].node))
