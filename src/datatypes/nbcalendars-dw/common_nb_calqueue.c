@@ -820,7 +820,7 @@ void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 
 void flush_node(nbc_bucket_node *right_node, table *new_h)
 {
-	nbc_bucket_node *replica;
+	nbc_bucket_node *replica, *ptr_node_allocated;
 	nbc_bucket_node** new_node;
 	nbc_bucket_node *right_replica_field, *right_node_next;
 	
@@ -840,6 +840,8 @@ void flush_node(nbc_bucket_node *right_node, table *new_h)
 	replica = node_malloc(right_node->payload, right_node->timestamp,  right_node->counter);
 	#endif
 	
+	ptr_node_allocated = replica;
+
 	new_node 			= &replica;
 	new_node_pointer 	= (*new_node);
 	new_node_counter 	= new_node_pointer->counter;
@@ -865,6 +867,9 @@ void flush_node(nbc_bucket_node *right_node, table *new_h)
 				replica
 				)
 		; 
+
+	if(replica != ptr_node_allocated && ptr_node_allocated != right_node->replica)
+		FETCH_AND_AND(&(ptr_node_allocated->next), MASK_DEL);	
 
 	right_replica_field = right_node->replica;
 
@@ -1035,6 +1040,7 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 			}while(true);
 	
 			search(bucket, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);  // perform a compact to remove all DEL nodes (make head and tail adjacents again)
+			/*
 			assertf(get_unmarked(right_node) != tail, "Fail in line 972 %p %p %p %p %p %p\n",
 			 bucket,
 			  left_node,
@@ -1042,7 +1048,7 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 			   ((nbc_bucket_node*)get_unmarked(right_node))->next, 
 			   ((nbc_bucket_node*)get_unmarked(right_node))->replica, 
 			   tail); 
-	
+	*/
 		}
 		
 		

@@ -17,6 +17,8 @@ extern nbc_bucket_node* get_node_pointer(nbc_bucket_node*);
 extern int get_deq_ind(int);
 extern bool is_deleted(nbc_bucket_node*);
 extern bool is_moved(nbc_bucket_node*);
+extern bool is_none(nbc_bucket_node*);
+extern bool is_blocked(nbc_bucket_node*);
 
 bool is_marked_ref(dwb* bucket, unsigned long long mark){return (bool)((unsigned long long)bucket & mark);}
 dwb* get_marked_ref(dwb* bucket, unsigned long long mark){return (dwb*)((unsigned long long)bucket | mark);}
@@ -74,11 +76,11 @@ dwb* list_search(dwb *head, long long index_vb, dwb** left_node, int mode, dwb* 
 			    	for(i = 0; i < left_node_next->valid_elem; i++){
 
 			    		assertf(left_node_next->dwv_sorted[i].timestamp == INV_TS, "INV_TS while releasing memory%s\n", "");
-                        assertf(!is_deleted(left_node_next->dwv_sorted[i].node) && !is_moved(left_node_next->dwv_sorted[i].node), "\n\nnodo non marcato come eliminato o trasferito %p\n", left_node_next->dwv_sorted[i].node); 
+                        //assertf(!is_deleted(left_node_next->dwv_sorted[i].node) && !is_moved(left_node_next->dwv_sorted[i].node), "\n\nnodo non marcato come eliminato o trasferito %p\n", left_node_next->dwv_sorted[i].node); 
                         assertf(get_node_pointer(left_node_next->dwv_sorted[i].node) == NULL || left_node_next->dwv_sorted[i].timestamp == INFTY, "nodo non valido per rilascio%s\n", ""); 
 
             			// if(get_node_pointer(left_node_next->dwv_sorted[i].node) != NULL && left_node_next->dwv_sorted[i].timestamp != INFTY)
-                  //    	if(is_deleted(left_node_next->dwv_sorted[i].node))
+                      	//if(!is_blocked(left_node_next->dwv_sorted[i].node))
                             node_free(get_node_pointer(left_node_next->dwv_sorted[i].node));
                     }
 

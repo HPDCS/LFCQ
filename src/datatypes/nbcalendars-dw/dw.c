@@ -159,7 +159,7 @@ void dw_block_table(void* tb, unsigned int start){
 
 				// marco il bucket come BLK e possibile da eliminare
 				// potrebbe non essere bloccato esplicitamente per gli inserimenti se era marcato come DELN prima della resize
-				BOOL_CAS(&prev_bucket_p->next, set_bucket_state(prev_bucket_p->next, EXT), get_marked_ref(set_bucket_state(prev_bucket_p->next, BLK), DELN));
+				BOOL_CAS(&prev_bucket_p->next, set_bucket_state(prev_bucket_p->next, EXT), get_marked_ref(set_bucket_state(prev_bucket_p->next, BLK), DELB));
 				assertf(!is_marked_ref(prev_bucket_p->next, DELB) || get_bucket_state(prev_bucket_p->next) != BLK, 
 					"dw_block_table(): bucket non marcato %d %llu\n", is_marked_ref(prev_bucket_p->next, DELB),
 					get_bucket_state(prev_bucket_p->next));
@@ -250,19 +250,51 @@ int dw_enqueue(void *tb, unsigned long long index_vb, nbc_bucket_node *new_node)
 	return result;
 }
 
+void dw_flush(void *tb, dwb *bucket_p){
+	table* h = (table*)tb;
+	nbc_bucket_node* dw_node;
+	int j = 0;
+
+	// scorro tutto il bucket flushando i nodi marcandoli come eliminati
+	for(j = 0; j < bucket_p->valid_elem && !is_marked_ref(bucket_p, DELB); j++){
+		// se non è già stato eliminato cerco di contribuire
+		//if(is_moving(bucket_p->dwv_sorted[j].node))
+		//	return;
+
+		if(is_none(bucket_p->dwv_sorted[j].node)){
+			dw_node = get_node_pointer(bucket_p->dwv_sorted[j].node);	 // prendo soltanto il puntatore
+			flush_node(dw_node, h);	// migro
+			BOOL_CAS(&bucket_p->dwv_sorted[j].node, dw_node, get_marked_node(dw_node, BLKN));
+			assertf(!is_blocked(bucket_p->dwv_sorted[j].node), "dw_flush(): nodo non marcato come eliminato %p\n", bucket_p->dwv_sorted[j].node);
+		}
+	}
+
+	// marco come da eliminare
+	BOOL_CAS(&bucket_p->next, set_bucket_state(bucket_p->next, EXT), get_marked_ref(set_bucket_state(bucket_p->next, EXT), DELB));
+	assertf(!is_marked_ref(bucket_p->next, DELB), 
+	"dw_flush(): bucket non marcato %d %llu\n", is_marked_ref(bucket_p->next, DELB), get_bucket_state(bucket_p->next));
+}
+
 dwb* dw_dequeue(void *tb, unsigned long long index_vb){
 	table *h = (table*)tb;
 	dwstr *str = h->deferred_work;
 	dwb* bucket_p = NULL;
 
 	bucket_p = list_remove(&str->heads[index_vb % h->size], index_vb, str->list_tail);
+
 	if(bucket_p == NULL || is_marked_ref(bucket_p->next, DELB))
 		return NULL;
 
 	//assertf(is_marked_ref(bucket_p->next, DELB) == 1, "dw_dequeue(): nodo marcato %p\n", bucket_p->next);
 
 	do{		
-		if(get_bucket_state(bucket_p->next) == EXT || get_bucket_state(bucket_p->next) == BLK){ 
+		if(get_bucket_state(bucket_p->next) == EXT || get_bucket_state(bucket_p->next) == BLK){
+
+			if(get_bucket_state(bucket_p->next) == EXT && FLUSH_DW){
+				dw_flush(h, bucket_p);
+				//return NULL;
+			}
+
 			if(is_marked_ref(bucket_p->next, DELB))
 				return NULL;
 			else
