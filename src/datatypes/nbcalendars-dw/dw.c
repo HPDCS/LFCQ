@@ -149,7 +149,7 @@ void dw_block_table(void* tb, unsigned int start){
 					// se non è già stato trasferito o eliminato cerco di contribuire
 					if(is_moving(prev_bucket_p->dwv_sorted[j].node) && !is_moved(prev_bucket_p->dwv_sorted[j].node)){
 						dw_node = get_node_pointer(prev_bucket_p->dwv_sorted[j].node);	 // prendo soltanto il puntatore
-						migrate_node(dw_node, h);	// migro
+						flush_node(dw_node, h);	// migro
 						dw_node = get_marked_node(dw_node, MVGN);
 						BOOL_CAS(&prev_bucket_p->dwv_sorted[j].node, dw_node, get_marked_node(dw_node, MVDN));// marco come trasferito(potrebbe fallire se già stato marcato MVDN)
 						// alla fine sarà marcato sia come in trasferimento(MVGN) che trasferito(MVDN), cosi in estrazione controllo solo il primo

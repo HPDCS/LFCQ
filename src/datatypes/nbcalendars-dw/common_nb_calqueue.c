@@ -370,8 +370,12 @@ int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, unsigned int tie_
 			return MOV_FOUND;
 		
 		// mark the to-be.inserted node as INV if flag == REMOVE_DEL
-		new_node_pointer->next = get_marked(tmp, INV & (-(!is_new_key)) );
-		
+		if(flag == REMOVE_DEL)
+			new_node_pointer->next = get_marked(tmp, INV & (-(!is_new_key)) );
+		else if(flag == REMOVE_DEL_FOR_DW)
+			new_node_pointer->next = get_marked(tmp, INV2 & (-(!is_new_key)) );
+		else
+			new_node_pointer->next = get_marked(tmp, INV & (-(!is_new_key)) );
 		// set the tie_breaker to:
 		// 1+T1 		IF K1 == timestamp AND flag == REMOVE_DEL_INV 
 		// 1			IF K1 != timestamp AND flag == REMOVE_DEL_INV
@@ -811,6 +815,70 @@ void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 		right_node_next = FETCH_AND_AND(&(right_node->next), MASK_DEL);
 	}
 }
+
+void flush_node(nbc_bucket_node *right_node, table *new_h)
+{
+	nbc_bucket_node *replica;
+	nbc_bucket_node** new_node;
+	nbc_bucket_node *right_replica_field, *right_node_next;
+	
+	nbc_bucket_node *bucket, *new_node_pointer;
+	unsigned int index;
+
+	unsigned int new_node_counter 	;
+	pkey_t 		 new_node_timestamp ;
+
+	
+	int res = 0;
+	
+	//Create a new node to be inserted in the new table as as INValid
+	#if NUMA_DW
+	replica = node_malloc(right_node->payload, right_node->timestamp,  right_node->counter, NODE_HASH(hash(right_node->timestamp, new_h->bucket_width)));
+	#else
+	replica = node_malloc(right_node->payload, right_node->timestamp,  right_node->counter);
+	#endif
+	
+	new_node 			= &replica;
+	new_node_pointer 	= (*new_node);
+	new_node_counter 	= new_node_pointer->counter;
+	new_node_timestamp 	= new_node_pointer->timestamp;
+	
+	index = hash(new_node_timestamp, new_h->bucket_width);
+
+	// node to be added in the hashtable
+	bucket = new_h->array + (index % new_h->size);
+	         
+    do{	right_replica_field = right_node->replica; } 
+    // try to insert the replica in the new table       
+	while(right_replica_field == NULL && (res = 
+	search_and_insert(bucket, new_node_timestamp, new_node_counter, REMOVE_DEL_FOR_DW, new_node_pointer, new_node)
+	) == ABORT);
+	// at this point we have at least one replica into the new table
+
+	// try to decide which is the right replica and if I won the challenge increase the counter of enqueued items into the new set table
+	if( right_replica_field == NULL) 
+			BOOL_CAS(
+				&(right_node->replica),
+				NULL,
+				replica
+				)
+		; 
+
+	right_replica_field = right_node->replica;
+
+	// make the replica being valid
+	do{	right_node_next = right_replica_field->next;}
+	while( 
+		is_marked(right_node_next, INV2) && 
+		!BOOL_CAS(	&(right_replica_field->next),
+					right_node_next,
+					get_unmarked(right_node_next)
+				)
+		);
+
+}
+
+
 
 table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsigned int elem_per_bucket, double perc_used_bucket)
 {

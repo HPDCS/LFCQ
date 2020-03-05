@@ -107,22 +107,25 @@ extern int gc_hid[];
 #define ATOMIC_READ					atomic_read
 //#define ATOMIC_READ(x)					__sync_fetch_and_add( &((x)->count), 0)
 
-#define VAL (0ULL)
-#define DEL (1ULL)
-#define INV (2ULL)
-#define MOV (3ULL)
+#define VAL  (0ULL)
+#define DEL  (1ULL)
+#define INV  (2ULL)
+#define MOV  (3ULL)
+#define INV2 (4ULL)
+//#define MOV2 (8ULL)
 
-#define MASK_PTR 	((unsigned long long) (-4LL))
-#define MASK_MRK 	(3ULL)
-#define MASK_DEL 	((unsigned long long) (-3LL))
+#define MASK_PTR 	((unsigned long long) (-16LL))
+#define MASK_MRK 	(15ULL)
+#define MASK_DEL 	((unsigned long long) (-15LL))
 
 #define MAX_UINT 			  (0xffffffffU)
 #define MASK_EPOCH	(0x00000000ffffffffULL)
 #define MASK_CURR	(0xffffffff00000000ULL)
 
 
-#define REMOVE_DEL	 	 0
-#define REMOVE_DEL_INV	 1
+#define REMOVE_DEL	 	 	0
+#define REMOVE_DEL_INV	 	1
+#define REMOVE_DEL_FOR_DW	2
 
 #define is_marked(...) macro_dispatcher(is_marked, __VA_ARGS__)(__VA_ARGS__)
 #define is_marked2(w,r) is_marked_2(w,r)
@@ -241,6 +244,7 @@ extern table* read_table(table * volatile *hashtable, unsigned int threshold, un
 extern void block_table(table* h);
 extern double compute_mean_separation_time(table* h, unsigned int new_size, unsigned int threashold, unsigned int elem_per_bucket);
 extern void migrate_node(nbc_bucket_node *right_node,	table *new_h);
+extern void flush_node(nbc_bucket_node *right_node,	table *new_h);
 extern void search(nbc_bucket_node *head, pkey_t timestamp, unsigned int tie_breaker, nbc_bucket_node **left_node, nbc_bucket_node **right_node, int flag);
 extern void flush_current(table* h, unsigned long long newIndex, nbc_bucket_node* node);
 extern double nbc_prune();
