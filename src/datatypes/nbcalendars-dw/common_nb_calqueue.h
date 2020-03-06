@@ -156,22 +156,14 @@ struct __bucket_node
 	nbc_bucket_node * volatile next;	// pointer to the successor
 	//48
 	nbc_bucket_node * volatile replica;	// pointer to the replica
-	nbc_bucket_node * volatile next_next;
+	nbc_bucket_node * volatile original_copy;
 	//64
 };
 
 //extern nbc_bucket_node *g_tail;
 
 #include "dw.h"
-#if NUMA_DW
-#include "./gc/ptst.h"
-#else
-#include "../../gc/ptst.h"
-#endif
-#if NUMA_DW || SEL_DW
-#define NODE_HASH(bucket_id) (bucket_id % _NUMA_NODES)	// per bucket fisico
-#define NID nid
-#endif
+
 extern __thread ptst_t *ptst;
 
 typedef struct table table;
@@ -253,6 +245,8 @@ extern double nbc_prune();
 extern void nbc_report(unsigned int);
 extern int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, unsigned int tie_breaker,
 						 int flag, nbc_bucket_node *new_node_pointer, nbc_bucket_node **new_node);
+
+extern void validate_or_destroy(nbc_bucket_node *right_node);
 
 /**
  *  This function is an helper to allocate a node and filling its fields.
