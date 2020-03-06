@@ -36,11 +36,6 @@ int add_enq_ind(int, int);
 
 // Ausiliarie
 void block_ins(dwb*);
-#if NUMA_DW
-void do_ord(dwb*, int);
-#else
-void do_ord(dwb*);
-#endif
 int cmp_node(const void*, const void*);
 void print_dwv(int, nbnc*);
 
@@ -171,6 +166,7 @@ void dw_block_table(void* tb, unsigned int start){
 		bucket_p = list_remove(&h->deferred_work->heads[index_pb], LLONG_MAX-1, h->deferred_work->list_tail);
 	}
 }
+
 
 int dw_enqueue(void *tb, unsigned long long index_vb, nbc_bucket_node *new_node
 #if NUMA_DW
@@ -376,9 +372,9 @@ void block_ins(dwb* bucket_p){
 	//assertf((bucket_p->dwv[VEC_SIZE - 1].node == NULL && get_enq_ind(bucket_p->indexes) == VEC_SIZE && bucket_p->dwv[VEC_SIZE - 1].node == NULL), "block_ins(): falso bucket virtuale pieno. index = %llu %p %d\n", bucket_p->index_vb, bucket_p->dwv[VEC_SIZE - 1].node, from);
 	
 	while((enq_cn = get_enq_ind(bucket_p->indexes)) < VEC_SIZE){// se non l'ha fatto ancora nessuno
-		assertf(enq_cn == 0, "block_ins(): non ci sono elementi nel bucket. enq_cn = %d\n", enq_cn);
+		//assertf(enq_cn == 0, "block_ins(): non ci sono elementi nel bucket. enq_cn = %d\n", enq_cn);
 		limit = get_enq_ind(VAL_CAS(&bucket_p->indexes, enq_cn << ENQ_BIT_SHIFT, ((enq_cn + VEC_SIZE) << ENQ_BIT_SHIFT)));	// aggiungo il massimo
-		assertf(limit == 0, "block_ins(): non ci sono elementi nel bucket. limit = %d\n", enq_cn);
+		//assertf(limit == 0, "block_ins(): non ci sono elementi nel bucket. limit = %d\n", enq_cn);
 		if(limit < VEC_SIZE){	// se ci sono riuscito
 			//assertf((!BOOL_CAS(&bucket_p->cicle_limit, VEC_SIZE, limit)), "block_ins(): settaggio di cicle_limit non riuscito, limit %d %d %d\n", limit, bucket_p->cicle_limit, enq_cn);// imposto quello del bucket
 			BOOL_CAS(&bucket_p->cicle_limit, VEC_SIZE, limit);
