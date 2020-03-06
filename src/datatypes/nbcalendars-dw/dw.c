@@ -26,6 +26,9 @@ bool is_none(nbc_bucket_node*);
 nbc_bucket_node* get_node_pointer(nbc_bucket_node*);
 nbc_bucket_node* get_marked_node(nbc_bucket_node*, unsigned long long);
 
+
+void apply_transition_ORD_to_EXT(dwb *bucket_p);
+
 // Indici
 int get_enq_ind(int);
 int get_deq_ind(int);
@@ -109,11 +112,7 @@ void dw_block_table(void* tb, unsigned int start){
 						block_ins(bucket_p);						// impedisco gli inserimenti iniziati
 
 					if(get_bucket_state(bucket_p->next) == ORD){	// eventuale ordinamento
-						#if NUMA_DW
-						do_ord(bucket_p, NODE_HASH(index_pb));
-						#else
-						do_ord(bucket_p);
-						#endif
+						apply_transition_ORD_to_EXT(bucket_p);
 					}
 				}
 
@@ -173,11 +172,11 @@ void dw_block_table(void* tb, unsigned int start){
 	}
 }
 
+int dw_enqueue(void *tb, unsigned long long index_vb, nbc_bucket_node *new_node
 #if NUMA_DW
-int dw_enqueue(void *tb, unsigned long long index_vb, nbc_bucket_node *new_node, int numa_node)
-#else
-int dw_enqueue(void *tb, unsigned long long index_vb, nbc_bucket_node *new_node)
+, int numa_node
 #endif
+)
 {
 	table *h = (table*)tb;
 	dwstr *str = h->deferred_work;
@@ -191,11 +190,16 @@ int dw_enqueue(void *tb, unsigned long long index_vb, nbc_bucket_node *new_node)
 	if(is_marked_ref(str->heads[index_vb % h->size].next, MOVB))
 		return MOV_FOUND;
 
+	bucket_p = get_bucket_pointer(
+		list_add(
+			&str->heads[index_vb % h->size], 
+			index_vb, 
 	#if NUMA_DW
-	bucket_p = get_bucket_pointer(list_add(&str->heads[index_vb % h->size], index_vb, numa_node, str->list_tail));
-	#else
-	bucket_p = get_bucket_pointer(list_add(&str->heads[index_vb % h->size], index_vb, str->list_tail));
+			numa_node, 
 	#endif
+			str->list_tail
+		)
+	);
 
 	// potrebbe essere NULL se ho trovato la testa marcata durante la ricerca
 	if(bucket_p == NULL || get_bucket_state(bucket_p->next) == BLK)
@@ -237,12 +241,8 @@ int dw_enqueue(void *tb, unsigned long long index_vb, nbc_bucket_node *new_node)
 	if(get_bucket_state(bucket_p->next) == INS && get_enq_ind(bucket_p->indexes) >= VEC_SIZE)
 		block_ins(bucket_p);
 
-	if(get_bucket_state(bucket_p->next) == ORD){
-		#if NUMA_DW
-		do_ord(bucket_p, numa_node);
-		#else
-		do_ord(bucket_p);
-		#endif
+	if(get_bucket_state(bucket_p->next) == ORD){	// eventuale ordinamento
+		apply_transition_ORD_to_EXT(bucket_p);
 	}
 
 	//assertf(get_enq_ind(bucket_p->indexes) >= VEC_SIZE && get_bucket_state(bucket_p->next) != EXT, "dw_enqueue(): bucket pieno e non in estrazione. stato %llu, enq_cn %d, enq_cn salvato %d\n", get_bucket_state(bucket_p->next), enq_cn, get_enq_ind(bucket_p->indexes));
@@ -278,7 +278,8 @@ void dw_flush(void *tb, dwb *bucket_p){
 dwb* dw_dequeue(void *tb, unsigned long long index_vb){
 	table *h = (table*)tb;
 	dwstr *str = h->deferred_work;
-	dwb* bucket_p = NULL;
+	dwb *bucket_p = NULL;
+
 
 	bucket_p = list_remove(&str->heads[index_vb % h->size], index_vb, str->list_tail);
 
@@ -290,7 +291,7 @@ dwb* dw_dequeue(void *tb, unsigned long long index_vb){
 	do{		
 		if(get_bucket_state(bucket_p->next) == EXT || get_bucket_state(bucket_p->next) == BLK){
 
-			if(get_bucket_state(bucket_p->next) == EXT && FLUSH_DW){
+			if(get_bucket_state(bucket_p->next) == EXT && DISABLE_EXTRACTION_FROM_DW){
 				dw_flush(h, bucket_p);
 				//return NULL;
 			}
@@ -309,21 +310,61 @@ dwb* dw_dequeue(void *tb, unsigned long long index_vb){
 		if(get_bucket_state(bucket_p->next) == INS)	
 			block_ins(bucket_p);
 
-		if(get_bucket_state(bucket_p->next) == ORD){
-			#if NUMA_DW
-				#if SEL_DW
-				do_ord(bucket_p, NODE_HASH(index_vb % h->size));// sta su un nodo remoto
-				#else
-				do_ord(bucket_p, NID);// sta sul mio nodo
-				#endif
-			#else
-			do_ord(bucket_p);
-			#endif 
-		}
-
+		if(get_bucket_state(bucket_p->next) == ORD)
+			apply_transition_ORD_to_EXT(bucket_p);
+			
 	}while(1);
 
 }
+
+
+void apply_transition_ORD_to_EXT(dwb *bucket_p){
+	nbnc *old_dwv, *aus_ord_array;
+	int i, j;
+	
+	if(get_bucket_state(bucket_p->next) == ORD){
+		assertf( bucket_p->cicle_limit  > VEC_SIZE || bucket_p->cicle_limit <= 0, "do_ord(): limite del ciclo fuori dal range %s\n", "");
+		assertf((bucket_p->cicle_limit == VEC_SIZE && bucket_p->dwv[VEC_SIZE - 1].node == NULL), "do_ord(): falso bucket virtuale pieno. index = %llu\n", bucket_p->index_vb);
+		assertf( bucket_p->cicle_limit == 0, "do_ord(): nulla da ordinare %s\n", "");
+		
+		if(bucket_p->dwv_sorted != NULL){
+			BOOL_CAS(&bucket_p->next, set_bucket_state(bucket_p->next, ORD), set_bucket_state(bucket_p->next, EXT));
+			return;
+		} 
+		
+	#if NUMA_DW			
+		aus_ord_array = gc_alloc_node(ptst, gc_aid[2], numa_node);
+	#else
+		aus_ord_array = gc_alloc(ptst, gc_aid[2]);
+	#endif
+	
+		if(aus_ord_array == NULL)	error("Non abbastanza memoria per allocare un array dwv in ORD\n");
+
+		//if(bucket_p->cicle_limit == VEC_SIZE){ print_dwv(VEC_SIZE, old_dwv); printf(" prima dell'ordinamento\n"); }
+
+		// memcopy selettiva
+		old_dwv = bucket_p->dwv;
+		for(i = 0, j = 0; i < bucket_p->cicle_limit; i++){
+			if(!is_blocked(old_dwv[i].node) && bucket_p->dwv[i].timestamp != INFTY){
+				memcpy(aus_ord_array + j, old_dwv + i, sizeof(nbnc));
+				j++;
+			}
+		}
+
+		assertf(j != bucket_p->valid_elem, "do_ord(): numero di elementi copiati per essere ordinati non corrisponde %d  %d\n", j, bucket_p->valid_elem);
+	
+	#if ENABLE_SORTING 
+		qsort(aus_ord_array, bucket_p->valid_elem, sizeof(nbnc), cmp_node);		// ordino solo elementi inseriti effettivamente nella fase INS
+	#endif
+		//if(bucket_p->cicle_limit == VEC_SIZE){ print_dwv(VEC_SIZE, old_dwv); printf("dopo l'ordinamento\n"); }
+		
+		// cerco di inserirlo
+		if(!BOOL_CAS(&bucket_p->dwv_sorted, NULL, aus_ord_array)) gc_free(ptst, aus_ord_array, gc_aid[2]);	
+		 
+	}
+}
+
+
 
 void block_ins(dwb* bucket_p){
 	int i, limit;
@@ -365,64 +406,6 @@ void block_ins(dwb* bucket_p){
 	BOOL_CAS(&bucket_p->next, set_bucket_state(bucket_p->next, INS), set_bucket_state(bucket_p->next, ORD));
 }
 
-#if NUMA_DW
-void do_ord(dwb* bucket_p, int numa_node)
-#else
-void do_ord(dwb* bucket_p)
-#endif
-{
-	nbnc *old_dwv, *aus_ord_array;
-	int i, j;
-
-	assertf(bucket_p->cicle_limit > VEC_SIZE || bucket_p->cicle_limit <= 0, "do_ord(): limite del ciclo fuori dal range %s\n", "");
-	assertf((bucket_p->cicle_limit == VEC_SIZE && bucket_p->dwv[VEC_SIZE - 1].node == NULL), "do_ord(): falso bucket virtuale pieno. index = %llu\n", bucket_p->index_vb);
-	assertf(bucket_p->cicle_limit == 0, "do_ord(): nulla da ordinare %s\n", "");
-
-	old_dwv = bucket_p->dwv;
-	if(bucket_p->dwv_sorted != NULL){
-		BOOL_CAS(&bucket_p->next, set_bucket_state(bucket_p->next, ORD), set_bucket_state(bucket_p->next, EXT));
-		return;
-	} 
-	
-	#if NUMA_DW
-	aus_ord_array = gc_alloc_node(ptst, gc_aid[2], numa_node);
-	#else
-	aus_ord_array = gc_alloc(ptst, gc_aid[2]);
-	#endif
-	if(aus_ord_array == NULL)	error("Non abbastanza memoria per allocare un array dwv in ORD\n");
-	else{
-		/*
-		if(bucket_p->cicle_limit == VEC_SIZE){
-			print_dwv(VEC_SIZE, old_dwv);
-			printf(" prima dell'ordinamento\n");
-		}
-		*/
-		
-		// memcopy selettiva
-		for(i = 0, j = 0; i < bucket_p->cicle_limit; i++){
-			if(!is_blocked(old_dwv[i].node) && bucket_p->dwv[i].timestamp != INFTY){
-				memcpy(aus_ord_array + j, old_dwv + i, sizeof(nbnc));
-				j++;
-			}
-		}
-
-		assertf(j != bucket_p->valid_elem, "do_ord(): numero di elementi copiati per essere ordinati non corrisponde %d  %d\n", j, bucket_p->valid_elem);
-		qsort(aus_ord_array, bucket_p->valid_elem, sizeof(nbnc), cmp_node);		// ordino solo elementi inseriti effettivamente nella fase INS
-	
-		/*
-		if(bucket_p->cicle_limit == VEC_SIZE){
-				print_dwv(VEC_SIZE, aus_ord_array);
-				printf(" dopo l'ordinamento\n");
-		}
-		*/
-
-		// cerco di inserirlo
-		if(BOOL_CAS(&bucket_p->dwv_sorted, NULL, aus_ord_array))
-			BOOL_CAS(&bucket_p->next, set_bucket_state(bucket_p->next, ORD), set_bucket_state(bucket_p->next, EXT));	
-		else
-			gc_free(ptst, aus_ord_array, gc_aid[2]);	
-	}	
-}
 
 int cmp_node(const void *p1, const void *p2){
 	nbnc *node_1 = (nbnc*)p1;
@@ -435,6 +418,12 @@ int cmp_node(const void *p1, const void *p2){
 	tmp = (node_1->timestamp - node_2->timestamp);
 	return (tmp > 0.0) - (tmp < 0.0);
 }
+
+
+
+
+
+
 /*
 pkey_t dw_extraction(dwb* bucket_p, void** result, pkey_t left_ts, bool remote, bool no_cq_node){
 	nbc_bucket_node *dw_node;
