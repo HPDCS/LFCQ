@@ -169,7 +169,12 @@ begin:
 			counter++;
 				
 			// Skip marked nodes, invalid nodes and nodes with timestamp out of range
-			if(is_marked(left_node_next, DEL) || is_marked(left_node_next, INV) || is_marked(left_node_next, INV2) || (left_ts < left_limit && left_node != tail)) continue;
+			if(is_marked(left_node_next, DEL) || is_marked(left_node_next, INV) || (left_ts < left_limit && left_node != tail)) continue;
+			
+			if(is_marked(left_node_next, INV2)){
+				 validate_or_destroy(left_node);
+				 goto begin;
+			}
 		
 			// Abort the operation since there is a resize or a possible insert in the past
 			if(is_marked(left_node_next, MOV) || left_node->epoch > epoch) goto begin;
