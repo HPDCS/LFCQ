@@ -818,6 +818,22 @@ void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 	}
 }
 
+void validate_or_destroy(nbc_bucket_node *right_node){
+	nbc_bucket_node *right_node_next;
+	if(right_node->original_copy->replica != right_node){
+		FETCH_AND_AND(&(right_node->next), MASK_DEL);	
+		return;
+	}
+	do{	right_node_next = right_node->next;}
+	while( 
+		(is_marked(right_node_next, INV) || is_marked(right_node_next, INV2)) && 
+		!BOOL_CAS(	&(right_node->next),
+					right_node_next,
+					get_unmarked(right_node_next)
+				)
+		);
+}
+
 void flush_node(nbc_bucket_node *right_node, table *new_h)
 {
 	nbc_bucket_node *replica, *ptr_node_allocated;
@@ -846,6 +862,7 @@ void flush_node(nbc_bucket_node *right_node, table *new_h)
 	new_node_pointer 	= (*new_node);
 	new_node_counter 	= new_node_pointer->counter;
 	new_node_timestamp 	= new_node_pointer->timestamp;
+	replica->original_copy = right_node;
 	
 	index = hash(new_node_timestamp, new_h->bucket_width);
 
@@ -1040,7 +1057,7 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 			}while(true);
 	
 			search(bucket, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);  // perform a compact to remove all DEL nodes (make head and tail adjacents again)
-			/*
+			
 			assertf(get_unmarked(right_node) != tail, "Fail in line 972 %p %p %p %p %p %p\n",
 			 bucket,
 			  left_node,
@@ -1048,7 +1065,7 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 			   ((nbc_bucket_node*)get_unmarked(right_node))->next, 
 			   ((nbc_bucket_node*)get_unmarked(right_node))->replica, 
 			   tail); 
-	*/
+	
 		}
 		
 		
