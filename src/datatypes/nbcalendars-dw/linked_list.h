@@ -6,11 +6,9 @@
 #ifndef LLIST_H_ 
 #define LLIST_H_
 
+#include "common_nb_calqueue.h"
+
 //#include <stddef.h>
-
-#define NUMA_DW 0	// se 1 allora utilizza allocatore NUMA aware
-#define SEL_DW	0	// se 1 allora lavoro differito solo se la destinazione si trova su un nodo numa remoto
-
 // container contnente un evento da gestire
 typedef struct nbc_bucket_node_container nbnc;
 struct nbc_bucket_node_container{
@@ -46,11 +44,15 @@ const typeof(((type *)0)->member) *__mptr = (ptr); \
 (type *)((char *)__mptr - offsetof(type, member)); })
 */
 //int new_list(dwl*);
+
+dwb* list_add(
+ dwb*, 
+ long long,
 #if NUMA_DW
-dwb* list_add(dwb*, long long, int, dwb*);
-#else
-dwb* list_add(dwb*, long long, dwb*);
+ int,
 #endif
+ dwb*
+);
 dwb* list_remove(dwb*, long long, dwb*);
 
 #endif
