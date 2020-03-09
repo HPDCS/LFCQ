@@ -1,14 +1,8 @@
 #include "common_nb_calqueue.h"
 #include "linked_list.h"
 
-#if NUMA_DW
-dwb* new_node(long long, dwb*, unsigned int);
-#else
-dwb* new_node(long long, dwb*);
-#endif
-dwb* list_search(dwb*, long long, dwb**, int, dwb*);
-bool is_marked_ref(dwb*, unsigned long long);
-dwb* get_marked_ref(dwb*, unsigned long long);
+
+
 
 extern unsigned long long get_bucket_state(dwb*);
 extern dwb* set_bucket_state(dwb*, unsigned long long);
@@ -98,11 +92,11 @@ dwb* list_search(dwb *head, long long index_vb, dwb** left_node, int mode, dwb* 
   	}
 }
 
+dwb* new_node(long long index_vb, dwb *next
 #if NUMA_DW
-dwb* new_node(long long index_vb, dwb *next, unsigned int numa_node)
-#else
-dwb* new_node(long long index_vb, dwb *next)
+, unsigned int numa_node
 #endif
+)
 {	
 	int i;
 

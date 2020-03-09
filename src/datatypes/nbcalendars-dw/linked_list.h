@@ -26,6 +26,7 @@ struct deferred_work_bucket{
 	int volatile valid_elem;
 	int volatile indexes;	// inserimento|estrazione
 	int volatile lock;
+	long long epoch;
 	//char pad[32];
 };
 
@@ -54,5 +55,10 @@ dwb* list_add(
  dwb*
 );
 dwb* list_remove(dwb*, long long, dwb*);
+
+
+extern bool is_marked_ref(dwb*, unsigned long long);
+extern dwb* get_marked_ref(dwb*, unsigned long long);
+
 
 #endif
