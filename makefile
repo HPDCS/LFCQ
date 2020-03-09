@@ -9,7 +9,8 @@ EXECUTABLES :=
 USER_OBJS :=
 LIBS := -lpthread -lm -lnuma -lrt -mrtm
 SRC_DIR := src
-TARGETS := NBCQ LIND MARO CBCQ SLCQ NBVB 2CAS VBPQ ACRCQ DWCQ DWCQN #V2CQ NUMA WORK
+TARGETS := NBCQ LIND MARO CBCQ SLCQ NBVB 2CAS VBPQ ACRCQ DWCQ DWCQN 
+#V2CQ NUMA WORK
 
 
 UTIL_value := src/utils/common.o src/utils/hpdcs_math.o 
@@ -18,7 +19,7 @@ ARCH_value := src/arch/x86.o
 
 #DW
 DWGACO_value := src/datatypes/nbcalendars-dw-numa/gc/gc.o src/datatypes/nbcalendars-dw-numa/gc/ptst.o
-DWSET_value := src/datatypes/nbcalendars-dw/gc/skip_cas.o
+DWSET_value := src/datatypes/nbcalendars-dw-numa/gc/skip_cas.o
 
 SLCQ_value := src/datatypes/slcalqueue/calqueue.o  $(UTIL_value)
 
