@@ -259,11 +259,11 @@ extern void validate_or_destroy(nbc_bucket_node *right_node);
  *  @return the pointer to the allocated node
  *
  */
+static inline nbc_bucket_node* node_malloc(void *payload, pkey_t timestamp, unsigned int tie_breaker
 #if NUMA_DW
-static inline nbc_bucket_node* node_malloc(void *payload, pkey_t timestamp, unsigned int tie_breaker, unsigned int numa_node)
-#else
-static inline nbc_bucket_node* node_malloc(void *payload, pkey_t timestamp, unsigned int tie_breaker)
+, unsigned int numa_node
 #endif
+)
 {
 	nbc_bucket_node* res;
 	

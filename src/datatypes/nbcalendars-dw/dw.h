@@ -2,7 +2,6 @@
 #define DEFERRED_WORK
 
 #include <string.h>
-#include "linked_list.h"
 
 // configuration
 #define VEC_SIZE 	128
@@ -11,10 +10,11 @@
 #define DW_USAGE_TH					0
 #define ENABLE_PROACTIVE_FLUSH		0
 #define ENABLE_BLOCKING_FLUSH		0
-#define NUMA_DW 0	// se 1 allora utilizza allocatore NUMA aware
-#define SEL_DW	0	// se 1 allora lavoro differito solo se la destinazione si trova su un nodo numa remoto
+#define NUMA_DW 					1	// se 1 allora utilizza allocatore NUMA aware
+#define SEL_DW						0	// se 1 allora lavoro differito solo se la destinazione si trova su un nodo numa remoto
 #define NODE_HASH(bucket_id) (bucket_id % _NUMA_NODES)	// per bucket fisico
 #define NID nid
+#include "linked_list.h"
 
 
 // Stati bucket virtuale
@@ -66,6 +66,7 @@ int dw_enqueue(
  ,int
 #endif
 );
+
 dwb* dw_dequeue(void *tb, unsigned long long index_vb);
 
 

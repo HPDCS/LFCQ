@@ -160,11 +160,11 @@ int new_list(dwl* list){
 }
 */
 
+dwb* list_add(dwb *head, long long index_vb, 
 #if NUMA_DW
-dwb* list_add(dwb *head, long long index_vb, int numa_node, dwb* list_tail)
-#else
-dwb* list_add(dwb *head, long long index_vb, dwb* list_tail)
+int numa_node, 
 #endif
+dwb* list_tail)
 {
 
 	unsigned long long state;

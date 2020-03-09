@@ -1,4 +1,5 @@
 #include "common_nb_calqueue.h"
+#include "linked_list.h"
 
 extern __thread unsigned long long no_empty_vb;
 extern __thread long ins;
@@ -27,7 +28,11 @@ nbc_bucket_node* get_node_pointer(nbc_bucket_node*);
 nbc_bucket_node* get_marked_node(nbc_bucket_node*, unsigned long long);
 
 
-void apply_transition_ORD_to_EXT(dwb *bucket_p);
+void apply_transition_ORD_to_EXT(dwb *bucket_p
+#if NUMA_DW
+, int numa_nodes
+#endif
+);
 
 // Indici
 int get_enq_ind(int);
@@ -107,7 +112,11 @@ void dw_block_table(void* tb, unsigned int start){
 						block_ins(bucket_p);						// impedisco gli inserimenti iniziati
 
 					if(get_bucket_state(bucket_p->next) == ORD){	// eventuale ordinamento
-						apply_transition_ORD_to_EXT(bucket_p);
+						apply_transition_ORD_to_EXT(bucket_p
+						#if NUMA_DW
+						, NODE_HASH(index_pb)
+						#endif
+						);
 					}
 				}
 
@@ -238,7 +247,11 @@ int dw_enqueue(void *tb, unsigned long long index_vb, nbc_bucket_node *new_node
 		block_ins(bucket_p);
 
 	if(get_bucket_state(bucket_p->next) == ORD){	// eventuale ordinamento
-		apply_transition_ORD_to_EXT(bucket_p);
+		apply_transition_ORD_to_EXT(bucket_p
+	#if NUMA_DW
+			, numa_node 
+	#endif
+	);
 	}
 
 	//assertf(get_enq_ind(bucket_p->indexes) >= VEC_SIZE && get_bucket_state(bucket_p->next) != EXT, "dw_enqueue(): bucket pieno e non in estrazione. stato %llu, enq_cn %d, enq_cn salvato %d\n", get_bucket_state(bucket_p->next), enq_cn, get_enq_ind(bucket_p->indexes));
@@ -314,14 +327,22 @@ dwb* dw_dequeue(void *tb, unsigned long long index_vb){
 			block_ins(bucket_p);
 
 		if(get_bucket_state(bucket_p->next) == ORD)
-			apply_transition_ORD_to_EXT(bucket_p);
+			apply_transition_ORD_to_EXT(bucket_p
+	#if NUMA_DW
+			, NODE_HASH(index_vb % h->size) 
+	#endif
+	);
 			
 	}while(1);
 
 }
 
 
-void apply_transition_ORD_to_EXT(dwb *bucket_p){
+void apply_transition_ORD_to_EXT(dwb *bucket_p
+#if NUMA_DW
+, int numa_node
+#endif
+){
 	nbnc *old_dwv, *aus_ord_array;
 	int i, j;
 	
