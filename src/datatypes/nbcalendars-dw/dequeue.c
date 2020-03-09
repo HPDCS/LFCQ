@@ -47,16 +47,6 @@ extern __thread long conflitti_ins;
 extern __thread long estr;
 extern __thread long conflitti_estr;
 
-extern int get_enq_ind(int);
-extern int get_deq_ind(int);
-extern nbc_bucket_node* get_marked_node(nbc_bucket_node*, unsigned long long);
-extern nbc_bucket_node* get_node_pointer(nbc_bucket_node*);
-extern bool is_deleted(nbc_bucket_node*);
-extern bool is_blocked(nbc_bucket_node*);
-extern bool is_moving(nbc_bucket_node*);
-extern unsigned long long get_bucket_state(dwb*);
-extern bool is_marked_ref(dwb*, unsigned long long);
-extern dwb* get_marked_ref(dwb*, unsigned long long);
 
 pkey_t pq_dequeue(void *q, void** result)
 {
