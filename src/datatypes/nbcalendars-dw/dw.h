@@ -10,6 +10,7 @@
 #define ENABLE_SORTING 				0
 #define DW_USAGE_TH					0
 #define ENABLE_PROACTIVE_FLUSH		0
+#define ENABLE_BLOCKING_FLUSH		0
 #define NUMA_DW 0	// se 1 allora utilizza allocatore NUMA aware
 #define SEL_DW	0	// se 1 allora lavoro differito solo se la destinazione si trova su un nodo numa remoto
 #define NODE_HASH(bucket_id) (bucket_id % _NUMA_NODES)	// per bucket fisico

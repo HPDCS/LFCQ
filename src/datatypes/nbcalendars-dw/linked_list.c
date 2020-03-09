@@ -138,6 +138,7 @@ dwb* new_node(long long index_vb, dwb *next)
   	node->index_vb = index_vb;
   	node->next = next;
     node->dwv_sorted = NULL; 
+    node->lock = 0;
 	  	
   	return node;
 }

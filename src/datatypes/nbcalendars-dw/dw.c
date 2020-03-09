@@ -250,23 +250,30 @@ void dw_flush(void *tb, dwb *bucket_p){
 	table* h = (table*)tb;
 	nbc_bucket_node* dw_node;
 	int j = 0;
+#if ENABLE_BLOCKING_FLUSH == 1
+	if(BOOL_CAS(&bucket_p->lock, 0, 1){	
+#endif
+		// scorro tutto il bucket flushando i nodi marcandoli come eliminati
+		for(j = 0; j < bucket_p->valid_elem && !is_marked_ref(bucket_p, DELB); j++){
+			// se non è già stato eliminato cerco di contribuire
+			//if(is_moving(bucket_p->dwv_sorted[j].node))
+			//	return;
 
-	// scorro tutto il bucket flushando i nodi marcandoli come eliminati
-	for(j = 0; j < bucket_p->valid_elem && !is_marked_ref(bucket_p, DELB); j++){
-		// se non è già stato eliminato cerco di contribuire
-		//if(is_moving(bucket_p->dwv_sorted[j].node))
-		//	return;
-
-		if(is_none(bucket_p->dwv_sorted[j].node)){
-			dw_node = get_node_pointer(bucket_p->dwv_sorted[j].node);	 // prendo soltanto il puntatore
-			flush_node(dw_node, h);	// migro
-			BOOL_CAS(&bucket_p->dwv_sorted[j].node, dw_node, get_marked_node(dw_node, BLKN));
-			assertf(!is_blocked(bucket_p->dwv_sorted[j].node), "dw_flush(): nodo non marcato come eliminato %p\n", bucket_p->dwv_sorted[j].node);
+			if(is_none(bucket_p->dwv_sorted[j].node)){
+				dw_node = get_node_pointer(bucket_p->dwv_sorted[j].node);	 // prendo soltanto il puntatore
+				flush_node(dw_node, h);	// migro
+				BOOL_CAS(&bucket_p->dwv_sorted[j].node, dw_node, get_marked_node(dw_node, BLKN));
+				assertf(!is_blocked(bucket_p->dwv_sorted[j].node), "dw_flush(): nodo non marcato come eliminato %p\n", bucket_p->dwv_sorted[j].node);
+			}
 		}
+		// marco come da eliminare
+		BOOL_CAS(&bucket_p->next, set_bucket_state(bucket_p->next, EXT), get_marked_ref(set_bucket_state(bucket_p->next, EXT), DELB));
+#if ENABLE_BLOCKING_FLUSH == 1
 	}
+	else while(!is_marked_ref(bucket_p->next, DELB);	
+#endif
 
-	// marco come da eliminare
-	BOOL_CAS(&bucket_p->next, set_bucket_state(bucket_p->next, EXT), get_marked_ref(set_bucket_state(bucket_p->next, EXT), DELB));
+
 	assertf(!is_marked_ref(bucket_p->next, DELB), 
 	"dw_flush(): bucket non marcato %d %llu\n", is_marked_ref(bucket_p->next, DELB), get_bucket_state(bucket_p->next));
 }

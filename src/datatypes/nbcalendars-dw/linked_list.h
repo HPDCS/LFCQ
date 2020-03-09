@@ -8,7 +8,6 @@
 
 #include "common_nb_calqueue.h"
 
-//#include <stddef.h>
 // container contnente un evento da gestire
 typedef struct nbc_bucket_node_container nbnc;
 struct nbc_bucket_node_container{
@@ -26,6 +25,7 @@ struct deferred_work_bucket{
 	int volatile cicle_limit;
 	int volatile valid_elem;
 	int volatile indexes;	// inserimento|estrazione
+	int volatile lock;
 	//char pad[32];
 };
 
