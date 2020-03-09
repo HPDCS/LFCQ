@@ -8,36 +8,35 @@
 #endif
 
 // configuration
-#define VEC_SIZE 	128
-#define DISABLE_EXTRACTION_FROM_DW	1
-#define ENABLE_SORTING 				0
-#define DW_USAGE_TH					0
-#define ENABLE_PROACTIVE_FLUSH		0
-#define ENABLE_BLOCKING_FLUSH		0
-#define SEL_DW						0	// se 1 allora lavoro differito solo se la destinazione si trova su un nodo numa remoto
-#define NODE_HASH(bucket_id) 		((bucket_id) % _NUMA_NODES)	// per bucket fisico
-#define NID nid
-#include "linked_list.h"
+#define VEC_SIZE                    128
+#define DISABLE_EXTRACTION_FROM_DW  1	// disabilita le estrazioni dirette dall dwq
+#define ENABLE_SORTING              0   // abilita il sorting per le dwq
+#define DW_USAGE_TH                 0	// setta il numero di elementi minimo per abilitare le dwq
+#define ENABLE_PROACTIVE_FLUSH      0   // abilita il flush proattivo
+#define ENABLE_BLOCKING_FLUSH       0	// abilita il lock per flushare elementi della dwq sui bucket della cq
+#define SEL_DW                      0	// se 1 allora lavoro differito solo se la destinazione si trova su un nodo numa remoto
+#define NODE_HASH(bucket_id)        ((bucket_id) % _NUMA_NODES)	// per bucket fisico
+#define NID                         nid
 
 
 // Stati bucket virtuale
-#define INS (0ULL)
-#define ORD (1ULL)
-#define EXT (2ULL)
-#define BLK (3ULL)
+#define INS 	(0ULL)
+#define ORD 	(1ULL)
+#define EXT 	(2ULL)
+#define BLK 	(3ULL)
 
 // Marcature di un nodo in dw
-#define NONE (0ULL)
-#define DELN (1ULL)
-#define BLKN (2ULL)
-#define MVGN (4ULL)
-#define MVDN (8ULL)
+#define NONE 	(0ULL)
+#define DELN 	(1ULL)
+#define BLKN 	(2ULL)
+#define MVGN 	(4ULL)
+#define MVDN 	(8ULL)
 
 // Marcature di un bucket
-#define DELB (1ULL)	// possibile eliminazione
-#define MOVB (2ULL)	// bucket in movimento
+#define DELB 	(1ULL)	// possibile eliminazione
+#define MOVB 	(2ULL)	// bucket in movimento
 
-#define INV_TS 		(-1.0)
+#define INV_TS 	(-1.0)
 
 #if NUMA_DW
 #include "../nbcalendars-dw-numa/gc/ptst.h"
@@ -71,15 +70,16 @@ struct nbc_bucket_node_container{
 // virtual bucket
 typedef struct deferred_work_bucket dwb;
 struct deferred_work_bucket{	
-	nbnc* volatile dwv;		// array di eventi deferred
-	nbnc* volatile dwv_sorted;		// array di eventi deferred
-	dwb* volatile next;		// puntatore al prossimo elemento
-	long long index_vb;
-	int volatile cicle_limit;
-	int volatile valid_elem;
-	int volatile indexes;	// inserimento|estrazione
-	int volatile lock;
-	long long epoch;
+	nbnc* volatile dwv;             // 8  // array di eventi deferred
+	nbnc* volatile dwv_sorted;      // 16 // array di eventi sorted e deferred
+	dwb* volatile next;             // 24 // puntatore al prossimo elemento
+	long long index_vb;             // 32 //
+	long long epoch;                // 40 //
+	int volatile cicle_limit;       // 44 //
+	int volatile valid_elem;        // 48 //
+	int volatile indexes;           // 52 // inserimento|estrazione
+	int volatile lock;              // 56 //
+	long long pad;                  // 64 //
 	//char pad[32];
 };
 
@@ -100,9 +100,11 @@ dwb* list_add(
  dwb*
 );
 
-dwb* list_remove(dwb*, long long, dwb*);
-
-
+dwb* list_remove(
+ dwb*, 
+ long long, 
+ dwb*
+);
 
 int dw_enqueue(
  void*, 
@@ -114,8 +116,6 @@ int dw_enqueue(
 );
 
 dwb* dw_dequeue(void *tb, unsigned long long index_vb);
-
-
 void dw_block_table(void*, unsigned int);
 pkey_t dw_extraction(dwb*, void**, pkey_t, bool, bool);
 

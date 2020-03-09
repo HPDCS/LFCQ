@@ -54,7 +54,7 @@ extern int gc_hid[];
 #endif
 #define RESIZE_PERIOD RESIZE_PERIOD_FACTOR*BASE
 
-#define BW_SCALING 1
+#define BW_SCALING 1.0
 
 
 #define OK			0
