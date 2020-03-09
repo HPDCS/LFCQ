@@ -97,6 +97,8 @@ extern int gc_hid[];
 
 #define FETCH_AND_AND 				__sync_fetch_and_and
 #define FETCH_AND_OR 				__sync_fetch_and_or
+#define FETCH_AND_ADD 				__sync_fetch_and_add
+
 
 #define ATOMIC_INC					atomic_inc_x86
 #define ATOMIC_DEC					atomic_dec_x86
