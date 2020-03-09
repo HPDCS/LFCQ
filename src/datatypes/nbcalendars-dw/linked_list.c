@@ -1,21 +1,6 @@
 #include "common_nb_calqueue.h"
-#include "linked_list.h"
 
 
-
-
-extern unsigned long long get_bucket_state(dwb*);
-extern dwb* set_bucket_state(dwb*, unsigned long long);
-extern dwb* get_bucket_pointer(dwb*);
-extern nbc_bucket_node* get_node_pointer(nbc_bucket_node*);
-extern int get_deq_ind(int);
-extern bool is_deleted(nbc_bucket_node*);
-extern bool is_moved(nbc_bucket_node*);
-extern bool is_none(nbc_bucket_node*);
-extern bool is_blocked(nbc_bucket_node*);
-
-bool is_marked_ref(dwb* bucket, unsigned long long mark){return (bool)((unsigned long long)bucket & mark);}
-dwb* get_marked_ref(dwb* bucket, unsigned long long mark){return (dwb*)((unsigned long long)bucket | mark);}
 
 dwb* list_search(dwb *head, long long index_vb, dwb** left_node, int mode, dwb* list_tail) {
  	int i;
@@ -136,23 +121,6 @@ dwb* new_node(long long index_vb, dwb *next
 	  	
   	return node;
 }
-
-/*
-int new_list(dwl* list){
-	int result = 0;
-
-  	// inizializzazione
-  	list->head = new_node(0, NULL, false);
-  	list->tail = new_node(ULLONG_MAX, NULL, false);
-  	
-  	if(list->head == NULL || list->tail == NULL)
-  		result = 1;
-  	else
-  		list->head->next = list->tail;
-  	
-  	return result;
-}
-*/
 
 dwb* list_add(dwb *head, long long index_vb, 
 #if NUMA_DW
