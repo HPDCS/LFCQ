@@ -1,65 +1,108 @@
 #include "common_nb_calqueue.h"
-#include "linked_list.h"
 
 extern __thread unsigned long long no_empty_vb;
 extern __thread long ins;
 extern __thread long conflitti_ins;
-
 extern __thread int blocked;
 extern __thread bool from_block_table;
 extern __thread long estr;
 extern __thread long conflitti_estr;
 
-extern bool is_marked_ref(dwb*, unsigned long long);
-extern dwb* get_marked_ref(dwb*, unsigned long long);
 
-// Bucket
-dwb* get_bucket_pointer(dwb*);
-unsigned long long get_bucket_state(dwb*);
-dwb* set_bucket_state(dwb*, unsigned long long);
+void block_ins(dwb* bucket_p){
+	int i, limit;
+	int enq_cn;
+	int valid_elem = 0;
 
-// Nodo
-bool is_blocked(nbc_bucket_node*);
-bool is_deleted(nbc_bucket_node*);
-bool is_moving(nbc_bucket_node*);
-bool is_moved(nbc_bucket_node*);
-bool is_none(nbc_bucket_node*);
-nbc_bucket_node* get_node_pointer(nbc_bucket_node*);
-nbc_bucket_node* get_marked_node(nbc_bucket_node*, unsigned long long);
+	//assertf(get_deq_ind(bucket_p->indexes) > 0, "block_ins(): deq_cn non nullo %d %d %p\n", get_deq_ind(bucket_p->indexes), bucket_p->indexes, bucket_p->next);
+	//assertf((get_enq_ind(bucket_p->indexes) == VEC_SIZE && from == 0), "block_ins(): bucket pieno da dw_dequeue. ultimo %p \n", bucket_p->dwv[VEC_SIZE - 1].node);
+	//assertf((bucket_p->dwv[VEC_SIZE - 1].node == NULL && get_enq_ind(bucket_p->indexes) == VEC_SIZE && bucket_p->dwv[VEC_SIZE - 1].node == NULL), "block_ins(): falso bucket virtuale pieno. index = %llu %p %d\n", bucket_p->index_vb, bucket_p->dwv[VEC_SIZE - 1].node, from);
+	
+	while((enq_cn = get_enq_ind(bucket_p->indexes)) < VEC_SIZE){// se non l'ha fatto ancora nessuno
+		//assertf(enq_cn == 0, "block_ins(): non ci sono elementi nel bucket. enq_cn = %d\n", enq_cn);
+		limit = get_enq_ind(VAL_CAS(&bucket_p->indexes, enq_cn << ENQ_BIT_SHIFT, ((enq_cn + VEC_SIZE) << ENQ_BIT_SHIFT)));	// aggiungo il massimo
+		//assertf(limit == 0, "block_ins(): non ci sono elementi nel bucket. limit = %d\n", enq_cn);
+		if(limit < VEC_SIZE){	// se ci sono riuscito
+			//assertf((!BOOL_CAS(&bucket_p->cicle_limit, VEC_SIZE, limit)), "block_ins(): settaggio di cicle_limit non riuscito, limit %d %d %d\n", limit, bucket_p->cicle_limit, enq_cn);// imposto quello del bucket
+			BOOL_CAS(&bucket_p->cicle_limit, VEC_SIZE, limit);
+		}
+	}
+
+	assertf(bucket_p->cicle_limit > VEC_SIZE || bucket_p->cicle_limit < 0, "block_ins(): limite ciclo sbagliato %d\n", enq_cn);
+	assertf(enq_cn < VEC_SIZE, "block_ins(): enq_cn non è stato incrementato %d\n", enq_cn);
+
+	for(i = 0; i < bucket_p->cicle_limit; i++){
+
+		if(bucket_p->dwv[i].node == NULL) BOOL_CAS(&bucket_p->dwv[i].node, NULL, (nbc_bucket_node*)BLKN);
+		if(bucket_p->dwv[i].timestamp == INV_TS) BOOL_CAS_DOUBLE(&bucket_p->dwv[i].timestamp,INV_TS,INFTY);
+		
+		if(!is_blocked(bucket_p->dwv[i].node) && bucket_p->dwv[i].timestamp != INFTY)
+			valid_elem++;
+
+		assertf(bucket_p->dwv[i].node == NULL, "block_ins(): nodo non marcato come bloccato %p %f\n", bucket_p->dwv[i].node, bucket_p->dwv[i].timestamp);
+	}
+
+	if(BOOL_CAS(&bucket_p->valid_elem, VEC_SIZE, valid_elem)){
+		blocked += bucket_p->cicle_limit - bucket_p->valid_elem;// statistica
+	}
+
+	BOOL_CAS(&bucket_p->next, set_bucket_state(bucket_p->next, INS), set_bucket_state(bucket_p->next, ORD));
+}
 
 
 void apply_transition_ORD_to_EXT(dwb *bucket_p
 #if NUMA_DW
-, int numa_nodes
+, int numa_node
 #endif
-);
+){
+	nbnc *old_dwv, *aus_ord_array;
+	int i, j;
+	
+	if(get_bucket_state(bucket_p->next) == ORD){
+		assertf( bucket_p->cicle_limit  > VEC_SIZE || bucket_p->cicle_limit <= 0, "do_ord(): limite del ciclo fuori dal range %s\n", "");
+		assertf((bucket_p->cicle_limit == VEC_SIZE && bucket_p->dwv[VEC_SIZE - 1].node == NULL), "do_ord(): falso bucket virtuale pieno. index = %llu\n", bucket_p->index_vb);
+		assertf( bucket_p->cicle_limit == 0, "do_ord(): nulla da ordinare %s\n", "");
+		
+		if(bucket_p->dwv_sorted != NULL){
+			BOOL_CAS(&bucket_p->next, set_bucket_state(bucket_p->next, ORD), set_bucket_state(bucket_p->next, EXT));
+			return;
+		} 
+		
+	#if NUMA_DW			
+		aus_ord_array = gc_alloc_node(ptst, gc_aid[2], numa_node);
+	#else
+		aus_ord_array = gc_alloc(ptst, gc_aid[2]);
+	#endif
+	
+		if(aus_ord_array == NULL)	error("Non abbastanza memoria per allocare un array dwv in ORD\n");
 
-// Indici
-int get_enq_ind(int);
-int get_deq_ind(int);
-int add_enq_ind(int, int);
+		//if(bucket_p->cicle_limit == VEC_SIZE){ print_dwv(VEC_SIZE, old_dwv); printf(" prima dell'ordinamento\n"); }
 
-// Ausiliarie
-void block_ins(dwb*);
-int cmp_node(const void*, const void*);
-void print_dwv(int, nbnc*);
+		// memcopy selettiva
+		old_dwv = bucket_p->dwv;
+		for(i = 0, j = 0; i < bucket_p->cicle_limit; i++){
+			if(!is_blocked(old_dwv[i].node) && bucket_p->dwv[i].timestamp != INFTY){
+				memcpy(aus_ord_array + j, old_dwv + i, sizeof(nbnc));
+				j++;
+			}
+		}
 
-nbc_bucket_node* get_node_pointer(nbc_bucket_node* node){return (nbc_bucket_node*)((unsigned long long)node & NODE_PTR_MASK);}
-nbc_bucket_node* get_marked_node(nbc_bucket_node* node, unsigned long long state){return ((nbc_bucket_node*)((unsigned long long)node | state));}
+		assertf(j != bucket_p->valid_elem, "do_ord(): numero di elementi copiati per essere ordinati non corrisponde %d  %d\n", j, bucket_p->valid_elem);
+	
+	#if ENABLE_SORTING 
+		qsort(aus_ord_array, bucket_p->valid_elem, sizeof(nbnc), cmp_node);		// ordino solo elementi inseriti effettivamente nella fase INS
+	#endif
+		//if(bucket_p->cicle_limit == VEC_SIZE){ print_dwv(VEC_SIZE, old_dwv); printf("dopo l'ordinamento\n"); }
+		
+		// cerco di inserirlo
+		if(!BOOL_CAS(&bucket_p->dwv_sorted, NULL, aus_ord_array)) gc_free(ptst, aus_ord_array, gc_aid[2]);	
+		 
+	}
+}
 
-bool is_deleted(nbc_bucket_node* node){return (bool)((unsigned long long)node & DELN);}
-bool is_blocked(nbc_bucket_node* node){return (bool)((unsigned long long)node & BLKN);}
-bool is_moving(nbc_bucket_node* node){return (bool)((unsigned long long)node & MVGN);}
-bool is_moved(nbc_bucket_node* node){return (bool)((unsigned long long)node & MVDN);}
-bool is_none(nbc_bucket_node* node){return (bool)(((unsigned long long)node & 0xfULL) == 0ULL);}
 
-dwb* get_bucket_pointer(dwb* bucket){return (dwb*)((unsigned long long)bucket & BUCKET_PTR_MASK);}
-unsigned long long get_bucket_state(dwb* bucket){return (((unsigned long long)bucket & BUCKET_STATE_MASK) >> BUCKET_STATE_SHIFT);}
-dwb* set_bucket_state(dwb* bucket, unsigned long long state){return (dwb*)(((unsigned long long)bucket & BUCKET_PTR_MASK_WM) | (state << BUCKET_STATE_SHIFT));}
 
-int get_enq_ind(int indexes){return indexes >> ENQ_BIT_SHIFT;}
-int get_deq_ind(int indexes){return indexes & DEQ_IND_MASK;}
-int add_enq_ind(int indexes, int num){return indexes + (num << ENQ_BIT_SHIFT);}
+
 
 void print_dwv(int size, nbnc *vect){
 	int j;
@@ -337,98 +380,6 @@ dwb* dw_dequeue(void *tb, unsigned long long index_vb){
 
 }
 
-
-void apply_transition_ORD_to_EXT(dwb *bucket_p
-#if NUMA_DW
-, int numa_node
-#endif
-){
-	nbnc *old_dwv, *aus_ord_array;
-	int i, j;
-	
-	if(get_bucket_state(bucket_p->next) == ORD){
-		assertf( bucket_p->cicle_limit  > VEC_SIZE || bucket_p->cicle_limit <= 0, "do_ord(): limite del ciclo fuori dal range %s\n", "");
-		assertf((bucket_p->cicle_limit == VEC_SIZE && bucket_p->dwv[VEC_SIZE - 1].node == NULL), "do_ord(): falso bucket virtuale pieno. index = %llu\n", bucket_p->index_vb);
-		assertf( bucket_p->cicle_limit == 0, "do_ord(): nulla da ordinare %s\n", "");
-		
-		if(bucket_p->dwv_sorted != NULL){
-			BOOL_CAS(&bucket_p->next, set_bucket_state(bucket_p->next, ORD), set_bucket_state(bucket_p->next, EXT));
-			return;
-		} 
-		
-	#if NUMA_DW			
-		aus_ord_array = gc_alloc_node(ptst, gc_aid[2], numa_node);
-	#else
-		aus_ord_array = gc_alloc(ptst, gc_aid[2]);
-	#endif
-	
-		if(aus_ord_array == NULL)	error("Non abbastanza memoria per allocare un array dwv in ORD\n");
-
-		//if(bucket_p->cicle_limit == VEC_SIZE){ print_dwv(VEC_SIZE, old_dwv); printf(" prima dell'ordinamento\n"); }
-
-		// memcopy selettiva
-		old_dwv = bucket_p->dwv;
-		for(i = 0, j = 0; i < bucket_p->cicle_limit; i++){
-			if(!is_blocked(old_dwv[i].node) && bucket_p->dwv[i].timestamp != INFTY){
-				memcpy(aus_ord_array + j, old_dwv + i, sizeof(nbnc));
-				j++;
-			}
-		}
-
-		assertf(j != bucket_p->valid_elem, "do_ord(): numero di elementi copiati per essere ordinati non corrisponde %d  %d\n", j, bucket_p->valid_elem);
-	
-	#if ENABLE_SORTING 
-		qsort(aus_ord_array, bucket_p->valid_elem, sizeof(nbnc), cmp_node);		// ordino solo elementi inseriti effettivamente nella fase INS
-	#endif
-		//if(bucket_p->cicle_limit == VEC_SIZE){ print_dwv(VEC_SIZE, old_dwv); printf("dopo l'ordinamento\n"); }
-		
-		// cerco di inserirlo
-		if(!BOOL_CAS(&bucket_p->dwv_sorted, NULL, aus_ord_array)) gc_free(ptst, aus_ord_array, gc_aid[2]);	
-		 
-	}
-}
-
-
-
-void block_ins(dwb* bucket_p){
-	int i, limit;
-	int enq_cn;
-	int valid_elem = 0;
-
-	//assertf(get_deq_ind(bucket_p->indexes) > 0, "block_ins(): deq_cn non nullo %d %d %p\n", get_deq_ind(bucket_p->indexes), bucket_p->indexes, bucket_p->next);
-	//assertf((get_enq_ind(bucket_p->indexes) == VEC_SIZE && from == 0), "block_ins(): bucket pieno da dw_dequeue. ultimo %p \n", bucket_p->dwv[VEC_SIZE - 1].node);
-	//assertf((bucket_p->dwv[VEC_SIZE - 1].node == NULL && get_enq_ind(bucket_p->indexes) == VEC_SIZE && bucket_p->dwv[VEC_SIZE - 1].node == NULL), "block_ins(): falso bucket virtuale pieno. index = %llu %p %d\n", bucket_p->index_vb, bucket_p->dwv[VEC_SIZE - 1].node, from);
-	
-	while((enq_cn = get_enq_ind(bucket_p->indexes)) < VEC_SIZE){// se non l'ha fatto ancora nessuno
-		//assertf(enq_cn == 0, "block_ins(): non ci sono elementi nel bucket. enq_cn = %d\n", enq_cn);
-		limit = get_enq_ind(VAL_CAS(&bucket_p->indexes, enq_cn << ENQ_BIT_SHIFT, ((enq_cn + VEC_SIZE) << ENQ_BIT_SHIFT)));	// aggiungo il massimo
-		//assertf(limit == 0, "block_ins(): non ci sono elementi nel bucket. limit = %d\n", enq_cn);
-		if(limit < VEC_SIZE){	// se ci sono riuscito
-			//assertf((!BOOL_CAS(&bucket_p->cicle_limit, VEC_SIZE, limit)), "block_ins(): settaggio di cicle_limit non riuscito, limit %d %d %d\n", limit, bucket_p->cicle_limit, enq_cn);// imposto quello del bucket
-			BOOL_CAS(&bucket_p->cicle_limit, VEC_SIZE, limit);
-		}
-	}
-
-	assertf(bucket_p->cicle_limit > VEC_SIZE || bucket_p->cicle_limit < 0, "block_ins(): limite ciclo sbagliato %d\n", enq_cn);
-	assertf(enq_cn < VEC_SIZE, "block_ins(): enq_cn non è stato incrementato %d\n", enq_cn);
-
-	for(i = 0; i < bucket_p->cicle_limit; i++){
-
-		if(bucket_p->dwv[i].node == NULL) BOOL_CAS(&bucket_p->dwv[i].node, NULL, (nbc_bucket_node*)BLKN);
-		if(bucket_p->dwv[i].timestamp == INV_TS) BOOL_CAS_DOUBLE(&bucket_p->dwv[i].timestamp,INV_TS,INFTY);
-		
-		if(!is_blocked(bucket_p->dwv[i].node) && bucket_p->dwv[i].timestamp != INFTY)
-			valid_elem++;
-
-		assertf(bucket_p->dwv[i].node == NULL, "block_ins(): nodo non marcato come bloccato %p %f\n", bucket_p->dwv[i].node, bucket_p->dwv[i].timestamp);
-	}
-
-	if(BOOL_CAS(&bucket_p->valid_elem, VEC_SIZE, valid_elem)){
-		blocked += bucket_p->cicle_limit - bucket_p->valid_elem;// statistica
-	}
-
-	BOOL_CAS(&bucket_p->next, set_bucket_state(bucket_p->next, INS), set_bucket_state(bucket_p->next, ORD));
-}
 
 
 int cmp_node(const void *p1, const void *p2){
