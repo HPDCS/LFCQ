@@ -42,7 +42,7 @@
 #define INV_TS 		(-1.0)
 
 #if NUMA_DW
-#include "./gc/ptst.h"
+#include "../nbcalendars-dw-numa/gc/ptst.h"
 #else
 #include "../../gc/ptst.h"
 #endif
