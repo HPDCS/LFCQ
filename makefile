@@ -9,7 +9,7 @@ EXECUTABLES :=
 USER_OBJS :=
 LIBS := -lpthread -lm -lnuma -lrt -mrtm
 SRC_DIR := src
-TARGETS := NBCQ LIND MARO CBCQ SLCQ NBVB 2CAS VBPQ ACRCQ DWCQ #V2CQ NUMA WORK
+TARGETS := NBCQ LIND MARO CBCQ SLCQ NBVB 2CAS VBPQ ACRCQ DWCQ DWCQN #V2CQ NUMA WORK
 
 
 UTIL_value := src/utils/common.o src/utils/hpdcs_math.o 
@@ -30,7 +30,7 @@ ACRCQ_value := src/datatypes/nbcalendars-ad/nb_calqueue.o src/datatypes/nbcalend
 # semplice
 DWCQ_value := src/datatypes/nbcalendars-dw/dequeue.o src/datatypes/nbcalendars-dw/enqueue.o src/datatypes/nbcalendars-dw/common_nb_calqueue.o src/datatypes/nbcalendars-dw/dw.o src/datatypes/nbcalendars-dw/linked_list.o $(UTIL_value) $(GACO_value) $(ARCH_value)
 # NUMA
-#DWCQ_value := src/datatypes/nbcalendars-dw/dequeue.o src/datatypes/nbcalendars-dw/enqueue.o src/datatypes/nbcalendars-dw/common_nb_calqueue.o src/datatypes/nbcalendars-dw/dw.o src/datatypes/nbcalendars-dw/linked_list.o $(DWSET_value) $(UTIL_value) $(DWGACO_value) $(ARCH_value)
+DWCQN_value := src/datatypes/nbcalendars-dw-numa/dequeue.o src/datatypes/nbcalendars-dw-numa/enqueue.o src/datatypes/nbcalendars-dw-numa/common_nb_calqueue.o src/datatypes/nbcalendars-dw-numa/dw.o src/datatypes/nbcalendars-dw-numa/linked_list.o $(DWSET_value) $(UTIL_value) $(DWGACO_value) $(ARCH_value)
 
 NBVB_value := src/datatypes/nbcalendars_with_vb/nb_calqueue.o src/datatypes/nbcalendars_with_vb/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
 2CAS_value := src/datatypes/nbcalendars_with_vb_2CAS/nb_calqueue.o src/datatypes/nbcalendars_with_vb_2CAS/common_nb_calqueue.o src/datatypes/nbcalendars_with_vb_2CAS/bucket.o $(UTIL_value) $(GACO_value) $(ARCH_value)
@@ -52,7 +52,8 @@ SLCQ_link := gcc
 
 NBCQ_link := gcc 
 ACRCQ_link := gcc 
-DWCQ_link := gcc 
+DWCQ_link := gcc  
+DWCQN_link := gcc 
 VBPQ_link := gcc 
 NBVB_link := gcc 
 2CAS_link := gcc 
@@ -204,7 +205,7 @@ endif
 
 
 #C_SUBDIRS 		:= src src/datatypes/nbcalendars-dw src/datatypes/nbcalendars-ad src/datatypes/nbcalendars src/datatypes/nbcalendars_with_vb src/datatypes/nbcalendars_with_vb2  src/datatypes/nbcalendars_with_vb_2CAS  src/datatypes/nbskiplists src/datatypes/slcalqueue  src/arch src/gc src/utils
-C_SUBDIRS 		:= src src/datatypes/nbcalendars-dw src/datatypes/nbcalendars-dw/gc src/datatypes/nbcalendars-ad src/datatypes/nbcalendars src/datatypes/nbcalendars_with_vb src/datatypes/nbcalendars_with_vb2  src/datatypes/nbcalendars_with_vb_2CAS  src/datatypes/nbskiplists src/datatypes/slcalqueue  src/arch src/gc src/utils
+C_SUBDIRS 		:= src src/datatypes/nbcalendars-dw-numa src/datatypes/nbcalendars-dw src/datatypes/nbcalendars-dw/gc src/datatypes/nbcalendars-ad src/datatypes/nbcalendars src/datatypes/nbcalendars_with_vb src/datatypes/nbcalendars_with_vb2  src/datatypes/nbcalendars_with_vb_2CAS  src/datatypes/nbskiplists src/datatypes/slcalqueue  src/arch src/gc src/utils
 C_SRCS			:= $(shell ls   $(patsubst %, %/*.c, $(C_SUBDIRS)) )
 C_SRCS 			:= $(filter-out $(FILTER_OUT_C_SRC), $(C_SRCS))
 C_OBJS			:= $(strip $(subst .c,.o, $(C_SRCS)))
