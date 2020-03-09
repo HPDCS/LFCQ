@@ -381,7 +381,4 @@ static inline void prefetch(void *p)
 	__builtin_prefetch(p, 1, 3);
 }
 
-
-
-
 #endif /* DATATYPES_COMMON_NONBLOCKING_CALQUEUE_H_ */

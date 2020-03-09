@@ -78,4 +78,25 @@ dwb* dw_dequeue(void *tb, unsigned long long index_vb);
 void dw_block_table(void*, unsigned int);
 pkey_t dw_extraction(dwb*, void**, pkey_t, bool, bool);
 
+static inline nbc_bucket_node* get_node_pointer(nbc_bucket_node* node){return (nbc_bucket_node*)((unsigned long long)node & NODE_PTR_MASK);}
+static inline nbc_bucket_node* get_marked_node(nbc_bucket_node* node, unsigned long long state){return ((nbc_bucket_node*)((unsigned long long)node | state));}
+
+static inline bool is_deleted(nbc_bucket_node* node){return (bool)((unsigned long long)node & DELN);}
+static inline bool is_blocked(nbc_bucket_node* node){return (bool)((unsigned long long)node & BLKN);}
+static inline bool is_moving(nbc_bucket_node* node){return (bool)((unsigned long long)node & MVGN);}
+static inline bool is_moved(nbc_bucket_node* node){return (bool)((unsigned long long)node & MVDN);}
+static inline bool is_none(nbc_bucket_node* node){return (bool)(((unsigned long long)node & 0xfULL) == 0ULL);}
+
+static inline dwb* get_bucket_pointer(dwb* bucket){return (dwb*)((unsigned long long)bucket & BUCKET_PTR_MASK);}
+static inline unsigned long long get_bucket_state(dwb* bucket){return (((unsigned long long)bucket & BUCKET_STATE_MASK) >> BUCKET_STATE_SHIFT);}
+static inline dwb* set_bucket_state(dwb* bucket, unsigned long long state){return (dwb*)(((unsigned long long)bucket & BUCKET_PTR_MASK_WM) | (state << BUCKET_STATE_SHIFT));}
+
+static inline int get_enq_ind(int indexes){return indexes >> ENQ_BIT_SHIFT;}
+static inline int get_deq_ind(int indexes){return indexes & DEQ_IND_MASK;}
+static inline int add_enq_ind(int indexes, int num){return indexes + (num << ENQ_BIT_SHIFT);}
+
+static inline bool is_marked_ref(dwb* bucket, unsigned long long mark){return (bool)((unsigned long long)bucket & mark);}
+static inline dwb* get_marked_ref(dwb* bucket, unsigned long long mark){return (dwb*)((unsigned long long)bucket | mark);}
+
+
 #endif // DEFERRED_WORK

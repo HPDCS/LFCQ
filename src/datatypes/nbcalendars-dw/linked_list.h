@@ -57,8 +57,4 @@ dwb* list_add(
 dwb* list_remove(dwb*, long long, dwb*);
 
 
-extern bool is_marked_ref(dwb*, unsigned long long);
-extern dwb* get_marked_ref(dwb*, unsigned long long);
-
-
 #endif
