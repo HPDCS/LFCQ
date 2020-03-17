@@ -289,10 +289,9 @@ begin:
 					*/
 			}
 
-			if(no_cq_node){// se non c'erano elementi ricominciamo
-				break;
-			}
-
+			// se non c'erano elementi ricominciamo
+			if(no_cq_node) break;
+		
 			// the node is a good candidate for extraction! lets try for it
 			int res = atomic_test_and_set_x64(UNION_CAST(&left_node->next, unsigned long long*));
 

@@ -34,16 +34,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 
 	int dest_node;
 	bool remote; 
-
-	#if !SEL_DW
-		#if NUMA_DW
-		new_node = node_malloc(payload, timestamp, 0, NID);	// allocazione del nodo vicino al thread che lo sta facendo
-		#else
-		new_node = node_malloc(payload, timestamp, 0);	// allocazione semplice
-		#endif
-	#else
-		int prev_dest_node = -1;// qui solo per togliere il warning
-	#endif
+	
+	int prev_dest_node = -1;// qui solo per togliere il warning
 	
 	//init the result
 	res = MOV_FOUND;
@@ -67,27 +59,38 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			// compute the index of the physical bucket
 			index = ((unsigned int) newIndex) % size;
 			
-			#if NUMA_DW || SEL_DW	
+		#if SEL_DW || NUMA_DW	
 			remote = false;
 			dest_node = NODE_HASH(index);
-			if(dest_node != NID)
-				remote = true;
-			#endif
-			
-			#if SEL_DW	// !SEL_DW è stato considerato all'inizio
-				
-				if(prev_dest_node != -1 && prev_dest_node != dest_node)
-					node_free(new_node);// rilascio la precedente allocazione
-
+			if(dest_node != NID) remote = true;
+		#endif
+		
+		#if SEL_DW	
+			if(prev_dest_node != -1 && prev_dest_node != dest_node){
+				node_free(new_node);// rilascio la precedente allocazione
+				new_node = node_malloc(
+					payload, 
+					timestamp, 
+					0
 				#if NUMA_DW
-				new_node = node_malloc(payload, timestamp, 0, dest_node);
-				#else
-				new_node = node_malloc(payload, timestamp, 0);
+					, dest_node
 				#endif
-						
+				);
+			}
+		#endif
+			
+			if(prev_dest_node == -1)
+				new_node = node_malloc(
+					payload, 
+					timestamp, 
+					0
+				#if NUMA_DW
+					, dest_node
+				#endif
+				);
+				
 			prev_dest_node = dest_node;
-			#endif
-
+		
 			// read the actual epoch
        		new_node->epoch = (h->current & MASK_EPOCH);
 
@@ -110,11 +113,14 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			if(remote)
 			#endif
 			{
+				res = dw_enqueue(
+					h, 
+					newIndex, 
+					new_node
 				#if NUMA_DW
-				res = dw_enqueue(h, newIndex, new_node, dest_node);
-				#else
-				res = dw_enqueue(h, newIndex, new_node);
+					, dest_node
 				#endif
+				);
 				if(res == MOV_FOUND)
 					continue;	
 			}

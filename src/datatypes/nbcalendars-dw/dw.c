@@ -146,8 +146,7 @@ void dw_block_table(void* tb, unsigned int start){
 			if(bucket_p != h->deferred_work->list_tail){	// evito di marcare la tail
 			
 				// se il bucket è già marcato per eliminazione lo salto
-				if(is_marked_ref(bucket_p->next, DELB))
-					continue;	
+				if(is_marked_ref(bucket_p->next, DELB)) continue;	
 
 				// porto il bucket in estrazione
 				while(get_bucket_state(bucket_p->next) != BLK && get_bucket_state(bucket_p->next) != EXT){
@@ -292,7 +291,7 @@ int dw_enqueue(void *tb, unsigned long long index_vb, nbc_bucket_node *new_node
 	if(get_bucket_state(bucket_p->next) == ORD){	// eventuale ordinamento
 		apply_transition_ORD_to_EXT(bucket_p
 	#if NUMA_DW
-			, numa_node 
+		, numa_node 
 	#endif
 	);
 	}
@@ -319,7 +318,7 @@ void dw_flush(void *tb, dwb *bucket_p){
 				dw_node = get_node_pointer(bucket_p->dwv_sorted[j].node);	 // prendo soltanto il puntatore
 				flush_node(dw_node, h);	// migro
 				BOOL_CAS(&bucket_p->dwv_sorted[j].node, dw_node, get_marked_node(dw_node, BLKN));
-				assertf(!is_blocked(bucket_p->dwv_sorted[j].node), "dw_flush(): nodo non marcato come eliminato %p\n", bucket_p->dwv_sorted[j].node);
+				//assertf(!is_blocked(bucket_p->dwv_sorted[j].node), "dw_flush(): nodo non marcato come eliminato %p\n", bucket_p->dwv_sorted[j].node);
 			}
 		}
 		// marco come da eliminare
@@ -330,8 +329,9 @@ void dw_flush(void *tb, dwb *bucket_p){
 #endif
 
 
-	assertf(!is_marked_ref(bucket_p->next, DELB), 
-	"dw_flush(): bucket non marcato %d %llu\n", is_marked_ref(bucket_p->next, DELB), get_bucket_state(bucket_p->next));
+	assertf(
+		!is_marked_ref(bucket_p->next, DELB), 
+		"dw_flush(): bucket non marcato %d %llu\n", is_marked_ref(bucket_p->next, DELB), get_bucket_state(bucket_p->next));
 }
 
 dwb* dw_dequeue(void *tb, unsigned long long index_vb){
