@@ -61,6 +61,7 @@ dwb* list_search(dwb *head, long long index_vb, dwb** left_node, int mode, dwb* 
             			// if(get_node_pointer(left_node_next->dwv_sorted[i].node) != NULL && left_node_next->dwv_sorted[i].timestamp != INFTY)
                       	//if(!is_blocked(left_node_next->dwv_sorted[i].node))
                             node_free(get_node_pointer(left_node_next->dwv_sorted[i].node));
+                            //printf("pippo\n");
                     }
 
 			      	gc_free(ptst, left_node_next->dwv, gc_aid[2]);
@@ -107,7 +108,7 @@ dwb* new_node(long long index_vb, dwb *next
 
     // inizializzazione dell'array allocato
   	for(i = 0; i < VEC_SIZE; i++){
-		node->dwv[i].node = NULL;
+		  node->dwv[i].node = NULL;
   		node->dwv[i].timestamp = INV_TS;	
   	}
 
@@ -118,6 +119,7 @@ dwb* new_node(long long index_vb, dwb *next
   	node->next = next;
     node->dwv_sorted = NULL; 
     node->lock = 0;
+    node->pro = 0;
 	  	
   	return node;
 }

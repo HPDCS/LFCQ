@@ -9,12 +9,21 @@
 
 // configuration
 #define VEC_SIZE                    128
-#define DISABLE_EXTRACTION_FROM_DW  1	// disabilita le estrazioni dirette dall dwq
-#define ENABLE_SORTING              0   // abilita il sorting per le dwq
-#define DW_USAGE_TH                 0	// setta il numero di elementi minimo per abilitare le dwq
-#define ENABLE_PROACTIVE_FLUSH      0   // abilita il flush proattivo
+#define DW_ENQUEUE_USAGE_TH			100	// minima distanza tra current e virtual bucket di inserimento per utilizzare DWQ
+
+#define DEQUEUE_WAIT_CICLES			0	// numero di cicli di attesa per un thread remoto prima di provare a fare la dequeue
+
+#define ENABLE_PROACTIVE_FLUSH      1   // abilita il flush proattivo
+#define DEQUEUE_NUM_TH				10	// dopo aver fatto questo numero di dequeue provo a fare flush proattivo di un bucket
+#define PRO_FLUSH_BUCKET_NUM		4	// distanza dal bucket attuale in numero di bucket che posso considerare per flush proattivo 
+#define PRO_FLUSH_BUCKET_NUM_MIN	30
+
+#define DISABLE_EXTRACTION_FROM_DW  ENABLE_PROACTIVE_FLUSH	// disabilita le estrazioni dirette dall dwq
+#define ENABLE_SORTING              1//!DISABLE_EXTRACTION_FROM_DW   // abilita il sorting per le dwq
+#define DW_USAGE_TH                 25000	// setta il numero di elementi minimo per abilitare le dwq
 #define ENABLE_BLOCKING_FLUSH       0	// abilita il lock per flushare elementi della dwq sui bucket della cq
 #define SEL_DW                      0	// se 1 allora lavoro differito solo se la destinazione si trova su un nodo numa remoto
+#define ENABLE_ENQUEUE_WORK			0   // abilita eventuale ulteriore lavoro svolto da un thread che esegue enqueue in DWQ
 #define NODE_HASH(bucket_id)        ((bucket_id) % _NUMA_NODES)	// per bucket fisico
 #define NID                         nid
 
@@ -79,8 +88,9 @@ struct deferred_work_bucket{
 	int volatile valid_elem;        // 48 //
 	int volatile indexes;           // 52 // inserimento|estrazione
 	int volatile lock;              // 56 //
-	long long pad;                  // 64 //
-	//char pad[32];
+	int volatile pro;				// 60 //
+	int pad;						// 64 // 
+	//long long pad;					               
 };
 
 // struttura di deferred work 
@@ -116,8 +126,10 @@ int dw_enqueue(
 );
 
 dwb* dw_dequeue(void *tb, unsigned long long index_vb);
+void dw_proactive_flush(void*, unsigned long long);
 void dw_block_table(void*, unsigned int);
 pkey_t dw_extraction(dwb*, void**, pkey_t, bool, bool);
+int cmp_node(const void*, const void*);
 
 static inline nbc_bucket_node* get_node_pointer(nbc_bucket_node* node){return (nbc_bucket_node*)((unsigned long long)node & NODE_PTR_MASK);}
 static inline nbc_bucket_node* get_marked_node(nbc_bucket_node* node, unsigned long long state){return ((nbc_bucket_node*)((unsigned long long)node | state));}

@@ -83,6 +83,7 @@ unsigned int TIME;
 
 
 __thread struct drand48_data seedT;
+__thread struct drand48_data seedP;
  
 pthread_t *p_tid;
 
@@ -128,6 +129,7 @@ void* process(void *arg)
 	srand48_r(my_id+157, &seed2);
     srand48_r(my_id+359, &seed);
     srand48_r(my_id+254, &seedT);
+    srand48_r(my_id, &seedP);
     
      
 	CPU_ZERO(&cpuset);

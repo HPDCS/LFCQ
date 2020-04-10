@@ -59,6 +59,7 @@ __thread double last_bw = 0.0;
 __thread long ins = 0;
 __thread long estr = 0;
 __thread long conflitti_ins = 0;
+__thread long cache_hit = 0;
 __thread long conflitti_estr = 0;
 __thread int blocked = 0;
 __thread bool from_block_table = false;
@@ -291,7 +292,7 @@ int search_and_insert(nbc_bucket_node *head, pkey_t timestamp, unsigned int tie_
 	pkey_t left_timestamp, tmp_timestamp;
 	double rand;
 	bool marked, ts_equal, tie_lower, go_to_next;
-	bool is_new_key = flag == REMOVE_DEL_INV;
+	bool is_new_key = (flag == REMOVE_DEL_INV);
 	drand48_r(&seedT, &rand);
 	
 	// clean the heading zone of the bucket
@@ -728,7 +729,7 @@ double compute_mean_separation_time(table* h,
 		}
 	}
 
-    double epb = h->pad;
+    //double epb = h->pad;
     newaverage = (newaverage / j) * elem_per_bucket *BW_SCALING; //elem_per_bucket; /* this is the new width */
 	//printf("OLD %f NEW %f\n", (double)elem_per_bucket, (double)epb );    
 	// Compute new width
@@ -820,8 +821,14 @@ void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 
 void validate_or_destroy(nbc_bucket_node *right_node){
 	nbc_bucket_node *right_node_next;
+
 	if(right_node->original_copy->replica != right_node){
-		FETCH_AND_AND(&(right_node->next), MASK_DEL);	
+		
+		do{right_node_next = right_node->next;}
+		while(!BOOL_CAS(	&(right_node->next),
+					right_node_next,
+					(unsigned long long)get_unmarked(right_node_next) | DEL));
+
 		return;
 	}
 	do{	right_node_next = right_node->next;}
@@ -834,9 +841,259 @@ void validate_or_destroy(nbc_bucket_node *right_node){
 		);
 }
 
+
+int search_and_insert_dw(nbc_bucket_node *suggestion, nbc_bucket_node *head, pkey_t timestamp, unsigned int tie_breaker,
+						 int flag, nbc_bucket_node *new_node_pointer, nbc_bucket_node **new_node)
+{
+	nbc_bucket_node *left, *left_next, *tmp, *tmp_next, *tail, *sug_next;
+	unsigned int counter;
+	unsigned int left_tie_breaker, tmp_tie_breaker;
+	unsigned int len;
+	pkey_t left_timestamp, tmp_timestamp;
+	double rand;
+	bool marked, ts_equal, tie_lower, go_to_next;
+	bool is_new_key = (flag == REMOVE_DEL_INV);
+	drand48_r(&seedT, &rand);
+	
+	// clean the heading zone of the bucket
+/*	nbc_bucket_node *lnode, *rnode;
+	
+
+	if(suggestion != NULL)
+		search(suggestion, -1.0, 0, &lnode, &rnode, flag);
+	else
+		search(head, -1.0, 0, &lnode, &rnode, flag);
+*/
+
+	
+	// read tail from head (this is done for avoiding an additional cache miss)
+	(*new_node)->tail = tail = head->tail;
+	do
+	{
+
+		len = 0;
+		
+		if(suggestion != NULL && !is_marked((sug_next = suggestion->next), DEL)){
+			left = tmp = suggestion;
+			left_next = tmp_next = sug_next;
+		}else{
+			// Fetch the head and its next node
+			left = tmp = head;
+			// read all data from the head (hopefully only the first access is a cache miss)
+			left_next = tmp_next = tmp->next;
+		}
+
+/*
+		val = leggere il valore di suggestion->next
+
+		if(suggestion == NULL){
+			/// Fetch the head and its next node
+			left = tmp = head;
+			// read all data from the head (hopefully only the first access is a cache miss)
+			left_next = tmp_next = tmp->next;
+		}else if(suggestion != NULL e non marcato){
+			left = suggestion
+			left_next = tmp_next = val
+		}	
+*/
+
+		// since such head does not change, probably we can cache such data with a local copy
+		left_tie_breaker = tmp_tie_breaker = tmp->counter;
+		left_timestamp 	= tmp_timestamp    = tmp->timestamp;
+		
+		// SANITY CHECKS
+		assertf(head == NULL, "PANIC %s\n", "");
+		assertf(tmp_next == NULL, "PANIC1 %s\n", "");
+		assertf(is_marked_for_search(left_next, flag), "PANIC2 %s\n", "");
+		
+		// init variables useful during iterations
+		counter = 0;
+		marked = is_marked_for_search(tmp_next, flag);
+		
+		do
+		{
+
+			len++;
+			//Find the left node compatible with value of 'flag'
+			// potentially this if can be removed
+			if (!marked)
+			{
+				left = tmp;
+				left_next = tmp_next;
+				left_tie_breaker = tmp_tie_breaker;
+				left_timestamp = tmp_timestamp;
+				counter = 0;
+			}
+			
+			// increase the count of marked nodes met during scan
+			counter+=marked;
+			
+			// get an unmarked reference to the tmp node
+			tmp = get_unmarked(tmp_next);
+			
+			// Retrieve timestamp and next field from the current node (tmp)
+			tmp_next = tmp->next;
+			tmp_timestamp = tmp->timestamp;
+			tmp_tie_breaker = tmp->counter;
+			
+			// Check if the right node is marked
+			marked = is_marked_for_search(tmp_next, flag);
+			
+			// Check if the right node timestamp and tie_breaker satisfies the conditions 
+			go_to_next = LESS(tmp_timestamp, timestamp);
+			ts_equal = D_EQUAL(tmp_timestamp, timestamp);
+			tie_lower = 		(
+								is_new_key || 
+								(!is_new_key && tmp_tie_breaker <= tie_breaker)
+							);
+			go_to_next =  go_to_next || (ts_equal && tie_lower);
+
+			// Exit if tmp is a tail or its timestamp is > of the searched key
+		} while (	tmp != tail &&
+					(
+						marked ||
+						go_to_next
+					)
+				);
+		
+		// if the right or the left node is MOV signal this to the caller
+		if(is_marked(tmp, MOV) || is_marked(left_next, MOV) )
+			return MOV_FOUND;
+		
+		// mark the to-be.inserted node as INV if flag == REMOVE_DEL
+		if(flag == REMOVE_DEL)
+			new_node_pointer->next = get_marked(tmp, INV & (-(!is_new_key)) );
+		else if(flag == REMOVE_DEL_FOR_DW)
+			new_node_pointer->next = get_marked(tmp, INV2 & (-(!is_new_key)) );
+		else
+			new_node_pointer->next = get_marked(tmp, INV & (-(!is_new_key)) );
+		// set the tie_breaker to:
+		// 1+T1 		IF K1 == timestamp AND flag == REMOVE_DEL_INV 
+		// 1			IF K1 != timestamp AND flag == REMOVE_DEL_INV
+		// UNCHANGED 	IF flag != REMOVE_DEL_INV
+		new_node_pointer->counter =  ( ((unsigned int)(-(is_new_key))) & (1 + ( ((unsigned int)-D_EQUAL(timestamp, left_timestamp )) & left_tie_breaker ))) +
+									 (~((unsigned int)(-(is_new_key))) & tie_breaker);
+
+		// node already exists
+		if(!is_new_key && D_EQUAL(timestamp, left_timestamp ) && left_tie_breaker == tie_breaker)
+		{
+			node_free(new_node_pointer);
+			*new_node = left;
+			return OK;
+		}
+		
+		#if KEY_TYPE != DOUBLE
+		if(is_new_key && D_EQUAL(timestamp, left_timestamp ))
+		{
+			node_free(new_node_pointer);
+			*new_node = left;
+			return PRESENT;
+		}
+		#endif
+		
+
+		// copy left node mark			
+		if (BOOL_CAS(&(left->next), left_next, get_marked(new_node_pointer,get_mark(left_next))))
+		{
+			if(is_new_key)
+			{
+				scan_list_length_en += len;
+			}
+			if (counter > 0)
+				connect_to_be_freed_node_list(left_next, counter);
+			return OK;
+		}
+		
+		// this could be avoided
+		return ABORT;
+
+		
+	} while (1);
+}
+
+nbc_bucket_node* flush_node(nbc_bucket_node *suggestion, nbc_bucket_node *right_node, table *new_h)
+{
+	nbc_bucket_node *replica;
+	nbc_bucket_node** new_node;
+	nbc_bucket_node *right_replica_field, *right_node_next;
+	
+	nbc_bucket_node* ret = NULL;
+	
+	nbc_bucket_node *bucket, *new_node_pointer;
+	unsigned int index;
+
+	unsigned int new_node_counter 	;
+	pkey_t 		 new_node_timestamp ;
+
+	
+	int res = 0;
+	
+	//Create a new node to be inserted in the new table as as INValid
+	#if NUMA_DW
+	replica = node_malloc(right_node->payload, right_node->timestamp,  right_node->counter, NODE_HASH(hash(right_node->timestamp, new_h->bucket_width)));
+	#else
+	replica = node_malloc(right_node->payload, right_node->timestamp,  right_node->counter);
+	#endif
+	
+	//ptr_node_allocated = replica;
+
+	new_node 			= &replica;
+	new_node_pointer 	= (*new_node);
+	new_node_counter 	= new_node_pointer->counter;
+	new_node_timestamp 	= new_node_pointer->timestamp;
+	replica->original_copy = right_node;
+	
+	index = hash(new_node_timestamp, new_h->bucket_width);
+
+	// node to be added in the hashtable
+	bucket = new_h->array + (index % new_h->size);
+	         
+    do{	right_replica_field = right_node->replica; } 
+    // try to insert the replica in the new table       
+	while(right_replica_field == NULL && (res = 
+	search_and_insert_dw(suggestion, bucket, new_node_timestamp, new_node_counter, REMOVE_DEL_FOR_DW, new_node_pointer, new_node)
+	) == ABORT);
+	// at this point we have at least one replica into the new table
+
+	// try to decide which is the right replica and if I won the challenge increase the counter of enqueued items into the new set table
+	if( right_replica_field == NULL) 
+			BOOL_CAS(
+				&(right_node->replica),
+				NULL,
+				replica
+				)
+		; 
+
+	//if(replica != ptr_node_allocated && ptr_node_allocated != right_node->replica){
+	if(replica != right_node->replica){
+
+		while(!BOOL_CAS(	&(replica->next),
+				replica->next,
+				(unsigned long long)get_unmarked(replica->next) | DEL));
+	}
+	#if ENABLE_SORTING
+	else
+		ret = replica;
+	#endif
+
+	right_replica_field = right_node->replica;
+
+	// make the replica being valid
+	do{	right_node_next = right_replica_field->next;}
+	while( 
+		is_marked(right_node_next, INV2) && 
+		!BOOL_CAS(	&(right_replica_field->next),
+					right_node_next,
+					get_unmarked(right_node_next)
+				)
+		);
+
+	return ret;
+}
+/*
 void flush_node(nbc_bucket_node *right_node, table *new_h)
 {
-	nbc_bucket_node *replica, *ptr_node_allocated;
+	nbc_bucket_node *replica;
 	nbc_bucket_node** new_node;
 	nbc_bucket_node *right_replica_field, *right_node_next;
 	
@@ -856,7 +1113,7 @@ void flush_node(nbc_bucket_node *right_node, table *new_h)
 	replica = node_malloc(right_node->payload, right_node->timestamp,  right_node->counter);
 	#endif
 	
-	ptr_node_allocated = replica;
+	//ptr_node_allocated = replica;
 
 	new_node 			= &replica;
 	new_node_pointer 	= (*new_node);
@@ -885,8 +1142,14 @@ void flush_node(nbc_bucket_node *right_node, table *new_h)
 				)
 		; 
 
-	if(replica != ptr_node_allocated && ptr_node_allocated != right_node->replica)
-		FETCH_AND_AND(&(ptr_node_allocated->next), MASK_DEL);	
+	//if(replica != ptr_node_allocated && ptr_node_allocated != right_node->replica){
+	if(replica != right_node->replica){
+
+		while(!BOOL_CAS(	&(replica->next),
+				replica->next,
+				(unsigned long long)get_unmarked(replica->next) | DEL));
+
+	}
 
 	right_replica_field = right_node->replica;
 
@@ -901,6 +1164,7 @@ void flush_node(nbc_bucket_node *right_node, table *new_h)
 		);
 
 }
+*/
 
 
 
@@ -1220,7 +1484,7 @@ void pq_report(int TID)
 			malloc_count, last_bw);
 
 	printf("Coda DW: inserimenti %ld, estrazione %ld, conflitti_ins %ld, conflitti_estr %ld\n", ins, estr, conflitti_ins, conflitti_estr);
-	printf("TID %d: elementi bloccati %d\n", TID, blocked);
+	printf("TID %d: elementi bloccati %d, cache hit %ld \n", TID, blocked, cache_hit);
 	#if NUMA_DW || SEL_DW
 	printf("DWQNumaStat: LOC: enq %llu, deq %llu. REM: enq %llu deq %llu\n\n", local_enq, local_deq, remote_enq, remote_deq);
 	#endif
@@ -1237,6 +1501,7 @@ void pq_reset_statistics(){
 		scan_list_length_en = 0;
 		scan_list_length = 0;
 		enq_failed=0;
+		conflitti_ins = 0;
 }
 
 unsigned int pq_num_malloc(){ return (unsigned int) malloc_count; }

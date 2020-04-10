@@ -116,9 +116,9 @@ extern int gc_hid[];
 #define INV2 (4ULL)
 //#define MOV2 (8ULL)
 
-#define MASK_PTR 	((unsigned long long) (-16LL))
-#define MASK_MRK 	(15ULL)
-#define MASK_DEL 	((unsigned long long) (-15LL))
+#define MASK_PTR 	((unsigned long long) (-8LL))
+#define MASK_MRK 	(7ULL)
+#define MASK_DEL 	((unsigned long long) (-7LL))
 
 #define MAX_UINT 			  (0xffffffffU)
 #define MASK_EPOCH	(0x00000000ffffffffULL)
@@ -208,6 +208,7 @@ struct nb_calqueue
 
 extern __thread unsigned int TID;
 extern __thread struct drand48_data seedT;
+extern __thread struct drand48_data seedP;
 
 extern __thread double last_bw;
 
@@ -240,7 +241,8 @@ extern table* read_table(table * volatile *hashtable, unsigned int threshold, un
 extern void block_table(table* h);
 extern double compute_mean_separation_time(table* h, unsigned int new_size, unsigned int threashold, unsigned int elem_per_bucket);
 extern void migrate_node(nbc_bucket_node *right_node,	table *new_h);
-extern void flush_node(nbc_bucket_node *right_node,	table *new_h);
+//extern void flush_node(nbc_bucket_node *right_node,	table *new_h);
+extern nbc_bucket_node * flush_node(nbc_bucket_node *, nbc_bucket_node *right_node,	table *new_h);
 extern void search(nbc_bucket_node *head, pkey_t timestamp, unsigned int tie_breaker, nbc_bucket_node **left_node, nbc_bucket_node **right_node, int flag);
 extern void flush_current(table* h, unsigned long long newIndex, nbc_bucket_node* node);
 extern double nbc_prune();
