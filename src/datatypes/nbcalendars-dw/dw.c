@@ -314,27 +314,33 @@ int dw_enqueue(void *tb, unsigned long long index_vb, nbc_bucket_node *new_node
 
 void dw_flush(void *tb, dwb *bucket_p, bool mark_bucket){
 	table* h = (table*)tb;
-	nbc_bucket_node* dw_node, *suggestion, *next_sug;
+	nbc_bucket_node* dw_node, *suggestion, *original_suggestion;
 	int j, step = THREADS;
+	unsigned int index_pb, index_vb;
+	double left_limit;
+
+	original_suggestion = NULL;
+
+	if(step > 1)	j = (int)TID;
+	else 			j = 0;
+
+	// ricerca minimo
+//	#if !ENABLE_SORTING
+	nbc_bucket_node *lnode, *rnode;
+	index_vb = bucket_p->index_vb;	// index bucket virtuale
+	index_pb = index_vb % h->size;	// index bucket fisico
+	left_limit = ((double)index_vb) * h->bucket_width;	// limite timestamp sinistro del bucket virtuale
+	search(h->array + index_pb, left_limit, 0, &lnode, &rnode, REMOVE_DEL_FOR_DW);
+	original_suggestion = lnode;
+//	#endif
 
 #if ENABLE_BLOCKING_FLUSH == 1
 	if(BOOL_CAS(&bucket_p->lock, 0, 1)){
 		step = 1;	
 #endif
-		//if(step == 0)
-		//	step = (int)TID * 2 + 1;
-
-		next_sug = NULL;
-
 		while(1){
-
-			if(step > 1)
-				j = (int)TID;
-			else
-				j = 0;
 			
-			suggestion = next_sug;
-			next_sug = NULL;
+			suggestion = original_suggestion;
 			
 			// scorro tutto il bucket flushando i nodi
 			for(/*j = 0*/; j < bucket_p->valid_elem && !is_marked_ref(bucket_p, DELB) && !bucket_p->pro; j += step){
@@ -349,11 +355,17 @@ void dw_flush(void *tb, dwb *bucket_p, bool mark_bucket){
 				dw_node = get_node_pointer(bucket_p->dwv_sorted[j].node);	 // prendo soltanto il puntatore
 				if(BOOL_CAS(&bucket_p->dwv_sorted[j].node, dw_node, get_marked_node(dw_node, BLKN))){
 					// se ci riesco faccio il flush
-					suggestion = flush_node(suggestion, dw_node, h);	// migro
 
-					if(next_sug == NULL)
-						next_sug = suggestion;
+					assertf(is_marked(original_suggestion->next, DEL), "dw_flush(): nodo di suggerimento marcato %s", "");
 
+					#if ENABLE_SORTING
+						suggestion = flush_node(suggestion, dw_node, h);	// migro
+
+						if(suggestion == NULL)
+							suggestion = original_suggestion;
+					#else
+						flush_node(suggestion, dw_node, h);
+					#endif
 					dw_node = get_marked_node(get_node_pointer(bucket_p->dwv_sorted[j].node), BLKN);	 // prendo soltanto il puntatore marcato come bloccato
 					BOOL_CAS(&bucket_p->dwv_sorted[j].node, dw_node, get_marked_node(dw_node, DELN));
 				}
@@ -365,6 +377,7 @@ void dw_flush(void *tb, dwb *bucket_p, bool mark_bucket){
 				break;
 
 			step = 1;
+			j = 0;
 		}
 
 		if(mark_bucket){

@@ -856,14 +856,13 @@ int search_and_insert_dw(nbc_bucket_node *suggestion, nbc_bucket_node *head, pke
 	drand48_r(&seedT, &rand);
 	
 	// clean the heading zone of the bucket
-/*	nbc_bucket_node *lnode, *rnode;
+	nbc_bucket_node *lnode, *rnode;
 	
 
 	if(suggestion != NULL)
 		search(suggestion, -1.0, 0, &lnode, &rnode, flag);
 	else
 		search(head, -1.0, 0, &lnode, &rnode, flag);
-*/
 
 	
 	// read tail from head (this is done for avoiding an additional cache miss)

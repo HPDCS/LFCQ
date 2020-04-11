@@ -2,11 +2,12 @@
 
 
 
-dwb* list_search(dwb *head, long long index_vb, dwb** left_node, int mode, dwb* list_tail) {
+dwb* list_search(dwb *head, long long index_vb, dwb** left_node, bool from_dequeue, dwb* list_tail) {
  	int i;
+  double rand;
  	dwb *left_node_next, *right_node;
   	left_node_next = right_node = NULL;
-
+/*
   if(mode){	              
 	  dwb *t = head->next;
 
@@ -18,7 +19,7 @@ dwb* list_search(dwb *head, long long index_vb, dwb** left_node, int mode, dwb* 
 	  printf("\n");
 	  fflush(stdout);
 	}
-
+*/
   
   	while(1) {
 
@@ -40,7 +41,8 @@ dwb* list_search(dwb *head, long long index_vb, dwb** left_node, int mode, dwb* 
     	
     	right_node = t;
 
-    	if(get_bucket_pointer(left_node_next) == right_node){
+      drand48_r(&seedT, &rand);
+    	if(get_bucket_pointer(left_node_next) == right_node || (from_dequeue && rand < 0.3)){
     		if(!is_marked_ref(right_node->next, DELB)){
    // 			assertf(is_marked_ref(right_node->next, DELB), "list_search(): nodo marcato %s\n", "");
          		return right_node;
@@ -136,7 +138,7 @@ dwb* list_tail)
   	right = left = new_elem = NULL;
 
   	while(1){
-    	right = list_search(head, index_vb, &left, 0, list_tail);
+    	right = list_search(head, index_vb, &left, false, list_tail);
     	if (right != list_tail && right->index_vb == index_vb){
       		return right;
     	}
@@ -170,7 +172,7 @@ dwb* list_remove(dwb *head, long long index_vb, dwb* list_tail){
   	right = left = right_succ = NULL;
 
   	while(1){
-    	right = list_search(head, index_vb, &left, 0, list_tail);
+    	right = list_search(head, index_vb, &left, true, list_tail);
     
     	// check if we found our node
         if (right == list_tail || (index_vb >= 0 && right->index_vb != index_vb)){// se vuota o non c'è il nodo cercato

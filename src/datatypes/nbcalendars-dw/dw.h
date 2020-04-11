@@ -9,14 +9,14 @@
 
 // configuration
 #define VEC_SIZE                    128
-#define DW_ENQUEUE_USAGE_TH			100	// minima distanza tra current e virtual bucket di inserimento per utilizzare DWQ
+#define DW_ENQUEUE_USAGE_TH			0	// minima distanza tra current e virtual bucket di inserimento per utilizzare DWQ
 
 #define DEQUEUE_WAIT_CICLES			0	// numero di cicli di attesa per un thread remoto prima di provare a fare la dequeue
 
 #define ENABLE_PROACTIVE_FLUSH      1   // abilita il flush proattivo
 #define DEQUEUE_NUM_TH				10	// dopo aver fatto questo numero di dequeue provo a fare flush proattivo di un bucket
-#define PRO_FLUSH_BUCKET_NUM		4	// distanza dal bucket attuale in numero di bucket che posso considerare per flush proattivo 
-#define PRO_FLUSH_BUCKET_NUM_MIN	30
+#define PRO_FLUSH_BUCKET_NUM		20	// distanza dal bucket attuale in numero di bucket che posso considerare per flush proattivo 
+#define PRO_FLUSH_BUCKET_NUM_MIN	20
 
 #define DISABLE_EXTRACTION_FROM_DW  ENABLE_PROACTIVE_FLUSH	// disabilita le estrazioni dirette dall dwq
 #define ENABLE_SORTING              1//!DISABLE_EXTRACTION_FROM_DW   // abilita il sorting per le dwq

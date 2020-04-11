@@ -150,9 +150,9 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	double rand;
 	nbc_bucket_node *left_node, *right_node;
 	drand48_r(&seedT, &rand);
-	if(rand < 0.2)
+//	if(rand < 0.2)
 	{
-	drand48_r(&seedT, &rand);
+//	drand48_r(&seedT, &rand);
 	search(h->array+((oldIndex + dist + (unsigned int)( ( (double)(size-dist) )*rand )) % size), -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
 	}
 	#endif
