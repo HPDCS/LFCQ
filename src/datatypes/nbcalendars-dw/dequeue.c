@@ -41,9 +41,8 @@
  * @return the highest priority 
  *
  */
-__thread unsigned long long no_empty_vb = 0;
-extern __thread long ins;
-extern __thread long conflitti_ins;
+
+extern __thread unsigned long long no_empty_vb;
 extern __thread long estr;
 extern __thread long conflitti_estr;
 
@@ -62,7 +61,6 @@ pkey_t pq_dequeue(void *q, void** result)
 	
 	unsigned int size, attempts = 0;
 	unsigned int counter;
-	unsigned int old_v;
 	pkey_t left_ts;
 	double bucket_width, left_limit, right_limit;
 
@@ -77,8 +75,8 @@ pkey_t pq_dequeue(void *q, void** result)
 
 	#if NUMA_DW || SEL_DW
 	unsigned int dest_node;
-	#endif
 	bool remote = false;
+	#endif
 
 	critical_enter();
 
@@ -92,9 +90,6 @@ begin:
 	pkey_t dw_node_ts;
 	bool no_cq_node, no_dw_node_curr_vb, no_dw_node;
 	
-	nbc_bucket_node *dw_node;
-	int indexes_enq, deq_cn;
-
 	// Get data from the table
 	size = h->size;
 	array = h->array;
@@ -120,6 +115,10 @@ begin:
 			
 		no_cq_node = false;
 
+		#if DISABLE_EXTRACTION_FROM_DW
+		assertf(!no_dw_node_curr_vb, "dequeue(): bucket non flushato %s\n", "");
+		#endif
+
 		if(!no_dw_node_curr_vb && (get_bucket_state(bucket_p->next) == BLK))
 			goto begin;
 
@@ -128,7 +127,7 @@ begin:
 		left_node = min_next = min->next;
 
 		#if NUMA_DW || SEL_DW
-		dest_node = NODE_HASH(index % (size));
+		dest_node = NODE_HASH(hash_dw(index, size)/*index % (size)*/);
 		if (dest_node != NID)
 			remote = true;
 		#endif
@@ -177,116 +176,29 @@ begin:
 					break;
 			}
 
-			if(!no_dw_node_curr_vb){
-
-				indexes_enq = get_enq_ind(bucket_p->indexes) << ENQ_BIT_SHIFT;// solo la parte inserimento di indexes
-				dw_retry:
-								 
-				old_v = bucket_p->indexes;
-				deq_cn = get_deq_ind(old_v); 
-				// cerco un possibile indice
+			// DWQ
+			if(!no_dw_node_curr_vb){				
 				
-				while(	deq_cn < bucket_p->valid_elem && is_deleted(bucket_p->dwv_sorted[deq_cn].node) && 
-						!is_moving(bucket_p->dwv_sorted[deq_cn].node) && !is_marked_ref(bucket_p->next, DELB))
-				{
-					//BOOL_CAS(&bucket_p->indexes, (indexes_enq + deq_cn), (indexes_enq + deq_cn + 1));	// aggiorno deq
-					deq_cn = 
-					deq_cn+1;
-					//get_deq_ind(bucket_p->indexes);
-				}
-				
-				old_v = bucket_p->indexes;
-				if(get_deq_ind(old_v) == 0 || get_deq_ind(old_v) < deq_cn ){
-					BOOL_CAS(&bucket_p->indexes, old_v, (indexes_enq + deq_cn));	// aggiorno deq
-				}
-
-				// controllo se sono uscito perchè è iniziata la resize
-				if(is_moving(bucket_p->dwv_sorted[deq_cn].node))
-					goto begin;
-
-				if(deq_cn >= bucket_p->valid_elem || is_marked_ref(bucket_p->next, DELB)){
-
-					no_dw_node_curr_vb = true;
-					if(!is_marked_ref(bucket_p->next, DELB))
-						BOOL_CAS(&(bucket_p->next), bucket_p->next, get_marked_ref(bucket_p->next, DELB));
-								
-					// TODO
-					//}else if(bucket_p->dwv[deq_cn].node->epoch > epoch){
-					//	goto begin;
-				}else{
-					assertf(is_blocked(bucket_p->dwv_sorted[deq_cn].node), 
-						"pq_dequeue(): si cerca di estrarre un nodo bloccato. stato nodo %p, stato bucket %llu\n", 
-						bucket_p->dwv_sorted[deq_cn].node, get_bucket_state(bucket_p->next));
-
-					assertf((bucket_p->dwv_sorted[deq_cn].node == NULL), 
-						"pq_dequeue(): si cerca di estrarre un nodo nullo." 
-						"\nnumero bucket: %llu"
-						"\nstato bucket virtuale: %llu"
-						"\nbucket marcato: %d"
-						"\nindice estrazione letto: %d"
-						"\nindice estrazione nella struttura: %d"
-						"\nindice inserimento: %d"
-						"\nlimite ciclo: %d"
-						"\nelementi validi: %d"
-						"\ntimestamp: %f\n",
-						bucket_p->index_vb, get_bucket_state(bucket_p->next), is_marked_ref(bucket_p->next, DELB), deq_cn, get_deq_ind(bucket_p->indexes), 
-						get_enq_ind(indexes_enq), bucket_p->cicle_limit, bucket_p->valid_elem, bucket_p->dwv_sorted[deq_cn].timestamp);
-					
-					// provo a fare l'estrazione se il nodo della dw viene prima 
-								
-					// TODO
-					assertf(bucket_p->dwv_sorted[deq_cn].timestamp == INV_TS, "INV_TS in extractions%s\n", ""); 
-					if((dw_node_ts = bucket_p->dwv_sorted[deq_cn].timestamp) <= left_ts){
-					
-						dw_node = get_node_pointer(bucket_p->dwv_sorted[deq_cn].node);	// per impedire l'estrazione di uno già estratto o in movimento
-						assertf((dw_node == NULL), "pq_dequeue(): dw_node è nullo %s\n", "");
-
-						if(BOOL_CAS(&bucket_p->dwv_sorted[deq_cn].node, dw_node, get_marked_node(dw_node, DELN))){// se estrazione riuscita
-										
-							assertf(deq_cn >= VEC_SIZE, "pq_dequeue(): indice di estrazione fuori range %s\n", "");	
-							assertf(get_enq_ind(bucket_p->indexes) != get_enq_ind(indexes_enq), "pq_dequeue(): indice di inserimento non costante %s\n", "");
-										
-							BOOL_CAS(&bucket_p->indexes, (indexes_enq + deq_cn), (indexes_enq + deq_cn + 1));
-							concurrent_dequeue += (unsigned long long) (__sync_fetch_and_add(&h->d_counter.count, 1) - con_de);
-
-							estr++;
-							*result = dw_node->payload;
-
-							if(!no_cq_node) no_empty_vb++;
-
-							critical_exit();
-							#if NUMA_DW || SEL_DW
-							if (!remote)
-								local_deq++;
-							else
-								remote_deq++;
-							#endif
-
-							return dw_node_ts;
-						}else{// provo a vedere se ci sono altri nodi in dw
-							conflitti_estr++;
-
-							// controllo se non ci sono riuscito perchè stiamo nella fase di resize
-							if(is_moving(bucket_p->dwv_sorted[deq_cn].node)) 
-								goto begin;
-
-							goto dw_retry;
-						}
-					}
-				}
-				
-				/*
-				dw_node_ts = dw_extraction(bucket_p, result, left_ts, remote, no_cq_node);
+				dw_node_ts = dw_extraction(bucket_p, result, left_ts);
 				
 				if(dw_node_ts >= 0){				// estrazione riuscita
 					concurrent_dequeue += (unsigned long long) (__sync_fetch_and_add(&h->d_counter.count, 1) - con_de);
+					if(!no_cq_node) no_empty_vb++;
 					critical_exit();
+					
+					#if NUMA_DW || SEL_DW
+						if (!remote)
+							local_deq++;
+						else
+							remote_deq++;
+					#endif
+
 					return dw_node_ts;
 				}else if(dw_node_ts == GOTO)		// bisogna ricominciare da capo
 					goto begin;
 				else if(dw_node_ts == EMPTY)	// bucket vuoto
 					no_dw_node_curr_vb = true;
-					*/
+					
 			}
 
 			// se non c'erano elementi ricominciamo

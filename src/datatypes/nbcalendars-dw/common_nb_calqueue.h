@@ -287,6 +287,7 @@ static inline nbc_bucket_node* node_malloc(void *payload, pkey_t timestamp, unsi
 	res->counter = tie_breaker;
 	res->next = NULL;
 	res->replica = NULL;
+	res->original_copy = NULL;
 	res->payload = payload;
 	res->epoch = 0;
 	res->timestamp = timestamp;

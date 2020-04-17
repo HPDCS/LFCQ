@@ -8,9 +8,13 @@
  * @param timestamp: the key associated with the value
  * @param payload: the value to be enqueued
  * @return true if the event is inserted in the set table else false
- */
-__thread unsigned long long enq_failed = 0; 
-__thread unsigned long long check_allocation = 0;
+ */ 
+extern __thread unsigned long long enq_mov;
+extern __thread unsigned long long enq_full;
+extern __thread unsigned long long enq_pro;
+extern __thread unsigned long long enq_ext;
+extern __thread unsigned long long enq_near;
+
 bool dw_enable = false;
 
 int pq_enqueue(void* q, pkey_t timestamp, void* payload)
@@ -61,7 +65,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			
 		#if SEL_DW || NUMA_DW	
 			remote = false;
-			dest_node = NODE_HASH(index);
+			dest_node = NODE_HASH(hash_dw(newIndex, size)/*index*/);
 			if(dest_node != NID) remote = true;
 		#endif
 		
@@ -108,25 +112,47 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 		}
 		#endif
 
-		if(dw_enable && ((h->current >> 32) + DW_ENQUEUE_USAGE_TH < newIndex)){
-			#if SEL_DW
-			if(remote)
-			#endif
-			{
-				res = dw_enqueue(
-					h, 
-					newIndex, 
-					new_node
-				#if NUMA_DW
-					, dest_node
+		if(dw_enable){
+			if((h->current >> 32) + DW_ENQUEUE_USAGE_TH < newIndex){
+				#if SEL_DW
+				if(remote)
 				#endif
-				);
-				if(res == MOV_FOUND)
-					continue;	
+				{
+					res = dw_enqueue(
+						h, 
+						newIndex, 
+						new_node
+					#if NUMA_DW
+						, dest_node
+					#endif
+					);
+
+					switch(res){
+						case MOV_FOUND:
+							enq_mov++;
+							continue;
+							break;
+						case ABORT:// pieno, flush proattivo, adesso in estrazione
+							enq_ext++;
+							break;
+						case BUCKET_FULL:
+							res = ABORT;
+							enq_full++;
+							break;
+						case PRO_EXT:
+							res = ABORT;
+							enq_pro++;
+							break;
+					}	
+				}
+			}else{
+				if((h->current >> 32) == newIndex)
+					enq_ext++;
+				else
+					enq_near++;
 			}
 		}
 
-		enq_failed += res!=OK;
 		if(res != OK){
 			// search the two adjacent nodes that surround the new key and try to insert with a CAS 
 			res = search_and_insert(bucket, timestamp, 0, REMOVE_DEL_INV, new_node, &new_node);
@@ -150,9 +176,9 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	double rand;
 	nbc_bucket_node *left_node, *right_node;
 	drand48_r(&seedT, &rand);
-//	if(rand < 0.2)
+	if(rand < 0.2)
 	{
-//	drand48_r(&seedT, &rand);
+	drand48_r(&seedT, &rand);
 	search(h->array+((oldIndex + dist + (unsigned int)( ( (double)(size-dist) )*rand )) % size), -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
 	}
 	#endif

@@ -1,10 +1,15 @@
 #include "common_nb_calqueue.h"
 
-
+extern __thread unsigned long long list_search_invoc_add;
+extern __thread unsigned long long list_search_invoc_rem;
+extern __thread unsigned long long list_search_steps_add;
+extern __thread unsigned long long list_search_steps_rem;
+extern __thread unsigned long long compact_buckets;
+extern __thread unsigned long long compact_buckets_pro;
+extern __thread unsigned long long nodes_per_bucket;
 
 dwb* list_search(dwb *head, long long index_vb, dwb** left_node, bool from_dequeue, dwb* list_tail) {
  	int i;
-  double rand;
  	dwb *left_node_next, *right_node;
   	left_node_next = right_node = NULL;
 /*
@@ -20,13 +25,18 @@ dwb* list_search(dwb *head, long long index_vb, dwb** left_node, bool from_deque
 	  fflush(stdout);
 	}
 */
-  
+    if(from_dequeue)  list_search_invoc_rem++;
+    else              list_search_invoc_add++;
+
   	while(1) {
 
     	dwb *t = head;
     	dwb *t_next = head->next;
     
     	while (is_marked_ref(t_next, DELB) || (t->index_vb < index_vb)) {
+
+          if(from_dequeue)  list_search_steps_rem++;
+          else              list_search_steps_add++;
       	
       		if (!is_marked_ref(t_next, DELB)) {
         		(*left_node) = t;
@@ -41,8 +51,7 @@ dwb* list_search(dwb *head, long long index_vb, dwb** left_node, bool from_deque
     	
     	right_node = t;
 
-      drand48_r(&seedT, &rand);
-    	if(get_bucket_pointer(left_node_next) == right_node || (from_dequeue && rand < 0.3)){
+    	if(get_bucket_pointer(left_node_next) == right_node || from_dequeue){
     		if(!is_marked_ref(right_node->next, DELB)){
    // 			assertf(is_marked_ref(right_node->next, DELB), "list_search(): nodo marcato %s\n", "");
          		return right_node;
@@ -53,25 +62,29 @@ dwb* list_search(dwb *head, long long index_vb, dwb** left_node, bool from_deque
                 get_marked_ref(set_bucket_state(right_node, get_bucket_state(left_node_next)), is_marked_ref(left_node_next, MOVB) * MOVB))) {
 
 	      		while((left_node_next = get_bucket_pointer(left_node_next)) != right_node){
+              compact_buckets++;
+              if(left_node_next->pro) compact_buckets_pro++;
+              nodes_per_bucket += left_node_next->valid_elem;
 
-			    	for(i = 0; i < left_node_next->valid_elem; i++){
+  			    	for(i = 0; i < left_node_next->valid_elem; i++){
 
-			    		assertf(left_node_next->dwv_sorted[i].timestamp == INV_TS, "INV_TS while releasing memory%s\n", "");
-                        //assertf(!is_deleted(left_node_next->dwv_sorted[i].node) && !is_moved(left_node_next->dwv_sorted[i].node), "\n\nnodo non marcato come eliminato o trasferito %p\n", left_node_next->dwv_sorted[i].node); 
-                        assertf(get_node_pointer(left_node_next->dwv_sorted[i].node) == NULL || left_node_next->dwv_sorted[i].timestamp == INFTY, "nodo non valido per rilascio%s\n", ""); 
+  			    		assertf(left_node_next->dwv_sorted[i].timestamp == INV_TS, "INV_TS while releasing memory%s\n", "");
+                          //assertf(!is_deleted(left_node_next->dwv_sorted[i].node) && !is_moved(left_node_next->dwv_sorted[i].node), "\n\nnodo non marcato come eliminato o trasferito %p\n", left_node_next->dwv_sorted[i].node); 
+                          assertf(get_node_pointer(left_node_next->dwv_sorted[i].node) == NULL || left_node_next->dwv_sorted[i].timestamp == INFTY, "nodo non valido per rilascio%s\n", ""); 
 
-            			// if(get_node_pointer(left_node_next->dwv_sorted[i].node) != NULL && left_node_next->dwv_sorted[i].timestamp != INFTY)
-                      	//if(!is_blocked(left_node_next->dwv_sorted[i].node))
-                            node_free(get_node_pointer(left_node_next->dwv_sorted[i].node));
-                            //printf("pippo\n");
-                    }
+              			// if(get_node_pointer(left_node_next->dwv_sorted[i].node) != NULL && left_node_next->dwv_sorted[i].timestamp != INFTY)
+                        	//if(!is_blocked(left_node_next->dwv_sorted[i].node))
+                              node_free(get_node_pointer(left_node_next->dwv_sorted[i].node));
+                              //printf("pippo\n");
+                      }
 
-			      	gc_free(ptst, left_node_next->dwv, gc_aid[2]);
-			      	gc_free(ptst, left_node_next->dwv_sorted, gc_aid[2]);
-			      	gc_free(ptst, left_node_next, gc_aid[1]);			      	
-			      	
-			      	left_node_next = left_node_next->next;
-			    }
+  			      	gc_free(ptst, left_node_next->dwv, gc_aid[2]);
+                if(i != 0)
+  			      	  gc_free(ptst, left_node_next->dwv_sorted, gc_aid[2]);
+  			      	gc_free(ptst, left_node_next, gc_aid[1]);			      	
+  			      	
+  			      	left_node_next = left_node_next->next;
+  			    }
 
 	        	if (!is_marked_ref(right_node->next, DELB))
 	          		return right_node;
@@ -126,18 +139,24 @@ dwb* new_node(long long index_vb, dwb *next
   	return node;
 }
 
-dwb* list_add(dwb *head, long long index_vb, 
+dwb* list_add(dwb *head, long long index_vb, dwb* list_tail
 #if NUMA_DW
-int numa_node, 
+, int numa_node
 #endif
-dwb* list_tail)
+)
 {
 
 	unsigned long long state;
 	dwb *right, *left, *new_elem;
+    double rand;
   	right = left = new_elem = NULL;
 
+    drand48_r(&seedT, &rand);
+    if(rand < 0.3)
+      right = list_search(head, -1, &left, false, list_tail);  
+
   	while(1){
+
     	right = list_search(head, index_vb, &left, false, list_tail);
     	if (right != list_tail && right->index_vb == index_vb){
       		return right;

@@ -63,6 +63,21 @@ __thread long cache_hit = 0;
 __thread long conflitti_estr = 0;
 __thread int blocked = 0;
 __thread bool from_block_table = false;
+__thread unsigned long long no_empty_vb = 0;
+
+__thread unsigned long long enq_mov = 0;
+__thread unsigned long long enq_full = 0;
+__thread unsigned long long enq_pro = 0;
+__thread unsigned long long enq_ext = 0;
+__thread unsigned long long enq_near = 0;
+
+__thread unsigned long long list_search_invoc_add = 0;
+__thread unsigned long long list_search_invoc_rem = 0;
+__thread unsigned long long list_search_steps_add = 0;
+__thread unsigned long long list_search_steps_rem = 0;
+__thread unsigned long long nodes_per_bucket = 0;
+__thread unsigned long long compact_buckets = 0;
+__thread unsigned long long compact_buckets_pro = 0;
 
 #if NUMA_DW || SEL_DW
 // statistica inserimenti nodi numa
@@ -436,6 +451,7 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 	double current_num_items = pub*epb*h->size;
 	int res = 0;
 	unsigned int i = 0;
+	unsigned int dwq_size;
 	unsigned int size = h->size;
 	unsigned int new_size = 0;
 	unsigned int thp2	  = 1;
@@ -467,6 +483,12 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 
 	if(new_size != 0) 
 	{
+
+		if(new_size < HEADS_ARRAY_SCALE)
+			dwq_size = 1;
+		else
+			dwq_size = new_size / HEADS_ARRAY_SCALE;
+
 		// allocate new table
 		res = posix_memalign((void**)&new_h, CACHE_LINE_SIZE, sizeof(table));
 		if(res != 0) {printf("No enough memory to new table structure\n"); return;}
@@ -482,7 +504,7 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 			return;
 		}
 
-		res = posix_memalign((void**)(&new_h->deferred_work->heads), CACHE_LINE_SIZE, new_size*sizeof(dwb));
+		res = posix_memalign((void**)(&new_h->deferred_work->heads), CACHE_LINE_SIZE, /*new_size*/dwq_size*sizeof(dwb));
 		if(res != 0) {
 			free(new_h->deferred_work);	
 			free(new_h->array);	
@@ -537,14 +559,15 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 			new_h->array[i].counter = 0;
 			new_h->array[i].epoch = 0;
 
-			//new_h->deferred_work->heads[i].index_vb = -1LL;
-			new_h->deferred_work->heads[i].index_vb = -2LL;
-			new_h->deferred_work->heads[i].next = new_h->deferred_work->list_tail;
-			new_h->deferred_work->heads[i].dwv = NULL;
-			new_h->deferred_work->heads[i].dwv_sorted = NULL;
-			new_h->deferred_work->heads[i].cicle_limit = VEC_SIZE;
-			new_h->deferred_work->heads[i].valid_elem = VEC_SIZE;
-			new_h->deferred_work->heads[i].indexes = 0;
+			if(i < dwq_size){
+				new_h->deferred_work->heads[i].index_vb = -2LL;
+				new_h->deferred_work->heads[i].next = new_h->deferred_work->list_tail;
+				new_h->deferred_work->heads[i].dwv = NULL;
+				new_h->deferred_work->heads[i].dwv_sorted = NULL;
+				new_h->deferred_work->heads[i].cicle_limit = VEC_SIZE;
+				new_h->deferred_work->heads[i].valid_elem = VEC_SIZE;
+				new_h->deferred_work->heads[i].indexes = 0;
+			}
 		}
 		
 		// try to publish the table
@@ -764,7 +787,7 @@ void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 	
 	//Create a new node to be inserted in the new table as as INValid
 	#if NUMA_DW
-	replica = node_malloc(right_node->payload, right_node->timestamp,  right_node->counter, NODE_HASH(hash(right_node->timestamp, new_h->bucket_width)));
+	replica = node_malloc(right_node->payload, right_node->timestamp,  right_node->counter, NODE_HASH(hash_dw(hash(right_node->timestamp, new_h->bucket_width), new_h->size)));
 	#else
 	replica = node_malloc(right_node->payload, right_node->timestamp,  right_node->counter);
 	#endif
@@ -856,14 +879,14 @@ int search_and_insert_dw(nbc_bucket_node *suggestion, nbc_bucket_node *head, pke
 	drand48_r(&seedT, &rand);
 	
 	// clean the heading zone of the bucket
-	nbc_bucket_node *lnode, *rnode;
+/*	nbc_bucket_node *lnode, *rnode;
 	
 
 	if(suggestion != NULL)
 		search(suggestion, -1.0, 0, &lnode, &rnode, flag);
 	else
 		search(head, -1.0, 0, &lnode, &rnode, flag);
-
+*/
 	
 	// read tail from head (this is done for avoiding an additional cache miss)
 	(*new_node)->tail = tail = head->tail;
@@ -958,7 +981,6 @@ int search_and_insert_dw(nbc_bucket_node *suggestion, nbc_bucket_node *head, pke
 		// if the right or the left node is MOV signal this to the caller
 		if(is_marked(tmp, MOV) || is_marked(left_next, MOV) )
 			return MOV_FOUND;
-		
 		// mark the to-be.inserted node as INV if flag == REMOVE_DEL
 		if(flag == REMOVE_DEL)
 			new_node_pointer->next = get_marked(tmp, INV & (-(!is_new_key)) );
@@ -1029,7 +1051,7 @@ nbc_bucket_node* flush_node(nbc_bucket_node *suggestion, nbc_bucket_node *right_
 	
 	//Create a new node to be inserted in the new table as as INValid
 	#if NUMA_DW
-	replica = node_malloc(right_node->payload, right_node->timestamp,  right_node->counter, NODE_HASH(hash(right_node->timestamp, new_h->bucket_width)));
+	replica = node_malloc(right_node->payload, right_node->timestamp,  right_node->counter, NODE_HASH(hash_dw(hash(right_node->timestamp, new_h->bucket_width), new_h->size)));
 	#else
 	replica = node_malloc(right_node->payload, right_node->timestamp,  right_node->counter);
 	#endif
@@ -1041,6 +1063,7 @@ nbc_bucket_node* flush_node(nbc_bucket_node *suggestion, nbc_bucket_node *right_
 	new_node_counter 	= new_node_pointer->counter;
 	new_node_timestamp 	= new_node_pointer->timestamp;
 	replica->original_copy = right_node;
+	replica->epoch = right_node->epoch;
 	
 	index = hash(new_node_timestamp, new_h->bucket_width);
 
@@ -1089,83 +1112,6 @@ nbc_bucket_node* flush_node(nbc_bucket_node *suggestion, nbc_bucket_node *right_
 
 	return ret;
 }
-/*
-void flush_node(nbc_bucket_node *right_node, table *new_h)
-{
-	nbc_bucket_node *replica;
-	nbc_bucket_node** new_node;
-	nbc_bucket_node *right_replica_field, *right_node_next;
-	
-	nbc_bucket_node *bucket, *new_node_pointer;
-	unsigned int index;
-
-	unsigned int new_node_counter 	;
-	pkey_t 		 new_node_timestamp ;
-
-	
-	int res = 0;
-	
-	//Create a new node to be inserted in the new table as as INValid
-	#if NUMA_DW
-	replica = node_malloc(right_node->payload, right_node->timestamp,  right_node->counter, NODE_HASH(hash(right_node->timestamp, new_h->bucket_width)));
-	#else
-	replica = node_malloc(right_node->payload, right_node->timestamp,  right_node->counter);
-	#endif
-	
-	//ptr_node_allocated = replica;
-
-	new_node 			= &replica;
-	new_node_pointer 	= (*new_node);
-	new_node_counter 	= new_node_pointer->counter;
-	new_node_timestamp 	= new_node_pointer->timestamp;
-	replica->original_copy = right_node;
-	
-	index = hash(new_node_timestamp, new_h->bucket_width);
-
-	// node to be added in the hashtable
-	bucket = new_h->array + (index % new_h->size);
-	         
-    do{	right_replica_field = right_node->replica; } 
-    // try to insert the replica in the new table       
-	while(right_replica_field == NULL && (res = 
-	search_and_insert(bucket, new_node_timestamp, new_node_counter, REMOVE_DEL_FOR_DW, new_node_pointer, new_node)
-	) == ABORT);
-	// at this point we have at least one replica into the new table
-
-	// try to decide which is the right replica and if I won the challenge increase the counter of enqueued items into the new set table
-	if( right_replica_field == NULL) 
-			BOOL_CAS(
-				&(right_node->replica),
-				NULL,
-				replica
-				)
-		; 
-
-	//if(replica != ptr_node_allocated && ptr_node_allocated != right_node->replica){
-	if(replica != right_node->replica){
-
-		while(!BOOL_CAS(	&(replica->next),
-				replica->next,
-				(unsigned long long)get_unmarked(replica->next) | DEL));
-
-	}
-
-	right_replica_field = right_node->replica;
-
-	// make the replica being valid
-	do{	right_node_next = right_replica_field->next;}
-	while( 
-		is_marked(right_node_next, INV2) && 
-		!BOOL_CAS(	&(right_replica_field->next),
-					right_node_next,
-					get_unmarked(right_node_next)
-				)
-		);
-
-}
-*/
-
-
 
 table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsigned int elem_per_bucket, double perc_used_bucket)
 {
@@ -1460,20 +1406,17 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	return res;
 }
 
-
-extern __thread unsigned long long no_empty_vb;
 void pq_report(int TID)
 {
 	
 	printf("%d- "
-	"Enqueue: %.10f LEN: %.10f FAILS:%.2f%% ### "
+	"Enqueue: %.10f LEN: %.10f ### "
 	"Dequeue: %.10f LEN: %.10f NUMCAS: %llu : %llu DOUBLE_CHECK:%.2f%%### "
 	"NEAR: %llu "
 	"RTC:%d,M:%lld BW:%f\n",
 			TID,
 			((float)concurrent_enqueue) /((float)performed_enqueue),
 			((float)scan_list_length_en)/((float)performed_enqueue),
-			((float)enq_failed)*100.0/((float)performed_enqueue),
 			((float)concurrent_dequeue) /((float)performed_dequeue),
 			((float)scan_list_length)   /((float)performed_dequeue),
 			num_cas, num_cas_useful,
@@ -1482,7 +1425,24 @@ void pq_report(int TID)
 			read_table_count	  ,
 			malloc_count, last_bw);
 
-	printf("Coda DW: inserimenti %ld, estrazione %ld, conflitti_ins %ld, conflitti_estr %ld\n", ins, estr, conflitti_ins, conflitti_estr);
+	printf("DWQ USAGE: inserimenti %ld, estrazione %ld, conflitti_ins %ld, conflitti_estr %ld\n", ins, estr, conflitti_ins, conflitti_estr);
+	printf("DWQ ENQUEUE FAILS: TOTALE %.2f%%, resize %.2f%%, pieno %.2f%%, flush proattivo %.2f%%, corrente %.2f%%, troppo vicino %.2f%% \n", 
+		((float)(enq_mov + enq_full + enq_pro + enq_ext + enq_near)*100.0 / ((float)performed_enqueue)),
+		(float)(enq_mov)	*100.0 / ((float)performed_enqueue), 
+		(float)(enq_full)	*100.0 / ((float)performed_enqueue), 
+		(float)(enq_pro)	*100.0 / ((float)performed_enqueue), 
+		(float)(enq_ext)	*100.0 / ((float)performed_enqueue), 
+		(float)(enq_near)	*100.0 / ((float)performed_enqueue)
+	);
+	printf("DWQ LIST USAGE: CALLS %llu, ADD_STEP %.2f, REM_STEP %.2f, CMP_B %llu(pro %.2f%%), CMP_B_PER_CALL %.2f, NODE_PER_B %.2f \n", 
+		list_search_invoc_add + list_search_invoc_rem,
+		(float)list_search_steps_add 	/ (float)list_search_invoc_add,
+		(float)list_search_steps_rem 	/ (float)list_search_invoc_rem,
+		compact_buckets,
+		(float)compact_buckets_pro *100.0 / (float)compact_buckets,
+		(float)compact_buckets 			/ (float)list_search_invoc_add,
+		(float)nodes_per_bucket 		/ (float)compact_buckets
+	);
 	printf("TID %d: elementi bloccati %d, cache hit %ld \n", TID, blocked, cache_hit);
 	#if NUMA_DW || SEL_DW
 	printf("DWQNumaStat: LOC: enq %llu, deq %llu. REM: enq %llu deq %llu\n\n", local_enq, local_deq, remote_enq, remote_deq);
@@ -1499,7 +1459,6 @@ void pq_reset_statistics(){
 		performed_dequeue = 0;
 		scan_list_length_en = 0;
 		scan_list_length = 0;
-		enq_failed=0;
 		conflitti_ins = 0;
 }
 
