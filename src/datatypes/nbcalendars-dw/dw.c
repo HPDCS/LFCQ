@@ -5,6 +5,7 @@ extern __thread long conflitti_ins;
 extern __thread int blocked;
 extern __thread bool from_block_table;
 extern __thread long cache_hit;
+extern __thread long remote_node_dequeue;
 
 __thread unsigned int dequeue_num = 0;	// per decidere quando fare il flush proattivo
 __thread dwb* last_bucket_p = NULL;		// cache dell'ultimo bucket ritrovato in estrazione
@@ -333,6 +334,9 @@ void dw_flush(void *tb, dwb *bucket_p, bool mark_bucket){
 	search(h->array + index_vb % h->size, left_limit, 0, &lnode, &rnode, REMOVE_DEL_FOR_DW);
 	original_suggestion = lnode;
 
+	if(mark_bucket) 	step = THREADS;
+	else 				step = 1;
+
 #if ENABLE_BLOCKING_FLUSH == 1
 	if(BOOL_CAS(&bucket_p->lock, 0, 1)){
 		step = 1;	
@@ -347,9 +351,9 @@ void dw_flush(void *tb, dwb *bucket_p, bool mark_bucket){
 			// scorro tutto il bucket flushando i nodi
 			for(; j < bucket_p->valid_elem && !is_marked_ref(bucket_p, DELB) && !bucket_p->pro; j += step){
 
-				// se già cancellato oppure bloccato ma il mio step non è 1 vado avanti
-				if(is_deleted(bucket_p->dwv_sorted[j].node) 
-					|| (step != 1 && is_blocked(bucket_p->dwv_sorted[j].node))
+				// posso saltare solo se sono arrivato qui perché il bucket è diventato hot
+				if(mark_bucket &&
+					(is_deleted(bucket_p->dwv_sorted[j].node) || (step != 1 && is_blocked(bucket_p->dwv_sorted[j].node)))
 				)
 					continue;
 
@@ -357,9 +361,11 @@ void dw_flush(void *tb, dwb *bucket_p, bool mark_bucket){
 				dw_node = get_node_pointer(bucket_p->dwv_sorted[j].node);	 // prendo soltanto il puntatore
 				if(is_none(bucket_p->dwv_sorted[j].node))
 					BOOL_CAS(&bucket_p->dwv_sorted[j].node, dw_node, get_marked_node(dw_node, BLKN));
+				else if(!mark_bucket)
+					return; // se sto in modalità proattiva e mi accorgo che non sono solo ritorno
 				
 				assertf(is_marked(original_suggestion->next, DEL), "dw_flush(): nodo di suggerimento marcato %s", "");	
-				assertf(suggestion != NULL && suggestion->timestamp >= dw_node->timestamp, "dw_flush: suggerimento sbagliato %s", "");
+				assertf(suggestion != NULL && suggestion->timestamp >= dw_node->timestamp, "dw_flush: suggerimento sbagliato %f %f", suggestion->timestamp, dw_node->timestamp);
 
 				#if ENABLE_SORTING
 					suggestion = flush_node(suggestion, dw_node, h);	// migro
@@ -474,7 +480,7 @@ dwb* dw_dequeue(void *tb, unsigned long long index_vb){
 	//assertf(is_marked_ref(bucket_p->next, DELB) == 1, "dw_dequeue(): nodo marcato %p\n", bucket_p->next);
 
 	do{	
-		#if ENABLE_PROACTIVE_FLUSH && _NUMA_NODES == 1			
+		#if ENABLE_PROACTIVE_FLUSH/* && _NUMA_NODES == 1*/			
 			if(dequeue_num > DEQUEUE_NUM_TH){
 				dequeue_num = 0;
 				dw_proactive_flush(tb, index_vb);
@@ -483,13 +489,15 @@ dwb* dw_dequeue(void *tb, unsigned long long index_vb){
 
 		if(NID != NODE_HASH(hash_dw(index_vb, h->size)/*index_vb % h->size*/)){// se cerco di estrarre da un nodo non locale per me
 			
+			remote_node_dequeue++;
+			/*
 			#if ENABLE_PROACTIVE_FLUSH && _NUMA_NODES != 1
 				if(dequeue_num > DEQUEUE_NUM_TH){
 					dequeue_num = 0;
 					dw_proactive_flush(tb, index_vb);
 				}
 			#endif
-
+			*/
 			for(i = 0; i < DEQUEUE_WAIT_CICLES && !is_marked_ref(bucket_p->next, DELB); i++);
 		}
 

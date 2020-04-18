@@ -38,6 +38,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 
 	int dest_node;
 	bool remote; 
+	unsigned long long curr;
 	
 	int prev_dest_node = -1;// qui solo per togliere il warning
 	
@@ -113,7 +114,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 		#endif
 
 		if(dw_enable){
-			if((h->current >> 32) + DW_ENQUEUE_USAGE_TH < newIndex){
+			curr = h->current >> 32;
+			if(curr + DW_ENQUEUE_USAGE_TH < newIndex){
 				#if SEL_DW
 				if(remote)
 				#endif
@@ -146,7 +148,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 					}	
 				}
 			}else{
-				if((h->current >> 32) == newIndex)
+				if(curr == newIndex)
 					enq_ext++;
 				else
 					enq_near++;
@@ -176,9 +178,9 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	double rand;
 	nbc_bucket_node *left_node, *right_node;
 	drand48_r(&seedT, &rand);
-	if(rand < 0.2)
+	//if(rand < 0.2)
 	{
-	drand48_r(&seedT, &rand);
+	//drand48_r(&seedT, &rand);
 	search(h->array+((oldIndex + dist + (unsigned int)( ( (double)(size-dist) )*rand )) % size), -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
 	}
 	#endif
