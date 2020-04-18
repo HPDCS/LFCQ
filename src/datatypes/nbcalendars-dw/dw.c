@@ -6,6 +6,7 @@ extern __thread int blocked;
 extern __thread bool from_block_table;
 extern __thread long cache_hit;
 extern __thread long remote_node_dequeue;
+extern __thread long remote_node_dequeue_exec;
 
 __thread unsigned int dequeue_num = 0;	// per decidere quando fare il flush proattivo
 __thread dwb* last_bucket_p = NULL;		// cache dell'ultimo bucket ritrovato in estrazione
@@ -365,7 +366,7 @@ void dw_flush(void *tb, dwb *bucket_p, bool mark_bucket){
 					return; // se sto in modalità proattiva e mi accorgo che non sono solo ritorno
 				
 				assertf(is_marked(original_suggestion->next, DEL), "dw_flush(): nodo di suggerimento marcato %s", "");	
-				assertf(suggestion != NULL && suggestion->timestamp >= dw_node->timestamp, "dw_flush: suggerimento sbagliato %f %f", suggestion->timestamp, dw_node->timestamp);
+				assertf(suggestion != NULL && suggestion->timestamp > dw_node->timestamp, "dw_flush: suggerimento sbagliato %f %f", suggestion->timestamp, dw_node->timestamp);
 
 				#if ENABLE_SORTING
 					suggestion = flush_node(suggestion, dw_node, h);	// migro
@@ -499,6 +500,9 @@ dwb* dw_dequeue(void *tb, unsigned long long index_vb){
 			#endif
 			*/
 			for(i = 0; i < DEQUEUE_WAIT_CICLES && !is_marked_ref(bucket_p->next, DELB); i++);
+
+			if(!is_marked_ref(bucket_p->next, DELB))
+				remote_node_dequeue_exec++;
 		}
 
 		/*
