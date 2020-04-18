@@ -443,7 +443,7 @@ void dw_proactive_flush(void *tb, unsigned long long index_vb){
 
 		if(get_bucket_state(bucket_p->next) == EXT || get_bucket_state(bucket_p->next) == BLK){
 
-			if(get_bucket_state(bucket_p->next) == EXT && !is_marked_ref(bucket_p->next, DELB)){
+			if(get_bucket_state(bucket_p->next) == EXT && !is_marked_ref(bucket_p->next, DELB) && !bucket_p->pro){
 				//printf("%d\n", bucket_p->valid_elem);
 				dw_flush(h, bucket_p, false);
 			}
