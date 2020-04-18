@@ -175,13 +175,17 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	unsigned long long oldCur = h->current;
 	unsigned long long oldIndex = oldCur >> 32;
 	unsigned long long dist = 1;
+	unsigned long long calc;
 	double rand;
 	nbc_bucket_node *left_node, *right_node;
 	drand48_r(&seedT, &rand);
-	//if(rand < 0.2)
+	if(rand < 0.2)
 	{
-	//drand48_r(&seedT, &rand);
-	search(h->array+((oldIndex + dist + (unsigned int)( ( (double)(size-dist) )*rand )) % size), -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
+	drand48_r(&seedT, &rand);
+	calc = oldIndex + dist + (unsigned int)( ( (double)(size-dist) )*rand );
+	for(;NODE_HASH(calc) != NID; calc++);
+	search(h->array + (calc % size), -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
+	//search(h->array+((oldIndex + dist + (unsigned int)( ( (double)(size-dist) )*rand )) % size), -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
 	}
 	#endif
 

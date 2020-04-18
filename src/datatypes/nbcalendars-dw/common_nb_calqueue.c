@@ -1445,7 +1445,7 @@ void pq_report(int TID)
 		(float)compact_buckets 			/ (float)list_search_invoc_add,
 		(float)nodes_per_bucket 		/ (float)compact_buckets
 	);
-	printf("TID %d: elementi bloccati %d, cache hit %ld, tentativi estrazione bucket remoti %ld, estrazioni remote svolte %ld\n", TID, blocked, cache_hit, remote_node_dequeue);
+	printf("TID %d: elementi bloccati %d, cache hit %ld, tentativi estrazione bucket remoti %ld, estrazioni remote svolte %ld\n", TID, blocked, cache_hit, remote_node_dequeue, remote_node_dequeue_exec);
 	#if NUMA_DW || SEL_DW
 	printf("DWQNumaStat: LOC: enq %llu, deq %llu. REM: enq %llu deq %llu\n\n", local_enq, local_deq, remote_enq, remote_deq);
 	#endif
