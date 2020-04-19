@@ -12,6 +12,7 @@
 extern __thread unsigned long long enq_mov;
 extern __thread unsigned long long enq_ext;
 extern __thread unsigned long long enq_near;
+__thread unsigned long long my_curr = 0;
 
 bool dw_enable = false;
 
@@ -122,6 +123,13 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 				if(remote)
 				#endif
 				{
+					if(my_curr > curr){
+						printf("%d - %llu -> %llu\n", TID, my_curr, curr);
+						//return OK;
+					}
+						
+					my_curr = curr;
+
 					res = dw_enqueue(
 						h, 
 						newIndex, 

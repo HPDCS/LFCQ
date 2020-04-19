@@ -184,8 +184,12 @@ begin:
 				if(bucket_p->lock)
 					dw_node_ts = dw_extraction(bucket_p, result, left_ts);
 				else{
-					dw_node_ts = dw_extraction_faa(bucket_p, result, left_ts);
-					//printf("%f %f\n", dw_node_ts, left_ts);
+					dw_node_ts = CONTINUE;
+
+					if(bucket_p->dwv_sorted[get_deq_ind(bucket_p->indexes)].timestamp <= left_ts){
+						dw_node_ts = dw_extraction_faa(bucket_p, result, left_ts);
+						//printf("%f %f\n", dw_node_ts, left_ts);
+					}
 				}
 				
 				if(dw_node_ts >= 0){				// estrazione riuscita

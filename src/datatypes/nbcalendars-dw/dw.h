@@ -270,6 +270,7 @@ dw_retry:
 if(bucket_p->lock)
 	return GOTO;
 
+
 		deq_cn = get_deq_ind(FETCH_AND_ADD(&bucket_p->indexes, 1));
 
 
