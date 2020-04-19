@@ -135,6 +135,7 @@ dwb* new_node(long long index_vb, dwb *next
     node->dwv_sorted = NULL; 
     node->lock = 0;
     node->pro = 0;
+    node->min_ts = INFTY;
 	  	
   	return node;
 }

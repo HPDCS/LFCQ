@@ -227,7 +227,7 @@ void dw_block_table(void* tb, unsigned int start){
 	}
 }
 
-int dw_enqueue(void *tb, unsigned long long index_vb, nbc_bucket_node *new_node
+int dw_enqueue(void *tb, unsigned long long index_vb, nbc_bucket_node *new_node, dwb **b
 #if NUMA_DW
 , int numa_node
 #endif
@@ -261,6 +261,8 @@ int dw_enqueue(void *tb, unsigned long long index_vb, nbc_bucket_node *new_node
 		return MOV_FOUND;
 
 	assertf(bucket_p == NULL, "dw_enqueue(): bucket NULL dove non dovrebbe %p\n", bucket_p);
+
+	*b = bucket_p;
 /*
 	if(get_bucket_state(bucket_p->next) == EXT)
 		return ABORT;// bucket già pieno o è iniziata l'estrazione

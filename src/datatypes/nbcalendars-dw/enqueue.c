@@ -37,6 +37,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	int dest_node;
 	bool remote; 
 	unsigned long long curr;
+	dwb *bucket_p;
+	pkey_t tmps;
 	
 	int prev_dest_node = -1;// qui solo per togliere il warning
 	
@@ -111,8 +113,11 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 		}
 		#endif
 
+		bucket_p = NULL;
+
 		if(dw_enable){
 			if(((curr = h->current >> 32) + DW_ENQUEUE_USAGE_TH) < newIndex){
+				
 				#if SEL_DW
 				if(remote)
 				#endif
@@ -120,7 +125,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 					res = dw_enqueue(
 						h, 
 						newIndex, 
-						new_node
+						new_node,
+						&bucket_p
 					#if NUMA_DW
 						, dest_node
 					#endif
@@ -142,6 +148,18 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 		if(res != OK){
 			// search the two adjacent nodes that surround the new key and try to insert with a CAS 
 			res = search_and_insert(bucket, timestamp, 0, REMOVE_DEL_INV, new_node, &new_node);
+			if(res == OK && bucket_p != NULL){
+				BOOL_CAS(&bucket_p->lock, 0, 1);
+				/*
+				while(
+					((tmps = bucket_p->min_ts) > new_node->timestamp) && 
+					!BOOL_CAS_DOUBLE((unsigned long long*)&bucket_p->min_ts, tmps, new_node->timestamp)
+				);
+					printf("%llu %f\n", bucket_p->index_vb, bucket_p->min_ts);
+		*/	}
+			/*else if(bucket_p == NULL)
+				printf("%llu non esistente\n", newIndex);
+		*/
 		}
 	}				
 

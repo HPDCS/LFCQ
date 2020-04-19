@@ -174,12 +174,19 @@ begin:
 
 				if(no_dw_node_curr_vb)
 					break;
+
+				BOOL_CAS(&bucket_p->lock, 1, 0);
 			}
 
 			// DWQ
 			if(!no_dw_node_curr_vb){				
 				
-				dw_node_ts = dw_extraction(bucket_p, result, left_ts);
+				if(bucket_p->lock)
+					dw_node_ts = dw_extraction(bucket_p, result, left_ts);
+				else{
+					dw_node_ts = dw_extraction_faa(bucket_p, result, left_ts);
+					//printf("%f %f\n", dw_node_ts, left_ts);
+				}
 				
 				if(dw_node_ts >= 0){				// estrazione riuscita
 					concurrent_dequeue += (unsigned long long) (__sync_fetch_and_add(&h->d_counter.count, 1) - con_de);
@@ -226,6 +233,8 @@ begin:
 			concurrent_dequeue += (unsigned long long) (__sync_fetch_and_add(&h->d_counter.count, 1) - con_de);
 
 			*result = left_node->payload;
+
+			//BOOL_CAS_DOUBLE((unsigned long long*)&bucket_p->min_ts, , new_node->timestamp);
 				
 			critical_exit();
 
