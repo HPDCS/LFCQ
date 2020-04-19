@@ -311,6 +311,7 @@ int dw_enqueue(void *tb, unsigned long long index_vb, nbc_bucket_node *new_node
 
 	if(result != OK){
 		if(get_enq_ind(bucket_p->indexes) % VEC_SIZE == 0)// bucket pieno
+
 			enq_full++;
 		else{
 			if(bucket_p->pro)	enq_pro++; // bucket flushato in modo proattivo

@@ -28,9 +28,6 @@
 #define NID                         nid
 #define HEADS_ARRAY_SCALE			1
 
-#define PRO_EXT						8   // indica che sono uscito dalla dw_enqueue perché il bucket è stato flushato proattivamente
-#define BUCKET_FULL					16	// indica che il bucket è stato riempito 
-
 // Stati bucket virtuale
 #define INS 	(0ULL)
 #define ORD 	(1ULL)

@@ -34,11 +34,11 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	int res, con_en = 0;
 	int iters = 0;
 
-	int dest_node;
+	int dest_node = -2;
 	bool remote; 
 	unsigned long long curr;
 	
-	int prev_dest_node = -1;// qui solo per togliere il warning
+	int prev_dest_node = -1;
 	
 	//init the result
 	res = MOV_FOUND;
@@ -67,32 +67,26 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			dest_node = NODE_HASH(hash_dw(newIndex, size)/*index*/);
 			if(dest_node != NID) remote = true;
 		#endif
-		
-		#if SEL_DW	
+			
+		#if NUMA_DW
 			if(prev_dest_node != -1 && prev_dest_node != dest_node){
-				node_free(new_node);// rilascio la precedente allocazione
-				new_node = node_malloc(
-					payload, 
-					timestamp, 
-					0
-				#if NUMA_DW
-					, dest_node
-				#endif
-				);
+				node_free(new_node);	// rilascio la precedente allocazione
+				prev_dest_node = -1;
 			}
 		#endif
-			
-			if(prev_dest_node == -1)
+
+			if(prev_dest_node == -1){
 				new_node = node_malloc(
-					payload, 
-					timestamp, 
-					0
-				#if NUMA_DW
-					, dest_node
-				#endif
+				payload, 
+				timestamp, 
+				0
+			#if NUMA_DW
+				, dest_node
+			#endif
 				);
-				
-			prev_dest_node = dest_node;
+
+				prev_dest_node = dest_node;
+			}
 		
 			// read the actual epoch
        		new_node->epoch = (h->current & MASK_EPOCH);
