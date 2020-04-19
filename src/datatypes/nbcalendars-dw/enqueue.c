@@ -10,8 +10,6 @@
  * @return true if the event is inserted in the set table else false
  */ 
 extern __thread unsigned long long enq_mov;
-extern __thread unsigned long long enq_full;
-extern __thread unsigned long long enq_pro;
 extern __thread unsigned long long enq_ext;
 extern __thread unsigned long long enq_near;
 
@@ -114,8 +112,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 		#endif
 
 		if(dw_enable){
-			curr = h->current >> 32;
-			if(curr + DW_ENQUEUE_USAGE_TH < newIndex){
+			if(((curr = h->current >> 32) + DW_ENQUEUE_USAGE_TH) < newIndex){
 				#if SEL_DW
 				if(remote)
 				#endif
@@ -129,23 +126,10 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 					#endif
 					);
 
-					switch(res){
-						case MOV_FOUND:
-							enq_mov++;
-							continue;
-							break;
-						case ABORT:// pieno, flush proattivo, adesso in estrazione
-							enq_ext++;
-							break;
-						case BUCKET_FULL:
-							res = ABORT;
-							enq_full++;
-							break;
-						case PRO_EXT:
-							res = ABORT;
-							enq_pro++;
-							break;
-					}	
+					if(res == MOV_FOUND){
+						enq_mov++;
+						continue;				
+					}
 				}
 			}else{
 				if(curr == newIndex)

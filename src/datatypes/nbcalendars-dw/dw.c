@@ -7,6 +7,9 @@ extern __thread bool from_block_table;
 extern __thread long cache_hit;
 extern __thread long remote_node_dequeue;
 extern __thread long remote_node_dequeue_exec;
+extern __thread unsigned long long enq_full;
+extern __thread unsigned long long enq_pro;
+extern __thread unsigned long long enq_ext;
 
 __thread unsigned int dequeue_num = 0;	// per decidere quando fare il flush proattivo
 __thread dwb* last_bucket_p = NULL;		// cache dell'ultimo bucket ritrovato in estrazione
@@ -307,11 +310,12 @@ int dw_enqueue(void *tb, unsigned long long index_vb, nbc_bucket_node *new_node
 	#endif
 
 	if(result != OK){
-		if(get_bucket_state(bucket_p->next) == EXT){
-			if(bucket_p->pro)	return PRO_EXT; // bucket flushato in modo proattivo
-			else 				return ABORT;	// bucket in estrazione
-		}else if(get_enq_ind(bucket_p->indexes) == VEC_SIZE)
-			return BUCKET_FULL;					// bucket pieno
+		if(get_enq_ind(bucket_p->indexes) % VEC_SIZE == 0)// bucket pieno
+			enq_full++;
+		else{
+			if(bucket_p->pro)	enq_pro++; // bucket flushato in modo proattivo
+			else 				enq_ext++;	// bucket in estrazione
+		}				
 	}
 
 	//assertf(get_enq_ind(bucket_p->indexes) >= VEC_SIZE && get_bucket_state(bucket_p->next) != EXT, "dw_enqueue(): bucket pieno e non in estrazione. stato %llu, enq_cn %d, enq_cn salvato %d\n", get_bucket_state(bucket_p->next), enq_cn, get_enq_ind(bucket_p->indexes));
@@ -323,14 +327,12 @@ void dw_flush(void *tb, dwb *bucket_p, bool mark_bucket){
 	table* h = (table*)tb;
 	nbc_bucket_node* dw_node, *suggestion, *original_suggestion;
 	int j, step = THREADS;
-	unsigned int index_pb, index_vb;
+	unsigned int index_vb;
 	double left_limit;
 
 	// ricerca minimo
 	nbc_bucket_node *lnode, *rnode;
 	index_vb = bucket_p->index_vb;	// index bucket virtuale
-	//index_pb = index_vb % h->size;	// index bucket fisico
-	index_pb = hash_dw(index_vb, h->size);
 	left_limit = ((double)index_vb) * h->bucket_width;	// limite timestamp sinistro del bucket virtuale
 	search(h->array + index_vb % h->size, left_limit, 0, &lnode, &rnode, REMOVE_DEL_FOR_DW);
 	original_suggestion = lnode;

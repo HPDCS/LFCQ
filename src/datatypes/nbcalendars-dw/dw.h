@@ -19,11 +19,11 @@
 #define PRO_FLUSH_BUCKET_NUM_MIN	16
 
 #define DISABLE_EXTRACTION_FROM_DW  ENABLE_PROACTIVE_FLUSH	// disabilita le estrazioni dirette dall dwq
-#define ENABLE_SORTING              0//!DISABLE_EXTRACTION_FROM_DW   // abilita il sorting per le dwq
+#define ENABLE_SORTING              1//!DISABLE_EXTRACTION_FROM_DW   // abilita il sorting per le dwq
 #define DW_USAGE_TH                 190000	// setta il numero di elementi minimo per abilitare le dwq
 #define ENABLE_BLOCKING_FLUSH       0	// abilita il lock per flushare elementi della dwq sui bucket della cq
 #define SEL_DW                      0	// se 1 allora lavoro differito solo se la destinazione si trova su un nodo numa remoto
-#define ENABLE_ENQUEUE_WORK			0   // abilita eventuale ulteriore lavoro svolto da un thread che esegue enqueue in DWQ
+#define ENABLE_ENQUEUE_WORK			1   // abilita eventuale ulteriore lavoro svolto da un thread che esegue enqueue in DWQ
 #define NODE_HASH(bucket_id)        ((bucket_id) % _NUMA_NODES)	// per bucket fisico
 #define NID                         nid
 #define HEADS_ARRAY_SCALE			1
