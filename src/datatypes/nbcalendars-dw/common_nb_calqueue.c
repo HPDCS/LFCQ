@@ -1428,6 +1428,7 @@ void pq_report(int TID)
 			malloc_count, last_bw);
 
 	printf("DWQ USAGE: inserimenti %ld, estrazione %ld, conflitti_ins %ld, conflitti_estr %ld\n", ins, estr, conflitti_ins, conflitti_estr);
+#if ENQ_FAILS_STAT
 	printf("DWQ ENQUEUE FAILS: TOTALE %.2f%%, resize %.2f%%, pieno %.2f%%, flush proattivo %.2f%%, corrente %.2f%%, troppo vicino %.2f%% \n", 
 		((float)(enq_mov + enq_full + enq_pro + enq_ext + enq_near)*100.0 / ((float)performed_enqueue)),
 		(float)(enq_mov)	*100.0 / ((float)performed_enqueue), 
@@ -1436,6 +1437,7 @@ void pq_report(int TID)
 		(float)(enq_ext)	*100.0 / ((float)performed_enqueue), 
 		(float)(enq_near)	*100.0 / ((float)performed_enqueue)
 	);
+#endif
 	printf("DWQ LIST USAGE: CALLS %llu, ADD_STEP %.2f, REM_STEP %.2f, CMP_B %llu(pro %.2f%%), CMP_B_PER_CALL %.2f, NODE_PER_B %.2f \n", 
 		list_search_invoc_add + list_search_invoc_rem,
 		(float)list_search_steps_add 	/ (float)list_search_invoc_add,

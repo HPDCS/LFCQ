@@ -125,12 +125,15 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 						continue;				
 					}
 				}
-			}else{
-				if(curr == newIndex)
-					enq_ext++;
-				else
-					enq_near++;
 			}
+			#if ENQ_FAILS_STAT
+				else{
+					if(curr == newIndex)
+						enq_ext++;
+					else
+						enq_near++;
+				}
+			#endif
 		}
 
 		if(res != OK){

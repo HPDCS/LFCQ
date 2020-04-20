@@ -41,9 +41,11 @@ void block_ins(dwb* bucket_p){
 
 		if(bucket_p->dwv[i].node == NULL) BOOL_CAS(&bucket_p->dwv[i].node, NULL, (nbc_bucket_node*)BLKN);
 		if(bucket_p->dwv[i].timestamp == INV_TS) BOOL_CAS_DOUBLE(&bucket_p->dwv[i].timestamp,INV_TS,INFTY);
-		
+		/*
 		if(!is_blocked(bucket_p->dwv[i].node) && bucket_p->dwv[i].timestamp != INFTY)
 			valid_elem++;
+		*/
+		valid_elem += (!is_blocked(bucket_p->dwv[i].node) && bucket_p->dwv[i].timestamp != INFTY);
 
 		assertf(bucket_p->dwv[i].node == NULL, "block_ins(): nodo non marcato come bloccato %p %f\n", bucket_p->dwv[i].node, bucket_p->dwv[i].timestamp);
 	}
@@ -86,14 +88,19 @@ void apply_transition_ORD_to_EXT(dwb *bucket_p
 
 		// memcopy selettiva
 		old_dwv = bucket_p->dwv;
-		for(i = 0, j = 0; i < bucket_p->cicle_limit; i++){
-			if(!is_blocked(old_dwv[i].node) && bucket_p->dwv[i].timestamp != INFTY){
-				memcpy(aus_ord_array + j, old_dwv + i, sizeof(nbnc));
-				j++;
+
+		if(bucket_p->cicle_limit == bucket_p->valid_elem)
+			memcpy(aus_ord_array, old_dwv, bucket_p->valid_elem * sizeof(nbnc));	
+		else{
+			for(i = 0, j = 0; i < bucket_p->cicle_limit; i++){
+				if(!is_blocked(old_dwv[i].node) && bucket_p->dwv[i].timestamp != INFTY){
+					memcpy(aus_ord_array + j, old_dwv + i, sizeof(nbnc));
+					j++;
+				}
 			}
 		}
 
-		assertf(j != bucket_p->valid_elem, "do_ord(): numero di elementi copiati per essere ordinati non corrisponde %d  %d\n", j, bucket_p->valid_elem);
+		//assertf(j != bucket_p->valid_elem, "do_ord(): numero di elementi copiati per essere ordinati non corrisponde %d  %d\n", j, bucket_p->valid_elem);
 	
 	#if ENABLE_SORTING 
 		qsort(aus_ord_array, bucket_p->valid_elem, sizeof(nbnc), cmp_node);		// ordino solo elementi inseriti effettivamente nella fase INS
@@ -309,6 +316,7 @@ int dw_enqueue(void *tb, unsigned long long index_vb, nbc_bucket_node *new_node
 
 	#endif
 
+#if ENQ_FAILS_STAT
 	if(result != OK){
 		if(get_enq_ind(bucket_p->indexes) % VEC_SIZE == 0)// bucket pieno
 
@@ -318,6 +326,7 @@ int dw_enqueue(void *tb, unsigned long long index_vb, nbc_bucket_node *new_node
 			else 				enq_ext++;	// bucket in estrazione
 		}				
 	}
+#endif
 
 	//assertf(get_enq_ind(bucket_p->indexes) >= VEC_SIZE && get_bucket_state(bucket_p->next) != EXT, "dw_enqueue(): bucket pieno e non in estrazione. stato %llu, enq_cn %d, enq_cn salvato %d\n", get_bucket_state(bucket_p->next), enq_cn, get_enq_ind(bucket_p->indexes));
 	//assertf((result != OK && get_bucket_state(bucket_p->next) != EXT), "dw_enqueue(): condizione di uscita sbagliata. state %llu, result %d\n", get_bucket_state(bucket_p->next), result);
@@ -380,7 +389,7 @@ void dw_flush(void *tb, dwb *bucket_p, bool mark_bucket){
 					flush_node(suggestion, dw_node, h);
 				#endif
 
-				dw_node = get_marked_node(get_node_pointer(bucket_p->dwv_sorted[j].node), BLKN);	 // prendo soltanto il puntatore marcato come bloccato
+				dw_node = get_marked_node(dw_node, BLKN);	 // prendo soltanto il puntatore marcato come bloccato
 				BOOL_CAS(&bucket_p->dwv_sorted[j].node, dw_node, get_marked_node(dw_node, DELN));
 			}
 
@@ -443,7 +452,7 @@ void dw_proactive_flush(void *tb, unsigned long long index_vb){
 	#if NUMA_DW
 			, NODE_HASH(hash_dw(index, h->size)/*index % h->size*/) 
 	#endif
-	);
+		);
 
 		if(get_bucket_state(bucket_p->next) == EXT || get_bucket_state(bucket_p->next) == BLK){
 
@@ -475,38 +484,34 @@ dwb* dw_dequeue(void *tb, unsigned long long index_vb){
 	else
 		bucket_p = list_remove(&str->heads[hash_dw(index_vb, h->size)/*index_vb % h->size*/], index_vb, str->list_tail);
 
+#if ENABLE_PROACTIVE_FLUSH/* && _NUMA_NODES == 1*/			
+	if(dequeue_num > DEQUEUE_NUM_TH){
+		dequeue_num = 0;
+		dw_proactive_flush(tb, index_vb);
+	}
+#endif
+
 	if(bucket_p == NULL || is_marked_ref(bucket_p->next, DELB)){
 		return NULL;
 	}
 
 	last_bucket_p = bucket_p;
 
+	if(NID != NODE_HASH(hash_dw(index_vb, h->size)/*index_vb % h->size*/)){// se cerco di estrarre da un nodo non locale per me
+			
+		remote_node_dequeue++;
+
+		for(i = 0; i < DEQUEUE_WAIT_CICLES && !is_marked_ref(bucket_p->next, DELB); i++);
+
+		if(is_marked_ref(bucket_p->next, DELB))
+			return NULL;
+
+		remote_node_dequeue_exec++;
+	}
+
 	//assertf(is_marked_ref(bucket_p->next, DELB) == 1, "dw_dequeue(): nodo marcato %p\n", bucket_p->next);
 
 	do{	
-		#if ENABLE_PROACTIVE_FLUSH/* && _NUMA_NODES == 1*/			
-			if(dequeue_num > DEQUEUE_NUM_TH){
-				dequeue_num = 0;
-				dw_proactive_flush(tb, index_vb);
-			}
-		#endif
-
-		if(NID != NODE_HASH(hash_dw(index_vb, h->size)/*index_vb % h->size*/)){// se cerco di estrarre da un nodo non locale per me
-			
-			remote_node_dequeue++;
-			/*
-			#if ENABLE_PROACTIVE_FLUSH && _NUMA_NODES != 1
-				if(dequeue_num > DEQUEUE_NUM_TH){
-					dequeue_num = 0;
-					dw_proactive_flush(tb, index_vb);
-				}
-			#endif
-			*/
-			for(i = 0; i < DEQUEUE_WAIT_CICLES && !is_marked_ref(bucket_p->next, DELB); i++);
-
-			if(!is_marked_ref(bucket_p->next, DELB))
-				remote_node_dequeue_exec++;
-		}
 
 		/*
 		assertf(get_enq_ind(bucket_p->indexes) >= VEC_SIZE && get_bucket_state(bucket_p->next) == EXT,
@@ -537,17 +542,16 @@ dwb* dw_dequeue(void *tb, unsigned long long index_vb){
 		}
 			
 	}while(1);
-
 }
 
 int cmp_node(const void *p1, const void *p2){
-	nbnc *node_1 = (nbnc*)p1;
-	nbnc *node_2 = (nbnc*)p2;
+	//nbnc *node_1 = (nbnc*)p1;
+	//nbnc *node_2 = (nbnc*)p2;
 	pkey_t tmp;
 
-	assertf(!is_none(node_1->node), "cmp_node(): nodo marcato %p %f %f\n", node_1->node, get_node_pointer(node_1->node)->timestamp, node_1->timestamp);
-	assertf(!is_none(node_2->node), "cmp_node(): nodo marcato %p %f %f\n", node_2->node, get_node_pointer(node_2->node)->timestamp, node_2->timestamp);
+	assertf(!is_none(((nbnc*)p1)->node), "cmp_node(): nodo marcato %p %f %f\n", ((nbnc*)p1)->node, get_node_pointer(((nbnc*)p1)->node)->timestamp, ((nbnc*)p1)->timestamp);
+	assertf(!is_none(((nbnc*)p2)->node), "cmp_node(): nodo marcato %p %f %f\n", ((nbnc*)p2)->node, get_node_pointer(((nbnc*)p2)->node)->timestamp, ((nbnc*)p2)->timestamp);
 
-	tmp = (node_1->timestamp - node_2->timestamp);
+	tmp = (((nbnc*)p1)->timestamp - ((nbnc*)p2)->timestamp);
 	return (tmp > 0.0) - (tmp < 0.0);
 }

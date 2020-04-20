@@ -46,6 +46,9 @@ extern __thread unsigned long long no_empty_vb;
 extern __thread long estr;
 extern __thread long conflitti_estr;
 
+__thread nbc_bucket_node* prev = NULL;
+__thread unsigned long long prev_vb = -1;
+
 
 pkey_t pq_dequeue(void *q, void** result)
 {
@@ -123,8 +126,12 @@ begin:
 			goto begin;
 
 		// get the physical bucket
-		min = array + (index % (size));
-		left_node = min_next = min->next;
+/*		if(prev_vb == index)
+			min = prev;
+		else
+*/			min = array + (index % (size));
+
+		left_node = min_next = get_node_pointer(min->next);
 
 		#if NUMA_DW || SEL_DW
 		dest_node = NODE_HASH(hash_dw(index, size)/*index % (size)*/);
@@ -147,7 +154,7 @@ begin:
 		
 		// a reshuffle has been detected => restart
 		if(is_marked(min_next, MOV)) goto begin;
-		
+
 		do
 		{
 			// get data from the current node	
@@ -217,6 +224,9 @@ begin:
 
 			// the node cannot be extracted && is marked as DEL => skip
 			if(is_marked(left_node_next, DEL))	continue;
+
+			prev_vb = index - 1;
+			prev = left_node;
 			
 			// the node has been extracted
 

@@ -28,6 +28,9 @@
 #define NID                         nid
 #define HEADS_ARRAY_SCALE			1
 
+
+#define ENQ_FAILS_STAT				1
+
 // Stati bucket virtuale
 #define INS 	(0ULL)
 #define ORD 	(1ULL)

@@ -163,11 +163,11 @@ dwb* list_add(dwb *head, long long index_vb, dwb* list_tail
     	}
 
     	if(new_elem == NULL){
-    		#if NUMA_DW
-    		new_elem = new_node(index_vb, NULL, numa_node);
-    		#else
-    		new_elem = new_node(index_vb, NULL);
-    		#endif
+    		  new_elem = new_node(index_vb, NULL
+                        #if NUMA_DW
+                            , numa_node
+                        #endif
+                          );
     	}
 
     	new_elem->next = right;
@@ -178,6 +178,7 @@ dwb* list_add(dwb *head, long long index_vb, dwb* list_tail
       		return new_elem;
     	}else{ // inserimento fallito
             if(is_marked_ref(head->next, MOVB)){   // se il nodo di sinistra è marcato in movimento
+                gc_free(ptst, new_elem->dwv, gc_aid[2]);
                 gc_free(ptst, new_elem, gc_aid[1]);// rilascio il nodo allocato
                 return NULL;
             }
