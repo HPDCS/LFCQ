@@ -10,6 +10,7 @@ extern __thread long remote_node_dequeue_exec;
 extern __thread unsigned long long enq_full;
 extern __thread unsigned long long enq_pro;
 extern __thread unsigned long long enq_ext;
+extern bool dw_enable;
 
 __thread unsigned int dequeue_num = 0;	// per decidere quando fare il flush proattivo
 __thread dwb* last_bucket_p = NULL;		// cache dell'ultimo bucket ritrovato in estrazione
@@ -473,10 +474,6 @@ dwb* dw_dequeue(void *tb, unsigned long long index_vb){
 	dwb *bucket_p = NULL;
 	int i;
 
-	#if ENABLE_PROACTIVE_FLUSH
-		dequeue_num++;
-	#endif
-
 	if(last_bucket_p != NULL && last_bucket_p->index_vb == index_vb){
 		bucket_p = last_bucket_p;
 		cache_hit++;
@@ -484,16 +481,19 @@ dwb* dw_dequeue(void *tb, unsigned long long index_vb){
 	else
 		bucket_p = list_remove(&str->heads[hash_dw(index_vb, h->size)/*index_vb % h->size*/], index_vb, str->list_tail);
 
-#if ENABLE_PROACTIVE_FLUSH/* && _NUMA_NODES == 1*/			
-	if(dequeue_num > DEQUEUE_NUM_TH){
+	if(bucket_p == NULL || is_marked_ref(bucket_p->next, DELB)){
+		return NULL;
+	}
+
+#if ENABLE_PROACTIVE_FLUSH/* && _NUMA_NODES == 1*/
+
+	dequeue_num++;
+
+	if(dequeue_num > DEQUEUE_NUM_TH && dw_enable){
 		dequeue_num = 0;
 		dw_proactive_flush(tb, index_vb);
 	}
 #endif
-
-	if(bucket_p == NULL || is_marked_ref(bucket_p->next, DELB)){
-		return NULL;
-	}
 
 	last_bucket_p = bucket_p;
 
