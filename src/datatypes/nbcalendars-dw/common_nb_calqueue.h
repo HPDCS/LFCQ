@@ -46,7 +46,7 @@ extern int gc_hid[];
 
 #define ENABLE_EXPANSION 1
 #define READTABLE_PERIOD 63
-#define COMPACT_RANDOM_ENQUEUE 1
+#define COMPACT_RANDOM_ENQUEUE 0
 
 #define BASE 1000000ULL 
 #ifndef RESIZE_PERIOD_FACTOR 
@@ -237,12 +237,12 @@ extern __thread unsigned long long remote_deq;
 
 
 extern void set_new_table(table* h, unsigned int threshold, double pub, unsigned int epb, unsigned int counter);
-extern table* read_table(table * volatile *hashtable, unsigned int threshold, unsigned int elem_per_bucket, double perc_used_bucket);
-extern void block_table(table* h);
-extern double compute_mean_separation_time(table* h, unsigned int new_size, unsigned int threashold, unsigned int elem_per_bucket);
-extern void migrate_node(nbc_bucket_node *right_node,	table *new_h);
+extern table* read_table(table * volatile *hashtable, unsigned int threshold, unsigned int elem_per_bucket, double perc_used_bucket, nbc_bucket_node*);
+extern void block_table(table* h, nbc_bucket_node*);
+extern double compute_mean_separation_time(table* h, unsigned int new_size, unsigned int threashold, unsigned int elem_per_bucket, nbc_bucket_node*);
+extern void migrate_node(nbc_bucket_node *right_node,	table *new_h, nbc_bucket_node*);
 //extern void flush_node(nbc_bucket_node *right_node,	table *new_h);
-extern nbc_bucket_node * flush_node(nbc_bucket_node *, nbc_bucket_node *right_node,	table *new_h);
+extern nbc_bucket_node * flush_node(nbc_bucket_node *, nbc_bucket_node *right_node,	table*, nbc_bucket_node*);
 extern void search(nbc_bucket_node *head, pkey_t timestamp, unsigned int tie_breaker, nbc_bucket_node **left_node, nbc_bucket_node **right_node, int flag);
 extern void flush_current(table* h, unsigned long long newIndex, nbc_bucket_node* node);
 extern double nbc_prune();

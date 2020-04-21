@@ -46,8 +46,7 @@ extern __thread unsigned long long no_empty_vb;
 extern __thread long estr;
 extern __thread long conflitti_estr;
 
-__thread nbc_bucket_node* prev = NULL;
-__thread unsigned long long prev_vb = -1;
+extern bool dw_enable;
 
 
 pkey_t pq_dequeue(void *q, void** result)
@@ -86,7 +85,7 @@ pkey_t pq_dequeue(void *q, void** result)
 begin:
 
 	// Get the current set table
-	h = read_table(&queue->hashtable, th, epb, pub);
+	h = read_table(&queue->hashtable, th, epb, pub, queue->tail);
 
 	// definizione variabili dw
 	dwb* bucket_p = NULL;
@@ -113,25 +112,58 @@ begin:
 		index = current >> 32;
 		epoch = current & MASK_EPOCH;
 
-		no_dw_node_curr_vb = ((bucket_p = dw_dequeue(h, index)) == NULL);
-		no_dw_node = (size == 1 && h->deferred_work->heads[0].next == h->deferred_work->list_tail);
-			
-		no_cq_node = false;
+		no_dw_node = no_cq_node = no_dw_node_curr_vb = false;
 
+		bucket_p = dw_dequeue(h, index, tail);
+
+		no_dw_node = (size == 1 && h->deferred_work->heads[0].next == h->deferred_work->list_tail);
+		if(bucket_p != NULL){
+			no_dw_node_curr_vb = ((bucket_p->valid_elem == 0) || (get_deq_ind(bucket_p->indexes) > 0 && get_deq_ind(bucket_p->indexes) == bucket_p->valid_elem) 
+				|| bucket_p->pro);
+			//no_cq_node = (bucket_p->cq_head->next == queue->tail);
+			
+			if(!no_dw_node_curr_vb && (get_bucket_state(bucket_p->next) == BLK))
+				goto begin;
+		}else{
+			//if (index <50)
+			//printf("%llu\n", index);
+			//no_dw_node = (size == 1 && h->deferred_work->heads[0].next == h->deferred_work->list_tail);
+			//no_cq_node = true;
+			index++;
+			goto fine;
+		}
+
+		//no_dw_node_curr_vb = ((bucket_p = dw_dequeue(h, index)) == NULL);
+		//no_dw_node = (size == 1 && h->deferred_work->heads[0].next == h->deferred_work->list_tail);
+		
+
+		//no_cq_node = false;
+/*
 		#if DISABLE_EXTRACTION_FROM_DW
 		assertf(!no_dw_node_curr_vb, "dequeue(): bucket non flushato %s\n", "");
 		#endif
-
+*/
+/*
 		if(!no_dw_node_curr_vb && (get_bucket_state(bucket_p->next) == BLK))
 			goto begin;
+*/
+/*
+		if(index < 100 && bucket_p != NULL)
+			printf("%p %llu\n", bucket_p, bucket_p->index_vb);
+		else if(index < 100)
+			printf("nullo\n");
+*/
+		/*
+		if(index < 50)
+			printf("%p %p\n", h->deferred_work->list_tail, h->deferred_work->heads[0].next);
+		*/
+
+		
 
 		// get the physical bucket
-/*		if(prev_vb == index)
-			min = prev;
-		else
-*/			min = array + (index % (size));
-
-		left_node = min_next = get_node_pointer(min->next);
+		//min = array + (index % (size));
+		min = bucket_p->cq_head;
+		left_node = min_next = min->next;
 
 		#if NUMA_DW || SEL_DW
 		dest_node = NODE_HASH(hash_dw(index, size)/*index % (size)*/);
@@ -154,9 +186,10 @@ begin:
 		
 		// a reshuffle has been detected => restart
 		if(is_marked(min_next, MOV)) goto begin;
-
+		
 		do
 		{
+			//printf("pippo %llu\n", index);
 			// get data from the current node	
 			left_node_next = left_node->next;
 			left_ts = left_node->timestamp;
@@ -199,7 +232,9 @@ begin:
 						else
 							remote_deq++;
 					#endif
-
+				
+				//	printf("DW %f\n", dw_node_ts);
+					
 					return dw_node_ts;
 				}else if(dw_node_ts == GOTO)		// bisogna ricominciare da capo
 					goto begin;
@@ -224,9 +259,6 @@ begin:
 
 			// the node cannot be extracted && is marked as DEL => skip
 			if(is_marked(left_node_next, DEL))	continue;
-
-			prev_vb = index - 1;
-			prev = left_node;
 			
 			// the node has been extracted
 
@@ -246,13 +278,23 @@ begin:
 				remote_deq++;
 			#endif
 
+			//printf("CQ %f\n", left_ts);
 			return left_ts;
 										
 		}while( (left_node = get_unmarked(left_node_next)));
 
+fine:		
+		
+		if(bucket_p != NULL){
+			assertf(dw_enable && !bucket_p->pro, "%s", "");
+			BOOL_CAS(&(bucket_p->next), bucket_p->next, get_marked_ref(bucket_p->next, DELB));
+			assertf(!is_marked_ref(bucket_p->next, DELB), "delb %s\n", "");
+		}
+
 		// if i'm here it means that the virtual bucket was empty. Check for queue emptyness
 		//if(left_node == tail && size == 1 && !is_marked(min->next, MOV))
-		if(left_node == tail && size == 1 && !is_marked(min->next, MOV) && no_dw_node)
+		//if(left_node == tail && size == 1 && !is_marked(min->next, MOV) && no_dw_node)
+		if(no_dw_node)
 		{
 			critical_exit();
 			*result = NULL;
@@ -272,6 +314,7 @@ begin:
 			num_cas++;
 			old_current = VAL_CAS( &(h->current), current, ((index << 32) | epoch) );
 			if(old_current == current){
+				//printf("old_current %llu\n", old_current);
 				current = ((index << 32) | epoch);
 				num_cas_useful++;
 			}

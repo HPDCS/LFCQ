@@ -64,8 +64,6 @@ __thread long conflitti_estr = 0;
 __thread int blocked = 0;
 __thread bool from_block_table = false;
 __thread unsigned long long no_empty_vb = 0;
-__thread long remote_node_dequeue = 0;
-__thread long remote_node_dequeue_exec = 0;
 
 __thread unsigned long long enq_mov = 0;
 __thread unsigned long long enq_full = 0;
@@ -494,10 +492,10 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 		// allocate new table
 		res = posix_memalign((void**)&new_h, CACHE_LINE_SIZE, sizeof(table));
 		if(res != 0) {printf("No enough memory to new table structure\n"); return;}
-
+/*
 		res = posix_memalign((void**)&new_h->array, CACHE_LINE_SIZE, new_size*sizeof(nbc_bucket_node));
 		if(res != 0) {free(new_h); printf("No enough memory to new table structure\n"); return;}
-
+*/
 		res = posix_memalign((void**)(&new_h->deferred_work), CACHE_LINE_SIZE, sizeof(dwstr));
 		if(res != 0) {
 			free(new_h->array);	
@@ -509,7 +507,7 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 		res = posix_memalign((void**)(&new_h->deferred_work->heads), CACHE_LINE_SIZE, /*new_size*/dwq_size*sizeof(dwb));
 		if(res != 0) {
 			free(new_h->deferred_work);	
-			free(new_h->array);	
+			//free(new_h->array);	
 			free(new_h);
 			printf("Non abbastanza memoria per allocare l'array di teste\n");
 			return;
@@ -523,7 +521,7 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 		if(new_h->deferred_work->list_tail == NULL) {
 			free(new_h->deferred_work->heads);
 			free(new_h->deferred_work);	
-			free(new_h->array);	
+			//free(new_h->array);	
 			free(new_h);
 			printf("Non abbastanza memoria per allocare la tail delle liste\n");
 			return;
@@ -540,7 +538,7 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 
 		new_h->deferred_work->vec_size = VEC_SIZE;
 		
-		tail = h->array->tail;
+		//tail = h->array->tail;
 		new_h->bucket_width  = -1.0;
 		new_h->size 		 = new_size;
 		new_h->new_table 	 = NULL;
@@ -556,11 +554,12 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 		//printf("%f %f %u\n", ((double)concurrent_dequeue)/((double)performed_dequeue), ((double)concurrent_enqueue)/((double)performed_enqueue), new_h->pad);
 		for (i = 0; i < new_size; i++)
 		{
+			/*
 			new_h->array[i].next = tail;
 			new_h->array[i].tail = tail;
 			new_h->array[i].counter = 0;
 			new_h->array[i].epoch = 0;
-
+*/
 			if(i < dwq_size){
 				new_h->deferred_work->heads[i].index_vb = -2LL;
 				new_h->deferred_work->heads[i].next = new_h->deferred_work->list_tail;
@@ -580,7 +579,7 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 			// attempt failed, thus release memory
 			free(new_h->deferred_work->heads);
 			free(new_h->deferred_work);				
-			free(new_h->array);
+			//free(new_h->array);
 			free(new_h);
 		}
 		else{
@@ -592,25 +591,25 @@ void set_new_table(table* h, unsigned int threshold, double pub, unsigned int ep
 	}
 }
 
-void block_table(table* h)
+void block_table(table* h, nbc_bucket_node * tail)
 {
-	unsigned int i=0;
+	/*unsigned int i=0;
 	unsigned int size = h->size;
 
 	nbc_bucket_node *array = h->array;
 	nbc_bucket_node *bucket, *bucket_next;
 	nbc_bucket_node *left_node, *right_node; 
 	nbc_bucket_node *right_node_next, *left_node_next;
-	nbc_bucket_node *tail = array->tail;
-	double rand = 0.0;			
+	nbc_bucket_node *tail = h->array->tail;
+	*/double rand = 0.0;			
 	unsigned int start = 0;		
 
 	drand48_r(&seedT, &rand); 
 	// start blocking table from a random physical bucket
-	start = (unsigned int) rand * size;	
+	start = (unsigned int) rand * h->size;	
 
-	dw_block_table(h, start);
-
+	dw_block_table(h, start, tail);
+/*
 	for(i = 0; i < size; i++)
 	{
 		bucket = array + ((i + start) % size);	
@@ -639,29 +638,32 @@ void block_table(table* h)
 				)
 		);
 	}
+	*/
 }
 
 
 double compute_mean_separation_time(table* h,
-		unsigned int new_size, unsigned int threashold, unsigned int elem_per_bucket)
+		unsigned int new_size, unsigned int threashold, unsigned int elem_per_bucket, nbc_bucket_node* cq_tail)
 {
 	//printf("new size = %u, threashold = %u, elem_per_bucket = %u\n", new_size, threashold, elem_per_bucket);
 
-	unsigned int i = 0, index;
+	unsigned int i = 0, index, k;
 
 	table *new_h = h->new_table;
-	nbc_bucket_node *array = h->array;
+	//nbc_bucket_node *array = h->array;
 	double old_bw = h->bucket_width;
 	unsigned int size = h->size;
 	double new_bw = new_h->bucket_width;
 
-	nbc_bucket_node *tail = array->tail;	
+	//nbc_bucket_node *tail = array->tail;	
+	nbc_bucket_node *tail = cq_tail;
 	unsigned int sample_size;
 	double average = 0.0;
 	double newaverage = 0.0;
 	pkey_t tmp_timestamp;
 	acc_counter  = 0;
 	unsigned int counter = 0;
+	dwb *bucket_p;
 	
 	pkey_t min_next_round = INFTY;
 	pkey_t lower_bound, upper_bound;
@@ -680,60 +682,81 @@ double compute_mean_separation_time(table* h,
 
 	sample_size = (new_size <= 5) ? (new_size/2) : (5 + (unsigned int)((double)new_size / 10));
 	sample_size = (sample_size > SAMPLE_SIZE) ? SAMPLE_SIZE : sample_size;
-    
+ 
 	pkey_t sample_array[SAMPLE_SIZE+1]; //<--TODO: DOES NOT FOLLOW STANDARD C90
     
     //read nodes until the total samples is reached or until someone else do it
 	acc = 0;
-	while(counter != sample_size && new_h->bucket_width == -1.0)
-	{   
+	unsigned long long ind = 0; 
+	//while(counter != sample_size && new_h->bucket_width == -1.0)
+	//{   
 
 		for (i = 0; i < size; i++)
 		{
-			tmp = array + (index + i) % size; 	//get the head of the bucket
-			tmp = get_unmarked(tmp->next);		//pointer to first node
-			
-			lower_bound = (pkey_t)((index + i) * old_bw);
-			upper_bound = (pkey_t)((index + i + 1) * old_bw);
-		
-			while( tmp != tail && counter < sample_size)
-			{
-				tmp_timestamp = tmp->timestamp;
-				tmp_next = tmp->next;
-				//I will consider ognly valid nodes (VAL or MOV) In realtà se becco nodi MOV posso uscire!
-				if(!is_marked(tmp_next, DEL) && !is_marked(tmp_next, INV))
+			/*
+			for(bucket_p = get_bucket_pointer(h->deferred_work->heads[i].next);
+				bucket_p != NULL && bucket_p != h->deferred_work->list_tail; 
+				bucket_p = get_bucket_pointer(bucket_p->next))
+			{*/
+				bucket_p = get_bucket_pointer(h->deferred_work->heads[i].next);
+				if(bucket_p == h->deferred_work->list_tail || bucket_p->index_vb < ind)
+					continue;
+				ind = bucket_p->index_vb;
+
+				//printf("			%llu \n", bucket_p->index_vb);
+				
+				tmp = bucket_p->cq_head;
+				//tmp = array + (index + i) % size; 	//get the head of the bucket
+				tmp = get_unmarked(tmp->next);		//pointer to first node
+				
+				/*
+				lower_bound = (pkey_t)((index + i) * old_bw);
+				upper_bound = (pkey_t)((index + i + 1) * old_bw);
+				*/
+				lower_bound = (pkey_t)((bucket_p->index_vb) * old_bw);
+				upper_bound = (pkey_t)((bucket_p->index_vb + 1) * old_bw);
+
+				while( tmp != tail && counter < sample_size)
 				{
-					if( //belong to the current bucket
-						LESS(tmp_timestamp, upper_bound) &&	GEQ(tmp_timestamp, lower_bound) &&
-						D_EQUAL(tmp_timestamp, sample_array[counter])
-					)
+					tmp_timestamp = tmp->timestamp;
+					tmp_next = tmp->next;
+					//I will consider ognly valid nodes (VAL or MOV) In realtà se becco nodi MOV posso uscire!
+					if(!is_marked(tmp_next, DEL) && !is_marked(tmp_next, INV))
 					{
-						acc++;
+						if( //belong to the current bucket
+							LESS(tmp_timestamp, upper_bound) &&	GEQ(tmp_timestamp, lower_bound) &&
+							D_EQUAL(tmp_timestamp, sample_array[counter])
+						)
+						{
+							acc++;
+						}
+						if( //belong to the current bucket
+							LESS(tmp_timestamp, upper_bound) &&	GEQ(tmp_timestamp, lower_bound) &&
+							!D_EQUAL(tmp_timestamp, sample_array[counter])
+						)
+						{
+							//printf("lista %f\n", tmp_timestamp);
+							sample_array[++counter] = tmp_timestamp;
+						}
+						/*else if(GEQ(tmp_timestamp, upper_bound) && LESS(tmp_timestamp, min_next_round))
+						{
+								min_next_round = tmp_timestamp;
+								break;
+						}*/
 					}
-					if( //belong to the current bucket
-						LESS(tmp_timestamp, upper_bound) &&	GEQ(tmp_timestamp, lower_bound) &&
-						!D_EQUAL(tmp_timestamp, sample_array[counter])
-					)
-					{
-						sample_array[++counter] = tmp_timestamp;
-					}
-					else if(GEQ(tmp_timestamp, upper_bound) && LESS(tmp_timestamp, min_next_round))
-					{
-							min_next_round = tmp_timestamp;
-							break;
-					}
+					tmp = get_unmarked(tmp_next);
 				}
-				tmp = get_unmarked(tmp_next);
-			}
+
+			//}
+	
 		}
 		//if the calendar has no more elements I will go out
-		if(min_next_round == INFTY)
-			break;
+//		if(min_next_round == INFTY)
+//			break;
 		//otherwise I will restart from the next good bucket
-		index = hash(min_next_round, old_bw);
-		min_next_round = INFTY;
-	}
-
+//		index = hash(min_next_round, old_bw);
+//		min_next_round = INFTY;
+//	}
 
 	if( counter < sample_size)
 		sample_size = counter;
@@ -753,7 +776,7 @@ double compute_mean_separation_time(table* h,
 			j++;
 		}
 	}
-
+//printf("%f %f %d %d\n\n\n\n", average, newaverage, j, sample_size);
     //double epb = h->pad;
     newaverage = (newaverage / j) * elem_per_bucket *BW_SCALING; //elem_per_bucket; /* this is the new width */
 	//printf("OLD %f NEW %f\n", (double)elem_per_bucket, (double)epb );    
@@ -772,7 +795,7 @@ double compute_mean_separation_time(table* h,
 	return newaverage;
 }
 
-void migrate_node(nbc_bucket_node *right_node,	table *new_h)
+void migrate_node(nbc_bucket_node *right_node, table *new_h, nbc_bucket_node* cq_tail)
 {
 	nbc_bucket_node *replica;
 	nbc_bucket_node** new_node;
@@ -784,7 +807,7 @@ void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 	unsigned int new_node_counter 	;
 	pkey_t 		 new_node_timestamp ;
 
-	
+	//printf("MIG %p %f\n", right_node, right_node->timestamp);
 	int res = 0;
 	
 	//Create a new node to be inserted in the new table as as INValid
@@ -800,14 +823,23 @@ void migrate_node(nbc_bucket_node *right_node,	table *new_h)
 	new_node_timestamp 	= new_node_pointer->timestamp;
 	
 	index = hash(new_node_timestamp, new_h->bucket_width);
-
-	// node to be added in the hashtable
-	bucket = new_h->array + (index % new_h->size);
+	dwb* bucket_p = list_add(&new_h->deferred_work->heads[hash_dw(index, new_h->size)], index, new_h->deferred_work->list_tail, cq_tail
+		#if NUMA_DW
+			, NODE_HASH(hash_dw(index, new_h->size))
+		#endif
+			);
+/*
+		if(index < 100 && bucket_p != NULL)
+			printf("%p %llu\n", bucket_p, bucket_p->index_vb);
+		else if(index < 100)
+			printf("nullo migrate\n");
+*/	// node to be added in the hashtable
+	//bucket = new_h->array + (index % new_h->size);
 	         
     do{	right_replica_field = right_node->replica; } 
     // try to insert the replica in the new table       
 	while(right_replica_field == NULL && (res = 
-	search_and_insert(bucket, new_node_timestamp, new_node_counter, REMOVE_DEL, new_node_pointer, new_node)
+	search_and_insert(bucket_p->cq_head, new_node_timestamp, new_node_counter, REMOVE_DEL, new_node_pointer, new_node)
 	) == ABORT);
 	// at this point we have at least one replica into the new table
 
@@ -1034,7 +1066,7 @@ int search_and_insert_dw(nbc_bucket_node *suggestion, nbc_bucket_node *head, pke
 	} while (1);
 }
 
-nbc_bucket_node* flush_node(nbc_bucket_node *suggestion, nbc_bucket_node *right_node, table *new_h)
+nbc_bucket_node* flush_node(nbc_bucket_node *suggestion, nbc_bucket_node *right_node, table *new_h, nbc_bucket_node *head)
 {
 	nbc_bucket_node *replica;
 	nbc_bucket_node** new_node;
@@ -1067,15 +1099,15 @@ nbc_bucket_node* flush_node(nbc_bucket_node *suggestion, nbc_bucket_node *right_
 	replica->original_copy = right_node;
 	replica->epoch = right_node->epoch;
 	
-	index = hash(new_node_timestamp, new_h->bucket_width);
+	//index = hash(new_node_timestamp, new_h->bucket_width);
 
 	// node to be added in the hashtable
-	bucket = new_h->array + (index % new_h->size);
+	//bucket = new_h->array + (index % new_h->size);
 	         
     do{	right_replica_field = right_node->replica; } 
     // try to insert the replica in the new table       
 	while(right_replica_field == NULL && (res = 
-	search_and_insert_dw(suggestion, bucket, new_node_timestamp, new_node_counter, REMOVE_DEL_FOR_DW, new_node_pointer, new_node)
+	search_and_insert_dw(suggestion, head, new_node_timestamp, new_node_counter, REMOVE_DEL_FOR_DW, new_node_pointer, new_node)
 	) == ABORT);
 	// at this point we have at least one replica into the new table
 
@@ -1115,7 +1147,7 @@ nbc_bucket_node* flush_node(nbc_bucket_node *suggestion, nbc_bucket_node *right_
 	return ret;
 }
 
-table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsigned int elem_per_bucket, double perc_used_bucket)
+table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsigned int elem_per_bucket, double perc_used_bucket, nbc_bucket_node *cq_tail)
 {
   #if ENABLE_EXPANSION == 0
   	return *curr_table_ptr;
@@ -1164,7 +1196,7 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 		// take the maximum between the signed_counter and ZERO
 		counter = (unsigned int) ( (-(signed_counter >= 0)) & signed_counter);
 
-		if(counter > DW_USAGE_TH)
+		if(counter > DW_USAGE_TH && ENABLE_PROACTIVE_FLUSH)
 			dw_enable = true;
 
 		//printf("%d: counter %d\n",TID, counter);
@@ -1178,16 +1210,17 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 	{
 		//printf("samples[0] %d, samples[1] %d, atro %d\n", samples[0], samples[1], (int)size*perc_used_bucket);
 		new_h 			= h->new_table;
-		array 			= h->array;
+		//array 			= h->array;
 		new_bw 			= new_h->bucket_width;
-		tail = array->tail;	
+		//tail = array->tail;
+		tail = cq_tail;	
 
 		if(new_bw < 0)
 		{
-			block_table(h); 				
+			block_table(h, cq_tail); 				
 
 			// avoid that extraction can succeed after its completition
-			newaverage = compute_mean_separation_time(h, new_h->size, threshold, elem_per_bucket);	// get the new bucket width
+			newaverage = compute_mean_separation_time(h, new_h->size, threshold, elem_per_bucket, tail);	// get the new bucket width
 			if 																						// commit the new bucket width
 			(
 				BOOL_CAS(
@@ -1204,33 +1237,43 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 		drand48_r(&seedT, &rand); 			
 		start = (unsigned int) rand * size;	// start to migrate from a random bucket
 		
+		dwb *bucket_p;
 		for(i = 0; i < size; i++)
 		{
-			bucket = array + ((i + start) % size);	// get the head 
-			node = get_unmarked(bucket->next);		// get the successor of the head (unmarked because heads are MOV)
-			do
+			
+			for(bucket_p = get_bucket_pointer(h->deferred_work->heads[i].next);
+				bucket_p != NULL && bucket_p != h->deferred_work->list_tail; 
+				bucket_p = get_bucket_pointer(bucket_p->next))
 			{
-				if(node == tail) 	break;			// the bucket is empty				
-				
-				search(node, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV); // compact and get the successor of node
-				right_node = get_unmarked(right_node);
-				right_node_next = right_node->next;				
-        
-        		// Skip the current bucket if
-				if( right_node == tail ||							// the successor of node is a tail ??? WTF??? 					
-					is_marked(right_node_next) || 					// the successor of node is already MOV
-						!BOOL_CAS(									// the successor of node has been concurrently set as MOV
-								&(right_node->next),
-								right_node_next,
-								get_marked(right_node_next, MOV)
-							)								
-				)
-					break;
-				
-				migrate_node(node, new_h);				// migrate node
-				node = right_node;						// go to the next node
-				
-			}while(true);
+			
+				bucket = bucket_p->cq_head;
+				//bucket = array + ((i + start) % size);	// get the head 
+				node = get_unmarked(bucket->next);		// get the successor of the head (unmarked because heads are MOV)
+				do
+				{
+					if(node == tail) 	break;			// the bucket is empty				
+					
+					search(node, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV); // compact and get the successor of node
+					right_node = get_unmarked(right_node);
+					right_node_next = right_node->next;				
+	        
+	        		// Skip the current bucket if
+					if( right_node == tail ||							// the successor of node is a tail ??? WTF??? 					
+						is_marked(right_node_next) || 					// the successor of node is already MOV
+							!BOOL_CAS(									// the successor of node has been concurrently set as MOV
+									&(right_node->next),
+									right_node_next,
+									get_marked(right_node_next, MOV)
+								)								
+					)
+						break;
+					
+					migrate_node(node, new_h, tail);				// migrate node
+					node = right_node;						// go to the next node
+					
+				}while(true);
+
+			}
 		}
 	
 		//Second conservative try: migrate the nodes and continue until each bucket is empty
@@ -1239,43 +1282,52 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 		start = (unsigned int) rand + size;	
 		for(i = 0; i < size; i++)
 		{
-			bucket = array + ((i + start) % size);	// get the head 
-			node = get_unmarked(bucket->next);		// get the successor of the head (unmarked because heads are MOV)
-			do
+
+			for(bucket_p = get_bucket_pointer(h->deferred_work->heads[i].next);
+				bucket_p != NULL && bucket_p != h->deferred_work->list_tail; 
+				bucket_p = get_bucket_pointer(bucket_p->next))
 			{
-				if(node == tail) 	break;			// the bucket is empty
-					
+						
+				bucket = bucket_p->cq_head;
+				//bucket = array + ((i + start) % size);	// get the head 
+			
+				node = get_unmarked(bucket->next);		// get the successor of the head (unmarked because heads are MOV)
 				do
 				{
-					search(node, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV); // compact and get the successor of node
-					right_node = get_unmarked(right_node);
-					right_node_next = right_node->next;
-				}
-				while(	// repeat because
-						right_node != tail &&						// the successor of node is not a tail
-						(
-							is_marked(right_node_next, DEL) ||		// the successor of node is DEL (we need to check the next one)
+					if(node == tail) 	break;			// the bucket is empty
+						
+					do
+					{
+						search(node, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV); // compact and get the successor of node
+						right_node = get_unmarked(right_node);
+						right_node_next = right_node->next;
+					}
+					while(	// repeat because
+							right_node != tail &&						// the successor of node is not a tail
 							(
-								is_marked(right_node_next, VAL) 	// the successor of node is VAL and the cas to mark it as MOV is failed
-								&& !BOOL_CAS(&(right_node->next), right_node_next, get_marked(right_node_next, MOV))
+								is_marked(right_node_next, DEL) ||		// the successor of node is DEL (we need to check the next one)
+								(
+									is_marked(right_node_next, VAL) 	// the successor of node is VAL and the cas to mark it as MOV is failed
+									&& !BOOL_CAS(&(right_node->next), right_node_next, get_marked(right_node_next, MOV))
+								)
 							)
-						)
-				);
-			
-				if(is_marked(node->next, MOV)) migrate_node(node, new_h); // if node is marked as MOV we can migrate it 
-				node = right_node;	// proceed to the next node (which is also MOV)
+					);
 				
-			}while(true);
-	
-			search(bucket, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);  // perform a compact to remove all DEL nodes (make head and tail adjacents again)
-			
-			assertf(get_unmarked(right_node) != tail, "Fail in line 972 %p %p %p %p %p %p\n",
-			 bucket,
-			  left_node,
-			   right_node, 
-			   ((nbc_bucket_node*)get_unmarked(right_node))->next, 
-			   ((nbc_bucket_node*)get_unmarked(right_node))->replica, 
-			   tail); 
+					if(is_marked(node->next, MOV)) migrate_node(node, new_h, tail); // if node is marked as MOV we can migrate it 
+					node = right_node;	// proceed to the next node (which is also MOV)
+					
+				}while(true);
+		
+				search(bucket, -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);  // perform a compact to remove all DEL nodes (make head and tail adjacents again)
+				
+				assertf(get_unmarked(right_node) != tail, "Fail in line 972 %p %p %p %p %p %p\n",
+				 bucket,
+				  left_node,
+				   right_node, 
+				   ((nbc_bucket_node*)get_unmarked(right_node))->next, 
+				   ((nbc_bucket_node*)get_unmarked(right_node))->replica, 
+				   tail); 
+			}
 	
 		}
 		
@@ -1283,7 +1335,7 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 		if( BOOL_CAS(curr_table_ptr, h, new_h) ){ //Try to replace the old table with the new one
 		 	// I won the challenge thus I collect memory
 		 	gc_add_ptr_to_hook_list(ptst, h, 		 gc_hid[0]);
-			gc_add_ptr_to_hook_list(ptst, h->array,  gc_hid[0]);
+								//gc_add_ptr_to_hook_list(ptst, h->array,  gc_hid[0]);
 			
 			/*
 			for(i = 0; i < h->size; i++){
@@ -1339,9 +1391,9 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	if(res_mem_posix != 0) 	error("No enough memory to allocate queue\n");
 	res_mem_posix = posix_memalign((void**)(&res->hashtable), CACHE_LINE_SIZE, sizeof(table));
 	if(res_mem_posix != 0)	error("No enough memory to allocate set table\n");
-	res_mem_posix = posix_memalign((void**)(&res->hashtable->array), CACHE_LINE_SIZE, MINIMUM_SIZE*sizeof(nbc_bucket_node));
+	/*res_mem_posix = posix_memalign((void**)(&res->hashtable->array), CACHE_LINE_SIZE, MINIMUM_SIZE*sizeof(nbc_bucket_node));
 	if(res_mem_posix != 0)	error("No enough memory to allocate array of heads\n");
-
+*/
 	res_mem_posix = posix_memalign((void**)(&res->hashtable->deferred_work), CACHE_LINE_SIZE, sizeof(dwstr));
 	if(res_mem_posix != 0)	error("Non abbastanza memoria per allocare la struttura globale dwstr.\n");
 	res_mem_posix = posix_memalign((void**)(&res->hashtable->deferred_work->heads), CACHE_LINE_SIZE, MINIMUM_SIZE*sizeof(dwb));
@@ -1356,7 +1408,7 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 		error("Non abbastanza memoria per allocare la tail.\n");
 
 	res->hashtable->deferred_work->vec_size = VEC_SIZE;	// setto numero di elementi in un array di deferred work
-
+assertf(get_bucket_state(res->hashtable->deferred_work->list_tail)!= INS, "tail non allineata %p\n", res->hashtable->deferred_work->list_tail);
 	// inizializzazione tail dw
 	res->hashtable->deferred_work->list_tail->index_vb = LLONG_MAX;
 	res->hashtable->deferred_work->list_tail->next = NULL;
@@ -1391,11 +1443,12 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 
 	for (i = 0; i < MINIMUM_SIZE; i++)
 	{
+		/*
 		res->hashtable->array[i].next = res->tail;
 		res->hashtable->array[i].tail = res->tail;
 		res->hashtable->array[i].timestamp = (pkey_t)i;
 		res->hashtable->array[i].counter = 0;
-
+*/
 		res->hashtable->deferred_work->heads[i].index_vb = -2LL;
 		res->hashtable->deferred_work->heads[i].next = res->hashtable->deferred_work->list_tail;
 		res->hashtable->deferred_work->heads[i].dwv = NULL;
@@ -1428,7 +1481,6 @@ void pq_report(int TID)
 			malloc_count, last_bw);
 
 	printf("DWQ USAGE: inserimenti %ld, estrazione %ld, conflitti_ins %ld, conflitti_estr %ld\n", ins, estr, conflitti_ins, conflitti_estr);
-#if ENQ_FAILS_STAT
 	printf("DWQ ENQUEUE FAILS: TOTALE %.2f%%, resize %.2f%%, pieno %.2f%%, flush proattivo %.2f%%, corrente %.2f%%, troppo vicino %.2f%% \n", 
 		((float)(enq_mov + enq_full + enq_pro + enq_ext + enq_near)*100.0 / ((float)performed_enqueue)),
 		(float)(enq_mov)	*100.0 / ((float)performed_enqueue), 
@@ -1437,7 +1489,6 @@ void pq_report(int TID)
 		(float)(enq_ext)	*100.0 / ((float)performed_enqueue), 
 		(float)(enq_near)	*100.0 / ((float)performed_enqueue)
 	);
-#endif
 	printf("DWQ LIST USAGE: CALLS %llu, ADD_STEP %.2f, REM_STEP %.2f, CMP_B %llu(pro %.2f%%), CMP_B_PER_CALL %.2f, NODE_PER_B %.2f \n", 
 		list_search_invoc_add + list_search_invoc_rem,
 		(float)list_search_steps_add 	/ (float)list_search_invoc_add,
@@ -1447,7 +1498,7 @@ void pq_report(int TID)
 		(float)compact_buckets 			/ (float)list_search_invoc_add,
 		(float)nodes_per_bucket 		/ (float)compact_buckets
 	);
-	printf("TID %d: elementi bloccati %d, cache hit %ld, tentativi estrazione bucket remoti %ld, estrazioni remote svolte %ld\n", TID, blocked, cache_hit, remote_node_dequeue, remote_node_dequeue_exec);
+	printf("TID %d: elementi bloccati %d, cache hit %ld \n", TID, blocked, cache_hit);
 	#if NUMA_DW || SEL_DW
 	printf("DWQNumaStat: LOC: enq %llu, deq %llu. REM: enq %llu deq %llu\n\n", local_enq, local_deq, remote_enq, remote_deq);
 	#endif

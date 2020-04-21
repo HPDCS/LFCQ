@@ -10,8 +10,11 @@
  * @return true if the event is inserted in the set table else false
  */ 
 extern __thread unsigned long long enq_mov;
+extern __thread unsigned long long enq_full;
+extern __thread unsigned long long enq_pro;
 extern __thread unsigned long long enq_ext;
 extern __thread unsigned long long enq_near;
+__thread unsigned long long my_curr = 0;
 
 bool dw_enable = false;
 
@@ -34,15 +37,15 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	int res, con_en = 0;
 	int iters = 0;
 
-	int dest_node = -2;
+	int dest_node;
 	bool remote; 
 	unsigned long long curr;
 	
-	int prev_dest_node = -1;
+	int prev_dest_node = -1;// qui solo per togliere il warning
 	
 	//init the result
 	res = MOV_FOUND;
-	
+	//printf("%d\n", res);
 	//repeat until a successful insert
 	while(res != OK){
 		iters++;
@@ -51,7 +54,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 		if(res == MOV_FOUND){
 
 			// check for a resize
-			h = read_table(&queue->hashtable, th, epb, pub);
+			h = read_table(&queue->hashtable, th, epb, pub, queue->tail);
 
 			// get actual size
 			size = h->size;
@@ -67,26 +70,32 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			dest_node = NODE_HASH(hash_dw(newIndex, size)/*index*/);
 			if(dest_node != NID) remote = true;
 		#endif
-			
-		#if NUMA_DW
+		
+		#if SEL_DW	
 			if(prev_dest_node != -1 && prev_dest_node != dest_node){
-				node_free(new_node);	// rilascio la precedente allocazione
-				prev_dest_node = -1;
+				node_free(new_node);// rilascio la precedente allocazione
+				new_node = node_malloc(
+					payload, 
+					timestamp, 
+					0
+				#if NUMA_DW
+					, dest_node
+				#endif
+				);
 			}
 		#endif
-
-			if(prev_dest_node == -1){
+			
+			if(prev_dest_node == -1)
 				new_node = node_malloc(
-				payload, 
-				timestamp, 
-				0
-			#if NUMA_DW
-				, dest_node
-			#endif
+					payload, 
+					timestamp, 
+					0
+				#if NUMA_DW
+					, dest_node
+				#endif
 				);
-
-				prev_dest_node = dest_node;
-			}
+				
+			prev_dest_node = dest_node;
 		
 			// read the actual epoch
        		new_node->epoch = (h->current & MASK_EPOCH);
@@ -105,40 +114,70 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 		}
 		#endif
 
-		if(dw_enable){
-			if(((curr = h->current >> 32) + DW_ENQUEUE_USAGE_TH) < newIndex){
+		// da risolvere. CASO INSERIMENTI NEL PASSATO
+		/*
+		if((h->current >> 32) > newIndex){
+			printf("%llu %llu\n", h->current >> 32, newIndex);
+			return OK;
+		}*/
+//printf("%d\n", res);
+		dwb *b = NULL;
+
+		if(true){
+			//if((curr = (h->current >> 32)) + DW_ENQUEUE_USAGE_TH < newIndex){
+			if(true){
 				#if SEL_DW
 				if(remote)
 				#endif
 				{
+
 					res = dw_enqueue(
 						h, 
 						newIndex, 
-						new_node
+						new_node,
+						queue->tail,
+						&b
 					#if NUMA_DW
 						, dest_node
 					#endif
 					);
-
-					if(res == MOV_FOUND){
-						enq_mov++;
-						continue;				
+//printf("%d\n", res);
+					switch(res){
+						case MOV_FOUND:
+							enq_mov++;
+							continue;
+							break;
+						case ABORT:// pieno, flush proattivo, adesso in estrazione
+							enq_ext++;
+							break;
+						case BUCKET_FULL:
+							res = ABORT;
+							enq_full++;
+							break;
+						case PRO_EXT:
+							res = ABORT;
+							enq_pro++;
+							break;
 					}
-				}
-			}
-			#if ENQ_FAILS_STAT
-				else{
-					if(curr == newIndex)
-						enq_ext++;
-					else
-						enq_near++;
-				}
-			#endif
-		}
 
+				}
+			}else{
+				if((h->current >> 32) == newIndex)
+					enq_ext++;
+				else
+					enq_near++;
+			}
+		}
+/*
+		if(b == NULL){
+			printf("oltre %d\n", res);
+			return OK;
+		}
+*/
 		if(res != OK){
 			// search the two adjacent nodes that surround the new key and try to insert with a CAS 
-			res = search_and_insert(bucket, timestamp, 0, REMOVE_DEL_INV, new_node, &new_node);
+			//res = search_and_insert(bucket, timestamp, 0, REMOVE_DEL_INV, new_node, &new_node);
+			res = search_and_insert(b->cq_head, timestamp, 0, REMOVE_DEL_INV, new_node, &new_node);
 		}
 	}				
 
@@ -156,17 +195,13 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	unsigned long long oldCur = h->current;
 	unsigned long long oldIndex = oldCur >> 32;
 	unsigned long long dist = 1;
-	unsigned long long calc;
 	double rand;
 	nbc_bucket_node *left_node, *right_node;
 	drand48_r(&seedT, &rand);
 	if(rand < 0.2)
 	{
 	drand48_r(&seedT, &rand);
-	calc = oldIndex + dist + (unsigned int)( ( (double)(size-dist) )*rand );
-	for(;NODE_HASH(calc) != NID; calc++);
-	search(h->array + (calc % size), -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
-	//search(h->array+((oldIndex + dist + (unsigned int)( ( (double)(size-dist) )*rand )) % size), -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
+	search(h->array+((oldIndex + dist + (unsigned int)( ( (double)(size-dist) )*rand )) % size), -1.0, 0, &left_node, &right_node, REMOVE_DEL_INV);
 	}
 	#endif
 

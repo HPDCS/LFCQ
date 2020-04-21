@@ -12,19 +12,19 @@ dwb* list_search(dwb *head, long long index_vb, dwb** left_node, bool from_deque
  	int i;
  	dwb *left_node_next, *right_node;
   	left_node_next = right_node = NULL;
-/*
-  if(mode){	              
+
+  if(from_dequeue && index_vb < 10 && false){	              
 	  dwb *t = head->next;
 
 	  printf("%d: valore %llu | ",	TID, index_vb);
 	  while(t != list_tail){
-	    printf("%p %llu %d %lld %d %d| ", t, t->index_vb, (int)is_marked_ref(t->next, DELB), get_bucket_state(t->next), t->cicle_limit, get_deq_ind(t->indexes));  
+	    printf("%p %llu %d %lld %d %d %d| ", t, t->index_vb, (int)is_marked_ref(t->next, DELB), get_bucket_state(t->next), t->cicle_limit, get_enq_ind(t->indexes), get_deq_ind(t->indexes));  
 	    t = get_bucket_pointer(t->next);
 	  }
 	  printf("\n");
 	  fflush(stdout);
 	}
-*/
+
     if(from_dequeue)  list_search_invoc_rem++;
     else              list_search_invoc_add++;
 
@@ -75,7 +75,7 @@ dwb* list_search(dwb *head, long long index_vb, dwb** left_node, bool from_deque
               			// if(get_node_pointer(left_node_next->dwv_sorted[i].node) != NULL && left_node_next->dwv_sorted[i].timestamp != INFTY)
                         	//if(!is_blocked(left_node_next->dwv_sorted[i].node))
                               node_free(get_node_pointer(left_node_next->dwv_sorted[i].node));
-                              //printf("pippo\n");
+                          
                       }
 
   			      	gc_free(ptst, left_node_next->dwv, gc_aid[2]);
@@ -93,7 +93,7 @@ dwb* list_search(dwb *head, long long index_vb, dwb** left_node, bool from_deque
   	}
 }
 
-dwb* new_node(long long index_vb, dwb *next
+dwb* new_node(long long index_vb, dwb *next, nbc_bucket_node *cq_list_tail
 #if NUMA_DW
 , unsigned int numa_node
 #endif
@@ -115,11 +115,29 @@ dwb* new_node(long long index_vb, dwb *next
 	#else
 	node->dwv = gc_alloc(ptst, gc_aid[2]);
 	#endif
-        
+  
+
 	if(node->dwv == NULL){
 		gc_free(ptst, node, gc_aid[1]);
 		return NULL;
 	}
+
+    #if NUMA_DW
+  node->cq_head = gc_alloc_node(ptst, gc_aid[0], numa_node); 
+  #else
+  node->cq_head = gc_alloc(ptst, gc_aid[0]);
+  #endif
+
+  if(node->cq_head == NULL){
+    gc_free(ptst, node->dwv, gc_aid[2]);
+    gc_free(ptst, node, gc_aid[1]);
+    return NULL;  
+  }
+
+    node->cq_head->next = cq_list_tail;
+    node->cq_head->tail = cq_list_tail;
+    node->cq_head->timestamp = (pkey_t)0;
+    node->cq_head->counter = 0;
 
     // inizializzazione dell'array allocato
   	for(i = 0; i < VEC_SIZE; i++){
@@ -139,7 +157,7 @@ dwb* new_node(long long index_vb, dwb *next
   	return node;
 }
 
-dwb* list_add(dwb *head, long long index_vb, dwb* list_tail
+dwb* list_add(dwb *head, long long index_vb, dwb* list_tail, nbc_bucket_node *cq_list_tail
 #if NUMA_DW
 , int numa_node
 #endif
@@ -152,7 +170,7 @@ dwb* list_add(dwb *head, long long index_vb, dwb* list_tail
   	right = left = new_elem = NULL;
 
     drand48_r(&seedT, &rand);
-    if(rand < 0.3)
+    if(rand < 0.1)
       right = list_search(head, -1, &left, false, list_tail);  
 
   	while(1){
@@ -163,11 +181,11 @@ dwb* list_add(dwb *head, long long index_vb, dwb* list_tail
     	}
 
     	if(new_elem == NULL){
-    		  new_elem = new_node(index_vb, NULL
-                        #if NUMA_DW
-                            , numa_node
-                        #endif
-                          );
+    		#if NUMA_DW
+    		new_elem = new_node(index_vb, NULL, cq_list_tail, numa_node);
+    		#else
+    		new_elem = new_node(index_vb, NULL, cq_list_tail);
+    		#endif
     	}
 
     	new_elem->next = right;
@@ -178,7 +196,7 @@ dwb* list_add(dwb *head, long long index_vb, dwb* list_tail
       		return new_elem;
     	}else{ // inserimento fallito
             if(is_marked_ref(head->next, MOVB)){   // se il nodo di sinistra è marcato in movimento
-                gc_free(ptst, new_elem->dwv, gc_aid[2]);
+              gc_free(ptst, new_elem->dwv, gc_aid[2]);
                 gc_free(ptst, new_elem, gc_aid[1]);// rilascio il nodo allocato
                 return NULL;
             }
@@ -186,7 +204,7 @@ dwb* list_add(dwb *head, long long index_vb, dwb* list_tail
   	}
 }
 
-dwb* list_remove(dwb *head, long long index_vb, dwb* list_tail){
+dwb* list_remove(dwb *head, long long index_vb, dwb* list_tail, nbc_bucket_node *cq_tail){
 
   	dwb* right, *left, *right_succ;
   	right = left = right_succ = NULL;
@@ -204,7 +222,7 @@ dwb* list_remove(dwb *head, long long index_vb, dwb* list_tail){
     	//assertf(is_marked_ref(right_succ, DELB), "list_remove(): ritornato un nodo marcato %s\n", "");
     	//assertf(getEnqInd(right->indexes) > VEC_SIZE && ((getEnqInd(right->indexes) - VEC_SIZE) < get_deq_ind(right->indexes)), 
     	//	"TID %d:list_remove(): indice di estrazione troppo grande: estrazione %d, inserimento %d\n", TID, get_deq_ind(right->indexes), (getEnqInd(right->indexes) - VEC_SIZE));
-    	if (!is_marked_ref(right_succ, DELB) && (right->valid_elem == get_deq_ind(right->indexes))){
+    	if (!is_marked_ref(right_succ, DELB) && (right->valid_elem == get_deq_ind(right->indexes) && right->cq_head->next == cq_tail)){
     		//printf("prima di marcare\n");
             assertf(is_marked_ref(right_succ, MOVB), "list_remove(): bucket marcato in movimento%s\n", "");
       		if (BOOL_CAS(&(right->next), right_succ, get_marked_ref(right_succ, DELB))){

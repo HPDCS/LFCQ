@@ -5,11 +5,8 @@ extern __thread long conflitti_ins;
 extern __thread int blocked;
 extern __thread bool from_block_table;
 extern __thread long cache_hit;
-extern __thread long remote_node_dequeue;
-extern __thread long remote_node_dequeue_exec;
-extern __thread unsigned long long enq_full;
-extern __thread unsigned long long enq_pro;
-extern __thread unsigned long long enq_ext;
+
+extern bool dw_enable;
 
 __thread unsigned int dequeue_num = 0;	// per decidere quando fare il flush proattivo
 __thread dwb* last_bucket_p = NULL;		// cache dell'ultimo bucket ritrovato in estrazione
@@ -41,11 +38,9 @@ void block_ins(dwb* bucket_p){
 
 		if(bucket_p->dwv[i].node == NULL) BOOL_CAS(&bucket_p->dwv[i].node, NULL, (nbc_bucket_node*)BLKN);
 		if(bucket_p->dwv[i].timestamp == INV_TS) BOOL_CAS_DOUBLE(&bucket_p->dwv[i].timestamp,INV_TS,INFTY);
-		/*
+		
 		if(!is_blocked(bucket_p->dwv[i].node) && bucket_p->dwv[i].timestamp != INFTY)
 			valid_elem++;
-		*/
-		valid_elem += (!is_blocked(bucket_p->dwv[i].node) && bucket_p->dwv[i].timestamp != INFTY);
 
 		assertf(bucket_p->dwv[i].node == NULL, "block_ins(): nodo non marcato come bloccato %p %f\n", bucket_p->dwv[i].node, bucket_p->dwv[i].timestamp);
 	}
@@ -88,19 +83,14 @@ void apply_transition_ORD_to_EXT(dwb *bucket_p
 
 		// memcopy selettiva
 		old_dwv = bucket_p->dwv;
-
-		if(bucket_p->cicle_limit == bucket_p->valid_elem)
-			memcpy(aus_ord_array, old_dwv, bucket_p->valid_elem * sizeof(nbnc));	
-		else{
-			for(i = 0, j = 0; i < bucket_p->cicle_limit; i++){
-				if(!is_blocked(old_dwv[i].node) && bucket_p->dwv[i].timestamp != INFTY){
-					memcpy(aus_ord_array + j, old_dwv + i, sizeof(nbnc));
-					j++;
-				}
+		for(i = 0, j = 0; i < bucket_p->cicle_limit; i++){
+			if(!is_blocked(old_dwv[i].node) && bucket_p->dwv[i].timestamp != INFTY){
+				memcpy(aus_ord_array + j, old_dwv + i, sizeof(nbnc));
+				j++;
 			}
 		}
 
-		//assertf(j != bucket_p->valid_elem, "do_ord(): numero di elementi copiati per essere ordinati non corrisponde %d  %d\n", j, bucket_p->valid_elem);
+		assertf(j != bucket_p->valid_elem, "do_ord(): numero di elementi copiati per essere ordinati non corrisponde %d  %d\n", j, bucket_p->valid_elem);
 	
 	#if ENABLE_SORTING 
 		qsort(aus_ord_array, bucket_p->valid_elem, sizeof(nbnc), cmp_node);		// ordino solo elementi inseriti effettivamente nella fase INS
@@ -128,7 +118,7 @@ void print_dwv(int size, nbnc *vect){
 	fflush(stdout);	
 }
 
-void dw_block_table(void* tb, unsigned int start){
+void dw_block_table(void* tb, unsigned int start, nbc_bucket_node *tail){
 	
 	nbc_bucket_node *dw_node;
 	table* h = (table*)tb;
@@ -210,13 +200,49 @@ void dw_block_table(void* tb, unsigned int start){
 					// se non è già stato trasferito o eliminato cerco di contribuire
 					if(is_moving(prev_bucket_p->dwv_sorted[j].node) && !is_moved(prev_bucket_p->dwv_sorted[j].node)){
 						dw_node = get_node_pointer(prev_bucket_p->dwv_sorted[j].node);	 // prendo soltanto il puntatore
-						flush_node(NULL, dw_node, h);	// migro
+						flush_node(NULL, dw_node, h, prev_bucket_p->cq_head);	// migro
+						//printf("BCK %p %f\n", dw_node, dw_node->timestamp);
 						dw_node = get_marked_node(dw_node, MVGN);
 						BOOL_CAS(&prev_bucket_p->dwv_sorted[j].node, dw_node, get_marked_node(dw_node, MVDN));// marco come trasferito(potrebbe fallire se già stato marcato MVDN)
 						// alla fine sarà marcato sia come in trasferimento(MVGN) che trasferito(MVDN), cosi in estrazione controllo solo il primo
 						assertf(!is_moved(prev_bucket_p->dwv_sorted[j].node) || !is_moving(prev_bucket_p->dwv_sorted[j].node), "dw_block_table(): nodo non marcato come trasferito %p\n", prev_bucket_p->dwv_sorted[j].node);
 					}
 				}
+
+
+
+	nbc_bucket_node *bucket, *bucket_next;
+	nbc_bucket_node *left_node, *right_node; 
+	nbc_bucket_node *right_node_next, *left_node_next;
+					//for(i = 0; i < size; i++)
+					//{
+						//bucket = array + ((i + start) % size);	
+						bucket = prev_bucket_p->cq_head;
+
+						//Try to mark the head as MOV
+						do{ bucket_next = bucket->next;}
+						while( !is_marked(bucket_next, MOV) &&
+								!BOOL_CAS(&(bucket->next), bucket_next,	get_marked(bucket_next, MOV)) 
+						);
+
+						//Try to mark the first VALid node as MOV
+						do
+						{
+							search(bucket, -1.0, 0, &left_node, &left_node_next, REMOVE_DEL_INV);
+							right_node = get_unmarked(left_node_next);
+							right_node_next = right_node->next;	
+						}
+						while(
+								right_node != tail &&
+								(
+									is_marked(right_node_next, DEL) ||
+									(
+										is_marked(right_node_next, VAL) 
+										&& !BOOL_CAS(&(right_node->next), right_node_next, get_marked(right_node_next, MOV))
+									)
+								)
+						);
+					//}
 
 				// marco il bucket come BLK e possibile da eliminare
 				// potrebbe non essere bloccato esplicitamente per gli inserimenti se era marcato come DELN prima della resize
@@ -230,11 +256,11 @@ void dw_block_table(void* tb, unsigned int start){
 			}
 		}
 		// compatto una volta rilasciando la memoria
-		bucket_p = list_remove(&h->deferred_work->heads[index_pb], LLONG_MAX-1, h->deferred_work->list_tail);
+		//bucket_p = list_remove(&h->deferred_work->heads[index_pb], LLONG_MAX-1, h->deferred_work->list_tail);
 	}
 }
 
-int dw_enqueue(void *tb, unsigned long long index_vb, nbc_bucket_node *new_node
+int dw_enqueue(void *tb, unsigned long long index_vb, nbc_bucket_node *new_node, nbc_bucket_node *cq_list_tail, dwb **b
 #if NUMA_DW
 , int numa_node
 #endif
@@ -251,12 +277,13 @@ int dw_enqueue(void *tb, unsigned long long index_vb, nbc_bucket_node *new_node
 	// controllo se la testa è stata marcata per l'inizio resize 
 	if(is_marked_ref(str->heads[hash_dw(index_vb, h->size)/*index_vb % h->size*/].next, MOVB))
 		return MOV_FOUND;
-
+//assertf(!is_none(str->list_tail),"%s","");
 	bucket_p = get_bucket_pointer(
 		list_add(
 			&str->heads[hash_dw(index_vb, h->size)/*index_vb % h->size*/], 
 			index_vb, 
-			str->list_tail
+			str->list_tail,
+			cq_list_tail
 	#if NUMA_DW
 			, numa_node
 	#endif
@@ -272,6 +299,9 @@ int dw_enqueue(void *tb, unsigned long long index_vb, nbc_bucket_node *new_node
 	if(get_bucket_state(bucket_p->next) == EXT)
 		return ABORT;// bucket già pieno o è iniziata l'estrazione
 */
+
+	*b = bucket_p;
+
 	while((enq_cn = get_enq_ind(bucket_p->indexes)) < bucket_p->cicle_limit && get_bucket_state(bucket_p->next) == INS){
 
 		indexes = enq_cn << ENQ_BIT_SHIFT;	// per escludere la parte estrazione
@@ -316,17 +346,13 @@ int dw_enqueue(void *tb, unsigned long long index_vb, nbc_bucket_node *new_node
 
 	#endif
 
-#if ENQ_FAILS_STAT
 	if(result != OK){
-		if(get_enq_ind(bucket_p->indexes) % VEC_SIZE == 0)// bucket pieno
-
-			enq_full++;
-		else{
-			if(bucket_p->pro)	enq_pro++; // bucket flushato in modo proattivo
-			else 				enq_ext++;	// bucket in estrazione
-		}				
+		if(get_bucket_state(bucket_p->next) == EXT){
+			if(bucket_p->pro)	return PRO_EXT; // bucket flushato in modo proattivo
+			else 				return ABORT;	// bucket in estrazione
+		}else if(get_enq_ind(bucket_p->indexes) == VEC_SIZE)
+			return BUCKET_FULL;					// bucket pieno
 	}
-#endif
 
 	//assertf(get_enq_ind(bucket_p->indexes) >= VEC_SIZE && get_bucket_state(bucket_p->next) != EXT, "dw_enqueue(): bucket pieno e non in estrazione. stato %llu, enq_cn %d, enq_cn salvato %d\n", get_bucket_state(bucket_p->next), enq_cn, get_enq_ind(bucket_p->indexes));
 	//assertf((result != OK && get_bucket_state(bucket_p->next) != EXT), "dw_enqueue(): condizione di uscita sbagliata. state %llu, result %d\n", get_bucket_state(bucket_p->next), result);
@@ -337,18 +363,18 @@ void dw_flush(void *tb, dwb *bucket_p, bool mark_bucket){
 	table* h = (table*)tb;
 	nbc_bucket_node* dw_node, *suggestion, *original_suggestion;
 	int j, step = THREADS;
-	unsigned int index_vb;
+	unsigned int index_pb, index_vb;
 	double left_limit;
 
 	// ricerca minimo
 	nbc_bucket_node *lnode, *rnode;
 	index_vb = bucket_p->index_vb;	// index bucket virtuale
+	//index_pb = index_vb % h->size;	// index bucket fisico
+	index_pb = hash_dw(index_vb, h->size);
 	left_limit = ((double)index_vb) * h->bucket_width;	// limite timestamp sinistro del bucket virtuale
-	search(h->array + index_vb % h->size, left_limit, 0, &lnode, &rnode, REMOVE_DEL_FOR_DW);
+	search(bucket_p->cq_head/*h->array + index_vb % h->size*/, left_limit, 0, &lnode, &rnode, REMOVE_DEL_FOR_DW);
 	original_suggestion = lnode;
-
-	if(mark_bucket) 	step = THREADS;
-	else 				step = 1;
+	//original_suggestion = bucket_p->cq_head;
 
 #if ENABLE_BLOCKING_FLUSH == 1
 	if(BOOL_CAS(&bucket_p->lock, 0, 1)){
@@ -364,9 +390,9 @@ void dw_flush(void *tb, dwb *bucket_p, bool mark_bucket){
 			// scorro tutto il bucket flushando i nodi
 			for(; j < bucket_p->valid_elem && !is_marked_ref(bucket_p, DELB) && !bucket_p->pro; j += step){
 
-				// posso saltare solo se sono arrivato qui perché il bucket è diventato hot
-				if(mark_bucket &&
-					(is_deleted(bucket_p->dwv_sorted[j].node) || (step != 1 && is_blocked(bucket_p->dwv_sorted[j].node)))
+				// se già cancellato oppure bloccato ma il mio step non è 1 vado avanti
+				if(is_deleted(bucket_p->dwv_sorted[j].node) 
+					|| (step != 1 && is_blocked(bucket_p->dwv_sorted[j].node))
 				)
 					continue;
 
@@ -374,23 +400,21 @@ void dw_flush(void *tb, dwb *bucket_p, bool mark_bucket){
 				dw_node = get_node_pointer(bucket_p->dwv_sorted[j].node);	 // prendo soltanto il puntatore
 				if(is_none(bucket_p->dwv_sorted[j].node))
 					BOOL_CAS(&bucket_p->dwv_sorted[j].node, dw_node, get_marked_node(dw_node, BLKN));
-				else if(!mark_bucket)
-					return; // se sto in modalità proattiva e mi accorgo che non sono solo ritorno
 				
 				assertf(is_marked(original_suggestion->next, DEL), "dw_flush(): nodo di suggerimento marcato %s", "");	
-				assertf(suggestion != NULL && suggestion->timestamp > dw_node->timestamp, "dw_flush: suggerimento sbagliato %f %f", suggestion->timestamp, dw_node->timestamp);
+				assertf(suggestion != NULL && suggestion->timestamp >= dw_node->timestamp, "dw_flush: suggerimento sbagliato %s", "");
 
 				#if ENABLE_SORTING
-					suggestion = flush_node(suggestion, dw_node, h);	// migro
+					suggestion = flush_node(suggestion, dw_node, h, bucket_p->cq_head);	// migro
 
 					if(suggestion == NULL)
 						suggestion = original_suggestion;
 				#else
-					flush_node(suggestion, dw_node, h);
+					flush_node(suggestion, dw_node, h, bucket_p->cq_head);
 				#endif
 
-				dw_node = get_marked_node(dw_node, BLKN);	 // prendo soltanto il puntatore marcato come bloccato
-				BOOL_CAS(&bucket_p->dwv_sorted[j].node, dw_node, get_marked_node(dw_node, DELN));
+				//dw_node = get_marked_node(get_node_pointer(bucket_p->dwv_sorted[j].node), BLKN);	 // prendo soltanto il puntatore marcato come bloccato
+				//BOOL_CAS(&bucket_p->dwv_sorted[j].node, dw_node, get_marked_node(dw_node, DELN));
 			}
 
 			if(step == 1 || is_marked_ref(bucket_p, DELB) || bucket_p->pro)
@@ -400,13 +424,13 @@ void dw_flush(void *tb, dwb *bucket_p, bool mark_bucket){
 			j = 0;
 		}
 
-		if(mark_bucket){
+		/*if(mark_bucket){
 			while(
 				!is_marked_ref(bucket_p->next, DELB) 
 				&& !BOOL_CAS(&bucket_p->next, set_bucket_state(bucket_p->next, EXT), get_marked_ref(set_bucket_state(bucket_p->next, EXT), DELB))
 			);
 		}
-		else if(!bucket_p->pro)
+		else if(!bucket_p->pro)*/
 			BOOL_CAS(&bucket_p->pro, 0, 1);	
 
 #if ENABLE_BLOCKING_FLUSH == 1
@@ -419,12 +443,13 @@ void dw_flush(void *tb, dwb *bucket_p, bool mark_bucket){
 		);
 	}	
 #endif
-	
+	/*
 	assertf(mark_bucket && !is_marked_ref(bucket_p->next, DELB), 
 			"dw_flush(): bucket non marcato %p %llu\n", bucket_p->next, get_bucket_state(bucket_p->next));
+*/
 }
 
-void dw_proactive_flush(void *tb, unsigned long long index_vb){
+void dw_proactive_flush(void *tb, unsigned long long index_vb, nbc_bucket_node* cq_tail){
 	table *h = (table*)tb;
 	dwstr *str = h->deferred_work;
 	dwb *bucket_p = NULL;
@@ -437,7 +462,7 @@ void dw_proactive_flush(void *tb, unsigned long long index_vb){
 	// calcolo il numero del bucket in modo che sia locale a me
 	for(;NODE_HASH(hash_dw(index, h->size)/*index % h->size*/) != NID; index++);
 
-	bucket_p = list_remove(&str->heads[hash_dw(index, h->size)/*index % h->size*/], index, str->list_tail);
+	bucket_p = list_remove(&str->heads[hash_dw(index, h->size)/*index % h->size*/], index, str->list_tail, cq_tail);
 
 	if(bucket_p == NULL || is_marked_ref(bucket_p->next, DELB) || get_bucket_state(bucket_p->next) != INS)
 		return;
@@ -452,11 +477,11 @@ void dw_proactive_flush(void *tb, unsigned long long index_vb){
 	#if NUMA_DW
 			, NODE_HASH(hash_dw(index, h->size)/*index % h->size*/) 
 	#endif
-		);
+	);
 
 		if(get_bucket_state(bucket_p->next) == EXT || get_bucket_state(bucket_p->next) == BLK){
 
-			if(get_bucket_state(bucket_p->next) == EXT && !is_marked_ref(bucket_p->next, DELB) && !bucket_p->pro){
+			if(get_bucket_state(bucket_p->next) == EXT && !is_marked_ref(bucket_p->next, DELB)){
 				//printf("%d\n", bucket_p->valid_elem);
 				dw_flush(h, bucket_p, false);
 			}
@@ -467,51 +492,42 @@ void dw_proactive_flush(void *tb, unsigned long long index_vb){
 	}while(1);
 }
 
-dwb* dw_dequeue(void *tb, unsigned long long index_vb){
+dwb* dw_dequeue(void *tb, unsigned long long index_vb, nbc_bucket_node* tail){
 	table *h = (table*)tb;
 	dwstr *str = h->deferred_work;
 	dwb *bucket_p = NULL;
 	int i;
 
-	#if ENABLE_PROACTIVE_FLUSH
-		dequeue_num++;
-	#endif
-
+//	assertf(get_bucket_state(str->list_tail)!= INS,"%s","");
 	if(last_bucket_p != NULL && last_bucket_p->index_vb == index_vb){
 		bucket_p = last_bucket_p;
 		cache_hit++;
 	}
 	else
-		bucket_p = list_remove(&str->heads[hash_dw(index_vb, h->size)/*index_vb % h->size*/], index_vb, str->list_tail);
-
-#if ENABLE_PROACTIVE_FLUSH/* && _NUMA_NODES == 1*/			
-	if(dequeue_num > DEQUEUE_NUM_TH){
-		dequeue_num = 0;
-		dw_proactive_flush(tb, index_vb);
-	}
-#endif
-
+		bucket_p = list_remove(&str->heads[hash_dw(index_vb, h->size)/*index_vb % h->size*/], index_vb, str->list_tail, tail);
+//assertf(get_bucket_state(str->list_tail)!= INS,"%s","");
 	if(bucket_p == NULL || is_marked_ref(bucket_p->next, DELB)){
 		return NULL;
 	}
 
 	last_bucket_p = bucket_p;
 
-	if(NID != NODE_HASH(hash_dw(index_vb, h->size)/*index_vb % h->size*/)){// se cerco di estrarre da un nodo non locale per me
-			
-		remote_node_dequeue++;
-
-		for(i = 0; i < DEQUEUE_WAIT_CICLES && !is_marked_ref(bucket_p->next, DELB); i++);
-
-		if(is_marked_ref(bucket_p->next, DELB))
-			return NULL;
-
-		remote_node_dequeue_exec++;
-	}
-
 	//assertf(is_marked_ref(bucket_p->next, DELB) == 1, "dw_dequeue(): nodo marcato %p\n", bucket_p->next);
 
+		#if ENABLE_PROACTIVE_FLUSH		
+		dequeue_num++;
+			if(dequeue_num > DEQUEUE_NUM_TH && dw_enable){
+				dequeue_num = 0;
+				dw_proactive_flush(tb, index_vb, tail);
+			}
+		#endif
+
 	do{	
+
+		if(NID != NODE_HASH(hash_dw(index_vb, h->size)/*index_vb % h->size*/)){// se cerco di estrarre da un nodo non locale per me
+
+			for(i = 0; i < DEQUEUE_WAIT_CICLES && !is_marked_ref(bucket_p->next, DELB); i++);
+		}
 
 		/*
 		assertf(get_enq_ind(bucket_p->indexes) >= VEC_SIZE && get_bucket_state(bucket_p->next) == EXT,
@@ -529,12 +545,12 @@ dwb* dw_dequeue(void *tb, unsigned long long index_vb){
 
 		if(get_bucket_state(bucket_p->next) == EXT || get_bucket_state(bucket_p->next) == BLK){
 
-			if(get_bucket_state(bucket_p->next) == EXT && DISABLE_EXTRACTION_FROM_DW && !is_marked_ref(bucket_p->next, DELB)){
+			if((get_bucket_state(bucket_p->next) == EXT && DISABLE_EXTRACTION_FROM_DW && !is_marked_ref(bucket_p->next, DELB))&& dw_enable && !bucket_p->pro){
 				dw_flush(h, bucket_p, true);
 				//return NULL;
 			}
 
-			if(is_marked_ref(bucket_p->next, DELB) || bucket_p->valid_elem == 0)
+			if(is_marked_ref(bucket_p->next, DELB)/* || bucket_p->valid_elem == 0*/)
 				return NULL;
 			else
 			//assertf(is_marked_ref(bucket_p->next, DELB) == 1, "dw_dequeue(): nodo marcato %p\n", bucket_p->next);
@@ -542,16 +558,17 @@ dwb* dw_dequeue(void *tb, unsigned long long index_vb){
 		}
 			
 	}while(1);
+
 }
 
 int cmp_node(const void *p1, const void *p2){
-	//nbnc *node_1 = (nbnc*)p1;
-	//nbnc *node_2 = (nbnc*)p2;
+	nbnc *node_1 = (nbnc*)p1;
+	nbnc *node_2 = (nbnc*)p2;
 	pkey_t tmp;
 
-	assertf(!is_none(((nbnc*)p1)->node), "cmp_node(): nodo marcato %p %f %f\n", ((nbnc*)p1)->node, get_node_pointer(((nbnc*)p1)->node)->timestamp, ((nbnc*)p1)->timestamp);
-	assertf(!is_none(((nbnc*)p2)->node), "cmp_node(): nodo marcato %p %f %f\n", ((nbnc*)p2)->node, get_node_pointer(((nbnc*)p2)->node)->timestamp, ((nbnc*)p2)->timestamp);
+	assertf(!is_none(node_1->node), "cmp_node(): nodo marcato %p %f %f\n", node_1->node, get_node_pointer(node_1->node)->timestamp, node_1->timestamp);
+	assertf(!is_none(node_2->node), "cmp_node(): nodo marcato %p %f %f\n", node_2->node, get_node_pointer(node_2->node)->timestamp, node_2->timestamp);
 
-	tmp = (((nbnc*)p1)->timestamp - ((nbnc*)p2)->timestamp);
+	tmp = (node_1->timestamp - node_2->timestamp);
 	return (tmp > 0.0) - (tmp < 0.0);
 }

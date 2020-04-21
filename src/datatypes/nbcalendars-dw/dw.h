@@ -8,28 +8,28 @@
 #endif
 
 // configuration
-#define VEC_SIZE                    128
+#define VEC_SIZE                   255
 #define DW_ENQUEUE_USAGE_TH			0	// minima distanza tra current e virtual bucket di inserimento per utilizzare DWQ
 
 #define DEQUEUE_WAIT_CICLES			0	// numero di cicli di attesa per un thread remoto prima di provare a fare la dequeue
 
 #define ENABLE_PROACTIVE_FLUSH      1   // abilita il flush proattivo
-#define DEQUEUE_NUM_TH				8	// dopo aver fatto questo numero di dequeue provo a fare flush proattivo di un bucket
-#define PRO_FLUSH_BUCKET_NUM		32	// distanza dal bucket attuale in numero di bucket che posso considerare per flush proattivo 
-#define PRO_FLUSH_BUCKET_NUM_MIN	16
+#define DEQUEUE_NUM_TH				80	// dopo aver fatto questo numero di dequeue provo a fare flush proattivo di un bucket
+#define PRO_FLUSH_BUCKET_NUM		20	// distanza dal bucket attuale in numero di bucket che posso considerare per flush proattivo 
+#define PRO_FLUSH_BUCKET_NUM_MIN	20
 
 #define DISABLE_EXTRACTION_FROM_DW  ENABLE_PROACTIVE_FLUSH	// disabilita le estrazioni dirette dall dwq
 #define ENABLE_SORTING              1//!DISABLE_EXTRACTION_FROM_DW   // abilita il sorting per le dwq
-#define DW_USAGE_TH                 190000	// setta il numero di elementi minimo per abilitare le dwq
+#define DW_USAGE_TH                 25000	// setta il numero di elementi minimo per abilitare le dwq
 #define ENABLE_BLOCKING_FLUSH       0	// abilita il lock per flushare elementi della dwq sui bucket della cq
 #define SEL_DW                      0	// se 1 allora lavoro differito solo se la destinazione si trova su un nodo numa remoto
-#define ENABLE_ENQUEUE_WORK			1   // abilita eventuale ulteriore lavoro svolto da un thread che esegue enqueue in DWQ
+#define ENABLE_ENQUEUE_WORK			0   // abilita eventuale ulteriore lavoro svolto da un thread che esegue enqueue in DWQ
 #define NODE_HASH(bucket_id)        ((bucket_id) % _NUMA_NODES)	// per bucket fisico
 #define NID                         nid
 #define HEADS_ARRAY_SCALE			1
 
-
-#define ENQ_FAILS_STAT				1
+#define PRO_EXT						8   // indica che sono uscito dalla dw_enqueue perché il bucket è stato flushato proattivamente
+#define BUCKET_FULL					16	// indica che il bucket è stato riempito 
 
 // Stati bucket virtuale
 #define INS 	(0ULL)
@@ -86,13 +86,14 @@ struct deferred_work_bucket{
 	nbnc* volatile dwv_sorted;      // 16 // array di eventi sorted e deferred
 	dwb* volatile next;             // 24 // puntatore al prossimo elemento
 	long long index_vb;             // 32 //
-	long long epoch;                // 40 //
+//	long long epoch;                // 40 //
 	int volatile cicle_limit;       // 44 //
 	int volatile valid_elem;        // 48 //
 	int volatile indexes;           // 52 // inserimento|estrazione
 	int volatile lock;              // 56 //
 	int volatile pro;				// 60 //
-	int volatile pad;						// 64 // 
+	nbc_bucket_node *cq_head;
+	//int volatile pad;						// 64 // 
 	//long long pad;					               
 };
 
@@ -107,7 +108,8 @@ struct deferred_work_structure{
 dwb* list_add(
 dwb*, 
 long long, 
-dwb*
+dwb*,
+nbc_bucket_node*
 #if NUMA_DW
  ,int
 #endif
@@ -116,21 +118,24 @@ dwb*
 dwb* list_remove(
  dwb*, 
  long long, 
- dwb*
+ dwb*,
+ nbc_bucket_node*
 );
 
 int dw_enqueue(
  void*, 
  unsigned long long, 
- nbc_bucket_node* 
+ nbc_bucket_node*,
+ nbc_bucket_node*,
+ dwb ** 
 #if NUMA_DW
  ,int
 #endif
 );
 
-dwb* dw_dequeue(void *tb, unsigned long long index_vb);
-void dw_proactive_flush(void*, unsigned long long);
-void dw_block_table(void*, unsigned int);
+dwb* dw_dequeue(void *tb, unsigned long long index_vb, nbc_bucket_node*);
+void dw_proactive_flush(void*, unsigned long long, nbc_bucket_node*);
+void dw_block_table(void*, unsigned int, nbc_bucket_node *);
 int cmp_node(const void*, const void*);
 
 static inline nbc_bucket_node* get_node_pointer(nbc_bucket_node* node){return (nbc_bucket_node*)((unsigned long long)node & NODE_PTR_MASK);}
@@ -192,8 +197,8 @@ static inline pkey_t dw_extraction(dwb* bucket_p, void** result, pkey_t left_ts)
 	if(deq_cn >= bucket_p->valid_elem || is_marked_ref(bucket_p->next, DELB)){
 
 		//no_dw_node_curr_vb = true;
-		if(!is_marked_ref(bucket_p->next, DELB))
-			BOOL_CAS(&(bucket_p->next), bucket_p->next, get_marked_ref(bucket_p->next, DELB));
+		//if(!is_marked_ref(bucket_p->next, DELB))
+		//	BOOL_CAS(&(bucket_p->next), bucket_p->next, get_marked_ref(bucket_p->next, DELB));
 								
 			// TODO
 		//}else if(bucket_p->dwv[deq_cn].node->epoch > epoch){
