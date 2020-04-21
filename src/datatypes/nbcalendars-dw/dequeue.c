@@ -45,6 +45,7 @@
 extern __thread unsigned long long no_empty_vb;
 extern __thread long estr;
 extern __thread long conflitti_estr;
+extern bool dw_enable;
 
 __thread nbc_bucket_node* prev = NULL;
 __thread unsigned long long prev_vb = -1;
@@ -126,7 +127,7 @@ begin:
 			goto begin;
 
 		// get the physical bucket
-/*		if(prev_vb == index)
+/*		if(prev_vb == index && dw_enable)
 			min = prev;
 		else
 */			min = array + (index % (size));
