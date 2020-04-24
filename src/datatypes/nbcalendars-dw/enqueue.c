@@ -160,7 +160,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	double rand;
 	nbc_bucket_node *left_node, *right_node;
 	drand48_r(&seedT, &rand);
-	if(rand < 0.2)
+	if(rand < 0.7)
 	{
 	drand48_r(&seedT, &rand);
 	calc = oldIndex + dist + (unsigned int)( ( (double)(size-dist) )*rand );

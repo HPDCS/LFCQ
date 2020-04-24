@@ -152,7 +152,7 @@ dwb* list_add(dwb *head, long long index_vb, dwb* list_tail
   	right = left = new_elem = NULL;
 
     drand48_r(&seedT, &rand);
-    if(rand < 0.3)
+    if(rand < 0.1)
       right = list_search(head, -1, &left, false, list_tail);  
 
   	while(1){

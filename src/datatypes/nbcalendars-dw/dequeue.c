@@ -127,10 +127,10 @@ begin:
 			goto begin;
 
 		// get the physical bucket
-/*		if(prev_vb == index && dw_enable)
+		if(prev_vb == index && dw_enable)
 			min = prev;
 		else
-*/			min = array + (index % (size));
+			min = array + (index % (size));
 
 		left_node = min_next = get_node_pointer(min->next);
 

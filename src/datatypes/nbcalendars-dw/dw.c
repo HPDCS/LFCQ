@@ -440,7 +440,7 @@ void dw_proactive_flush(void *tb, unsigned long long index_vb){
 
 	bucket_p = list_remove(&str->heads[hash_dw(index, h->size)/*index % h->size*/], index, str->list_tail);
 
-	if(bucket_p == NULL || is_marked_ref(bucket_p->next, DELB) || get_bucket_state(bucket_p->next) != INS)
+	if(bucket_p == NULL || is_marked_ref(bucket_p->next, DELB) || get_bucket_state(bucket_p->next) != INS || bucket_p->pro)
 		return;
 
 	do{	
