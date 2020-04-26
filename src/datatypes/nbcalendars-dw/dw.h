@@ -7,24 +7,27 @@
 #define NUMA_DW 					0	// se 1 allora utilizza allocatore NUMA aware
 #endif
 
+extern unsigned int TOTAL_OPS1;
+extern unsigned int THREADS;
+
 // configuration
-#define VEC_SIZE                    128
+#define VEC_SIZE                    1020
 #define DW_ENQUEUE_USAGE_TH			0	// minima distanza tra current e virtual bucket di inserimento per utilizzare DWQ
 
-#define DEQUEUE_WAIT_CICLES			0	// numero di cicli di attesa per un thread remoto prima di provare a fare la dequeue
+#define DEQUEUE_WAIT_CICLES			5000	// numero di cicli di attesa per un thread remoto prima di provare a fare la dequeue
 
 #define ENABLE_PROACTIVE_FLUSH      1   // abilita il flush proattivo
-#define DEQUEUE_NUM_TH				1	// dopo aver fatto questo numero di dequeue provo a fare flush proattivo di un bucket
-#define PRO_FLUSH_BUCKET_NUM		2	 
-#define PRO_FLUSH_BUCKET_NUM_MIN	8	// distanza dal bucket attuale in numero di bucket che posso considerare per flush proattivo
+#define DEQUEUE_NUM_TH				0	// dopo aver fatto questo numero di dequeue provo a fare flush proattivo di un bucket
+#define PRO_FLUSH_BUCKET_NUM		THREADS * 2	 
+#define PRO_FLUSH_BUCKET_NUM_MIN	0	// distanza dal bucket attuale in numero di bucket che posso considerare per flush proattivo
 
 #define DISABLE_EXTRACTION_FROM_DW  ENABLE_PROACTIVE_FLUSH	// disabilita le estrazioni dirette dall dwq
 #define ENABLE_SORTING              0//!DISABLE_EXTRACTION_FROM_DW   // abilita il sorting per le dwq
-#define DW_USAGE_TH                 190000	// setta il numero di elementi minimo per abilitare le dwq
+#define DW_USAGE_TH                 TOTAL_OPS1*0.39//190000	// setta il numero di elementi minimo per abilitare le dwq
 #define ENABLE_BLOCKING_FLUSH       0	// abilita il lock per flushare elementi della dwq sui bucket della cq
 #define SEL_DW                      0	// se 1 allora lavoro differito solo se la destinazione si trova su un nodo numa remoto
 #define ENABLE_ENQUEUE_WORK			0   // abilita eventuale ulteriore lavoro svolto da un thread che esegue enqueue in DWQ
-#define NODE_HASH(bucket_id)        ((bucket_id) % _NUMA_NODES)	// per bucket fisico
+#define NODE_HASH(bucket_id)        ((bucket_id) % (((THREADS-1)/4)+1)/*_NUMA_NODES*/)	// per bucket fisico
 #define NID                         nid
 #define HEADS_ARRAY_SCALE			1
 

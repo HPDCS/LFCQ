@@ -52,6 +52,7 @@
 
 #define _PAGE_SIZE 4096
 #define _PAGE_NODE_BITMAKS ~0xFFFUL
+//#define _PAGE_NODE_BITMAKS ~0x3FFFUL
 
 #define MAX_NODES 16 /* UP to one thread per node <- _NUMA_NODES MACRO in makefile does the job*/
 
@@ -804,6 +805,7 @@ void _init_gc_subsystem(void)
     memset(&gc_global, 0, sizeof(gc_global));
 
     gc_global.page_size   = (unsigned int)sysconf(_SC_PAGESIZE); 
+    //gc_global.page_size = 16384;
     gc_global.numa_nodes = (unsigned int) numa_num_configured_nodes();
 
     for (i=0; i<gc_global.numa_nodes; i++) {

@@ -64,13 +64,13 @@ outfile=out.'/Real-'.queue.'.eps'
 set output outfile
 
 
-#plot for [col=start:end] file using 1:col with lines ls col t columnheader
+plot for [col=start:end] file using 1:col with lines ls col t columnheader
 
 
-plot file using 1:12 with lines ls 2 t columnheader(12),\
-file using 1:13 with lines ls 3 t columnheader(13),\
-file using 1:14 with lines ls 4 t columnheader(14),\
-file using 1:6 with lines ls 6 t columnheader(6)
+#plot file using 1:12 with lines ls 2 t columnheader(12),\
+#file using 1:13 with lines ls 3 t columnheader(13),\
+#file using 1:14 with lines ls 4 t columnheader(14),\
+#file using 1:6 with lines ls 6 t columnheader(6)
 
 system(sprintf("epstopdf %s", outfile)) 
 
