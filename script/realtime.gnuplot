@@ -35,7 +35,12 @@ set offset 2,2,10,10
 set title 'Queue Size = '.queue
 set xlabel '#Threads'
 set grid  lc rgb "#888888"
-set ylabel 'Throughput (Ops/ms)' offset 2
+
+#set ylabel 'Throughput (Ops/ms)' offset 2
+#set ylabel 'Passi dequeue' offset 2
+set ylabel 'Passi enqueue' offset 2
+#set ylabel 'Quota flush pro' offset 2
+
 set xtics 0,4,50
 
 set style line  2 dt  1 lc rgb "#000000"
@@ -51,8 +56,11 @@ set style line 11 dt 10 lc rgb "#000000"
 set style line 12 dt 11 lc rgb "#000000"
 
 	
-set yrange [500:8000]
-set xrange [0:50]
+#set yrange [500:5000] #throughput
+#set yrange [0:50]		#passi estrazione
+set yrange [0:100]		#passi inserimento
+#set yrange [70:105]		#quota pro
+set xrange [0:36]
 set offset 2,2,1,1
 
 maxitems=56

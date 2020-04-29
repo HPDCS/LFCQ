@@ -10,6 +10,8 @@
 extern unsigned int TOTAL_OPS1;
 extern unsigned int THREADS;
 
+#define MAX_THREAD_NUM 32.0
+
 // configuration
 #define VEC_SIZE                    1020
 #define DW_ENQUEUE_USAGE_TH			0	// minima distanza tra current e virtual bucket di inserimento per utilizzare DWQ
@@ -23,7 +25,9 @@ extern unsigned int THREADS;
 
 #define DISABLE_EXTRACTION_FROM_DW  ENABLE_PROACTIVE_FLUSH	// disabilita le estrazioni dirette dall dwq
 #define ENABLE_SORTING              0//!DISABLE_EXTRACTION_FROM_DW   // abilita il sorting per le dwq
-#define DW_USAGE_TH                 TOTAL_OPS1*0.39//190000	// setta il numero di elementi minimo per abilitare le dwq
+//#define DW_USAGE_TH                 TOTAL_OPS1*0.39//190000	// setta il numero di elementi minimo per abilitare le dwq
+#define DW_USAGE_TH                 (int)(TOTAL_OPS1*0.39/(MAX_THREAD_NUM / THREADS))
+
 #define ENABLE_BLOCKING_FLUSH       0	// abilita il lock per flushare elementi della dwq sui bucket della cq
 #define SEL_DW                      0	// se 1 allora lavoro differito solo se la destinazione si trova su un nodo numa remoto
 #define ENABLE_ENQUEUE_WORK			0   // abilita eventuale ulteriore lavoro svolto da un thread che esegue enqueue in DWQ
@@ -155,6 +159,15 @@ static inline int add_enq_ind(int indexes, int num){return indexes + (num << ENQ
 
 static inline bool is_marked_ref(dwb* bucket, unsigned long long mark){return (bool)((unsigned long long)bucket & mark);}
 static inline dwb* get_marked_ref(dwb* bucket, unsigned long long mark){return (dwb*)((unsigned long long)bucket | mark);}
+
+/*
++static inline int NODE_HASH(unsigned int bucket_id){
++       static int nodes[]={0,2,4,7,1,3,5,6};
++       int interm = bucket_id % THREADS;
++//     printf("interm %d, %d\n",interm, nodes[(((int)(interm/16))*4+(interm%4))]);
++       return nodes[(((int)(interm / 16))*4 + (interm % 4))]; 
++}*/
+
 
 static inline unsigned int hash_dw(unsigned long long index_vb, unsigned int size){
 	unsigned int scale = HEADS_ARRAY_SCALE;

@@ -49,9 +49,19 @@ for u in $usage_factor; do
 					file="$ofile-$i"
 					file=`echo "$file" | tr '.' '_'`.dat
 					file=$input/$file
-					val=`grep THROUGHPUT $file  | cut -d',' -f4 `
+					#val=`grep THROUGHPUT $file  | cut -d',' -f4 `	#throughput
+					#val=`echo $val  | cut -d':' -f2`
+					
+					#val=`grep NUMCAS $file  | cut -d':' -f5 `		#passi estrazione
+					#val=`echo $val  | cut -d' ' -f1`
+
+					val=`grep NUMCAS $file  | cut -d':' -f3 `		#passi inserimento
+					val=`echo $val  | cut -d' ' -f1`
+					
+					#val=`grep 'LIST USAGE' $file  | cut -d'%' -f1 `	#quota pro
+					#val=`echo $val  | cut -d' ' -f12`
+
 					#echo $file $val 
-					val=`echo $val  | cut -d':' -f2`
 					if [ "$val" = "" ]; then
 						echo $file
 						count=$(($count+1))

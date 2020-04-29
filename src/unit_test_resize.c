@@ -110,6 +110,7 @@ volatile long long final_ops = 0;
 #define QSIZE 250000
 
 __thread unsigned int stopforcheck = 0;
+int *numa_mapping;
 
 void* process(void *arg)
 {
@@ -125,7 +126,12 @@ void* process(void *arg)
 
 	my_id =  *((int*)(arg));
 	(TID) = my_id;
-	(NID) 		= numa_node_of_cpu(tid);
+    int cpu = numa_mapping[my_id];
+    //(NID)                 = numa_node_of_cpu(tid);
+    (NID) = numa_node_of_cpu(cpu);
+    //printf("TID-%d: NUMA %d\n", TID, NID);
+    //fflush(stdout);
+
 	srand48_r(my_id+157, &seed2);
     srand48_r(my_id+359, &seed);
     srand48_r(my_id+254, &seedT);
@@ -255,6 +261,19 @@ int main(int argc, char **argv)
 	
 	
 	NUMA_NODES  = numa_num_configured_nodes();
+
+    int k, j;
+    int num_numa_nodes      = numa_max_node()+1;
+    int num_cpus            = numa_num_configured_cpus();
+    numa_mapping            = malloc(sizeof(int)*num_cpus);
+    k = j = 0;
+
+    for(i=0;i<num_numa_nodes;i++){
+        for(j=0;j<num_cpus;j++){
+            if(i == numa_node_of_cpu(j))
+                numa_mapping[k++] = j;
+        }
+    }
 	
 	//set_mempolicy(MPOL_BIND, &numa_mask, 2);
 	
