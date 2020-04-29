@@ -116,7 +116,7 @@ int enqueue(int my_id, struct drand48_data* seed, pkey_t local_min, double (*cur
 	pkey_t update = 0.0;
 	do{
 		update = (pkey_t)  current_prob(seed, MEAN_INTERARRIVAL_TIME);
-		timestamp = local_min + update + (MEAN_INTERARRIVAL_TIME * 0.01);
+		timestamp = local_min + update;
 	}while(timestamp == INFTY);
 	
 	if(timestamp < 0.0)
@@ -126,7 +126,7 @@ int enqueue(int my_id, struct drand48_data* seed, pkey_t local_min, double (*cur
 	assertf(index > TRACE_LEN, "THE TRACE IS SHORT: %d vs %llu\n", TRACE_LEN, index);
 	timestamp = trace[index];
 #endif
-
+//printf("%f\n", timestamp);
 	int res = pq_enqueue(nbcqueue, timestamp, UNION_CAST(1, void*));
 
 	return res;
