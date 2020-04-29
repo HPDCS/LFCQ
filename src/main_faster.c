@@ -361,7 +361,7 @@ void* process(void *arg)
 	(TID) 		= my_id;
 	int cpu 	= numa_mapping[my_id];
 	(NID) 		= numa_node_of_cpu(cpu);
-	//printf("TID - %d, NUMA %d\n", TID, NID);
+	printf("TID - %d, NUMA %d\n", TID, NID);
 	srand48_r(my_id+157, &seed2);
     srand48_r(my_id+359, &seed);
     srand48_r(my_id+254, &seedT);
@@ -415,13 +415,24 @@ int main(int argc, char **argv)
 	numa_mapping		= malloc(sizeof(int)*num_cpus);
 	
 	int i,k,j=0;
-
+/*
+	// occupazione graduale
 	k = 0;
 	for(i=0;i<num_numa_nodes;i++){
 		for(j=0;j<num_cpus;j++){
 			if( i == numa_node_of_cpu(j))
 				numa_mapping[k++] = j;
 		}
+	}
+*/
+	// occupazione distribuita
+	int numa_count[num_numa_nodes];
+	for(i = 0; i < num_numa_nodes; i++)
+		numa_count[i] = 0;
+	for(i = 0; i < num_cpus; i++){
+		j = numa_node_of_cpu(i);// ottengo il nodo
+		numa_mapping[j * numa_count[j] + j] = i;
+		numa_count[j]++;
 	}
 
 

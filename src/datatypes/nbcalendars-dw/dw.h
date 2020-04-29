@@ -31,7 +31,8 @@ extern unsigned int THREADS;
 #define ENABLE_BLOCKING_FLUSH       0	// abilita il lock per flushare elementi della dwq sui bucket della cq
 #define SEL_DW                      0	// se 1 allora lavoro differito solo se la destinazione si trova su un nodo numa remoto
 #define ENABLE_ENQUEUE_WORK			0   // abilita eventuale ulteriore lavoro svolto da un thread che esegue enqueue in DWQ
-#define NODE_HASH(bucket_id)        ((bucket_id) % (((THREADS-1)/4)+1)/*_NUMA_NODES*/)	// per bucket fisico
+//#define NODE_HASH(bucket_id)        ((bucket_id) % (((THREADS-1)/4)+1)/*_NUMA_NODES*/)	// per bucket fisico
+#define NODE_HASH(bucket_id)        ((bucket_id) % ((THREADS < _NUMA_NODES) ? THREADS : _NUMA_NODES))
 #define NID                         nid
 #define HEADS_ARRAY_SCALE			1
 

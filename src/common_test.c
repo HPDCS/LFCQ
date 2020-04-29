@@ -116,7 +116,7 @@ int enqueue(int my_id, struct drand48_data* seed, pkey_t local_min, double (*cur
 	pkey_t update = 0.0;
 	do{
 		update = (pkey_t)  current_prob(seed, MEAN_INTERARRIVAL_TIME);
-		timestamp = local_min + update;
+		timestamp = local_min + update + (MEAN_INTERARRIVAL_TIME * 0.01);
 	}while(timestamp == INFTY);
 	
 	if(timestamp < 0.0)

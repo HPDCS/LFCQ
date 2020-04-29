@@ -137,9 +137,9 @@ void* process(void *arg)
     srand48_r(my_id+254, &seedT);
     srand48_r(my_id, &seedP);
     
-     
 	CPU_ZERO(&cpuset);
-	CPU_SET((unsigned int )my_id, &cpuset);
+	//CPU_SET((unsigned int )my_id, &cpuset);
+	CPU_SET((unsigned int )cpu, &cpuset);
 	pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
 
     
