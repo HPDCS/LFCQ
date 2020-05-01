@@ -103,7 +103,6 @@ __thread unsigned int num_op=0;
 
 int NUMA_NODES;
 volatile pkey_t *timestamps;
-volatile int *flags;
 
 unsigned int *id;
 volatile long long *ops;
@@ -118,6 +117,11 @@ volatile long long final_ops = 0;
 
 
 
+#define BOOL_CAS_DOUBLE(addr, old, new)  __sync_bool_compare_and_swap(\
+                                                                               UNION_CAST(addr, volatile unsigned long long *),\
+                                                                               UNION_CAST(old,  unsigned long long),\
+                                                                               UNION_CAST(new,  unsigned long long)\
+                                                                         )
 
 
 
@@ -269,35 +273,35 @@ void classic_hold(
 		par_count = 0;
 		ops_count[my_id] = 0;
 		
-		int ind;
-		ind = (int)(my_id / 2);
+		int ind = my_id / 2;
+		int i;
+        pkey_t enq_tmp;
+        if(my_id % 2 == 0){
+	        timestamps[ind] = 0.0;
+            BOOL_CAS_DOUBLE(&timestamps[ind], 0.0, local_min);
+        }
 
-		if(my_id % 2 == 1)
-			timestamps[ind] = local_min;
-
-		//printf("TID - %d: ind %d , %d\n", TID, ind, my_id%2);
 		while((TEST_MODE != 'T' && tot_count < end_operations2) || (TEST_MODE == 'T' && !end_test))
 		{
-			//printf("TID - %d: ind %d, my_id %d\n", TID, ind, my_id);
-			if(my_id % 2 == 0 && flags[ind] == 1){
-				//printf("%d\n\n\n\n\n\n\n\n", flags[ind]);
+			if(my_id % 2 == 0 && timestamps[ind] == 0.0){
 				par_count++;
 				timestamp = dequeue();
 				if(timestamp != INFTY)
 					//local_min = timestamp;
-					timestamps[ind] = timestamp;
+					BOOL_CAS_DOUBLE(&timestamps[ind], 0.0, timestamp);
 				//pthread_yield();
-				//printf("%d\n", flags[ind]);
-				__sync_fetch_and_add(&flags[ind], -1);
-				//printf("%d\n", flags[ind]);
 			}
 
-			if(my_id % 2 == 1 && flags[ind] == 0){
-				par_count++;
-				enqueue(my_id, seed, timestamps[ind], current_dist);
-				//printf("my_id %d, %d ind %d\n", my_id, flags[ind], ind);
-				__sync_fetch_and_add(&flags[ind], 1);
-				//printf("my_id %d, %d ind %d\n", my_id, flags[ind], ind);
+			if(my_id % 2 == 1){
+				//	          par_count++;
+		        	for(i = ind; i < THREADS / 2; i++){
+		        		if((enq_tmp = timestamps[i]) != 0.0){
+				            if(BOOL_CAS_DOUBLE(&timestamps[i], enq_tmp, 0.0)){
+				                enqueue(my_id, seed, enq_tmp, current_dist);
+				                break;
+				            }
+				        }	
+		        	}
 			}
 						
 			if(par_count == THREADS && TEST_MODE != 'T')
@@ -505,9 +509,6 @@ int main(int argc, char **argv)
 	TIME 			= (unsigned int) strtol(argv[par++], (char **)NULL, 10);
 
 	timestamps = malloc(sizeof(pkey_t)*(THREADS / 2));
-	flags = malloc(sizeof(int)*(THREADS / 2));
-	for(i = 0; i < (THREADS / 2); i++)
-		flags[i] = 0;
 
 	id = (unsigned int*) malloc(THREADS*sizeof(unsigned int));
 	ops = (long long*) malloc(THREADS*sizeof(long long));

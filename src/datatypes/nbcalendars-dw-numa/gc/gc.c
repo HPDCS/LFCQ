@@ -531,7 +531,6 @@ void *gc_alloc_node(ptst_t *ptst, int alloc_id, unsigned int node)
     
     ret = ch->blk[--ch->i];
     tmp = (unsigned long*) (((unsigned long) ret) & _PAGE_NODE_BITMAKS);
-
     x = __sync_val_compare_and_swap(tmp, 0, node); //mark the page with zone id   
     assert((x == 0) || (x == node)); //either is first allocation, or the page was already marked
     
