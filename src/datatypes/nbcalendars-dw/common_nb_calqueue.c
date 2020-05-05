@@ -1291,10 +1291,15 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 				gc_add_ptr_to_hook_list(ptst, h->deferred_work->dwls[i]->head, gc_hid[0]);
 				gc_add_ptr_to_hook_list(ptst, h->deferred_work->dwls[i]->tail, gc_hid[0]);
 				
-			}
-			gc_add_ptr_to_hook_list(ptst, h->deferred_work->dwls, gc_hid[0]);
+			}*/
+			gc_add_ptr_to_hook_list(ptst, h->deferred_work->heads, gc_hid[0]);
+			gc_add_ptr_to_hook_list(ptst, h->deferred_work->list_tail, gc_aid[1]);
 			gc_add_ptr_to_hook_list(ptst, h->deferred_work, gc_hid[0]);
-			*/
+			//gc_free(ptst, new_h->deferred_work->list_tail, gc_aid[1]);
+			
+			//free(h->deferred_work->heads);
+			//free(h->deferred_work->list_tail);
+			//free(h->deferred_work);
 		 }
 
 		

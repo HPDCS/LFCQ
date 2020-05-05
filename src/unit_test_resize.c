@@ -56,7 +56,7 @@ struct payload
 
 typedef struct payload payload;
 
-
+unsigned int MAX_THREAD_NUM;
 unsigned int THREADS;		// Number of threads
 unsigned int OPERATIONS; 	// Number of operations per thread
 unsigned int ITERATIONS;	// = 800000;
@@ -108,6 +108,7 @@ volatile unsigned int end_test = 0;
 volatile long long final_ops = 0;
 
 #define QSIZE 250000
+#define GRAD_PIN 0 // se 1 allora pin graduale: prima il nodo 0, poi 1, 2 e cosi via, altrimenti distribuito.
 
 __thread unsigned int stopforcheck = 0;
 int *numa_mapping;
@@ -268,12 +269,32 @@ int main(int argc, char **argv)
     numa_mapping            = malloc(sizeof(int)*num_cpus);
     k = j = 0;
 
-    for(i=0;i<num_numa_nodes;i++){
-        for(j=0;j<num_cpus;j++){
-            if(i == numa_node_of_cpu(j))
-                numa_mapping[k++] = j;
-        }
-    }
+    MAX_THREAD_NUM = (unsigned int)num_cpus;
+
+#if GRAD_PIN
+	// occupazione graduale
+	for(i=0;i<num_numa_nodes;i++){
+		for(j=0;j<num_cpus;j++){
+			if( i == numa_node_of_cpu(j))
+				numa_mapping[k++] = j;
+		}
+	}
+#else
+	// occupazione distribuita
+	int numa_count[num_numa_nodes];
+	for(i = 0; i < num_numa_nodes; i++)
+		numa_count[i] = 0;
+	for(i = 0; i < num_cpus; i++){
+		j = numa_node_of_cpu(i);// ottengo il nodo
+		numa_mapping[num_numa_nodes * numa_count[j] + j] = i;
+		numa_count[j]++;
+	}
+#endif
+
+	printf("CPU PIN");
+	for(i = 0; i < num_cpus; i++)
+		printf(" %d", numa_node_of_cpu(numa_mapping[i]));
+	printf("\n");
 	
 	//set_mempolicy(MPOL_BIND, &numa_mask, 2);
 	

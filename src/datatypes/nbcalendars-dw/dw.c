@@ -348,15 +348,22 @@ void dw_flush(void *tb, dwb *bucket_p, bool mark_bucket){
 	search(h->array + index_vb % h->size, left_limit, 0, &lnode, &rnode, REMOVE_DEL_FOR_DW);
 	original_suggestion = lnode;
 
-	if(mark_bucket) 	step = THREADS;
+	if(mark_bucket) 	step = CPU_PER_NODE/*THREADS*/;
 	else 				step = 1;
 
 #if ENABLE_BLOCKING_FLUSH == 1
 	if(BOOL_CAS(&bucket_p->lock, 0, 1)){
 		step = 1;	
 #endif
-		if(step > 1)	j = (int)TID;
-		else 			j = 0;
+		if(step > 1)
+			j = (int)TID
+			#if GRAD_PIN 
+			% CPU_PER_NODE/*(int)TID*/;
+			#else
+		 	/ _NUMA_NODES;
+			#endif
+		else 			
+			j = 0;
 
 		while(1){
 			

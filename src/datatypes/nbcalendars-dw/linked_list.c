@@ -51,7 +51,7 @@ dwb* list_search(dwb *head, long long index_vb, dwb** left_node, bool from_deque
     	
     	right_node = t;
 
-    	if(get_bucket_pointer(left_node_next) == right_node || from_dequeue){
+    	if(get_bucket_pointer(left_node_next) == right_node || (from_dequeue && index_vb != (LLONG_MAX-1))){
     		if(!is_marked_ref(right_node->next, DELB)){
    // 			assertf(is_marked_ref(right_node->next, DELB), "list_search(): nodo marcato %s\n", "");
          		return right_node;

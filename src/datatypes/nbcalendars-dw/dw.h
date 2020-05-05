@@ -9,8 +9,11 @@
 
 extern unsigned int TOTAL_OPS1;
 extern unsigned int THREADS;
+extern unsigned int MAX_THREAD_NUM;
 
-#define MAX_THREAD_NUM 32.0
+
+#define GRAD_PIN 0 // se 1 allora pin graduale: prima il nodo 0, poi 1, 2 e cosi via, altrimenti distribuito.
+#define CPU_PER_NODE (MAX_THREAD_NUM / _NUMA_NODES)	
 
 // configuration
 #define VEC_SIZE                    1020
@@ -26,13 +29,16 @@ extern unsigned int THREADS;
 #define DISABLE_EXTRACTION_FROM_DW  ENABLE_PROACTIVE_FLUSH	// disabilita le estrazioni dirette dall dwq
 #define ENABLE_SORTING              0//!DISABLE_EXTRACTION_FROM_DW   // abilita il sorting per le dwq
 //#define DW_USAGE_TH                 TOTAL_OPS1*0.39//190000	// setta il numero di elementi minimo per abilitare le dwq
-#define DW_USAGE_TH                 (int)(TOTAL_OPS1*0.39/(MAX_THREAD_NUM / THREADS))
+#define DW_USAGE_TH                 (int)(TOTAL_OPS1*0.39/((float)MAX_THREAD_NUM / THREADS))
 
 #define ENABLE_BLOCKING_FLUSH       0	// abilita il lock per flushare elementi della dwq sui bucket della cq
 #define SEL_DW                      0	// se 1 allora lavoro differito solo se la destinazione si trova su un nodo numa remoto
 #define ENABLE_ENQUEUE_WORK			0   // abilita eventuale ulteriore lavoro svolto da un thread che esegue enqueue in DWQ
-//#define NODE_HASH(bucket_id)        ((bucket_id) % (((THREADS-1)/4)+1)/*_NUMA_NODES*/)	// per bucket fisico
+#if GRAD_PIN
+#define NODE_HASH(bucket_id)        ((bucket_id) % (((THREADS-1)/CPU_PER_NODE)+1)/*_NUMA_NODES*/)	// per bucket fisico
+#else
 #define NODE_HASH(bucket_id)        ((bucket_id) % ((THREADS < _NUMA_NODES) ? THREADS : _NUMA_NODES))
+#endif
 #define NID                         nid
 #define HEADS_ARRAY_SCALE			1
 
