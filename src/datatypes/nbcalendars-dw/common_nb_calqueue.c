@@ -1322,11 +1322,15 @@ void std_free_hook(ptst_t *p, void *ptr){	free(ptr); }
  * @param elem_per_bucket: set the expected number of items for each virtual bucket
  * @return a pointer a new queue
  */
-void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket)
+void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket_init)
 {
 	unsigned int i = 0;
 	int res_mem_posix = 0;
 	nb_calqueue* res = NULL;
+	unsigned int elem_per_bucket;
+
+	elem_per_bucket = (unsigned int)(START_EPB + (THREADS - 1) * INC_EPB_PER_THREAD);
+	printf("\nDimensione calcolata: %u\n", elem_per_bucket);
 
 	// init fraser garbage collector/allocator 
 	_init_gc_subsystem();

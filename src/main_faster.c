@@ -45,8 +45,8 @@
 
 
 
-  
 #define GRAD_PIN 0 // se 1 allora pin graduale: prima il nodo 0, poi 1, 2 e cosi via, altrimenti distribuito.
+
 
 #define NID nid
 #define TID tid
@@ -102,7 +102,6 @@ __thread int NID;
 __thread unsigned int num_op=0;
 
 int NUMA_NODES;
-volatile pkey_t *timestamps;
 
 unsigned int *id;
 volatile long long *ops;
@@ -117,11 +116,6 @@ volatile long long final_ops = 0;
 
 
 
-#define BOOL_CAS_DOUBLE(addr, old, new)  __sync_bool_compare_and_swap(\
-                                                                               UNION_CAST(addr, volatile unsigned long long *),\
-                                                                               UNION_CAST(old,  unsigned long long),\
-                                                                               UNION_CAST(new,  unsigned long long)\
-                                                                         )
 
 
 
@@ -272,37 +266,16 @@ void classic_hold(
 		pq_reset_statistics();
 		par_count = 0;
 		ops_count[my_id] = 0;
-		
-		int ind = my_id / 2;
-		int i;
-        pkey_t enq_tmp;
-        if(my_id % 2 == 0){
-	        timestamps[ind] = 0.0;
-            BOOL_CAS_DOUBLE(&timestamps[ind], 0.0, local_min);
-        }
-
+				
 		while((TEST_MODE != 'T' && tot_count < end_operations2) || (TEST_MODE == 'T' && !end_test))
 		{
-			if(my_id % 2 == 0 && timestamps[ind] == 0.0){
-				par_count++;
-				timestamp = dequeue();
-				if(timestamp != INFTY)
-					//local_min = timestamp;
-					BOOL_CAS_DOUBLE(&timestamps[ind], 0.0, timestamp);
-				//pthread_yield();
-			}
+			par_count++;
+			timestamp = dequeue();
+			if(timestamp != INFTY)
+				local_min = timestamp;
+			//pthread_yield();
 
-			if(my_id % 2 == 1){
-				//	          par_count++;
-		        	for(i = ind; i < THREADS / 2; i++){
-		        		if((enq_tmp = timestamps[i]) != 0.0){
-				            if(BOOL_CAS_DOUBLE(&timestamps[i], enq_tmp, 0.0)){
-				                enqueue(my_id, seed, enq_tmp, current_dist);
-				                break;
-				            }
-				        }	
-		        	}
-			}
+			enqueue(my_id, seed, local_min, current_dist);
 						
 			if(par_count == THREADS && TEST_MODE != 'T')
 			{	
@@ -513,8 +486,7 @@ int main(int argc, char **argv)
 	EMPTY_QUEUE 				= (unsigned int) strtol(argv[par++], (char **)NULL, 10);
 	TEST_MODE = argv[par++][0];
 	TIME 			= (unsigned int) strtol(argv[par++], (char **)NULL, 10);
-
-	timestamps = malloc(sizeof(pkey_t)*(THREADS / 2));
+	
 
 	id = (unsigned int*) malloc(THREADS*sizeof(unsigned int));
 	ops = (long long*) malloc(THREADS*sizeof(long long));

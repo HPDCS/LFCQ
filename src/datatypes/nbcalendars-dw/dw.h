@@ -16,7 +16,9 @@ extern unsigned int MAX_THREAD_NUM;
 #define CPU_PER_NODE (MAX_THREAD_NUM / _NUMA_NODES)	
 
 // configuration
-#define VEC_SIZE                    1020
+#define START_EPB					65
+#define INC_EPB_PER_THREAD			24
+#define VEC_SIZE                    (unsigned int)((START_EPB + (THREADS - 1) * INC_EPB_PER_THREAD) * 1.27)//1020
 #define DW_ENQUEUE_USAGE_TH			0	// minima distanza tra current e virtual bucket di inserimento per utilizzare DWQ
 
 #define DEQUEUE_WAIT_CICLES			5000	// numero di cicli di attesa per un thread remoto prima di provare a fare la dequeue
