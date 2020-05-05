@@ -231,7 +231,9 @@ void dw_block_table(void* tb, unsigned int start){
 			}
 		}
 		// compatto una volta rilasciando la memoria
+		from_block_table = true; // necessario per non sfalsare le statistiche aggiornate nella list_search
 		bucket_p = list_remove(&h->deferred_work->heads[index_pb], LLONG_MAX-1, h->deferred_work->list_tail);
+		from_block_table = false;
 	}
 }
 

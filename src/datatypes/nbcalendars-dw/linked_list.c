@@ -7,6 +7,7 @@ extern __thread unsigned long long list_search_steps_rem;
 extern __thread unsigned long long compact_buckets;
 extern __thread unsigned long long compact_buckets_pro;
 extern __thread unsigned long long nodes_per_bucket;
+extern __thread bool from_block_table;
 
 dwb* list_search(dwb *head, long long index_vb, dwb** left_node, bool from_dequeue, dwb* list_tail) {
  	int i;
@@ -25,8 +26,10 @@ dwb* list_search(dwb *head, long long index_vb, dwb** left_node, bool from_deque
 	  fflush(stdout);
 	}
 */
-    if(from_dequeue)  list_search_invoc_rem++;
-    else              list_search_invoc_add++;
+    if(!from_block_table){
+      if(from_dequeue)  list_search_invoc_rem++;
+      else              list_search_invoc_add++;
+    }
 
   	while(1) {
 
@@ -34,10 +37,12 @@ dwb* list_search(dwb *head, long long index_vb, dwb** left_node, bool from_deque
     	dwb *t_next = head->next;
     
     	while (is_marked_ref(t_next, DELB) || (t->index_vb < index_vb)) {
+        
+          if(!from_block_table){
+            if(from_dequeue)  list_search_steps_rem++;
+            else              list_search_steps_add++;
+      	  }
 
-          if(from_dequeue)  list_search_steps_rem++;
-          else              list_search_steps_add++;
-      	
       		if (!is_marked_ref(t_next, DELB)) {
         		(*left_node) = t;
         		left_node_next = t_next;
@@ -62,9 +67,11 @@ dwb* list_search(dwb *head, long long index_vb, dwb** left_node, bool from_deque
                 get_marked_ref(set_bucket_state(right_node, get_bucket_state(left_node_next)), is_marked_ref(left_node_next, MOVB) * MOVB))) {
 
 	      		while((left_node_next = get_bucket_pointer(left_node_next)) != right_node){
-              compact_buckets++;
-              if(left_node_next->pro) compact_buckets_pro++;
-              nodes_per_bucket += left_node_next->valid_elem;
+              if(!from_block_table){
+                compact_buckets++;
+                if(left_node_next->pro) compact_buckets_pro++;
+                nodes_per_bucket += left_node_next->valid_elem;
+              }
 
   			    	for(i = 0; i < left_node_next->valid_elem; i++){
 
