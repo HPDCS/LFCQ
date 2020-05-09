@@ -252,7 +252,6 @@ int dw_enqueue(void *tb, unsigned long long index_vb, nbc_bucket_node *new_node
 	assertf(from_block_table, "dw_enqueue(): thread proviene dalla block table %s\n", "");
 
 	// controllo se la testa è stata marcata per l'inizio resize 
-	if(is_marked_ref(str->heads[hash_dw(index_vb, h->size)/*index_vb % h->size*/].next, MOVB))
 		return MOV_FOUND;
 
 	bucket_p = get_bucket_pointer(

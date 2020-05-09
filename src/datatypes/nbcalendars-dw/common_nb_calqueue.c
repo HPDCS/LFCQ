@@ -1329,7 +1329,8 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	nb_calqueue* res = NULL;
 	unsigned int elem_per_bucket;
 
-	elem_per_bucket = (unsigned int)(START_EPB + (THREADS - 1) * INC_EPB_PER_THREAD);
+	elem_per_bucket = elem_per_bucket_init;
+	//elem_per_bucket = (unsigned int)(START_EPB + (THREADS - 1) * INC_EPB_PER_THREAD);
 	printf("\nDimensione calcolata: %u\n", elem_per_bucket);
 
 	// init fraser garbage collector/allocator 
