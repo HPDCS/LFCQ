@@ -15,10 +15,18 @@ extern unsigned int MAX_THREAD_NUM;
 #define GRAD_PIN 0 // se 1 allora pin graduale: prima il nodo 0, poi 1, 2 e cosi via, altrimenti distribuito.
 #define CPU_PER_NODE (MAX_THREAD_NUM / _NUMA_NODES)	
 
+#define TH1 						(THREADS < 4)
+#define TH2 						(THREADS >= 4 && THREADS <= 8)
+#define TH3 						(THREADS > 8 && THREADS <= 16)
+#define TH4 						(THREADS > 16)
+
 // configuration
-#define START_EPB					65
-#define INC_EPB_PER_THREAD			(THREADS < (/*MAX_THREAD_NUM*/0 / 2) ? 42 : ((800 - START_EPB) / (THREADS - 1)))//24
-#define VEC_SIZE                    1020//(unsigned int)((START_EPB + (THREADS - 1) * INC_EPB_PER_THREAD) * 1.27)//1020
+//#define START_EPB					65
+//#define INC_EPB_PER_THREAD			(THREADS < (/*MAX_THREAD_NUM*/0 / 2) ? 42 : ((800 - START_EPB) / (THREADS - 1)))//24
+#define EPB 						(TH1 * 140 + TH2 * 300 + TH3 * 620 + TH4 * 800)
+//#define VEC_SIZE 					(unsigned int)(EPB * 1.27)
+//#define VEC_SIZE                    (unsigned int)((START_EPB + (THREADS - 1) * INC_EPB_PER_THREAD) * 1.27)//1020
+#define VEC_SIZE 					255
 #define DW_ENQUEUE_USAGE_TH			0	// minima distanza tra current e virtual bucket di inserimento per utilizzare DWQ
 
 #define DEQUEUE_WAIT_CICLES			5000	// numero di cicli di attesa per un thread remoto prima di provare a fare la dequeue
@@ -40,6 +48,7 @@ extern unsigned int MAX_THREAD_NUM;
 #define NODE_HASH(bucket_id)        ((bucket_id) % (((THREADS-1)/CPU_PER_NODE)+1)/*_NUMA_NODES*/)	// per bucket fisico
 #else
 #define NODE_HASH(bucket_id)        ((bucket_id) % ((THREADS < _NUMA_NODES) ? THREADS : _NUMA_NODES))
+//#define NODE_HASH(bucket_id)        ((bucket_id) % ((THREADS < 4) ? 1 : 2))// per il caso dei thread distinti
 #endif
 #define NID                         nid
 #define HEADS_ARRAY_SCALE			1
