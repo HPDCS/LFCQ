@@ -15,18 +15,19 @@ extern unsigned int MAX_THREAD_NUM;
 #define GRAD_PIN 0 // se 1 allora pin graduale: prima il nodo 0, poi 1, 2 e cosi via, altrimenti distribuito.
 #define CPU_PER_NODE (MAX_THREAD_NUM / _NUMA_NODES)	
 
-#define TH1 						(THREADS < 4)
-#define TH2 						(THREADS >= 4 && THREADS <= 8)
-#define TH3 						(THREADS > 8 && THREADS <= 16)
-#define TH4 						(THREADS > 16)
+#define TH0 						(int)(THREADS == 1)
+#define TH1 						(int)(THREADS >1 && THREADS <= 4)
+#define TH2 						(int)(THREADS > 4 && THREADS <= 8)
+#define TH3 						(int)(THREADS > 8 && THREADS <= 16)
+#define TH4 						(int)(THREADS > 16)
 
 // configuration
 //#define START_EPB					65
 //#define INC_EPB_PER_THREAD			(THREADS < (/*MAX_THREAD_NUM*/0 / 2) ? 42 : ((800 - START_EPB) / (THREADS - 1)))//24
-#define EPB 						(TH1 * 140 + TH2 * 300 + TH3 * 620 + TH4 * 800)
-//#define VEC_SIZE 					(unsigned int)(EPB * 1.27)
+#define EPB 						(unsigned int)(TH0 * 65 + TH1 * 140 + TH2 * 300 + TH3 * 620 + TH4 * 800)
+#define VEC_SIZE 					(unsigned int)(EPB * 1.27)
 //#define VEC_SIZE                    (unsigned int)((START_EPB + (THREADS - 1) * INC_EPB_PER_THREAD) * 1.27)//1020
-#define VEC_SIZE 					255
+//#define VEC_SIZE 					255
 #define DW_ENQUEUE_USAGE_TH			0	// minima distanza tra current e virtual bucket di inserimento per utilizzare DWQ
 
 #define DEQUEUE_WAIT_CICLES			5000	// numero di cicli di attesa per un thread remoto prima di provare a fare la dequeue
@@ -37,7 +38,7 @@ extern unsigned int MAX_THREAD_NUM;
 #define PRO_FLUSH_BUCKET_NUM_MIN	0	// distanza dal bucket attuale in numero di bucket che posso considerare per flush proattivo
 
 #define DISABLE_EXTRACTION_FROM_DW  ENABLE_PROACTIVE_FLUSH	// disabilita le estrazioni dirette dall dwq
-#define ENABLE_SORTING              0//!DISABLE_EXTRACTION_FROM_DW   // abilita il sorting per le dwq
+#define ENABLE_SORTING              1//!DISABLE_EXTRACTION_FROM_DW   // abilita il sorting per le dwq
 //#define DW_USAGE_TH                 TOTAL_OPS1*0.39//190000	// setta il numero di elementi minimo per abilitare le dwq
 #define DW_USAGE_TH                 (int)(TOTAL_OPS1*0.39/((float)MAX_THREAD_NUM / THREADS))
 
@@ -72,6 +73,7 @@ extern unsigned int MAX_THREAD_NUM;
 // Marcature di un bucket
 #define DELB 	(1ULL)	// possibile eliminazione
 #define MOVB 	(2ULL)	// bucket in movimento
+#define ANYB	(3ULL)  // una delle precedenti
 
 #define INV_TS 	(-1.0)
 
@@ -165,7 +167,7 @@ static inline bool is_deleted(nbc_bucket_node* node){return (bool)((unsigned lon
 static inline bool is_blocked(nbc_bucket_node* node){return (bool)((unsigned long long)node & BLKN);}
 static inline bool is_moving(nbc_bucket_node* node){return (bool)((unsigned long long)node & MVGN);}
 static inline bool is_moved(nbc_bucket_node* node){return (bool)((unsigned long long)node & MVDN);}
-static inline bool is_none(nbc_bucket_node* node){return (bool)(((unsigned long long)node & 0xfULL) == 0ULL);}
+static inline bool is_none(nbc_bucket_node* node){return (bool)(((unsigned long long)node & 0xfULL) == NONE);}
 
 static inline dwb* get_bucket_pointer(dwb* bucket){return (dwb*)((unsigned long long)bucket & BUCKET_PTR_MASK);}
 static inline unsigned long long get_bucket_state(dwb* bucket){return (((unsigned long long)bucket & BUCKET_STATE_MASK) >> BUCKET_STATE_SHIFT);}
@@ -220,7 +222,7 @@ static inline pkey_t dw_extraction(dwb* bucket_p, void** result, pkey_t left_ts)
 		BOOL_CAS(&bucket_p->indexes, old_v, (indexes_enq + deq_cn));	// aggiorno deq
 
 	// controllo se sono uscito perchè è iniziata la resize
-	if(is_moving(bucket_p->dwv_sorted[deq_cn].node))
+	if(deq_cn < bucket_p->valid_elem && is_moving(bucket_p->dwv_sorted[deq_cn].node))
 		return GOTO;
 
 	if(deq_cn >= bucket_p->valid_elem || is_marked_ref(bucket_p->next, DELB)){

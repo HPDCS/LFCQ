@@ -114,6 +114,7 @@ begin:
 		index = current >> 32;
 		epoch = current & MASK_EPOCH;
 
+
 		no_dw_node_curr_vb = ((bucket_p = dw_dequeue(h, index)) == NULL);
 		no_dw_node = (size == 1 && h->deferred_work->heads[0].next == h->deferred_work->list_tail);
 			
@@ -123,11 +124,15 @@ begin:
 		assertf(!no_dw_node_curr_vb, "dequeue(): bucket non flushato %s\n", "");
 		#endif
 
-		if(!no_dw_node_curr_vb && (get_bucket_state(bucket_p->next) == BLK))
-			goto begin;
+		if(!no_dw_node_curr_vb/* && (get_bucket_state(bucket_p->next) == BLK)*/){
+			if(is_marked_ref(bucket_p->next, MOVB))
+				goto begin;
+			else if(is_marked_ref(bucket_p->next, DELB) || bucket_p->valid_elem == 0)
+				no_dw_node_curr_vb = true;	
+		}
 
 		// get the physical bucket
-		if(prev_vb == index && dw_enable)
+		if(prev_vb == index && dw_enable && prev->next != NULL)
 			min = prev;
 		else
 			min = array + (index % (size));

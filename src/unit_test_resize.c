@@ -107,7 +107,7 @@ volatile unsigned int end_phase_3 = 0;
 volatile unsigned int end_test = 0;
 volatile long long final_ops = 0;
 
-#define QSIZE 250000
+#define QSIZE 1000000
 #define GRAD_PIN 0 // se 1 allora pin graduale: prima il nodo 0, poi 1, 2 e cosi via, altrimenti distribuito.
 
 __thread unsigned int stopforcheck = 0;

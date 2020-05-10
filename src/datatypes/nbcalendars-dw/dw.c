@@ -220,7 +220,7 @@ void dw_block_table(void* tb, unsigned int start){
 				}
 
 				// marco il bucket come BLK e possibile da eliminare
-				// potrebbe non essere bloccato esplicitamente per gli inserimenti se era marcato come DELN prima della resize
+				// potrebbe non essere bloccato esplicitamente per gli inserimenti se era marcato come DELB prima della resize
 				BOOL_CAS(&prev_bucket_p->next, set_bucket_state(prev_bucket_p->next, EXT), get_marked_ref(set_bucket_state(prev_bucket_p->next, BLK), DELB));
 				assertf(!is_marked_ref(prev_bucket_p->next, DELB) || get_bucket_state(prev_bucket_p->next) != BLK, 
 					"dw_block_table(): bucket non marcato %d %llu\n", is_marked_ref(prev_bucket_p->next, DELB),
@@ -449,7 +449,7 @@ void dw_proactive_flush(void *tb, unsigned long long index_vb){
 
 	bucket_p = list_remove(&str->heads[hash_dw(index, h->size)/*index % h->size*/], index, str->list_tail);
 
-	if(bucket_p == NULL || is_marked_ref(bucket_p->next, DELB) || get_bucket_state(bucket_p->next) != INS || bucket_p->pro)
+	if(bucket_p == NULL || is_marked_ref(bucket_p->next, ANYB) || get_bucket_state(bucket_p->next) != INS || bucket_p->pro)
 		return;
 
 	do{	
@@ -466,7 +466,7 @@ void dw_proactive_flush(void *tb, unsigned long long index_vb){
 
 		if(get_bucket_state(bucket_p->next) == EXT || get_bucket_state(bucket_p->next) == BLK){
 
-			if(get_bucket_state(bucket_p->next) == EXT && !is_marked_ref(bucket_p->next, DELB) && !bucket_p->pro){
+			if(get_bucket_state(bucket_p->next) == EXT && !is_marked_ref(bucket_p->next, ANYB) && !bucket_p->pro){
 				//printf("%d\n", bucket_p->valid_elem);
 				dw_flush(h, bucket_p, false);
 			}
@@ -489,10 +489,13 @@ dwb* dw_dequeue(void *tb, unsigned long long index_vb){
 	}
 	else
 		bucket_p = list_remove(&str->heads[hash_dw(index_vb, h->size)/*index_vb % h->size*/], index_vb, str->list_tail);
-
+/*
 	if(bucket_p == NULL || is_marked_ref(bucket_p->next, DELB)){
 		return NULL;
 	}
+*/
+	if(bucket_p == NULL || is_marked_ref(bucket_p->next, ANYB))
+		return bucket_p;
 
 #if ENABLE_PROACTIVE_FLUSH/* && _NUMA_NODES == 1*/
 
@@ -510,10 +513,11 @@ dwb* dw_dequeue(void *tb, unsigned long long index_vb){
 			
 		remote_node_dequeue++;
 
-		for(i = 0; i < DEQUEUE_WAIT_CICLES && !is_marked_ref(bucket_p->next, DELB); i++);
+		for(i = 0; i < DEQUEUE_WAIT_CICLES && !is_marked_ref(bucket_p->next, ANYB/*DELB*/); i++);
 
-		if(is_marked_ref(bucket_p->next, DELB))
-			return NULL;
+		if(is_marked_ref(bucket_p->next, ANYB/*DELB*/))
+			//return NULL;
+			return bucket_p;
 
 		remote_node_dequeue_exec++;
 	}
@@ -538,14 +542,14 @@ dwb* dw_dequeue(void *tb, unsigned long long index_vb){
 
 		if(get_bucket_state(bucket_p->next) == EXT || get_bucket_state(bucket_p->next) == BLK){
 
-			if(get_bucket_state(bucket_p->next) == EXT && DISABLE_EXTRACTION_FROM_DW && !is_marked_ref(bucket_p->next, DELB)){
+			if(get_bucket_state(bucket_p->next) == EXT && DISABLE_EXTRACTION_FROM_DW && !is_marked_ref(bucket_p->next, ANYB)){
 				dw_flush(h, bucket_p, true);
 				//return NULL;
 			}
 
-			if(is_marked_ref(bucket_p->next, DELB) || bucket_p->valid_elem == 0)
-				return NULL;
-			else
+			//if(is_marked_ref(bucket_p->next, DELB) || bucket_p->valid_elem == 0)
+			//	return NULL;
+			//else
 			//assertf(is_marked_ref(bucket_p->next, DELB) == 1, "dw_dequeue(): nodo marcato %p\n", bucket_p->next);
 				return bucket_p;
 		}
