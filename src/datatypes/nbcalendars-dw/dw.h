@@ -35,7 +35,7 @@ extern unsigned int MAX_THREAD_NUM;
 #define ENABLE_PROACTIVE_FLUSH      1   // abilita il flush proattivo
 #define DEQUEUE_NUM_TH				0	// dopo aver fatto questo numero di dequeue provo a fare flush proattivo di un bucket
 #define PRO_FLUSH_BUCKET_NUM		THREADS * 2	 
-#define PRO_FLUSH_BUCKET_NUM_MIN	0	// distanza dal bucket attuale in numero di bucket che posso considerare per flush proattivo
+#define PRO_FLUSH_BUCKET_NUM_MIN	1	// distanza dal bucket attuale in numero di bucket che posso considerare per flush proattivo
 
 #define DISABLE_EXTRACTION_FROM_DW  ENABLE_PROACTIVE_FLUSH	// disabilita le estrazioni dirette dall dwq
 #define ENABLE_SORTING              1//!DISABLE_EXTRACTION_FROM_DW   // abilita il sorting per le dwq
@@ -48,8 +48,8 @@ extern unsigned int MAX_THREAD_NUM;
 #if GRAD_PIN
 #define NODE_HASH(bucket_id)        ((bucket_id) % (((THREADS-1)/CPU_PER_NODE)+1)/*_NUMA_NODES*/)	// per bucket fisico
 #else
-#define NODE_HASH(bucket_id)        ((bucket_id) % ((THREADS < _NUMA_NODES) ? THREADS : _NUMA_NODES))
-//#define NODE_HASH(bucket_id)        ((bucket_id) % ((THREADS < 4) ? 1 : 2))// per il caso dei thread distinti
+//#define NODE_HASH(bucket_id)        ((bucket_id) % ((THREADS < _NUMA_NODES) ? THREADS : _NUMA_NODES))
+#define NODE_HASH(bucket_id)        ((bucket_id) % ((THREADS < 4) ? 1 : 2))// per il caso dei thread distinti
 #endif
 #define NID                         nid
 #define HEADS_ARRAY_SCALE			1

@@ -266,47 +266,26 @@ void classic_hold(
 		pq_reset_statistics();
 		par_count = 0;
 		ops_count[my_id] = 0;
-
-		struct drand48_data seme;
-		long int rand;
-		int min_dim, max_dim, dim, k;
-
-		min_dim = 1;
-		max_dim = 1;
-
-		pkey_t array[max_dim];
-
+				
 		while((TEST_MODE != 'T' && tot_count < end_operations2) || (TEST_MODE == 'T' && !end_test))
 		{
+			par_count++;
+			timestamp = dequeue();
+			if(timestamp != INFTY)
+				local_min = timestamp;
+			//pthread_yield();
 
-			lrand48_r(&seme, &rand);
-			//dim = rand % (max_dim - min_dim) + min_dim;
-			dim = 1;
-			for(k = 0; k < dim; k++){
-				par_count++;
-				timestamp = dequeue();
-				//if(timestamp != INFTY)
-				//	local_min = timestamp;
-				array[k] = timestamp;
-				//pthread_yield();
-
-				if(par_count == THREADS && TEST_MODE != 'T')
-				{	
-					ops_count[my_id]+=par_count;
-					par_count = 0;
-					tot_count = 0;
-					for(j=0;j<THREADS;j++)
-						tot_count += ops_count[j];
-
-				}
-			}
-
-			for(k = 0; k < dim; k++){
-				if(array[k] != INFTY)
-					enqueue(my_id, seed, local_min, current_dist);
-			}
+			enqueue(my_id, seed, local_min, current_dist);
 						
+			if(par_count == THREADS && TEST_MODE != 'T')
+			{	
+				ops_count[my_id]+=par_count;
+				par_count = 0;
+				tot_count = 0;
+				for(j=0;j<THREADS;j++)
+					tot_count += ops_count[j];
 
+			}
 			//pthread_yield();
 		}
 		
@@ -381,12 +360,7 @@ void* process(void *arg)
 	my_id 		=  *((int*)(arg));
 	(TID) 		= my_id;
 	int cpu 	= numa_mapping[my_id];
-
-	#if GRAD_PIN == 0
-	(NID) = cpu % 2;
-	#else
 	(NID) 		= numa_node_of_cpu(cpu);
-	#endif
 	srand48_r(my_id+157, &seed2);
     srand48_r(my_id+359, &seed);
     srand48_r(my_id+254, &seedT);
@@ -452,7 +426,6 @@ int main(int argc, char **argv)
 	}
 #else
 	// occupazione distribuita
-	/*
 	int numa_count[num_numa_nodes];
 	for(i = 0; i < num_numa_nodes; i++)
 		numa_count[i] = 0;
@@ -461,16 +434,6 @@ int main(int argc, char **argv)
 		numa_mapping[num_numa_nodes * numa_count[j] + j] = i;
 		numa_count[j]++;
 	}
-*/
-
-	for(i = 0; i < num_cpus; i++){
-        if(i % 4 == 0 || i % 4 == 3)
-            numa_mapping[i] = i;
-        else if(i % 4 == 1)
-            numa_mapping[i] = i + 1;
-        else
-            numa_mapping[i] = i - 1;
-    }
 #endif
 
 	printf("CPU PIN");

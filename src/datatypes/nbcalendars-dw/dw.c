@@ -66,7 +66,7 @@ void apply_transition_ORD_to_EXT(dwb *bucket_p
 	nbnc *old_dwv, *aus_ord_array;
 	int i, j;
 	
-	if(get_bucket_state(bucket_p->next) == ORD){
+	//if(get_bucket_state(bucket_p->next) == ORD){
 		//potrebbe capitare che in fase di inserimento il bucket è stato creato ma non èstato aggiornato nessun indice ne inserito nessun elemento
 		//assertf( bucket_p->cicle_limit == 0, "do_ord(): nulla da ordinare %s\n", "");
 		assertf( bucket_p->cicle_limit  > VEC_SIZE || bucket_p->cicle_limit < 0, "do_ord(): limite del ciclo fuori dal range %d\n", bucket_p->cicle_limit);
@@ -111,7 +111,7 @@ void apply_transition_ORD_to_EXT(dwb *bucket_p
 		// cerco di inserirlo
 		if(!BOOL_CAS(&bucket_p->dwv_sorted, NULL, aus_ord_array)) gc_free(ptst, aus_ord_array, gc_aid[2]);	
 		else BOOL_CAS(&bucket_p->next, set_bucket_state(bucket_p->next, ORD), set_bucket_state(bucket_p->next, EXT)); 
-	}
+	//}
 }
 
 
@@ -384,7 +384,7 @@ void dw_flush(void *tb, dwb *bucket_p, bool mark_bucket){
 				dw_node = get_node_pointer(bucket_p->dwv_sorted[j].node);	 // prendo soltanto il puntatore
 				if(is_none(bucket_p->dwv_sorted[j].node))
 					BOOL_CAS(&bucket_p->dwv_sorted[j].node, dw_node, get_marked_node(dw_node, BLKN));
-				else if(!mark_bucket)
+				else if(!mark_bucket || is_moving(bucket_p->dwv_sorted[j].node))
 					return; // se sto in modalità proattiva e mi accorgo che non sono solo ritorno
 				
 				assertf(is_marked(original_suggestion->next, DEL), "dw_flush(): nodo di suggerimento marcato %s", "");	
