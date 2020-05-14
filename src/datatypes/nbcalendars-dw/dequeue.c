@@ -120,16 +120,16 @@ begin:
 			
 		no_cq_node = false;
 
-		#if DISABLE_EXTRACTION_FROM_DW
-		assertf(!no_dw_node_curr_vb, "dequeue(): bucket non flushato %s\n", "");
-		#endif
-
 		if(!no_dw_node_curr_vb/* && (get_bucket_state(bucket_p->next) == BLK)*/){
 			if(is_marked_ref(bucket_p->next, MOVB))
 				goto begin;
 			else if(is_marked_ref(bucket_p->next, DELB) || bucket_p->valid_elem == 0)
 				no_dw_node_curr_vb = true;	
 		}
+
+		#if DISABLE_EXTRACTION_FROM_DW
+		assertf(!no_dw_node_curr_vb, "dequeue(): bucket non flushato %s\n", "");
+		#endif
 
 		// get the physical bucket
 		if(prev_vb == index && dw_enable && prev->next != NULL)

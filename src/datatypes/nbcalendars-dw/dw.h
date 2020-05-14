@@ -11,8 +11,14 @@ extern unsigned int TOTAL_OPS1;
 extern unsigned int THREADS;
 extern unsigned int MAX_THREAD_NUM;
 
+#define DISTRIBUTED_PIN		0	// numero minimo dei thread su ogni nodo	
+#define GRADUAL_PIN			1	// prima il nodo 0, poi 1, 2 e cosi via
+#define GRAD_PIN DISTRIBUTED_PIN 
 
-#define GRAD_PIN 0 // se 1 allora pin graduale: prima il nodo 0, poi 1, 2 e cosi via, altrimenti distribuito.
+#define DISTINCT_THREAD_TYPES	0	// il ruolo dei thread è suddiviso
+
+
+
 #define CPU_PER_NODE (MAX_THREAD_NUM / _NUMA_NODES)	
 
 #define TH0 						(int)(THREADS == 1)
@@ -38,7 +44,7 @@ extern unsigned int MAX_THREAD_NUM;
 #define PRO_FLUSH_BUCKET_NUM_MIN	1	// distanza dal bucket attuale in numero di bucket che posso considerare per flush proattivo
 
 #define DISABLE_EXTRACTION_FROM_DW  ENABLE_PROACTIVE_FLUSH	// disabilita le estrazioni dirette dall dwq
-#define ENABLE_SORTING              1//!DISABLE_EXTRACTION_FROM_DW   // abilita il sorting per le dwq
+#define ENABLE_SORTING              0//!DISABLE_EXTRACTION_FROM_DW   // abilita il sorting per le dwq
 //#define DW_USAGE_TH                 TOTAL_OPS1*0.39//190000	// setta il numero di elementi minimo per abilitare le dwq
 #define DW_USAGE_TH                 (int)(TOTAL_OPS1*0.39/((float)MAX_THREAD_NUM / THREADS))
 
@@ -48,8 +54,11 @@ extern unsigned int MAX_THREAD_NUM;
 #if GRAD_PIN
 #define NODE_HASH(bucket_id)        ((bucket_id) % (((THREADS-1)/CPU_PER_NODE)+1)/*_NUMA_NODES*/)	// per bucket fisico
 #else
-//#define NODE_HASH(bucket_id)        ((bucket_id) % ((THREADS < _NUMA_NODES) ? THREADS : _NUMA_NODES))
-#define NODE_HASH(bucket_id)        ((bucket_id) % ((THREADS < 4) ? 1 : 2))// per il caso dei thread distinti
+	#if DISTINCT_THREAD_TYPES
+	#define NODE_HASH(bucket_id)        ((bucket_id) % ((THREADS < 4) ? 1 : 2))// per il caso dei thread distinti
+	#else
+	#define NODE_HASH(bucket_id)        ((bucket_id) % ((THREADS < _NUMA_NODES) ? THREADS : _NUMA_NODES))
+	#endif
 #endif
 #define NID                         nid
 #define HEADS_ARRAY_SCALE			1

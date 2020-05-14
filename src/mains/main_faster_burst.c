@@ -43,30 +43,17 @@
 #include "utils/common.h"
 #include "gc/gc.h"
 
-// tipo esecuzione
-#define DISTRIBUTED_PIN		0	// numero minimo dei thread su ogni nodo	
-#define GRADUAL_PIN			1	// prima il nodo 0, poi 1, 2 e cosi via
-// delay
-#define ENQUEUE_SLEEP		0	// microsecondi
-#define DEQUEUE_SLEEP		0	// microsecondi
-// suddivisione o meno del ruolo dei thread
-#define DISTINCT_THREAD_TYPES	0	// il ruolo dei thread è suddiviso
 
 
-
-
-#define GRAD_PIN DISTRIBUTED_PIN
+#define GRAD_PIN 0 // se 1 allora pin graduale: prima il nodo 0, poi 1, 2 e cosi via, altrimenti distribuito.
 
 
 #define NID nid
 #define TID tid
 
 
-#define BOOL_CAS_DOUBLE(addr, old, new)  __sync_bool_compare_and_swap(\
-                                                                               UNION_CAST(addr, volatile unsigned long long *),\
-                                                                               UNION_CAST(old,  unsigned long long),\
-                                                                               UNION_CAST(new,  unsigned long long)\
-                                                                         )
+
+
 
 
 struct payload
@@ -120,12 +107,6 @@ unsigned int *id;
 volatile long long *ops;
 volatile long long *ops_count;
 volatile long long *malloc_op;
-// statistiche
-volatile double *deq_times;
-volatile double *enq_times;
-volatile long long *enq_count;
-volatile long long *deq_count;
-volatile pkey_t *timestamps;
 
 volatile unsigned int end_phase_1 = 0;
 volatile unsigned int end_phase_2 = 0;
@@ -286,108 +267,47 @@ void classic_hold(
 		par_count = 0;
 		ops_count[my_id] = 0;
 
-		//struct drand48_data seme;
-		//long int rand;
+		struct drand48_data seme;
+		long int rand;
+		int min_dim, max_dim, dim, k;
 
-		struct timespec start, end;
-		struct timespec elapsed;
+		min_dim = 10;
+		max_dim = 30;
 
-#if DISTINCT_THREAD_TYPES
-		int ind = my_id / 2;
-		int i;
-        pkey_t enq_tmp;
-        if(my_id % 2 == 0)
-            BOOL_CAS_DOUBLE(&timestamps[ind], 0.0, local_min);
-        else
-        	while(timestamps[ind] == 0.0);
-#else
-#endif
+		pkey_t array[max_dim];
 
-
-        while((TEST_MODE != 'T' && tot_count < end_operations2) || (TEST_MODE == 'T' && !end_test))
+		while((TEST_MODE != 'T' && tot_count < end_operations2) || (TEST_MODE == 'T' && !end_test))
 		{
 
-#if DISTINCT_THREAD_TYPES
-
-			if(my_id % 2 == 0 && timestamps[ind] == 0.0){
+			lrand48_r(&seme, &rand);
+			dim = rand % (max_dim - min_dim) + min_dim;
+			//dim = 1;
+			for(k = 0; k < dim; k++){
 				par_count++;
-				gettime(&start);
 				timestamp = dequeue();
-				gettime(&end);
-
-				if(DEQUEUE_SLEEP)	
-					usleep(DEQUEUE_SLEEP);
-				
-				elapsed = timediff(start, end);
-	    		deq_times[my_id] += (double)elapsed.tv_sec + (double)elapsed.tv_nsec / 1000000000.0;
-	    		deq_count[my_id]++;
-				if(timestamp != INFTY)
-					//local_min = timestamp;
-					BOOL_CAS_DOUBLE(&timestamps[ind], 0.0, timestamp);
+				//if(timestamp != INFTY)
+				//	local_min = timestamp;
+				array[k] = timestamp;
 				//pthread_yield();
+
+				if(par_count == THREADS && TEST_MODE != 'T')
+				{	
+					ops_count[my_id]+=par_count;
+					par_count = 0;
+					tot_count = 0;
+					for(j=0;j<THREADS;j++)
+						tot_count += ops_count[j];
+
+				}
 			}
 
-			if(my_id % 2 == 1){
-				//	          par_count++;
-	        	for(i = ind; i < THREADS / 2; i++){
-	        		if((enq_tmp = timestamps[i]) != 0.0){
-			            if(BOOL_CAS_DOUBLE(&timestamps[i], enq_tmp, 0.0)){
-			            	gettime(&start);
-			                enqueue(my_id, seed, enq_tmp, current_dist);
-			                gettime(&end);
-							elapsed = timediff(start, end);
-				    		enq_times[my_id] += (double)elapsed.tv_sec + (double)elapsed.tv_nsec / 1000000000.0;
-				    		enq_count[my_id]++;
-
-				    		if(ENQUEUE_SLEEP)
-				    			usleep(ENQUEUE_SLEEP);
-
-			                break;
-			            }
-			        }	
-	        	}
+			for(k = 0; k < dim; k++){
+				if(array[k] != INFTY)
+					enqueue(my_id, seed, array[k], current_dist);
 			}
-
-
-#else
-			par_count++;
-
-			gettime(&start);
-			timestamp = dequeue();
-			gettime(&end);
-			elapsed = timediff(start, end);
-    		deq_times[my_id] += (double)elapsed.tv_sec + (double)elapsed.tv_nsec / 1000000000.0;
-    		deq_count[my_id]++;
-
-    		if(DEQUEUE_SLEEP)	
-				usleep(DEQUEUE_SLEEP);
-
-			if(timestamp != INFTY)
-				local_min = timestamp;
-			//pthread_yield();
-
-			gettime(&start);
-			enqueue(my_id, seed, local_min, current_dist);
-			gettime(&end);
-			elapsed = timediff(start, end);
-    		enq_times[my_id] += (double)elapsed.tv_sec + (double)elapsed.tv_nsec / 1000000000.0;
-    		enq_count[my_id]++;
-
-    		if(ENQUEUE_SLEEP)
-				usleep(ENQUEUE_SLEEP);
 						
-#endif
-    		if(par_count == THREADS && TEST_MODE != 'T')
-			{	
-				ops_count[my_id]+=par_count;
-				par_count = 0;
-				tot_count = 0;
-				for(j=0;j<THREADS;j++)
-					tot_count += ops_count[j];
 
-			}
 			//pthread_yield();
-
 		}
 		
 		if(end_test)
@@ -462,7 +382,7 @@ void* process(void *arg)
 	(TID) 		= my_id;
 	int cpu 	= numa_mapping[my_id];
 
-	#if GRAD_PIN == DISTRIBUTED_PIN && DISTINCT_THREAD_TYPES
+	#if GRAD_PIN == 0
 	(NID) = cpu % 2;
 	#else
 	(NID) 		= numa_node_of_cpu(cpu);
@@ -519,10 +439,9 @@ int main(int argc, char **argv)
 	num_cpus_per_node 	= num_cpus/num_numa_nodes;
 	numa_mapping		= malloc(sizeof(int)*num_cpus);
 	
-	int i,j=0;
+	int i,k,j=0;
 
-#if GRAD_PIN == GRADUAL_PIN
-	int k;
+#if GRAD_PIN
 	// occupazione graduale
 	k = 0;
 	for(i=0;i<num_numa_nodes;i++){
@@ -531,30 +450,27 @@ int main(int argc, char **argv)
 				numa_mapping[k++] = j;
 		}
 	}
-#elif GRAD_PIN == DISTRIBUTED_PIN
-
-	#if DISTINCT_THREAD_TYPES == 0
+#else
 	// occupazione distribuita
-		int numa_count[num_numa_nodes];
-		for(i = 0; i < num_numa_nodes; i++)
-			numa_count[i] = 0;
-		for(i = 0; i < num_cpus; i++){
-			j = numa_node_of_cpu(i);// ottengo il nodo
-			numa_mapping[num_numa_nodes * numa_count[j] + j] = i;
-			numa_count[j]++;
-		}
+	/*
+	int numa_count[num_numa_nodes];
+	for(i = 0; i < num_numa_nodes; i++)
+		numa_count[i] = 0;
+	for(i = 0; i < num_cpus; i++){
+		j = numa_node_of_cpu(i);// ottengo il nodo
+		numa_mapping[num_numa_nodes * numa_count[j] + j] = i;
+		numa_count[j]++;
+	}
+*/
 
-	#else
-		for(i = 0; i < num_cpus; i++){
-	        if(i % 4 == 0 || i % 4 == 3)
-	            numa_mapping[i] = i;
-	        else if(i % 4 == 1)
-	            numa_mapping[i] = i + 1;
-	        else
-	            numa_mapping[i] = i - 1;
-	    }
-
-    #endif
+	for(i = 0; i < num_cpus; i++){
+        if(i % 4 == 0 || i % 4 == 3)
+            numa_mapping[i] = i;
+        else if(i % 4 == 1)
+            numa_mapping[i] = i + 1;
+        else
+            numa_mapping[i] = i - 1;
+    }
 #endif
 
 	printf("CPU PIN");
@@ -614,21 +530,8 @@ int main(int argc, char **argv)
 	malloc_op = (long long*) malloc(THREADS*sizeof(long long));
 	ops_count = (long long*) malloc(THREADS*sizeof(long long));
 	p_tid = malloc(THREADS*sizeof(pthread_t));
-
-	enq_times = (double*) malloc(THREADS*sizeof(double));
-	deq_times = (double*) malloc(THREADS*sizeof(double));
-	enq_count = (long long*) malloc(THREADS*sizeof(long long));
-	deq_count = (long long*) malloc(THREADS*sizeof(long long));
-	timestamps = malloc(sizeof(pkey_t)*(THREADS / 2));
 	
-	for(i = 0; i < THREADS / 2; i++)
-		timestamps[i] = 0.0;
 
-	for(i = 0; i < THREADS; i++){
-		enq_count[i] = deq_count[i] = 0;
-		enq_times[i] = deq_times[i] = 0.0;
-	}
-	
 	printf("T:%u,", THREADS);
 	printf("ITERATIONS:%u,", ITERATIONS);
 	printf("OPS:%u,", TOTAL_OPS);
@@ -705,11 +608,6 @@ int main(int argc, char **argv)
 	elapsed = timediff(start, end);
     dt = (double)elapsed.tv_sec + (double)elapsed.tv_nsec / 1000000000.0;
 	
-    double enq_tmp_avg, deq_tmp_avg;
-    long long ec, dc;
-    enq_tmp_avg = deq_tmp_avg = 0.0;
-    ec = dc = 0;
-
     for(i=0;i<THREADS;i++)
     {
             qsi += ops[i];
@@ -718,16 +616,9 @@ int main(int argc, char **argv)
             sum += tmp;
             min = min < tmp ? min : tmp;
             max = max > tmp ? max : tmp;
-
-            enq_tmp_avg += enq_times[i];
-            deq_tmp_avg += deq_times[i];
-            ec += enq_count[i];
-            dc += deq_count[i];
     }
 
 	avg = sum/THREADS;
-	enq_tmp_avg /= ec;
-	deq_tmp_avg /= dc;
 	
 
 	printf("CHECK:%lld," , qsi);
@@ -735,7 +626,6 @@ int main(int argc, char **argv)
 	if(TEST_MODE == 'T'){
 		printf("TIME:%.8f,", dt);
 		printf("\nTHROUGHPUT:%.3f\n,", (double)sum*2.0/dt/1000.0);
-		printf("TMP_AVG_ENQUEUE: %.10f ns ### TMP_AVG_DEQUEUE: %.10f ns\n", enq_tmp_avg*1000000000, deq_tmp_avg*1000000000);
 	}
 	printf("MIN OP:%lld,", min);
 	printf("MAX OP:%lld,", max);
