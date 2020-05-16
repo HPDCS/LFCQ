@@ -49,6 +49,10 @@
 // delay
 #define ENQUEUE_SLEEP		0	// microsecondi
 #define DEQUEUE_SLEEP		0	// microsecondi
+
+#define ENQUEUE_BUSY_LOOP	0	// microsecondi
+#define DEQUEUE_BUSY_LOOP	0	// microsecondi
+
 // suddivisione o meno del ruolo dei thread
 #define DISTINCT_THREAD_TYPES	0	// il ruolo dei thread è suddiviso
 
@@ -126,6 +130,7 @@ volatile double *enq_times;
 volatile long long *enq_count;
 volatile long long *deq_count;
 volatile pkey_t *timestamps;
+double conv = 0.0;
 
 volatile unsigned int end_phase_1 = 0;
 volatile unsigned int end_phase_2 = 0;
@@ -134,7 +139,7 @@ volatile unsigned int end_test = 0;
 volatile long long final_ops = 0;
 
 
-
+void get_factor();
 
 
 
@@ -289,8 +294,11 @@ void classic_hold(
 		//struct drand48_data seme;
 		//long int rand;
 
-		struct timespec start, end;
-		struct timespec elapsed;
+		//struct timespec start, end;
+		//struct timespec elapsed;
+
+		unsigned long long start;
+		double elapsed, aus;
 
 #if DISTINCT_THREAD_TYPES
 		int ind = my_id / 2;
@@ -311,15 +319,21 @@ void classic_hold(
 
 			if(my_id % 2 == 0 && timestamps[ind] == 0.0){
 				par_count++;
-				gettime(&start);
+
+				start = read_tsc_p();
 				timestamp = dequeue();
-				gettime(&end);
+				elapsed = (read_tsc_p() - start) / conv;
 
 				if(DEQUEUE_SLEEP)	
 					usleep(DEQUEUE_SLEEP);
+
+				if(DEQUEUE_BUSY_LOOP){
+					start = read_tsc_p();
+					aus = DEQUEUE_BUSY_LOOP * conv;
+					while((read_tsc_p() - start) < aus);
+				}
 				
-				elapsed = timediff(start, end);
-	    		deq_times[my_id] += (double)elapsed.tv_sec + (double)elapsed.tv_nsec / 1000000000.0;
+	    		deq_times[my_id] += elapsed;
 	    		deq_count[my_id]++;
 				if(timestamp != INFTY)
 					//local_min = timestamp;
@@ -332,15 +346,21 @@ void classic_hold(
 	        	for(i = ind; i < THREADS / 2; i++){
 	        		if((enq_tmp = timestamps[i]) != 0.0){
 			            if(BOOL_CAS_DOUBLE(&timestamps[i], enq_tmp, 0.0)){
-			            	gettime(&start);
+			            	start = read_tsc_p();
 			                enqueue(my_id, seed, enq_tmp, current_dist);
-			                gettime(&end);
-							elapsed = timediff(start, end);
-				    		enq_times[my_id] += (double)elapsed.tv_sec + (double)elapsed.tv_nsec / 1000000000.0;
+			                elapsed = (read_tsc_p() - start) / conv;
+
+				    		enq_times[my_id] += elapsed;
 				    		enq_count[my_id]++;
 
 				    		if(ENQUEUE_SLEEP)
 				    			usleep(ENQUEUE_SLEEP);
+
+				    		if(ENQUEUE_BUSY_LOOP){
+								start = read_tsc_p();
+								aus = ENQUEUE_BUSY_LOOP * conv;
+								while((read_tsc_p() - start) < aus);
+							}
 
 			                break;
 			            }
@@ -352,29 +372,41 @@ void classic_hold(
 #else
 			par_count++;
 
-			gettime(&start);
+			start = read_tsc_p();
 			timestamp = dequeue();
-			gettime(&end);
-			elapsed = timediff(start, end);
-    		deq_times[my_id] += (double)elapsed.tv_sec + (double)elapsed.tv_nsec / 1000000000.0;
+			elapsed = (read_tsc_p() - start) / conv;
+    		
+    		deq_times[my_id] += elapsed;
     		deq_count[my_id]++;
 
     		if(DEQUEUE_SLEEP)	
 				usleep(DEQUEUE_SLEEP);
 
+			if(DEQUEUE_BUSY_LOOP){
+				start = read_tsc_p();
+				aus = DEQUEUE_BUSY_LOOP * conv;
+				while((read_tsc_p() - start) < aus);
+			}
+
 			if(timestamp != INFTY)
 				local_min = timestamp;
 			//pthread_yield();
 
-			gettime(&start);
+			start = read_tsc_p();
 			enqueue(my_id, seed, local_min, current_dist);
-			gettime(&end);
-			elapsed = timediff(start, end);
-    		enq_times[my_id] += (double)elapsed.tv_sec + (double)elapsed.tv_nsec / 1000000000.0;
+			elapsed = (read_tsc_p() - start) / conv;
+
+    		enq_times[my_id] += elapsed;
     		enq_count[my_id]++;
 
     		if(ENQUEUE_SLEEP)
 				usleep(ENQUEUE_SLEEP);
+
+			if(ENQUEUE_BUSY_LOOP){
+				start = read_tsc_p();
+				aus = ENQUEUE_BUSY_LOOP * conv;
+				while((read_tsc_p() - start) < aus);
+			}
 						
 #endif
     		if(par_count == THREADS && TEST_MODE != 'T')
@@ -562,6 +594,8 @@ int main(int argc, char **argv)
 		printf(" %d", numa_node_of_cpu(numa_mapping[i]));
 	printf("\n");
 
+	get_factor();
+
 	int par = 1;
 	int num_par = 17;
 	i = 0;
@@ -735,7 +769,7 @@ int main(int argc, char **argv)
 	if(TEST_MODE == 'T'){
 		printf("TIME:%.8f,", dt);
 		printf("\nTHROUGHPUT:%.3f\n,", (double)sum*2.0/dt/1000.0);
-		printf("TMP_AVG_ENQUEUE: %.10f ns ### TMP_AVG_DEQUEUE: %.10f ns\n", enq_tmp_avg*1000000000, deq_tmp_avg*1000000000);
+		printf("TMP_AVG_ENQUEUE: %.10f us ### TMP_AVG_DEQUEUE: %.10f us\n", enq_tmp_avg, deq_tmp_avg);
 	}
 	printf("MIN OP:%lld,", min);
 	printf("MAX OP:%lld,", max);
@@ -750,4 +784,23 @@ int main(int argc, char **argv)
 	
 
 	return 0;
+}
+
+void get_factor(){
+	unsigned long long exec_time;
+	unsigned long long tot_time;
+	unsigned long long seconds;
+	unsigned long long aus;
+	
+	if(conv == 0.0){
+		seconds=1;
+		exec_time = read_tsc_p();
+		sleep(seconds);
+
+		tot_time = read_tsc_p() - exec_time;
+		aus = ((int)(tot_time/1000.0/1000.0)/seconds);
+		conv = (double)(aus - aus % 100);
+	}
+
+	printf("Clocks per us: %f\n", conv);
 }
