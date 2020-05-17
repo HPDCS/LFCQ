@@ -300,6 +300,12 @@ void classic_hold(
 		unsigned long long start;
 		double elapsed, aus;
 
+		double accum_time_enq, accum_time_deq;
+		int accum_count_enq, accum_count_deq;
+
+		accum_time_enq = accum_time_deq = 0.0;
+		accum_count_enq = accum_count_deq = 0;
+
 #if DISTINCT_THREAD_TYPES
 		int ind = my_id / 2;
 		int i;
@@ -334,8 +340,17 @@ void classic_hold(
 					while((read_tsc_p() - start) < aus);
 				#endif
 				
-	    		deq_times[my_id] += elapsed;
-	    		deq_count[my_id]++;
+				accum_time_deq += elapsed;
+	    		accum_count_deq++;
+
+	    		if(accum_count_deq == THREADS){
+		    		deq_times[my_id] += accum_time_deq;
+		    		deq_count[my_id] += accum_count_deq;
+
+		    		accum_time_deq = 0.0;
+		    		accum_count_deq = 0;
+		    	}
+
 				if(timestamp != INFTY)
 					//local_min = timestamp;
 					BOOL_CAS_DOUBLE(&timestamps[ind], 0.0, timestamp);
@@ -351,8 +366,16 @@ void classic_hold(
 			                enqueue(my_id, seed, enq_tmp, current_dist);
 			                elapsed = (read_tsc_p() - start) / conv;
 
-				    		enq_times[my_id] += elapsed;
-				    		enq_count[my_id]++;
+			                accum_time_enq += elapsed;
+	    					accum_count_enq++;
+							
+							if(accum_count_enq == THREADS){
+					    		enq_times[my_id] += accum_time_enq;
+					    		enq_count[my_id] += accum_count_enq;
+
+					    		accum_time_enq = 0.0;
+		    					accum_count_enq = 0;
+					    	}
 
 				    		#if ENQUEUE_SLEEP
 				    			usleep(ENQUEUE_SLEEP);
@@ -378,8 +401,17 @@ void classic_hold(
 			timestamp = dequeue();
 			elapsed = (read_tsc_p() - start) / conv;
     		
-    		deq_times[my_id] += elapsed;
-    		deq_count[my_id]++;
+    		accum_time_deq += elapsed;
+    		accum_count_deq++;
+
+    		if(accum_count_deq == THREADS){
+	    		deq_times[my_id] += accum_time_deq;
+	    		deq_count[my_id] += accum_count_deq;
+
+	    		accum_time_deq = 0.0;
+	    		accum_count_deq = 0;
+	    	}
+
 
     		#if DEQUEUE_SLEEP	
 				usleep(DEQUEUE_SLEEP);
@@ -399,8 +431,16 @@ void classic_hold(
 			enqueue(my_id, seed, local_min, current_dist);
 			elapsed = (read_tsc_p() - start) / conv;
 
-    		enq_times[my_id] += elapsed;
-    		enq_count[my_id]++;
+			accum_time_enq += elapsed;
+	    	accum_count_enq++;
+							
+			if(accum_count_enq == THREADS){
+				enq_times[my_id] += accum_time_enq;
+				enq_count[my_id] += accum_count_enq;
+
+				accum_time_enq = 0.0;
+		    	accum_count_enq = 0;
+			}
 
     		# if ENQUEUE_SLEEP
 				usleep(ENQUEUE_SLEEP);
