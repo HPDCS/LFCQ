@@ -52,14 +52,18 @@ extern unsigned int MAX_THREAD_NUM;
 #define SEL_DW                      0	// se 1 allora lavoro differito solo se la destinazione si trova su un nodo numa remoto
 #define ENABLE_ENQUEUE_WORK			0   // abilita eventuale ulteriore lavoro svolto da un thread che esegue enqueue in DWQ
 #if GRAD_PIN
-#define NODE_HASH(bucket_id)        ((bucket_id) % (((THREADS-1)/CPU_PER_NODE)+1)/*_NUMA_NODES*/)	// per bucket fisico
+#define NUMA_NODES_IN_USE		(((THREADS-1)/CPU_PER_NODE)+1)
+//#define NODE_HASH(bucket_id)        ((bucket_id) % (((THREADS-1)/CPU_PER_NODE)+1)/*_NUMA_NODES*/)	// per bucket fisico
 #else
 	#if DISTINCT_THREAD_TYPES
-	#define NODE_HASH(bucket_id)        ((bucket_id) % ((THREADS < 4) ? 1 : 2))// per il caso dei thread distinti
+	#define NUMA_NODES_IN_USE	((THREADS < 4) ? 1 : 2)
+//	#define NODE_HASH(bucket_id)        ((bucket_id) % ((THREADS < 4) ? 1 : 2))// per il caso dei thread distinti
 	#else
-	#define NODE_HASH(bucket_id)        ((bucket_id) % ((THREADS < _NUMA_NODES) ? THREADS : _NUMA_NODES))
+	#define NUMA_NODES_IN_USE	((THREADS < _NUMA_NODES) ? THREADS : _NUMA_NODES)
+//	#define NODE_HASH(bucket_id)        ((bucket_id) % ((THREADS < _NUMA_NODES) ? THREADS : _NUMA_NODES))
 	#endif
 #endif
+#define NODE_HASH(bucket_id)	(bucket_id % NUMA_NODES_IN_USE)
 #define NID                         nid
 #define HEADS_ARRAY_SCALE			1
 

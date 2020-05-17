@@ -49,6 +49,7 @@ extern bool dw_enable;
 
 __thread nbc_bucket_node* prev = NULL;
 __thread unsigned long long prev_vb = -1;
+__thread unsigned int pro_numa_slots = 0;
 
 
 pkey_t pq_dequeue(void *q, void** result)
@@ -81,6 +82,17 @@ pkey_t pq_dequeue(void *q, void** result)
 	unsigned int dest_node;
 	bool remote = false;
 	#endif
+
+	if(!pro_numa_slots){
+		pro_numa_slots++;
+		while(NID + (pro_numa_slots * NUMA_NODES_IN_USE) < PRO_FLUSH_BUCKET_NUM){
+			//printf("%d\n", pro_numa_slots);
+			pro_numa_slots++;
+		}
+
+		pro_numa_slots += 1;	// perché posso andare oltre PRO_FLUSH_BUCKET_NUM
+		printf("TID %d: %d\n", TID, pro_numa_slots);
+	}
 
 	critical_enter();
 

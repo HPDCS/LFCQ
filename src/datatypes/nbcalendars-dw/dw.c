@@ -11,11 +11,34 @@ extern __thread unsigned long long enq_full;
 extern __thread unsigned long long enq_pro;
 extern __thread unsigned long long enq_ext;
 extern bool dw_enable;
+extern __thread unsigned int pro_numa_slots;
 
 __thread unsigned int dequeue_num = 0;	// per decidere quando fare il flush proattivo
 __thread dwb* last_bucket_p = NULL;		// cache dell'ultimo bucket ritrovato in estrazione
 
+__thread unsigned int pro_flush_cache = 0;
+__thread long long last_pro_index_vb = 0;
+__thread unsigned int curr_pro_index = 0;
+
 extern unsigned int THREADS;
+
+void clear_cache_bit(unsigned int index){
+	unsigned int bit = 0x1;
+
+	bit <<= index;
+	pro_flush_cache &= ~bit;
+}
+
+bool set_cache_bit(unsigned int index){
+	unsigned int bit = 0x1;
+	unsigned int prev_bit = 0x0;
+
+	bit <<= index;
+	prev_bit = pro_flush_cache & bit;
+	pro_flush_cache |= bit;
+
+	return (bool)prev_bit;
+}
 
 void block_ins(dwb* bucket_p){
 	int i, limit;
@@ -440,12 +463,33 @@ void dw_proactive_flush(void *tb, unsigned long long index_vb){
 	dwb *bucket_p = NULL;
 	unsigned long long index;
 	long int rand;
+	bool use_cache = (index_vb >= last_pro_index_vb);
 
 	lrand48_r(&seedP, &rand);
 	index = index_vb + rand % PRO_FLUSH_BUCKET_NUM + PRO_FLUSH_BUCKET_NUM_MIN;
 
 	// calcolo il numero del bucket in modo che sia locale a me
 	for(;NODE_HASH(hash_dw(index, h->size)/*index % h->size*/) != NID; index++);
+
+	if(use_cache){
+		while(index_vb > last_pro_index_vb + PRO_FLUSH_BUCKET_NUM_MIN){
+			last_pro_index_vb++;
+			if(NODE_HASH(hash_dw(last_pro_index_vb, h->size)/*index % h->size*/) == NID){
+				clear_cache_bit(curr_pro_index);
+				curr_pro_index = (curr_pro_index + 1) % pro_numa_slots;
+			}
+		}
+
+		if(set_cache_bit((curr_pro_index + (index - index_vb)) % pro_numa_slots))// ritorna quello precedente
+			return;
+	}else{
+		curr_pro_index = 0;
+		last_pro_index_vb = 0;
+		pro_flush_cache = 0;
+	}
+	
+//if(pro_flush_cache)
+//	printf("%d %x\n",pro_numa_slots,  pro_flush_cache);
 
 	bucket_p = list_remove(&str->heads[hash_dw(index, h->size)/*index % h->size*/], index, str->list_tail);
 

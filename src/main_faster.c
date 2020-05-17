@@ -130,7 +130,7 @@ volatile double *enq_times;
 volatile long long *enq_count;
 volatile long long *deq_count;
 volatile pkey_t *timestamps;
-double conv = 0.0;
+double conv = 1900.0;
 
 volatile unsigned int end_phase_1 = 0;
 volatile unsigned int end_phase_2 = 0;
