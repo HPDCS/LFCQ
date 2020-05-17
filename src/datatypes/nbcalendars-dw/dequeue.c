@@ -83,6 +83,7 @@ pkey_t pq_dequeue(void *q, void** result)
 	bool remote = false;
 	#endif
 
+	#if PRO_CACHE
 	if(!pro_numa_slots){
 		pro_numa_slots++;
 		while(NID + (pro_numa_slots * NUMA_NODES_IN_USE) < PRO_FLUSH_BUCKET_NUM){
@@ -91,8 +92,9 @@ pkey_t pq_dequeue(void *q, void** result)
 		}
 
 		pro_numa_slots += 1;	// perché posso andare oltre PRO_FLUSH_BUCKET_NUM
-		printf("TID %d: %d\n", TID, pro_numa_slots);
+		//printf("TID %d: %d\n", TID, pro_numa_slots);
 	}
+	#endif
 
 	critical_enter();
 

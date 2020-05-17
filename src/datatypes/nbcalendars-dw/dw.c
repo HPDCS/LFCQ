@@ -463,15 +463,14 @@ void dw_proactive_flush(void *tb, unsigned long long index_vb){
 	dwb *bucket_p = NULL;
 	unsigned long long index;
 	long int rand;
-	bool use_cache = (index_vb >= last_pro_index_vb);
 
 	lrand48_r(&seedP, &rand);
 	index = index_vb + rand % PRO_FLUSH_BUCKET_NUM + PRO_FLUSH_BUCKET_NUM_MIN;
 
 	// calcolo il numero del bucket in modo che sia locale a me
 	for(;NODE_HASH(hash_dw(index, h->size)/*index % h->size*/) != NID; index++);
-
-	if(use_cache){
+#if PRO_CACHE
+	if(index_vb >= last_pro_index_vb){
 		while(index_vb > last_pro_index_vb + PRO_FLUSH_BUCKET_NUM_MIN){
 			last_pro_index_vb++;
 			if(NODE_HASH(hash_dw(last_pro_index_vb, h->size)/*index % h->size*/) == NID){
@@ -480,17 +479,15 @@ void dw_proactive_flush(void *tb, unsigned long long index_vb){
 			}
 		}
 
-		if(set_cache_bit((curr_pro_index + (index - index_vb)) % pro_numa_slots))// ritorna quello precedente
+		if(set_cache_bit((curr_pro_index + (index - index_vb) / NUMA_NODES_IN_USE) % pro_numa_slots))// ritorna quello precedente
 			return;
 	}else{
 		curr_pro_index = 0;
 		last_pro_index_vb = 0;
 		pro_flush_cache = 0;
 	}
+#endif
 	
-//if(pro_flush_cache)
-//	printf("%d %x\n",pro_numa_slots,  pro_flush_cache);
-
 	bucket_p = list_remove(&str->heads[hash_dw(index, h->size)/*index % h->size*/], index, str->list_tail);
 
 	if(bucket_p == NULL || is_marked_ref(bucket_p->next, ANYB) || get_bucket_state(bucket_p->next) != INS || bucket_p->pro)

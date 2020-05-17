@@ -324,14 +324,15 @@ void classic_hold(
 				timestamp = dequeue();
 				elapsed = (read_tsc_p() - start) / conv;
 
-				if(DEQUEUE_SLEEP)	
+				#if DEQUEUE_SLEEP	
 					usleep(DEQUEUE_SLEEP);
+				#endif
 
-				if(DEQUEUE_BUSY_LOOP){
+				#if DEQUEUE_BUSY_LOOP
 					start = read_tsc_p();
 					aus = DEQUEUE_BUSY_LOOP * conv;
 					while((read_tsc_p() - start) < aus);
-				}
+				#endif
 				
 	    		deq_times[my_id] += elapsed;
 	    		deq_count[my_id]++;
@@ -353,14 +354,15 @@ void classic_hold(
 				    		enq_times[my_id] += elapsed;
 				    		enq_count[my_id]++;
 
-				    		if(ENQUEUE_SLEEP)
+				    		#if ENQUEUE_SLEEP
 				    			usleep(ENQUEUE_SLEEP);
+				    		#endif
 
-				    		if(ENQUEUE_BUSY_LOOP){
+				    		#if ENQUEUE_BUSY_LOOP
 								start = read_tsc_p();
 								aus = ENQUEUE_BUSY_LOOP * conv;
 								while((read_tsc_p() - start) < aus);
-							}
+							#endif
 
 			                break;
 			            }
@@ -379,14 +381,15 @@ void classic_hold(
     		deq_times[my_id] += elapsed;
     		deq_count[my_id]++;
 
-    		if(DEQUEUE_SLEEP)	
+    		#if DEQUEUE_SLEEP	
 				usleep(DEQUEUE_SLEEP);
+			#endif
 
-			if(DEQUEUE_BUSY_LOOP){
+			#if DEQUEUE_BUSY_LOOP
 				start = read_tsc_p();
 				aus = DEQUEUE_BUSY_LOOP * conv;
 				while((read_tsc_p() - start) < aus);
-			}
+			#endif
 
 			if(timestamp != INFTY)
 				local_min = timestamp;
@@ -399,14 +402,15 @@ void classic_hold(
     		enq_times[my_id] += elapsed;
     		enq_count[my_id]++;
 
-    		if(ENQUEUE_SLEEP)
+    		# if ENQUEUE_SLEEP
 				usleep(ENQUEUE_SLEEP);
+			#endif
 
-			if(ENQUEUE_BUSY_LOOP){
+			#if ENQUEUE_BUSY_LOOP
 				start = read_tsc_p();
 				aus = ENQUEUE_BUSY_LOOP * conv;
 				while((read_tsc_p() - start) < aus);
-			}
+			#endif
 						
 #endif
     		if(par_count == THREADS && TEST_MODE != 'T')

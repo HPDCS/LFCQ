@@ -67,7 +67,7 @@ extern unsigned int MAX_THREAD_NUM;
 #define NID                         nid
 #define HEADS_ARRAY_SCALE			1
 
-
+#define PRO_CACHE					1
 #define ENQ_FAILS_STAT				1
 
 // Stati bucket virtuale
