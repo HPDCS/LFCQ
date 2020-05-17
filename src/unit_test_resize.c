@@ -95,6 +95,7 @@ __thread int NID;
 __thread unsigned int num_op=0;
 
 int NUMA_NODES;
+int kill_all = 0;
 
 unsigned int *id;
 volatile long long *ops;

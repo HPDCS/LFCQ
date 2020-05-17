@@ -51,7 +51,6 @@ __thread nbc_bucket_node* prev = NULL;
 __thread unsigned long long prev_vb = -1;
 __thread unsigned int pro_numa_slots = 0;
 
-
 pkey_t pq_dequeue(void *q, void** result)
 {
 	nb_calqueue *queue = (nb_calqueue*)q;
@@ -83,7 +82,7 @@ pkey_t pq_dequeue(void *q, void** result)
 	bool remote = false;
 	#endif
 
-	#if PRO_CACHE
+	#if PRO_CACHE && !PRO_THREADS
 	if(!pro_numa_slots){
 		pro_numa_slots++;
 		while(NID + (pro_numa_slots * NUMA_NODES_IN_USE) < PRO_FLUSH_BUCKET_NUM){

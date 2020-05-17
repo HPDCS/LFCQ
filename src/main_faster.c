@@ -119,6 +119,7 @@ __thread int NID;
 __thread unsigned int num_op=0;
 
 int NUMA_NODES;
+int kill_all = 0;
 
 unsigned int *id;
 volatile long long *ops;
@@ -468,6 +469,7 @@ void classic_hold(
 		
 		if(end_test)
 		{
+			kill_all = 1;
 			if(TEST_MODE == 'T')
 			{	
 				ops_count[my_id]+=par_count;

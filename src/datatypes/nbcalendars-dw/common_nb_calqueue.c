@@ -26,6 +26,8 @@
 
 #include <stdlib.h>
 #include <limits.h>
+#include <pthread.h>
+#include <unistd.h>
 
 #include "common_nb_calqueue.h"
 
@@ -91,6 +93,46 @@ __thread unsigned long long remote_deq = 0ULL;
 #endif
 
 extern bool dw_enable;
+
+#if PRO_THREADS
+extern int kill_all;
+extern __thread unsigned int pro_numa_slots;
+
+struct data{
+	nb_calqueue *queue;
+	ptst_t *gc;
+	int nid;
+};
+
+void* pro_work(void *arg)
+{
+	struct data *d = (struct data*)arg;
+	table *h;
+	NID = d->nid;
+	ptst = d->gc;
+
+	pro_numa_slots++;
+	while(NID + (pro_numa_slots * NUMA_NODES_IN_USE) < PRO_FLUSH_BUCKET_NUM)
+		pro_numa_slots++;
+
+	pro_numa_slots += 1;	// perché posso andare oltre PRO_FLUSH_BUCKET_NUM
+
+	printf("Il mio NID: %d, queue %p\n", NID, d->queue->hashtable);
+
+	while(!dw_enable)
+		usleep(PRO_THREAD_US);
+
+	while(!kill_all){
+		h = d->queue->hashtable;
+		dw_proactive_flush(h, h->current>>32);
+		usleep(PRO_THREAD_US);
+	}
+
+	printf("thread %d morto\n",NID);
+
+	return NULL;
+}
+#endif
 
 /**
  * This function commits a value in the current field of a queue. It retries until the timestamp
@@ -1314,7 +1356,6 @@ table* read_table(table *volatile *curr_table_ptr, unsigned int threshold, unsig
 
 void std_free_hook(ptst_t *p, void *ptr){	free(ptr); }
 
-
 /**
  * This function create an instance of a NBCQ.
  *
@@ -1416,6 +1457,17 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 		res->hashtable->deferred_work->heads[i].valid_elem = VEC_SIZE;
 		res->hashtable->deferred_work->heads[i].indexes = 0;
 	}
+
+#if PRO_THREADS
+	pthread_t tid;
+	for(i = 0; i < NUMA_NODES_IN_USE; i++){
+			struct data *d = (struct data*)malloc(sizeof(struct data));
+			d->queue = res;
+			d->nid = i;
+			d->gc = ptst;
+			pthread_create(&tid, NULL, pro_work, d);
+	}
+#endif
 
 	return res;
 }

@@ -541,7 +541,7 @@ dwb* dw_dequeue(void *tb, unsigned long long index_vb){
 	if(bucket_p == NULL || is_marked_ref(bucket_p->next, ANYB))
 		return bucket_p;
 
-#if ENABLE_PROACTIVE_FLUSH/* && _NUMA_NODES == 1*/
+#if ENABLE_PROACTIVE_FLUSH && !PRO_THREADS/* && _NUMA_NODES == 1*/
 
 	dequeue_num++;
 
