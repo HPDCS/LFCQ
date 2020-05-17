@@ -10,6 +10,7 @@ extern __thread long remote_node_dequeue_exec;
 extern __thread unsigned long long enq_full;
 extern __thread unsigned long long enq_pro;
 extern __thread unsigned long long enq_ext;
+extern __thread unsigned long long pro_cache_usage;
 extern bool dw_enable;
 extern __thread unsigned int pro_numa_slots;
 
@@ -479,8 +480,10 @@ void dw_proactive_flush(void *tb, unsigned long long index_vb){
 			}
 		}
 
-		if(set_cache_bit((curr_pro_index + (index - index_vb) / NUMA_NODES_IN_USE) % pro_numa_slots))// ritorna quello precedente
+		if(set_cache_bit((curr_pro_index + (index - index_vb) / NUMA_NODES_IN_USE) % pro_numa_slots)){// ritorna quello precedente
+			pro_cache_usage++;
 			return;
+		}
 	}else{
 		curr_pro_index = 0;
 		last_pro_index_vb = 0;

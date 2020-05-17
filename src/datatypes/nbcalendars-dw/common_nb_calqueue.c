@@ -80,6 +80,7 @@ __thread unsigned long long list_search_steps_rem = 0;
 __thread unsigned long long nodes_per_bucket = 0;
 __thread unsigned long long compact_buckets = 0;
 __thread unsigned long long compact_buckets_pro = 0;
+__thread unsigned long long pro_cache_usage = 0;
 
 #if NUMA_DW || SEL_DW
 // statistica inserimenti nodi numa
@@ -1458,7 +1459,7 @@ void pq_report(int TID)
 		(float)compact_buckets 			/ (float)list_search_invoc_add,
 		(float)nodes_per_bucket 		/ (float)compact_buckets
 	);
-	printf("TID %d: elementi bloccati %d, cache hit %ld, tentativi estrazione bucket remoti %ld, estrazioni remote svolte %ld\n", TID, blocked, cache_hit, remote_node_dequeue, remote_node_dequeue_exec);
+	printf("TID %d: elementi bloccati %d, cache hit %ld, tentativi estrazione bucket remoti %ld, estrazioni remote svolte %ld, ricerche risparmiate in pro %llu \n", TID, blocked, cache_hit, remote_node_dequeue, remote_node_dequeue_exec, pro_cache_usage);
 	#if NUMA_DW || SEL_DW
 	printf("DWQNumaStat: LOC: enq %llu, deq %llu. REM: enq %llu deq %llu\n\n", local_enq, local_deq, remote_enq, remote_deq);
 	#endif
