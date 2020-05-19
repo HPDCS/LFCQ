@@ -68,7 +68,7 @@ extern unsigned int MAX_THREAD_NUM;
 #define HEADS_ARRAY_SCALE			1
 
 #define PRO_CACHE					1		// utilizzo della cache in flush proattivo
-#define PRO_THREADS 				1		// utilizzo dei thread appositi
+#define PRO_THREADS 				0		// utilizzo dei thread appositi
 #define PRO_THREAD_US				1		// attesa dei thread che si occupano del flush proattivo
 
 
