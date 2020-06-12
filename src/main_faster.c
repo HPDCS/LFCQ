@@ -53,7 +53,7 @@
 #define ENQUEUE_BUSY_LOOP	0	// microsecondi
 #define DEQUEUE_BUSY_LOOP	0	// microsecondi
 
-#define TAKE_TIMES			1   // faccio o no le misurazioni
+#define TAKE_TIMES			0   // faccio o no le misurazioni
 
 // suddivisione o meno del ruolo dei thread
 #define DISTINCT_THREAD_TYPES	0	// il ruolo dei thread è suddiviso
@@ -133,7 +133,7 @@ volatile double *enq_times;
 volatile long long *enq_count;
 volatile long long *deq_count;
 volatile pkey_t *timestamps;
-double conv = 1900.0;
+double conv = 1990.0;
 
 volatile unsigned int end_phase_1 = 0;
 volatile unsigned int end_phase_2 = 0;
@@ -632,11 +632,15 @@ int main(int argc, char **argv)
 
 	#if DISTINCT_THREAD_TYPES == 0
 	// occupazione distribuita
+		//num_numa_nodes = 8;
+		//num_cpus = 32;
+		//int node[] = {0,2,4,7,0,2,4,7,0,2,4,7,0,2,4,7,1,3,5,6,1,3,5,6,1,3,5,6,1,3,5,6};
 		int numa_count[num_numa_nodes];
 		for(i = 0; i < num_numa_nodes; i++)
 			numa_count[i] = 0;
 		for(i = 0; i < num_cpus; i++){
 			j = numa_node_of_cpu(i);// ottengo il nodo
+			//j = node[i];
 			numa_mapping[num_numa_nodes * numa_count[j] + j] = i;
 			numa_count[j]++;
 		}
@@ -657,6 +661,7 @@ int main(int argc, char **argv)
 	printf("CPU PIN");
 	for(i = 0; i < num_cpus; i++)
 		printf(" %d", numa_node_of_cpu(numa_mapping[i]));
+		//printf(" %d", numa_mapping[i]);
 	printf("\n");
 
 	get_factor();

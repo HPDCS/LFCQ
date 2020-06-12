@@ -47,8 +47,8 @@ extern __thread long estr;
 extern __thread long conflitti_estr;
 extern bool dw_enable;
 
-__thread nbc_bucket_node* prev = NULL;
-__thread unsigned long long prev_vb = -1;
+__thread nbc_bucket_node* prev_node = NULL;
+__thread unsigned long long prev_current = -1;
 __thread unsigned int pro_numa_slots = 0;
 
 pkey_t pq_dequeue(void *q, void** result)
@@ -145,8 +145,8 @@ begin:
 		#endif
 
 		// get the physical bucket
-		if(prev_vb == index && dw_enable && prev->next != NULL)
-			min = prev;
+		if(prev_current == current && dw_enable)
+			min = prev_node;
 		else
 			min = array + (index % (size));
 
@@ -244,8 +244,8 @@ begin:
 			// the node cannot be extracted && is marked as DEL => skip
 			if(is_marked(left_node_next, DEL))	continue;
 
-			prev_vb = index - 1;
-			prev = left_node;
+			prev_current = current;
+			prev_node = left_node;
 			
 			// the node has been extracted
 

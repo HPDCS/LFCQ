@@ -14,7 +14,7 @@ threads="32 30 28 26 24 22 20 18 16 14 12 10 8 6 4 2"
 #threads="32 28 24 20 16 12 8 4"
 iterations="1 2 3" # 3 4 5" # 6 7 8 9 10"
 distributions="E" #E" # U T N C"
-queue_sizes="190000 390000 1900000 3900000" #7900000"
+queue_sizes="200000 400000 2000000 4000000"
 usage_factor="0.33333333333333333333333"
 results="INT-results"
 
