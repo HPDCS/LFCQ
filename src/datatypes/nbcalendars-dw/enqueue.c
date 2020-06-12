@@ -174,10 +174,16 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 			return OK;
 		}
 */
+		int limit = 5;
 		if(res != OK){
 			// search the two adjacent nodes that surround the new key and try to insert with a CAS 
 			//res = search_and_insert(bucket, timestamp, 0, REMOVE_DEL_INV, new_node, &new_node);
+			//if(newIndex < limit)
+			//	printf("CQ %f\n", timestamp);
 			res = search_and_insert(b->cq_head, timestamp, 0, REMOVE_DEL_INV, new_node, &new_node);
+		}else{
+			//if(newIndex < limit)
+			//	printf("DWQ %f\n", timestamp);
 		}
 	}				
 

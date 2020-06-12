@@ -647,7 +647,7 @@ double compute_mean_separation_time(table* h,
 {
 	//printf("new size = %u, threashold = %u, elem_per_bucket = %u\n", new_size, threashold, elem_per_bucket);
 
-	unsigned int i = 0, index, k;
+	unsigned int j, i = 0, index, k;
 
 	table *new_h = h->new_table;
 	//nbc_bucket_node *array = h->array;
@@ -691,28 +691,30 @@ double compute_mean_separation_time(table* h,
 	//while(counter != sample_size && new_h->bucket_width == -1.0)
 	//{   
 
-		for (i = 0; i < size; i++)
+		for (i = 0; i < size && counter < sample_size; i++)
 		{
-			/*
+			
 			for(bucket_p = get_bucket_pointer(h->deferred_work->heads[i].next);
-				bucket_p != NULL && bucket_p != h->deferred_work->list_tail; 
+				bucket_p != NULL && bucket_p != h->deferred_work->list_tail && counter < sample_size; 
 				bucket_p = get_bucket_pointer(bucket_p->next))
-			{*/
-				bucket_p = get_bucket_pointer(h->deferred_work->heads[i].next);
-				if(bucket_p == h->deferred_work->list_tail || bucket_p->index_vb < ind)
-					continue;
-				ind = bucket_p->index_vb;
+			{
+				//bucket_p = get_bucket_pointer(h->deferred_work->heads[i].next);
+				//if(bucket_p == h->deferred_work->list_tail || bucket_p->index_vb < ind)
+				//	continue;
+				//ind = bucket_p->index_vb;
 
 				//printf("			%llu \n", bucket_p->index_vb);
-				
+
+				for(j = 0; j < bucket_p->valid_elem && counter < sample_size; j++){
+					printf("%f\n", bucket_p->dwv_sorted[j].timestamp);
+					sample_array[counter++] = bucket_p->dwv_sorted[j].timestamp;
+				}
+/*				
 				tmp = bucket_p->cq_head;
 				//tmp = array + (index + i) % size; 	//get the head of the bucket
 				tmp = get_unmarked(tmp->next);		//pointer to first node
 				
-				/*
-				lower_bound = (pkey_t)((index + i) * old_bw);
-				upper_bound = (pkey_t)((index + i + 1) * old_bw);
-				*/
+
 				lower_bound = (pkey_t)((bucket_p->index_vb) * old_bw);
 				upper_bound = (pkey_t)((bucket_p->index_vb + 1) * old_bw);
 
@@ -738,16 +740,16 @@ double compute_mean_separation_time(table* h,
 							//printf("lista %f\n", tmp_timestamp);
 							sample_array[++counter] = tmp_timestamp;
 						}
-						/*else if(GEQ(tmp_timestamp, upper_bound) && LESS(tmp_timestamp, min_next_round))
-						{
-								min_next_round = tmp_timestamp;
-								break;
-						}*/
+						//else if(GEQ(tmp_timestamp, upper_bound) && LESS(tmp_timestamp, min_next_round))
+						//{
+						//		min_next_round = tmp_timestamp;
+						//		break;
+						//}
 					}
 					tmp = get_unmarked(tmp_next);
 				}
-
-			//}
+					*/
+			}
 	
 		}
 		//if the calendar has no more elements I will go out
@@ -760,16 +762,20 @@ double compute_mean_separation_time(table* h,
 
 	if( counter < sample_size)
 		sample_size = counter;
-
-	for(i = 2; i<=sample_size;i++)
-		average += sample_array[i] - sample_array[i - 1];
-    
+//printf("%f\n", average);
+	for(i = 1; i<sample_size;i++){
+//		if (average == 0.0 || (sample_array[i] - sample_array[i - 1]) < (average / i)){
+//		printf("%d , %f\n", i, sample_array[i]);
+		average += (sample_array[i] - sample_array[i - 1]);
+//	}
+	}
+  //  printf("%f\n", average);
 		// Get the average
 	average = average / (double)(sample_size - 1);
-    
-	int j=0;
+    //printf("%f\n", average);
+	j=0;
 	// Recalculate ignoring large separations
-	for (i = 2; i <= sample_size; i++) {
+	for (i = 1; i < sample_size; i++) {
 		if ((sample_array[i] - sample_array[i - 1]) < (average * 2.0))
 		{
 			newaverage += (sample_array[i] - sample_array[i - 1]);
@@ -778,7 +784,7 @@ double compute_mean_separation_time(table* h,
 	}
 //printf("%f %f %d %d\n\n\n\n", average, newaverage, j, sample_size);
     //double epb = h->pad;
-    newaverage = (newaverage / j) * elem_per_bucket *BW_SCALING; //elem_per_bucket; /* this is the new width */
+    newaverage = (newaverage / j)/* * elem_per_bucket *BW_SCALING*/; //elem_per_bucket; /* this is the new width */
 	//printf("OLD %f NEW %f\n", (double)elem_per_bucket, (double)epb );    
 	// Compute new width
 	//newaverage = (newaverage / j) * (concurrent_enqueue+concurrent_dequeue) *3.5; //elem_per_bucket;	/* this is the new width */
