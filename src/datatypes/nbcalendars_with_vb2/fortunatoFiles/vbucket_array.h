@@ -1,40 +1,17 @@
-/*****************************************************************************
-*
-*	This file is part of NBCQ, a lock-free O(1) priority queue.
-*
-*   Copyright (C) 2019, Romolo Marotta
-*
-*   This program is free software: you can redistribute it and/or modify
-*   it under the terms of the GNU General Public License as published by
-*   the Free Software Foundation, either version 3 of the License, or
-*   (at your option) any later version.
-*
-*   This is distributed in the hope that it will be useful,
-*   but WITHOUT ANY WARRANTY; without even the implied warranty of
-*   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-*   GNU General Public License for more details.
-*
-*   You should have received a copy of the GNU General Public License
-*   along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*
-******************************************************************************/
-/*
- *  bucket.h
- *
- *  Author: Romolo Marotta
- */
-
-#ifndef VBUCKET_H_
-#define VBUCKET_H_
+#ifndef VBUCKET_ARRAY_H
+#define VBUCKET_ARRAY_H
 
 #include <stdlib.h>
 #include <immintrin.h>
 
-#include "../../key_type.h"
-#include "../../utils/rtm.h"
-#include "../../gc/gc.h"
-#include "../../utils/hpdcs_utils.h"
-#include "nb_lists_defs.h"
+#include "../../../key_type.h"
+#include "../../../utils/rtm.h"
+#include "../../../gc/gc.h"
+#include "../../../utils/hpdcs_utils.h"
+#include "../mm_vbucket.h"
+#include "../cache.h"
+#include "../nb_lists_defs.h"
+#include "./array.h"
 
 extern __thread ptst_t *ptst;
 extern int gc_aid[];
@@ -45,15 +22,12 @@ extern __thread struct drand48_data seedT;
 extern __thread unsigned int tid;
 extern __thread int nid;
 
-//#define VALIDATE_BUCKETS
-
 #define GC_BUCKETS   0
 #define GC_INTERNALS 1
 
 #define RTM_RETRY 32
 #define RTM_FALLBACK 1
 #define RTM_BACKOFF 1L
-
 
 #define NOOP			0ULL
 #define CHANGE_EPOCH	1ULL
@@ -70,19 +44,19 @@ extern __thread int nid;
 
 #define get_op_type(x) ((x) >> 32)
 
-
 #define BACKOFF_LOOP() {\
 long rand;\
 long fallback;\
     lrand48_r(&seedT, &rand);\
-    fallback = (rand & RTM_BACKOFF) /* + nid*350*/;\
-    /*if(fallback & 1L)*/ while(fallback--!=0) _mm_pause();\
+    fallback = (rand & RTM_BACKOFF) /** + nid*350*/;\
+    /**if(fallback & 1L)*/ while(fallback--!=0) _mm_pause();\
 }
 
-typedef struct __node_t node_t;
-typedef struct __bucket_t bucket_t;
 typedef unsigned int sl_key_t;
 
+/**
+ *  Struct that define a list of buckets
+ */ 
 typedef struct listNode_t {
 	sl_key_t key;
 	int topLevel;
@@ -99,9 +73,10 @@ typedef struct skipList_t {
 
 typedef ListNode* markable_ref;
 
-
-struct __node_t
-{
+/**
+ *  Struct that define a node
+ */ 
+typedef struct __node_t {
 	void *payload;						// 8
 	pkey_t timestamp;  					//  
 	char __pad_1[8-sizeof(pkey_t)];		// 16
@@ -110,13 +85,12 @@ struct __node_t
 	void * volatile replica;			// 40
 	node_t * volatile next;				// 32
 	node_t * volatile upper_next[VB_NUM_LEVELS-1];	// 64
-};
+} node_t;
 
 /**
  *  Struct that define a bucket
  */ 
-struct __bucket_t
-{
+typedef struct __bucket_t {
 	volatile unsigned long long extractions;	//  8
 	char __pad_2[56];
 	unsigned int epoch;				
@@ -129,18 +103,24 @@ struct __bucket_t
 	node_t * volatile pending_insert;		// 40
 	bucket_t * volatile next;			// 48
 	volatile long hash;				// 64
-//-----------------------------
+	//-----------------------------
 	node_t head;					// 32
 	char __pad_3[64-sizeof(node_t)];
-//-----------------------------
+	//-----------------------------
+	// Fortunato
+	arrayNodes_t* array;
+	arrayNodes_t* arrayOrdered;
+	unsigned long long indexWrite;
+	unsigned long long indexRead;
+	//-----------------------------
   #ifndef RTM
 	pthread_spinlock_t lock;
   #endif
-};
+} bucket_t;
 
-#include "mm_vbucket.h"
-#include "cache.h"
-
+/**
+* Function that do a validation of the bucket
+*/
 static inline void validate_bucket(bucket_t *bckt){
   #ifdef VALIDATE_BUCKETS 
 	node_t *ln;
@@ -151,8 +131,10 @@ static inline void validate_bucket(bucket_t *bckt){
   #endif
 }
 
-unsigned long tacc_rdtscp(int *chip, int *core)
-{
+/**
+* Function that reads the current value of the processor's timestamp counter
+*/
+unsigned long tacc_rdtscp(int *chip, int *core){
     unsigned long a,d,c;
     __asm__ volatile("rdtscp" : "=a" (a), "=d" (d), "=c" (c));
     *chip = (c & 0xFFF000)>>12;
@@ -160,9 +142,8 @@ unsigned long tacc_rdtscp(int *chip, int *core)
     return ((unsigned long)a) | (((unsigned long)d) << 32);;
 }
 
-
+// TODO: TO DELETE BECAUSE UNUSED FUNCTION
 static inline void acquire_node(volatile int *socket){
-//return;
 	int core, l_nid;
 	tacc_rdtscp(&l_nid, &core);
 //	if(nid != l_nid) printf("NID: %d  LNID: %d\n", nid, l_nid);
@@ -185,83 +166,85 @@ static inline void acquire_node(volatile int *socket){
 	}
 }
 
-
+/**
+* Function that freeze the bucket, compute eventual insert and then change the bucket epoch
+*/
 static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long old_extractions){
-	unsigned int present	=	0;
+	unsigned int present = 0;
 	unsigned long long toskip;
-	node_t *tail  = bckt->tail;
-	node_t *left  = &bckt->head;
-	node_t *curr  = left;
-	node_t *head  = curr;
-	node_t *new;
+	node_t *tail = bckt->tail;
+	node_t *left = &bckt->head;
+	node_t *curr = left;
+	node_t *head = curr;
+	node_t *newN;
 	bucket_t *res;
 	bucket_t *old_next = bckt->next;
 	bool suc = false;
 
 	// phase 2: check if there is a pending op
 	if(bckt->pending_insert != ((void*)1ULL) ){
-		toskip			= get_cleaned_extractions(old_extractions);
-		new   = node_alloc();
-		new->timestamp  = bckt->pending_insert->timestamp;
-		new->payload	= bckt->pending_insert->payload;
-		new->hash		= bckt->pending_insert->hash;
+		toskip = get_cleaned_extractions(old_extractions);
+		newN = node_alloc();
+		newN->timestamp  = bckt->pending_insert->timestamp;
+		newN->payload	= bckt->pending_insert->payload;
+		newN->hash		= bckt->pending_insert->hash;
 		
 		// check if there is space in the bucket
-	  	while(toskip > 0ULL && curr != tail){
-	  		curr = curr->next;
-	  		toskip--;
-	  	}
+		while(toskip > 0ULL && curr != tail){
+			curr = curr->next;
+			toskip--;
+		}
 		head  = curr;
 
-	  	// there is no space so the whoever has tried a fallback has to retry
-	  	if(curr == tail && toskip >= 0ULL) 	node_unsafe_free(new);
-	  	else{
-		  	// Connect...
+		// there is no space so the whoever has tried a fallback has to retry
+		if(curr == tail && toskip >= 0ULL) 	node_unsafe_free(newN);
+		else{
+			// connect...
 			do{
-	  			new->tie_breaker = 1;
-	  			left = curr = head;
-			  	curr = curr->next;
-			  	while(curr->timestamp <= new->timestamp){
-	            	// keep memory if it was inserted to release memory
-	                if(curr->timestamp == new->timestamp && curr->hash == new->hash) present = 1;
+					newN->tie_breaker = 1;
+					left = curr = head;
+					curr = curr->next;
+					while(curr->timestamp <= newN->timestamp){
+						// keep memory if it was inserted to release memory
+						if(curr->timestamp == newN->timestamp && curr->hash == newN->hash) present = 1;
+						left = curr;
+						curr = curr->next;
+					}
+					if(left->timestamp == newN->timestamp)	newN->tie_breaker+= left->tie_breaker;
+					newN->next = curr;
+			}while(!present && !__sync_bool_compare_and_swap(&left->next, curr, newN));
+			// CAS has done insert of the new node
 
-			  		left = curr;
-			  		curr = curr->next;
-
-			  	}
-
-			  	if(left->timestamp == new->timestamp)	new->tie_breaker+= left->tie_breaker;
-
-			  	new->next = curr;
-			}while(!present && !__sync_bool_compare_and_swap(&left->next, curr, new));
-
-			if(present) node_unsafe_free(new);
+			if(present) node_unsafe_free(newN);
 			// now either it was present or i'm inserted so communicate that the op has compleated
 		}
 	}
 	
 	// phase 3: replace the bucket for new epoch
 	res = bucket_alloc(bckt->tail);
-    res->extractions 		= get_cleaned_extractions(old_extractions);
-    res->epoch				= bckt->op_descriptor & MASK_EPOCH;
-    res->epoch				= res->epoch < bckt->epoch ? bckt->epoch :  res->epoch;
-    res->index				= bckt->index;
-    res->type				= bckt->type;
+	res->extractions = get_cleaned_extractions(old_extractions);
+	res->epoch = bckt->op_descriptor & MASK_EPOCH;
+	res->epoch = res->epoch < bckt->epoch ? bckt->epoch :  res->epoch;
+	res->index = bckt->index;
+	res->type	= bckt->type;
 
-    res->head.payload		= NULL;
-    res->head.timestamp		= MIN;
-    res->head.tie_breaker	= 0U;
-    res->head.next			= bckt->head.next;
-       
-    do{
+	res->head.payload = NULL;
+	res->head.timestamp	= MIN;
+	res->head.tie_breaker	= 0U;
+	res->head.next = bckt->head.next;
+			
+	do{
 		old_next = bckt->next;
 		res->next = old_next;
 		suc=false;
-	}while(is_marked(old_next, VAL) && !(suc = __sync_bool_compare_and_swap(&(bckt)->next, old_next, get_marked(res, DEL))));
-    atomic_bts_x64(&bckt->extractions, DEL_BIT_POS);
-
-    old_next = get_unmarked(bckt->next); 
-    if(old_next->index == bckt->index) update_cache(old_next);
+	}while(is_marked(old_next, VAL) && 
+		!(suc = __sync_bool_compare_and_swap(&(bckt)->next, old_next, get_marked(res, DEL))));
+	// With the CAS in the while condition I mark old bucket as delete and substitute it with the new bucket
+	atomic_bts_x64(&bckt->extractions, DEL_BIT_POS);
+	old_next = get_unmarked(bckt->next);
+	
+	// TODO: TO DELETE becuse cache
+	// if(old_next->index == bckt->index) update_cache(old_next);
 
 	if(suc) return;
 
@@ -272,7 +255,9 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 __thread unsigned long long count_epoch_ops = 0ULL;
 __thread unsigned long long rq_epoch_ops = 0ULL;
 __thread unsigned long long bckt_connect_count = 0ULL;
-
+/**
+* Function that publish an operation to execute on a bucket
+*/
 static void post_operation(bucket_t *bckt, unsigned long long ops_type, unsigned int epoch, node_t *node){
 	unsigned long long pending_op_descriptor = bckt->op_descriptor;
 	unsigned long long pending_op_type	  = get_op_type(pending_op_descriptor);
@@ -283,64 +268,74 @@ static void post_operation(bucket_t *bckt, unsigned long long ops_type, unsigned
 	__sync_bool_compare_and_swap(&bckt->op_descriptor, NOOP, pending_op_descriptor);
 }
 
-
-
+/**
+* Function that executes an operation on the passed bucket
+*/
 static inline void execute_operation(bucket_t *bckt){
 	unsigned long long pending_op_type = get_op_type(bckt->op_descriptor);
 	unsigned long long old_extractions = bckt->extractions;
 	unsigned long long new_extractions = 0ULL;
 	bucket_t *old_next = NULL;
 
+	// No operation to execute
 	if(pending_op_type == NOOP) return;
+	// A DELETE operation to execute
 	else if(pending_op_type == DELETE){
-        if(!is_freezed_for_del(old_extractions)) 		atomic_bts_x64(&bckt->extractions, DEL_BIT_POS);
-        if(is_marked(bckt->next, VAL))		 			atomic_bts_x64(&bckt->next, 0);
+		if(!is_freezed_for_del(old_extractions))
+			atomic_bts_x64(&bckt->extractions, DEL_BIT_POS);
+		if(is_marked(bckt->next, VAL))
+			atomic_bts_x64(&bckt->next, 0);
 	}
+	// A SET_AS_MOV operation to execute
 	else if(pending_op_type == SET_AS_MOV){
 		while(!is_freezed(old_extractions)){
+			// Gets the count of the extract by freezing which will become the new value of the extract begins
 			new_extractions = get_freezed(old_extractions, FREEZE_FOR_MOV);
 			if(__sync_bool_compare_and_swap(&bckt->extractions, old_extractions, new_extractions)) 	
 				break;
 			old_extractions = bckt->extractions;
 		}
-	
-		do{ old_next = bckt->next;
+		do{
+			old_next = bckt->next;
 		}while(is_marked(old_next, VAL) && !__sync_bool_compare_and_swap(&bckt->next, old_next, get_marked(old_next, MOV)));
+		// With the CAS in the while condition, I mark old bucket as delete and substitute it with the new bucket
 
 	}
+	// A CHANGE_EPOCH operation to execute
 	else if(pending_op_type == CHANGE_EPOCH){
 		while(!is_freezed(old_extractions)){
+			// Gets the count of the extract by freezing which will become the new value of the extract begins
 			new_extractions = get_freezed(old_extractions, FREEZE_FOR_EPO);
 			old_extractions = __sync_val_compare_and_swap(&bckt->extractions, old_extractions, new_extractions);
 		}
-
 		if(bckt->pending_insert == NULL) __sync_bool_compare_and_swap(&bckt->pending_insert, NULL, (void*)1ULL);
+		// Continue ...
 		complete_freeze_for_epo(bckt, old_extractions);
 	}
 	else 
 		assert(0);
-
 }
 
-
-
-
+/**
+* Function that try to terminate the SET_AS_MOV operation
+*/
 static inline void finalize_set_as_mov(bucket_t *bckt){
 	bucket_t *old_next = NULL;
 
 	if(is_freezed_for_mov(bckt->extractions)) atomic_bts_x64(&bckt->extractions, DEL_BIT_POS);
-
     do{
-            old_next = bckt->next;
+			old_next = bckt->next;
     }while(is_marked(old_next, MOV)  && !__sync_bool_compare_and_swap(&bckt->next, old_next, get_marked(get_unmarked(old_next), DEL)));
+		// With the CAS in the while condition I mark old bucket as delete
 }
 
 
 __thread unsigned long long fallback_insertions = 0ULL;
 __thread pkey_t last_key_fall = 0;
 __thread unsigned long long counter_last_key_fall = 0ULL;
-
-
+/**
+* Function that implements the fallback path of bucket connection
+*/
 static inline int bucket_connect_fallback(bucket_t *bckt, node_t *node, unsigned int epoch){
 	fallback_insertions++;
 	int res = ABORT;
@@ -348,6 +343,7 @@ static inline int bucket_connect_fallback(bucket_t *bckt, node_t *node, unsigned
 	post_operation(bckt, CHANGE_EPOCH, epoch, node);
 	execute_operation(bckt);
 
+	// Check to know if the operation executed is what I have requested rows above
 	if(get_op_type(bckt->op_descriptor) == CHANGE_EPOCH && bckt->pending_insert == node) res = OK;
 
 	if(last_key_fall != node->timestamp){
@@ -362,7 +358,9 @@ static inline int bucket_connect_fallback(bucket_t *bckt, node_t *node, unsigned
 	return res;
 }
 
-
+/**
+ * Variables for statistics
+*/
 __thread unsigned long long acc_contention = 0ULL;
 __thread unsigned long long cnt_contention = 0ULL;
 __thread unsigned long long min_contention = -1LL;
@@ -372,13 +370,15 @@ __thread pkey_t last_key = 0;
 __thread unsigned long long counter_last_key = 0ULL;
 
 
-
-
+/**
+* Function that increase the epoch of the passed bucket
+*/
 static inline bucket_t* increase_epoch(bucket_t *bckt, unsigned int epoch){
 	unsigned int __status,  original_index = bckt->index;
 	bucket_t *res = bckt; 
 
 	count_epoch_ops++;
+	// Try change the epoch using a transaction
 	if((__status = _xbegin ()) == _XBEGIN_STARTED)
 	{
 		if(is_freezed(bckt->extractions)){ TM_ABORT(0xf2);}
@@ -386,12 +386,14 @@ static inline bucket_t* increase_epoch(bucket_t *bckt, unsigned int epoch){
 		if(bckt->epoch < epoch) bckt->epoch = epoch;
 		TM_COMMIT();
 	}
+	// Fallback path using atomic ops
 	else{
 		post_operation(bckt, CHANGE_EPOCH, epoch, NULL);
 		execute_operation(bckt);
 		res = get_unmarked(bckt->next);
 		rq_epoch_ops++;
 		
+		// Check to verify if I have executed the operation requested rows above
 		if(get_op_type(bckt->op_descriptor) != CHANGE_EPOCH) return NULL;
 		if(res->index != original_index) return NULL;
 	}
@@ -399,6 +401,9 @@ static inline bucket_t* increase_epoch(bucket_t *bckt, unsigned int epoch){
 	return res;
 }
 
+/**
+* Function that goes over the extracted nodes modifing the passed parameters
+*/
 unsigned long long skip_extracted(node_t *tail, node_t **curr, unsigned long long toskip){
 	unsigned long long position = 0;  
 	while(toskip > 0ULL && *curr != tail){
@@ -410,7 +415,9 @@ unsigned long long skip_extracted(node_t *tail, node_t **curr, unsigned long lon
   	return position;
 }
 
-
+/**
+ * Function that obtain the position where to insert the new node
+*/
 unsigned long long fetch_position(node_t **curr, node_t **left, pkey_t timestamp, int level){
 	unsigned long long position = 0;
 	  	while((*curr)->timestamp <= timestamp){
@@ -429,16 +436,19 @@ unsigned long long fetch_position(node_t **curr, node_t **left, pkey_t timestamp
 __thread unsigned long long rtm_skip_insertion = 0;
 __thread unsigned long long accelerated_searches = 0;
 __thread unsigned long long searches_count = 0;
-
+/**
+ * Function that inserts a new node in the list stored in the bucket
+*/
 int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, void* payload, unsigned int epoch){
 	bckt_connect_count++;
 
+// TODO: To DELETE the row below
 //	acquire_node(&bckt->socket);
 
-    while(bckt != NULL && bckt->epoch < epoch){
-    	bckt = increase_epoch(bckt, epoch);
-    } 
-    if(bckt == NULL) return ABORT;
+	while(bckt != NULL && bckt->epoch < epoch){
+		bckt = increase_epoch(bckt, epoch);
+	} 
+	if(bckt == NULL) return ABORT;
 
 	node_t *tail  = bckt->tail;
 	node_t *left  = &bckt->head;
@@ -452,19 +462,22 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	unsigned int mask = 1;
 	int res = OK;
 	int level = 0;
-    long long contention = 0; //__sync_fetch_and_add(&bckt->pad3, 1LL);
-    acc_contention+=contention;
-    cnt_contention++;
-    min_contention = contention <= min_contention ? contention : min_contention;
-    max_contention = contention >= max_contention ? contention : max_contention;
+	long long contention = 0;
+	acc_contention+=contention;
+	cnt_contention++;
+	min_contention = contention <= min_contention ? contention : min_contention;
+	max_contention = contention >= max_contention ? contention : max_contention;
+    // FIXME: Romolo, chiedere per la alloc by index
+	node_t *newN   = node_alloc(); //node_alloc_by_index(bckt->index);
+	newN->timestamp = timestamp;
+	newN->payload	= payload;
 
-	node_t *new   = node_alloc(); //node_alloc_by_index(bckt->index);
-	new->timestamp = timestamp;
-	new->payload	= payload;
-
+	// Check the validity of the bucket
 	validate_bucket(bckt);
+
 	int i = 0;
-	long rand, record = 0;  lrand48_r(&seedT, &rand);
+	long rand, record = 0;
+	lrand48_r(&seedT, &rand);
 	for(i=0;i<VB_NUM_LEVELS-1;i++){
 		if(rand & 1) level++;
 		else break;
@@ -473,7 +486,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	assert(level <= VB_MAX_LEVEL);
 
   begin:
-  	__global_try++;
+	__global_try++;
 	curr = left = &bckt->head;
 	PREFETCH(curr->next, 0);
 	if(last_key != timestamp){
@@ -481,17 +494,31 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 		counter_last_key =0 ;
 	}
 	counter_last_key++;
-	new->tie_breaker = 1;
-  	extracted 	= bckt->extractions;
+	newN->tie_breaker = 1;
+	// Get amount of extractions, important
+	extracted = bckt->extractions;
 
-  	if(get_op_type(bckt->op_descriptor) == SET_AS_MOV) 	{node_unsafe_free(new); res = MOV_FOUND; goto out;	}
-  	if(get_op_type(bckt->op_descriptor) != NOOP) 		{node_unsafe_free(new); res = ABORT; 	 goto out; 	}
+  // If the request operation is another type then I return and notify that
+	if(get_op_type(bckt->op_descriptor) == SET_AS_MOV){
+		node_unsafe_free(newN);
+		res = MOV_FOUND;
+		goto out;	
+	}
 
-  	toskip		= extracted;
+	if(get_op_type(bckt->op_descriptor) != NOOP){
+		node_unsafe_free(newN);
+		res = ABORT;
+		goto out;
+	}
+
+  // The amount of elements to skip are equal to the extracted value
+  toskip = extracted;
+    
+  // Set the level at 0 if we have been extractions
 	record = extracted == 0;
 	if(!record) level  = 0;
 	
-	/*
+	/** TODO: TO DELETE, the same code of skip_extracted
   	position = 0;
 	while(toskip > 0ULL && curr != tail){
   		curr = curr->next;
@@ -507,24 +534,28 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 
 	toskip -= position;
 	searches_count++;
-  	if(curr == tail && toskip >= 0ULL) {
+	// In case I have arrived at the end of list and I need to go along
+	// so this means that the bucket is empty then I mark it as deleted
+	// and return an abort
+	if(curr == tail && toskip >= 0ULL) {
 		post_operation(bckt, DELETE, 0ULL, NULL);
-  		node_unsafe_free(new);
-  		res = ABORT; 
-  		goto out;
-  	}
+		node_unsafe_free(newN);
+		res = ABORT; 
+		goto out;
+	}
 
-
+	// If the skiplist is disabled or if there were any extractions 
+	// previously so I insert the event in the lowest level
 	if(DISABLE_SKIPLIST || !record){
 		left = curr;
 		curr = curr->next;
+		// Level is set to 0 (the lowest)
 		position += fetch_position(&curr, &left, timestamp, 0);
 		scan_list_length_en+=position;
-	}
-	else{
+	}else{
+		// Insert using the skiplist ...
 		node_t *preds[VB_NUM_LEVELS], *succs[VB_NUM_LEVELS];
 		accelerated_searches++;
-
 
 		for(i=VB_MAX_LEVEL;i>=0;i--){
 			preds[i] = curr;
@@ -532,8 +563,8 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 			scan_list_length_en+=fetch_position(&succs[i], &preds[i], timestamp, i);
 			curr 	 = preds[i];
 		}
-// TODO: TO DELETE, unrolled loop
-/*
+// TODO: TO DELETE, unrolled of above loop
+/**
 		preds[3] = curr;
 		succs[3] = curr->upper_next[2];
 		scan_list_length_en+=fetch_position(&succs[3], &preds[3], timestamp, 3);
@@ -559,21 +590,23 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 
 
 		if(level > 0){
-				if(preds[0]->timestamp == timestamp) new->tie_breaker+= preds[0]->tie_breaker;
+			// FIXME: Devo farlo sempre su preds[0] questo check oppure doveva essere left
+			if(preds[0]->timestamp == timestamp) newN->tie_breaker+= preds[0]->tie_breaker;
 
-				for(i=0;i<VB_NUM_LEVELS;i++)
-					new->upper_next[i-1] = level >= i ? succs[i] : NULL;
+			for(i=0;i<VB_NUM_LEVELS;i++)
+				newN->upper_next[i-1] = level >= i ? succs[i] : NULL;
 
-/*				if(level >= 0)			new->upper_next[-1]	= succs[0];
-				if(level >= 1) 			new->upper_next[ 0] 	= succs[1];
-				if(level >= 2) 			new->upper_next[ 1] 	= succs[2];
-				if(level >= 3) 			new->upper_next[ 2] 	= succs[3];
+			// TODO: TO DELETE, unrolled above loop
+/**				if(level >= 0)			newN->upper_next[-1]	= succs[0];
+				if(level >= 1) 			newN->upper_next[ 0] 	= succs[1];
+				if(level >= 2) 			newN->upper_next[ 1] 	= succs[2];
+				if(level >= 3) 			newN->upper_next[ 2] 	= succs[3];
 */
 
-/*										new->next 			= succs[0];
-				if(level >= 1) 			new->upper_next[0] 	= succs[1];
-				if(level >= 2) 			new->upper_next[1] 	= succs[2];
-				if(level >= 3) 			new->upper_next[2] 	= succs[3];
+/**										newN->next 			= succs[0];
+				if(level >= 1) 			newN->upper_next[0] 	= succs[1];
+				if(level >= 2) 			newN->upper_next[1] 	= succs[2];
+				if(level >= 3) 			newN->upper_next[2] 	= succs[3];
 */
 
 				__local_try=0;
@@ -583,19 +616,19 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 
 				BACKOFF_LOOP();
 
-			    if(bckt->extractions != 0)  							{rtm_debug++;goto begin;}
+				if(bckt->extractions != 0){ rtm_debug++; goto begin; }
 
 				for(i=0;i<VB_NUM_LEVELS;i++)
-					if(level >= i && preds[i]->upper_next[i-1] != succs[i])	{rtm_nested++;goto begin;}
+					if(level >= i && preds[i]->upper_next[i-1] != succs[i]){ rtm_nested++; goto begin; }
 
-/*			    
+/**			    
 				if(				 preds[0]->next 	     != succs[0])	{rtm_nested++;goto begin;}
 				if(level >= 1 && preds[1]->upper_next[0] != succs[1])	{rtm_nested++;goto begin;}
 				if(level >= 2 && preds[2]->upper_next[1] != succs[2])	{rtm_nested++;goto begin;}
 				if(level >= 3 && preds[3]->upper_next[2] != succs[3])	{rtm_nested++;goto begin;}
 */
 
-/*
+/**
 			  	for(i=0;i<level;i++)
 					if(preds[i+1]->upper_next[i] != succs[i+1])	{rtm_nested++;goto begin;}
 */
@@ -604,93 +637,85 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 				++rtm_prova;
 				__status = 0;
 
-				assert(new != NULL && preds[0]->next != NULL && succs[0] != NULL);
-				if((__status = _xbegin ()) == _XBEGIN_STARTED)
-				{
-				    if(bckt->extractions != 0)  							{ TM_ABORT(0xf2);}
+				assert(newN != NULL && preds[0]->next != NULL && succs[0] != NULL);
+				if((__status = _xbegin ()) == _XBEGIN_STARTED){
+					// If it was done an extraction then abort
+					if(bckt->extractions != 0) TM_ABORT(0xf2);
 
-                                for(i=0;i<VB_NUM_LEVELS;i++)
-                                        if(level >= i && preds[i]->upper_next[i-1] != succs[i])				{ TM_ABORT(0xf1);}
+					// If there is some difference from previous structure state then abort
+					for(i=0;i<VB_NUM_LEVELS;i++)
+						if(level >= i && preds[i]->upper_next[i-1] != succs[i]){ TM_ABORT(0xf1);}
 // TODO: DELETE
-/*					if(				 preds[0]->next 	     != succs[0])	{ TM_ABORT(0xf1);}
+/**					if(				 preds[0]->next 	     != succs[0])	{ TM_ABORT(0xf1);}
 					if(level >= 1 && preds[1]->upper_next[0] != succs[1])	{ TM_ABORT(0xf1);}
 					if(level >= 2 && preds[2]->upper_next[1] != succs[2])	{ TM_ABORT(0xf1);}
 					if(level >= 3 && preds[3]->upper_next[2] != succs[3])	{ TM_ABORT(0xf1);}
 */
-
+				// Insert the new node in the lost
 				for(i=0;i<VB_NUM_LEVELS;i++)
-                                       if(level >= i) preds[i]->upper_next[i-1] = new;
+					if(level >= i) preds[i]->upper_next[i-1] = newN;
 
 // TODO: DELETE
-/*					if(level >= 0 ) preds[0]->upper_next[-1]= new; //						preds[0]->next 			= new;
-					if(level >= 1 ) preds[1]->upper_next[0] = new;
-					if(level >= 2 ) preds[2]->upper_next[1] = new;
-					if(level >= 3 ) preds[3]->upper_next[2] = new;
+/**					if(level >= 0 ) preds[0]->upper_next[-1]= newN; //						preds[0]->next 			= newN;
+					if(level >= 1 ) preds[1]->upper_next[0] = newN;
+					if(level >= 2 ) preds[2]->upper_next[1] = newN;
+					if(level >= 3 ) preds[3]->upper_next[2] = newN;
 */
 
-/*				  	for(i=0;i<level;i++)
+/**				  	for(i=0;i<level;i++)
 						if(preds[i+1]->upper_next[i] != succs[i+1])	{ TM_ABORT(0xf1);}
 *///
 //					if(preds[1]->upper_next[0] != succs[1])	{ TM_ABORT(0xf1);}
 //					if((rand & 3) == 3 && preds[2]->upper_next[1] != succs[2])	{ TM_ABORT(0xf1);}
 
-/*
-					preds[0]->next 			= new; 
+/**
+					preds[0]->next 			= newN; 
 				  	for(i=0;i<level;i++)
-				  		preds[i+1]->upper_next[i] 	= new;
+				  		preds[i+1]->upper_next[i] 	= newN;
 */
-//					preds[1]->upper_next[0] 	= new; 
-//					if((rand & 3) == 3)			preds[2]->upper_next[1] 	= new; 
+//					preds[1]->upper_next[0] 	= newN; 
+//					if((rand & 3) == 3)			preds[2]->upper_next[1] 	= newN; 
 					TM_COMMIT();
 				}
 				else
 				{
 					rtm_failed++;
-					/*  Transaction retry is possible. */
+					/**  Transaction retry is possible. */
 					if(__status & _XABORT_RETRY) {DEB("RETRY\n");rtm_retry++;}
-					/*  Transaction abort due to a memory conflict with another thread */
+					/**  Transaction abort due to a memory conflict with another thread */
 					if(__status & _XABORT_CONFLICT) {DEB("CONFLICT\n");rtm_conflict++;}
-					/*  Transaction abort due to the transaction using too much memory */
+					/**  Transaction abort due to the transaction using too much memory */
 					if(__status & _XABORT_CAPACITY) {DEB("CAPACITY\n");rtm_capacity++;}
-					/*  Transaction abort due to a debug trap */
+					/**  Transaction abort due to a debug trap */
 					if(__status & _XABORT_DEBUG) {DEB("DEBUG\n");rtm_debug++;}
-					/*  Transaction abort in a inner nested transaction */
+					/**  Transaction abort in a inner nested transaction */
 					if(__status & _XABORT_NESTED) {DEB("NESTES\n");rtm_nested++;}
-					/*  Transaction explicitely aborted with _xabort. */
+					/**  Transaction explicitely aborted with _xabort. */
 					if(__status & _XABORT_EXPLICIT){DEB("EXPLICIT\n");rtm_explicit++;}
 					if(__status == 0){DEB("Other\n");rtm_other++;}
 					if(_XABORT_CODE(__status) == 0xf2) {rtm_a++;}
 					if(_XABORT_CODE(__status) == 0xf1) {rtm_b++;}
-					if(
-						//__status & _XABORT_RETRY ||
-						__local_try++ < RTM_RETRY
-					) 
-					{
+					if( /*__status & _XABORT_RETRY || */ __local_try++ < RTM_RETRY){
 						mask = mask | (mask <<1);
 						goto retry_tm2;
 					}
-					if(__global_try < RTM_FALLBACK || __status & _XABORT_EXPLICIT) 
+					if(__global_try < RTM_FALLBACK || __status & _XABORT_EXPLICIT)
 						goto begin;
-			//		__sync_fetch_and_add(&bckt->pad3, -1LL);
-
-					
-				    	res = bucket_connect_fallback(bckt, new, epoch); 
-				    	if(res != OK) 	node_unsafe_free(new);
-				    	return res;
+					// FIXME: Romolo a cosa serve questa FAA? è statistica?
+					//		__sync_fetch_and_add(&bckt->pad3, -1LL);
+					// Execute the fallback path because TSX path always fail
+					res = bucket_connect_fallback(bckt, newN, epoch); 
+					// In case of error, delete the created node and return the error status
+					if(res != OK) node_unsafe_free(newN);
+					return res;
 				}
-
 				rtm_insertions++;
 				rtm_skip_insertion+=1;
-			  	goto out;
-
-
-
-
+			  goto out;
 		}
-
 	}
 
-	/*
+	/**
   	while(curr->timestamp <= timestamp){
 		if(counter_last_key > 1000000ULL)	printf("L: %p-" KEY_STRING " C: %p-" KEY_STRING "\n", left, left->timestamp, curr, curr->timestamp);
   		left = curr;
@@ -703,10 +728,9 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	record = 0;
 	assert(curr->timestamp != INFTY || curr == tail);
 
-  	if(left->timestamp == timestamp) new->tie_breaker+= left->tie_breaker;
-  	new->next = curr;
-
-
+	if(left->timestamp == timestamp){ newN->tie_breaker+= left->tie_breaker; }
+	
+	newN->next = curr;
 	__local_try=0;
 	__status = 0;
 	mask = 1;
@@ -716,43 +740,42 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	//if(!BOOL_CAS(&left->next, curr, curr))  {rtm_nested++;goto begin;}
 	// if(position < VAL_CAS(&bckt->extractions, 0, 0))  {rtm_debug++;goto begin;}
 
-    if(position < bckt->extractions)  {rtm_debug++;goto begin;}
+  if(position < bckt->extractions)  {rtm_debug++;goto begin;}
 	if(left->next != curr)	{rtm_nested++;goto begin;}
 
 	++rtm_prova;
 	__status = 0;
 
-	assert(new != NULL && left->next != NULL && curr != NULL);
-	if((__status = _xbegin ()) == _XBEGIN_STARTED)
-	{
+	assert(newN != NULL && left->next != NULL && curr != NULL);
+	if((__status = _xbegin ()) == _XBEGIN_STARTED){
+		// If has been done any extractions then abort
 		if(position < bckt->extractions){ TM_ABORT(0xf2);}
+		// If there was any changes in the structure then abort
 		if(left->next != curr){ TM_ABORT(0xf1);}
-		left->next = new; 
+		// Insert the node
+		left->next = newN; 
 		TM_COMMIT();
 	}
 	else
 	{
 		rtm_failed++;
-		/*  Transaction retry is possible. */
+		/**  Transaction retry is possible. */
 		if(__status & _XABORT_RETRY) {DEB("RETRY\n");rtm_retry++;}
-		/*  Transaction abort due to a memory conflict with another thread */
+		/**  Transaction abort due to a memory conflict with another thread */
 		if(__status & _XABORT_CONFLICT) {DEB("CONFLICT\n");rtm_conflict++;}
-		/*  Transaction abort due to the transaction using too much memory */
+		/**  Transaction abort due to the transaction using too much memory */
 		if(__status & _XABORT_CAPACITY) {DEB("CAPACITY\n");rtm_capacity++;}
-		/*  Transaction abort due to a debug trap */
+		/**  Transaction abort due to a debug trap */
 		if(__status & _XABORT_DEBUG) {DEB("DEBUG\n");rtm_debug++;}
-		/*  Transaction abort in a inner nested transaction */
+		/**  Transaction abort in a inner nested transaction */
 		if(__status & _XABORT_NESTED) {DEB("NESTES\n");rtm_nested++;}
-		/*  Transaction explicitely aborted with _xabort. */
+		/**  Transaction explicitely aborted with _xabort. */
 		if(__status & _XABORT_EXPLICIT){DEB("EXPLICIT\n");rtm_explicit++;}
 		if(__status == 0){DEB("Other\n");rtm_other++;}
 		if(_XABORT_CODE(__status) == 0xf2) {rtm_a++;}
 		if(_XABORT_CODE(__status) == 0xf1) {rtm_b++;}
-		if(
-			//__status & _XABORT_RETRY ||
-			__local_try++ < RTM_RETRY
-		) 
-		{
+		//FIXME:
+		if(/*__status & _XABORT_RETRY ||*/ __local_try++ < RTM_RETRY){
 			mask = mask | (mask <<1);
 			goto retry_tm;
 		}
@@ -760,10 +783,11 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 			goto begin;
 //		__sync_fetch_and_add(&bckt->pad3, -1LL);
 
-		
-    	res = bucket_connect_fallback(bckt, new, epoch); 
-    	if(res != OK) 	node_unsafe_free(new);
-    	return res;
+		// Execute the fallback path because TSX path always fail
+		res = bucket_connect_fallback(bckt, newN, epoch);
+		// In case of error, delete the created node and return the error status
+		if(res != OK) 	node_unsafe_free(newN);
+		return res;
 	}
 
 	rtm_insertions++;
@@ -780,13 +804,14 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 
 __thread node_t   *__last_node 	= NULL;
 __thread unsigned long long __last_val = 0;
-
+/**
+ * Function that extract the node that has the minimum timestamp from the passed bucket
+*/
 static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts, unsigned int epoch){
 //	acquire_node(&bckt->socket);
 	node_t *curr  = &bckt->head;
 	node_t *tail  = bckt->tail;
 
-	
 	//node_t *head  = &bckt->head;
 	unsigned long long old_extracted = 0;	
 	unsigned long long extracted = 0;
@@ -794,26 +819,30 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
 	PREFETCH(curr->next, 0);
 	assertf(bckt->type != ITEM, "trying to extract from a head bucket%s\n", "");
 
+	// If the bucket epoch is greater than the parameter epoch then abort,
+	// I can't do an extract something that can be more recent of epoch from the bucket
 	if(bckt->epoch > epoch) return ABORT;
 
 //  unsigned int count = 0;	long rand;  lrand48_r(&seedT, &rand); count = rand & 7L; while(count-->0)_mm_pause();
 
-  	old_extracted = extracted 	= __sync_add_and_fetch(&bckt->extractions, 1ULL);
+	old_extracted = extracted = __sync_add_and_fetch(&bckt->extractions, 1ULL);
 
-  	if(is_freezed_for_mov(extracted)) return MOV_FOUND;
-  	if(is_freezed_for_epo(extracted)) return ABORT;
-  	if(is_freezed_for_del(extracted)) return EMPTY;
+	// If another operation is in progress, return the operation
+	if(is_freezed_for_mov(extracted)) return MOV_FOUND;
+	if(is_freezed_for_epo(extracted)) return ABORT;
+	if(is_freezed_for_del(extracted)) return EMPTY;
 
 	validate_bucket(bckt);
 
+	// FIXME: Romolo, condition always false
 	if(__last_node != NULL){
   		curr = __last_node;
   		extracted -= __last_val;
-  	}
+	}
 
 	scan_list_length += skip_extracted(tail, &curr, extracted);
 
-	/*
+	/**
   	while(extracted > 0ULL && curr != tail){
   		//if(skipped > 25 && extracted > 2){
   		//	if((__status = _xbegin ()) == _XBEGIN_STARTED)
@@ -835,17 +864,19 @@ static inline int extract_from_bucket(bucket_t *bckt, void ** result, pkey_t *ts
   	}
 	*/
 
+	// If it arrived at the end of the list then return EMPTY state
 	if(curr->timestamp == INFTY)	assert(curr == tail);
-  	if(curr == tail){
+	if(curr == tail){
 		post_operation(bckt, DELETE, 0ULL, NULL);
 		return EMPTY; 
-  	} 
-  	__last_node = curr;
-  	__last_val  = old_extracted;
+	}
+	__last_node = curr;
+	__last_val  = old_extracted;
 //	__sync_bool_compare_and_swap(&curr->taken, 0, 1);
-  	*result = curr->payload;
-  	*ts		= curr->timestamp;
-  	
+
+	// Return the important information of extracted node
+	*result = curr->payload;
+	*ts		= curr->timestamp;
 	return OK;
 }
 

@@ -140,17 +140,15 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	
 	//repeat until a successful insert
 	while(res != OK){
-		
 		// It is the first iteration or a node marked as MOV has been met (a resize is occurring)
 		if(res == MOV_FOUND){
-
 			// check for a resize
 			t_state = 0;
 			h = read_table(&queue->hashtable);
 			// get actual size
 			size = h->size;
-	        // read the actual epoch
-	        	epoch = (h->current & MASK_EPOCH);
+			// read the actual epoch
+				epoch = (h->current & MASK_EPOCH);
 			last_bw = h->bucket_width;
 			// compute the index of the virtual bucket
 			newIndex = hash(timestamp, h->bucket_width);
@@ -171,8 +169,10 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 		}
 		#endif
 		t_state = 2;
+		// TODO: Add here insert in array (I has all the parameters needed)
+
 		// search the two adjacent nodes that surround the new key and try to insert with a CAS 
-	    res = search_and_insert(bucket, lookup_table, newIndex, timestamp, 0, epoch, payload);
+		res = search_and_insert(bucket, lookup_table, newIndex, timestamp, 0, epoch, payload);
 	}
 
 
@@ -195,7 +195,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 	drand48_r(&seedT, &rand);
 	unsigned int counter = 0;
 	left_node = search(h->array+((oldIndex + dist + (unsigned int)( ( (double)(size-dist) )*rand )) % size), &left_node_next, &right_node, &counter, 0);
-	if(is_marked(left_node_next, VAL) && left_node_next != right_node && BOOL_CAS(&left_node->next, left_node_next, right_node))
+	if(is_marked(left_node_next, VAL) && left_node_next != right_node 
+			&& BOOL_CAS(&left_node->next, left_node_next, right_node))
 		connect_to_be_freed_node_list(left_node_next, counter);
 	#endif
 
@@ -228,12 +229,12 @@ __thread bucket_t *__last_bckt 				= NULL;
 
 pkey_t pq_dequeue(void *q, void** result)
 {
-t_state = 0;
+	t_state = 0;
 	vbpq *queue = (vbpq*)q;
 	bucket_t *min, *min_next, 
 					*left_node, *left_node_next, 
 					*array, *right_node;
-	table_t * h = NULL;
+	table_t *h = NULL;
 	
 	unsigned long long current, old_current, new_current;
 	unsigned long long index;
@@ -250,9 +251,9 @@ t_state = 0;
 
 begin:
 	// Get the current set table
-t_state =0;
+	t_state =0;
 	h = read_table(&queue->hashtable);
-t_state =1;
+	t_state =1;
 //   acquire_node(&h->socket);
 	// Get data from the table
 	size = h->size;
@@ -292,6 +293,7 @@ t_state =1;
 		}
 		else index = __last_index;
 
+		// Read the epoch
 		epoch = current & MASK_EPOCH;
 
 		// get the physical bucket
@@ -303,16 +305,15 @@ t_state =1;
 
 		left_node = __last_bckt;
 
-		if(left_node == NULL || left_node->index != index || is_freezed(left_node->extractions))
-		{
+		if(left_node == NULL || left_node->index != index || is_freezed(left_node->extractions)){
 			left_node = search(min, &left_node_next, &right_node, &counter, index);
-			if(is_marked(left_node_next, VAL) && left_node_next != right_node && BOOL_CAS(&left_node->next, left_node_next, right_node))
+			if(is_marked(left_node_next, VAL) && left_node_next != right_node 
+					&& BOOL_CAS(&left_node->next, left_node_next, right_node))
 				connect_to_be_freed_node_list(left_node_next, counter);
-	
 
 			// if i'm here it means that the physical bucket was empty. Check for queue emptyness
-			if(left_node->type == HEAD  && right_node->type == TAIL   && size == 1 && !is_freezed_for_mov(min->extractions))
-			{
+			if(left_node->type == HEAD  && right_node->type == TAIL 
+					&& size == 1 && !is_freezed_for_mov(min->extractions)){
 				critical_exit();
 				*result = NULL;
 				return INFTY;
@@ -321,13 +322,16 @@ t_state =1;
 
 		// Bucket present
 		if(left_node->index == index && left_node->type != HEAD){
-
 			if(left_node->epoch > epoch) goto begin;
 			if(left_node != __last_bckt){
-				__last_bckt 	= left_node;
-				__last_node 	= &left_node->head;
-				__last_val 	= 0;
+				__last_bckt = left_node;
+				__last_node = &left_node->head;
+				__last_val = 0;
 			}
+
+			//TODO: Add array extraction here
+
+			// Extract a node
 			res = extract_from_bucket(left_node, result, &left_ts, (unsigned int)epoch);
 			
 			if(res == MOV_FOUND) goto begin;
@@ -343,14 +347,13 @@ t_state =1;
 		// bucket empty or absent
 		new_current = h->current;
 		if(new_current == current){
-			
 			// save from livelock with empty queue
 			if(index == MASK_EPOCH && h->e_counter.count == 0) goto begin;
 
 			index++;
 			__last_index++;
 
-			if( (__last_index - (__last_current>>32)) == EXTRACTION_VIRTUAL_BUCKET_LEN){
+			if((__last_index - (__last_current>>32)) == EXTRACTION_VIRTUAL_BUCKET_LEN){
 				// increase current
 
 				num_cas++;
@@ -365,18 +368,14 @@ t_state =1;
 					if(old_current == current){
 						current = ((index << 32) | epoch);
 						num_cas_useful++;
-					}
-					else
+					}else
 						current = old_current;
-				}
-				else
+				}else
 					current = h->current;
 			}
 		}
 		else
 			current = new_current;
-		
-		
 	}while(1);
 	
 	return INFTY;
