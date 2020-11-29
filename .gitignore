@@ -12,4 +12,4 @@ NBCQ
 *tar.gz
 **.tar.gz
 perf.*
-
+**/.vscode/
