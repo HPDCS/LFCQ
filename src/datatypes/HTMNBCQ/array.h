@@ -50,10 +50,6 @@ typedef struct __arrayNodes_t {
 	unsigned long long indexWrite;
 } arrayNodes_t;
 
-static inline int getNumaNode(unsigned int tid, unsigned int num){
-	return tid % num;
-}
-
 /**
  * Method that initializes the array structure
 */

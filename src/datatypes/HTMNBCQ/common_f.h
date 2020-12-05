@@ -78,4 +78,8 @@ static inline int getcpu() {
     #endif
 }
 
+static inline int getNumaNode(unsigned int tid, unsigned int num){
+	return tid % num;
+}
+
 #endif

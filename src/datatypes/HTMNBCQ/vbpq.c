@@ -482,7 +482,7 @@ begin:
 			}
 
 			// LUCKY: 
-			int numaNode = numa_node_of_cpu(getcpu());
+			int numaNode = getNumaNode(pthread_self(), left_node->numaNodes);
 			if(validContent(left_node->indexWrite))
 				setUnvalidContent(left_node);
 
