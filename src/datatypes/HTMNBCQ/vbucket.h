@@ -681,6 +681,9 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 		// LUCKY:
 
 		int numaNode = numa_node_of_cpu(getcpu());
+		if(bckt->ptr_arrays[numaNode] == NULL){
+			bckt->ptr_arrays[numaNode] = initArray(300);
+		}
 		unsigned long long idxRead = bckt->ptr_arrays[numaNode]->indexWrite;
 		if(validContent(idxRead))
 			idxRead = VAL_FAA(&bckt->ptr_arrays[numaNode]->indexWrite, 1);

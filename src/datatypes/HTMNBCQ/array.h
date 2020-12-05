@@ -63,6 +63,8 @@ arrayNodes_t* initArray(int length){
 	// Set the metadata values
 	array->length = length;
 	array->epoch = -1;
+	array->indexRead = 0;
+	array->indexWrite = 0;
 
 	//array->nodes = gc_alloc(ptst, gc_aid[GC_INTERNALS]);
 	array->nodes = (nodeElem_t*)malloc(sizeof(nodeElem_t)*array->length);
