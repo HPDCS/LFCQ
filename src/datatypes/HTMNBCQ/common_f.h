@@ -1,7 +1,9 @@
 #ifndef COMMON_F_H
 #define COMMON_F_H
 
+#define _GNU_SOURCE  
 #include <unistd.h>
+#include <sys/syscall.h>
 #include <stdlib.h>
 #include "./vbucket.h"
 
@@ -67,13 +69,13 @@ void expBackoffTime(unsigned int* testSleep, unsigned int* maxSleep){
 }
 
 static inline int getcpu() {
-	#ifdef SYS_getcpu
-	int cpu, status;
-	status = syscall(SYS_getcpu, &cpu, NULL, NULL);
-	return (status == -1) ? status : cpu;
-	#else
-	return -1; // unavailable
-	#endif
+    #ifdef SYS_getcpu
+    int cpu, status;
+    status = syscall(SYS_getcpu, &cpu, NULL, NULL);
+    return (status == -1) ? status : cpu;
+    #else
+    return -1; // unavailable
+    #endif
 }
 
 #endif

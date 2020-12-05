@@ -50,6 +50,10 @@ typedef struct __arrayNodes_t {
 	unsigned long long indexWrite;
 } arrayNodes_t;
 
+static inline int getNumaNode(unsigned int tid, unsigned int num){
+	return tid % num;
+}
+
 /**
  * Method that initializes the array structure
 */
@@ -178,7 +182,8 @@ static inline unsigned long long validContent(unsigned long long index){
 static inline void setUnvalidContent(bucket_t* bckt){
 	unsigned long long nValCont = -1;
 	unsigned long long index = -1;
-	arrayNodes_t* array = bckt->ptr_arrays[numa_node_of_cpu(getcpu())];
+	int numaNode = getNumaNode(pthread_self(), bckt->numaNodes);
+	arrayNodes_t* array = bckt->ptr_arrays[numaNode];
 
 	do{
 		index = array->indexWrite;
@@ -212,7 +217,8 @@ static inline unsigned long long validRead(unsigned long long index){
 static inline void setUnvalidRead(bucket_t* bckt){
 	unsigned long long  nValCont = -1;
 	unsigned long long  index = -1;
-	arrayNodes_t* array = bckt->ptr_arrays[numa_node_of_cpu(getcpu())];
+	int numaNode = getNumaNode(pthread_self(), bckt->numaNodes);
+	arrayNodes_t* array = bckt->ptr_arrays[numaNode];
 	do{
 		index = array->indexRead;
 		nValCont =  index | (index << 32);
@@ -244,7 +250,8 @@ static inline int unlinked(unsigned long long index){
 static inline void setLinked(bucket_t* bckt){
 	unsigned long long nValCont = -1;
 	unsigned long long index = -1;
-	arrayNodes_t* array = bckt->ptr_arrays[numa_node_of_cpu(getcpu())];
+	int numaNode = getNumaNode(pthread_self(), bckt->numaNodes);
+	arrayNodes_t* array = bckt->ptr_arrays[numaNode];
 	do{
 		index = array->indexRead;
 		nValCont = index | 1ULL << 63;
@@ -317,7 +324,8 @@ static inline int isBlocked(arrayNodes_t* array){
  * Function that implements the logic of flag changes
 */
 void stateMachine(bucket_t* bckt, unsigned long dequeueStop){
-	arrayNodes_t* array = bckt->ptr_arrays[numa_node_of_cpu(getcpu())];
+	int numaNode = getNumaNode(pthread_self(), bckt->numaNodes);
+	arrayNodes_t* array = bckt->ptr_arrays[numaNode];
 	if(validContent(array->indexRead)){
 		if(array->indexWrite >= array->length){
 			setUnvalidContent(bckt);
@@ -379,7 +387,8 @@ void stateMachine(bucket_t* bckt, unsigned long dequeueStop){
  * Function that insert a new node in the array
 */
 int nodesInsert(bucket_t* bckt, int idxWrite, void* payload, pkey_t timestamp){
-	arrayNodes_t* array = bckt->ptr_arrays[numa_node_of_cpu(getcpu())];
+	int numaNode = getNumaNode(pthread_self(), bckt->numaNodes);
+	arrayNodes_t* array = bckt->ptr_arrays[numaNode];
 	int attempts = MAX_ATTEMPTS;
 	int resRet = MYARRAY_ERROR;
 	int __status = 0;
