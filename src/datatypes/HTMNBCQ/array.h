@@ -69,7 +69,7 @@ arrayNodes_t* initArray(int length){
 	//array->nodes = gc_alloc(ptst, gc_aid[GC_INTERNALS]);
 	array->nodes = (nodeElem_t*)malloc(sizeof(nodeElem_t)*array->length);
 	assert(array->nodes != NULL);
-	bzero(array->nodes, sizeof(node_t)*array->length);
+	bzero(array->nodes, sizeof(nodeElem_t)*array->length);
 
 	return array;
 }

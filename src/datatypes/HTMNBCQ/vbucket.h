@@ -680,7 +680,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	}else{
 		// LUCKY:
 
-		int numaNode = getNumaNode(pthread_self(), left_node->numaNodes);
+		int numaNode = getNumaNode(pthread_self(), bckt->numaNodes);
 		if(bckt->ptr_arrays[numaNode] == NULL){
 			bckt->ptr_arrays[numaNode] = initArray(300);
 		}
