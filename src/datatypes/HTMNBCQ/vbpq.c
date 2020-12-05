@@ -482,13 +482,14 @@ begin:
 			}
 
 			// LUCKY: 
+			int numaNode = numa_node_of_cpu(getcpu());
 			if(validContent(left_node->indexWrite))
 				setUnvalidContent(left_node);
 
 			stateMachine(left_node, DEQUEUE);
-			idxRead = VAL_FAA(&left_node->indexRead, 1);
+			idxRead = VAL_FAA(&left_node->ptr_arrays[numaNode]->indexRead, 1);
 
-			if(!validContent(idxRead) || getDynamic(idxRead) >= getFixed(left_node->indexWrite)){
+			if(!validContent(idxRead) || getDynamic(idxRead) >= getFixed(left_node->ptr_arrays[numaNode]->indexWrite)){
 				goto nextBucket;
 				continue;
 			}

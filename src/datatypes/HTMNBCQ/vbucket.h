@@ -140,7 +140,6 @@ struct __bucket_t {
 	struct __arrayNodes_t* arrayOrdered;
 	// Used only with ordered array and list
 	unsigned long long indexWrite;
-	unsigned long long indexRead;
 	// LUCKY: End
 	//-----------------------------
   #ifndef RTM

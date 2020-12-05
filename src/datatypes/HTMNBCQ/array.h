@@ -344,7 +344,7 @@ void stateMachine(bucket_t* bckt, unsigned long dequeueStop){
 
 	if(dequeueStop) return;
 
-	if(!unordered(bckt) && unlinked(bckt->indexRead)){
+	if(!unordered(bckt) && unlinked(array->indexRead)){
 		int attempts = MAX_ATTEMPTS;
 		unsigned long long idx = -1;
 		unsigned long long __status = -1;
@@ -353,9 +353,9 @@ void stateMachine(bucket_t* bckt, unsigned long dequeueStop){
 			if(attempts > 0){
 				// START TRANSACTION
 				if((__status = _xbegin ()) == _XBEGIN_STARTED){
-					idx = bckt->indexRead;
+					idx = getDynamic(array->indexRead);
 					bckt->head.next = (node_t*)array->nodes[idx].ptr;
-					bckt->indexRead = 0;
+					bckt->extractions = 0;
 					TM_COMMIT();
 				}else
 					expBackoffTime(&testSleep, &maxSleep);

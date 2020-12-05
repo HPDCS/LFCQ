@@ -145,7 +145,6 @@ static inline bucket_t* bucket_alloc(node_t *tail){
 			res->head.upper_next[i]	= res->tail;
     
 		res->numaNodes = numa_num_configured_nodes();
-		res->indexRead = 0;
 		res->indexWrite = 0;
 		res->ptr_arrays = (arrayNodes_t**)malloc(sizeof(arrayNodes_t*)*res->numaNodes);
 		
