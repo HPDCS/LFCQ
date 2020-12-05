@@ -3,13 +3,20 @@
 
 #include <unistd.h>
 #include <stdlib.h>
+#include "./vbucket.h"
 
 #define MAX_ATTEMPTS 10
 
 #define XABORT_CODE_RET 0xf1
 
-#define BLOCK 0x2 // marker that cell is blocked
-#define DELETE 0x1 // marker for delete
+#define BLOCK 0x1 // marker that cell is blocked
+
+#define VAL_FAA_GCC(addr, val)  __sync_fetch_and_add(\
+										(addr),\
+										(val)\
+									  )
+
+#define VAL_FAA VAL_FAA_GCC
 
 typedef struct __nodeBool_t {
   node_t* node;
@@ -57,6 +64,16 @@ void expBackoffTime(unsigned int* testSleep, unsigned int* maxSleep){
     backoffEnd = rdtsc();
   }
   *testSleep += 1;
+}
+
+static inline int getcpu() {
+	#ifdef SYS_getcpu
+	int cpu, status;
+	status = syscall(SYS_getcpu, &cpu, NULL, NULL);
+	return (status == -1) ? status : cpu;
+	#else
+	return -1; // unavailable
+	#endif
 }
 
 #endif
