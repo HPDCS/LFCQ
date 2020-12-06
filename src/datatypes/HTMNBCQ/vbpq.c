@@ -225,7 +225,7 @@ __thread bucket_t *__last_bckt 				= NULL;
  * @return the highest priority 
  *
  */
-pkey_t pq_dequeue(void *q, void** result)
+pkey_t pq_dequeue1(void *q, void** result)
 {
 	t_state = 0;
 	vbpq *queue = (vbpq*)q;
@@ -378,7 +378,7 @@ begin:
 }
 
 // LUCKY:  Dequeue
-pkey_t pq_dequeue1(void *q, void** result)
+pkey_t pq_dequeue(void *q, void** result)
 {
 	t_state = 0;
 	vbpq *queue = (vbpq*)q;

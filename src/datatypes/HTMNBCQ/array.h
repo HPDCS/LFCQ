@@ -10,7 +10,6 @@
 #include "./vbucket.h"
 #include "./common_f.h"
 
-
 #define SM_DEQUEUE 1ULL
 #define SM_ENQUEUE 2ULL
 #define SM_DEQUEUE_ARRAY_FINISHED 3ULL
@@ -49,6 +48,8 @@ typedef struct __arrayNodes_t {
 	unsigned long long indexRead;
 	unsigned long long indexWrite;
 } arrayNodes_t;
+
+#include "./myQuickSort.h"
 
 /**
  * Method that initializes the array structure
@@ -156,8 +157,8 @@ arrayNodes_t* vectorOrderingAndBuild(bucket_t* bckt){
 		}
 	}
 
-	// TODO: Manca l'implementazione di sort
-	//sort(newArray, elmToOrder);
+	// Sort elements
+	quickSort(newArray->nodes, 0, elmToOrder);
 	
 	// toList also allocate the node elem
 	toList(newArray, elmToOrder);
@@ -169,7 +170,7 @@ arrayNodes_t* vectorOrderingAndBuild(bucket_t* bckt){
  * Function that checks if the index passed indicates that the array insert is still valid
 */
 static inline unsigned long long validContent(unsigned long long index){
-	return !((index >> 32) & 0);
+	return (index >> 32) == 0;
 }
 
 /**
@@ -204,7 +205,7 @@ static inline void setUnvalidContent(bucket_t* bckt){
 */
 static inline unsigned long long validRead(unsigned long long index){
 	index &= ~(1UL << 63);
-	return !((index >> 32) & 0);
+	return (index >> 32) == 0;
 }
 
 /**
@@ -237,7 +238,7 @@ static inline void setUnvalidRead(bucket_t* bckt){
  * Function that checks if the list is enabled or not
 */
 static inline int unlinked(unsigned long long index){
-	return !((index >> 63) & 0);
+	return (index >> 63) == 0;
 }
 
 /**
@@ -390,7 +391,8 @@ int nodesInsert(bucket_t* bckt, int idxWrite, void* payload, pkey_t timestamp){
 	int __status = 0;
 	while(attempts > 0 && resRet == MYARRAY_ERROR){
 		// START TRANSACTION
-		if((__status = _xbegin ()) == _XBEGIN_STARTED){
+		__status = _xbegin();
+		if(__status == _XBEGIN_STARTED){
 			if(validContent(idxWrite)){
 				resRet =  set(array, idxWrite, payload, timestamp);
 				TM_COMMIT();
@@ -406,7 +408,7 @@ int nodesInsert(bucket_t* bckt, int idxWrite, void* payload, pkey_t timestamp){
 	}
 
 	// Fallback to CAS
-	if(attempts < 0){
+	if(attempts <= 0){
 			resRet = setCAS(array, idxWrite, payload, timestamp);
 	}
 	return resRet;

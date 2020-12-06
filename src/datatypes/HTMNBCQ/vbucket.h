@@ -784,79 +784,77 @@ static inline int extract_from_ArrayOrList(bucket_t *bckt, void ** result, pkey_
 		if(getDynamic(idxRead) < bckt->arrayOrdered->length){
 			return nodesDequeue(bckt->arrayOrdered, getDynamic(idxRead), result, ts) == MYARRAY_EXTRACT ? OK : ABORT;
 		}
-	}else{
-		// LUCKY: end
-		// acquire_node(&bckt->socket);
-		node_t *curr  = &bckt->head;
-		node_t *tail  = bckt->tail;
-
-		//node_t *head  = &bckt->head;
-		unsigned long long old_extracted = 0;	
-		unsigned long long extracted = 0;
-		//unsigned skipped = 0;
-		PREFETCH(curr->next, 0);
-		assertf(bckt->type != ITEM, "trying to extract from a head bucket%s\n", "");
-
-		// If the bucket epoch is greater than the parameter epoch then abort,
-		// I can't do an extract something that can be more recent of epoch from the bucket
-		if(bckt->epoch > epoch) return ABORT;
-
-		//  unsigned int count = 0;	long rand;  lrand48_r(&seedT, &rand); count = rand & 7L; while(count-->0)_mm_pause();
-
-		old_extracted = extracted = __sync_add_and_fetch(&bckt->extractions, 1ULL);
-
-		// If another operation is in progress, return the operation
-		if(is_freezed_for_mov(extracted)) return MOV_FOUND;
-		if(is_freezed_for_epo(extracted)) return ABORT;
-		if(is_freezed_for_del(extracted)) return EMPTY;
-
-		validate_bucket(bckt);
-
-		if(__last_node != NULL){
-			curr = __last_node;
-			extracted -= __last_val;
-		}
-
-		scan_list_length += skip_extracted(tail, &curr, extracted);
-
-		/**
-			while(extracted > 0ULL && curr != tail){
-				//if(skipped > 25 && extracted > 2){
-				//	if((__status = _xbegin ()) == _XBEGIN_STARTED)
-			//	{
-			//		if(old_extracted != bckt->extractions){ TM_ABORT(0xf2);}
-			//		head->next = curr;
-			//		old_extracted -= skipped; 
-			//		TM_COMMIT();
-			//		skipped = 0;
-			//	}
-			//	else{}
-			//
-				//}
-				curr = curr->next;
-			if(curr) 	PREFETCH(curr->next, 0);
-				extracted--;
-				skipped++;
-			scan_list_length++;
-			}
-		*/
-
-		// If it arrived at the end of the list then return EMPTY state
-		if(curr->timestamp == INFTY)	assert(curr == tail);
-		if(curr == tail){
-			post_operation(bckt, DELETE, 0ULL, NULL);
-			return EMPTY; 
-		}
-		__last_node = curr;
-		__last_val  = old_extracted;
-		//	__sync_bool_compare_and_swap(&curr->taken, 0, 1);
-
-		// Return the important information of extracted node
-		*result = curr->payload;
-		*ts		= curr->timestamp;
-		return OK;
 	}
-	return ABORT;
+	// LUCKY: end
+	// acquire_node(&bckt->socket);
+	node_t *curr  = &bckt->head;
+	node_t *tail  = bckt->tail;
+
+	//node_t *head  = &bckt->head;
+	unsigned long long old_extracted = 0;	
+	unsigned long long extracted = 0;
+	//unsigned skipped = 0;
+	PREFETCH(curr->next, 0);
+	assertf(bckt->type != ITEM, "trying to extract from a head bucket%s\n", "");
+
+	// If the bucket epoch is greater than the parameter epoch then abort,
+	// I can't do an extract something that can be more recent of epoch from the bucket
+	if(bckt->epoch > epoch) return ABORT;
+
+	//  unsigned int count = 0;	long rand;  lrand48_r(&seedT, &rand); count = rand & 7L; while(count-->0)_mm_pause();
+
+	old_extracted = extracted = __sync_add_and_fetch(&bckt->extractions, 1ULL);
+
+	// If another operation is in progress, return the operation
+	if(is_freezed_for_mov(extracted)) return MOV_FOUND;
+	if(is_freezed_for_epo(extracted)) return ABORT;
+	if(is_freezed_for_del(extracted)) return EMPTY;
+
+	validate_bucket(bckt);
+
+	if(__last_node != NULL){
+		curr = __last_node;
+		extracted -= __last_val;
+	}
+
+	scan_list_length += skip_extracted(tail, &curr, extracted);
+
+	/**
+		while(extracted > 0ULL && curr != tail){
+			//if(skipped > 25 && extracted > 2){
+			//	if((__status = _xbegin ()) == _XBEGIN_STARTED)
+		//	{
+		//		if(old_extracted != bckt->extractions){ TM_ABORT(0xf2);}
+		//		head->next = curr;
+		//		old_extracted -= skipped; 
+		//		TM_COMMIT();
+		//		skipped = 0;
+		//	}
+		//	else{}
+		//
+			//}
+			curr = curr->next;
+		if(curr) 	PREFETCH(curr->next, 0);
+			extracted--;
+			skipped++;
+		scan_list_length++;
+		}
+	*/
+
+	// If it arrived at the end of the list then return EMPTY state
+	if(curr->timestamp == INFTY)	assert(curr == tail);
+	if(curr == tail){
+		post_operation(bckt, DELETE, 0ULL, NULL);
+		return EMPTY; 
+	}
+	__last_node = curr;
+	__last_val  = old_extracted;
+	//	__sync_bool_compare_and_swap(&curr->taken, 0, 1);
+
+	// Return the important information of extracted node
+	*result = curr->payload;
+	*ts		= curr->timestamp;
+	return OK;
 }
 
 /**
