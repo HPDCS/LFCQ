@@ -147,6 +147,9 @@ static inline bucket_t* bucket_alloc(node_t *tail){
 		res->numaNodes = numa_num_configured_nodes();
 		res->indexWrite = 0;
 		res->ptr_arrays = (arrayNodes_t**)malloc(sizeof(arrayNodes_t*)*res->numaNodes);
+		for(int i=0; i < res->numaNodes; i++){
+			res->ptr_arrays[i] = initArray(300);
+		}
 		
     __sync_bool_compare_and_swap(&res->hash, res->hash, hash);
     #ifndef RTM

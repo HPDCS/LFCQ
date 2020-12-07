@@ -54,7 +54,7 @@ typedef struct __arrayNodes_t {
 /**
  * Method that initializes the array structure
 */
-arrayNodes_t* initArray(int length){
+arrayNodes_t* initArray(unsigned int length){
 	arrayNodes_t* array;
 	//array = gc_alloc(ptst, gc_aid[GC_INTERNALS]);
 	array = (arrayNodes_t*)malloc(sizeof(arrayNodes_t));
@@ -95,6 +95,7 @@ static inline unsigned long long getFixed(unsigned long long idx){
 static inline void copyArray(arrayNodes_t* array, unsigned long long limit, arrayNodes_t* newArray){
 	for (unsigned long i = 0; i < limit; i++){
 		newArray->nodes[i].ptr = array->nodes[i].ptr;
+		newArray->nodes[i].replica = array->nodes[i].replica;
 		newArray->nodes[i].timestamp = array->nodes[i].timestamp;
 	}
 }
@@ -142,7 +143,7 @@ nodeElem_t* getNodeElem(arrayNodes_t* array, unsigned long long position){
  * Function that implements the logic to ordering the array and build the list
 */
 arrayNodes_t* vectorOrderingAndBuild(bucket_t* bckt){
-	unsigned long long elmToOrder = -1;
+	unsigned long long elmToOrder = 0;
 	int actNuma;
 	for (actNuma = 0; actNuma < bckt->numaNodes; actNuma++){
 		elmToOrder += getFixed(bckt->ptr_arrays[actNuma]->indexWrite);
@@ -158,7 +159,7 @@ arrayNodes_t* vectorOrderingAndBuild(bucket_t* bckt){
 	}
 
 	// Sort elements
-	quickSort(newArray->nodes, 0, elmToOrder);
+	quickSort(newArray->nodes, 0, newArray->length-1);
 	
 	// toList also allocate the node elem
 	toList(newArray, elmToOrder);
@@ -179,22 +180,32 @@ static inline unsigned long long validContent(unsigned long long index){
 static inline void setUnvalidContent(bucket_t* bckt){
 	unsigned long long nValCont = -1;
 	unsigned long long index = -1;
+	int numRetry = 0;
 	int numaNode = getNumaNode(pthread_self(), bckt->numaNodes);
 	arrayNodes_t* array = bckt->ptr_arrays[numaNode];
 
 	do{
+		// FIXME: Check Aggiuntivo
+		if(numRetry > MAX_ATTEMPTS && array->indexWrite == 0) 
+			VAL_FAA(&array->indexWrite, 1);
 		index = array->indexWrite;
 		nValCont =  index | (index << 32);
 		BOOL_CAS(&array->indexWrite, index, nValCont);
+		numRetry++;
 	}while(validContent(array->indexWrite));
 
+	numRetry = 0;
 	int actNuma;
 	for (actNuma = 0; actNuma < bckt->numaNodes; actNuma++){
 		if(validContent(array->indexWrite)){
 			do{
+				// FIXME: Check Aggiuntivo
+				if(numRetry > MAX_ATTEMPTS && array->indexWrite == 0) 
+					VAL_FAA(&array->indexWrite, 1);
 				index = array->indexWrite;
 				nValCont =  index | (index << 32);
 				BOOL_CAS(&array->indexWrite, index, nValCont);
+				numRetry++;
 			}while(validContent(array->indexWrite));
 		}
 	}
@@ -204,7 +215,6 @@ static inline void setUnvalidContent(bucket_t* bckt){
  * Function that checks if the dequeue is blocked
 */
 static inline unsigned long long validRead(unsigned long long index){
-	index &= ~(1UL << 63);
 	return (index >> 32) == 0;
 }
 
@@ -257,6 +267,7 @@ static inline void setLinked(bucket_t* bckt){
 
 	int actNuma;
 	for (actNuma = 0; actNuma < bckt->numaNodes; actNuma++){
+		array = bckt->ptr_arrays[actNuma];
 		if(validRead(array->indexRead)){
 			do{
 				index = array->indexRead;
@@ -284,6 +295,8 @@ int set(arrayNodes_t* array, int position, void* payload, pkey_t timestamp){
 */
 int setCAS(arrayNodes_t* array, int position, void* payload, pkey_t timestamp){
 	int res = -1;
+	assert(&array->nodes[position] != NULL);
+	assert(array->nodes[position].ptr == NULL);
 	while(array->nodes[position].ptr == NULL){
 		res = BOOL_CAS(&array->nodes[position].ptr, NULL, payload);
 	}
@@ -323,12 +336,12 @@ static inline int isBlocked(arrayNodes_t* array){
 void stateMachine(bucket_t* bckt, unsigned long dequeueStop){
 	int numaNode = getNumaNode(pthread_self(), bckt->numaNodes);
 	arrayNodes_t* array = bckt->ptr_arrays[numaNode];
-	if(validContent(array->indexRead)){
+	if(validContent(array->indexWrite)){
 		if(array->indexWrite >= array->length){
 			setUnvalidContent(bckt);
 		}
 	}
-	if(!validContent(array->indexRead) && unordered(bckt)){
+	if(!validContent(array->indexWrite) && unordered(bckt)){
 		// First Phase: Block all used entries
 		if(!isBlocked(array))
 			blockEntriesArray(array, getFixed(array->indexWrite), 0);

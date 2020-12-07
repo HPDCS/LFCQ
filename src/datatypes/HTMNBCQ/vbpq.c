@@ -170,7 +170,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 		#endif
 		t_state = 2;
 
-		// search the two adjacent nodes that surround the new key and try to insert with a CAS 
+		// search the two adjacent nodes that surround the new key and try to insert with a CAS
+		//printf("Insert: idxBucket %u, payload %p, timestamp %f\n", bucket->index, payload, timestamp);
 		res = search_and_insert(bucket, lookup_table, newIndex, timestamp, 0, epoch, payload);
 		
 	}while(res != OK);
@@ -483,13 +484,13 @@ begin:
 
 			// LUCKY: 
 			int numaNode = getNumaNode(pthread_self(), left_node->numaNodes);
-			if(validContent(left_node->indexWrite))
+			if(validContent(left_node->ptr_arrays[numaNode]->indexWrite))
 				setUnvalidContent(left_node);
 
 			stateMachine(left_node, DEQUEUE);
 			idxRead = VAL_FAA(&left_node->ptr_arrays[numaNode]->indexRead, 1);
 
-			if(!validContent(idxRead) || getDynamic(idxRead) >= getFixed(left_node->ptr_arrays[numaNode]->indexWrite)){
+			if(validRead(idxRead) || getDynamic(idxRead) >= getFixed(left_node->ptr_arrays[numaNode]->indexWrite)){
 				goto nextBucket;
 				continue;
 			}
@@ -500,6 +501,8 @@ begin:
 			res = extract_from_ArrayOrList(left_node, result, &left_ts, (unsigned int)epoch, idxRead);
 
 			if(res == MOV_FOUND) goto begin;
+
+			//printf("Dequeue: result %p, timestamp %f\n", *result, left_ts);
 
 			// The bucket was not empty
 			if(res == OK){
