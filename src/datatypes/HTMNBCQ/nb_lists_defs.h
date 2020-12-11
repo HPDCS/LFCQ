@@ -109,19 +109,27 @@ static inline void clflush(volatile void *p){ asm volatile ("clflush (%0)" :: "r
 #define MOV_BIT_POS 63
 #define DEL_BIT_POS 62
 #define EPO_BIT_POS 61
+// LUCKY: Bit per il passaggio da unlinked a linked
+#define LNK_BIT_POS 60
 
 #define FREEZE_FOR_MOV (1ULL << MOV_BIT_POS)
 #define FREEZE_FOR_DEL (1ULL << DEL_BIT_POS)
 #define FREEZE_FOR_EPO (1ULL << EPO_BIT_POS)
+// LUCKY: Bit mask linked
+#define FREEZE_FOR_LNK (1ULL << LNK_BIT_POS)
 
 
 #define is_freezed(extractions)  ((extractions >> 32) != 0ULL)
 #define is_freezed_for_del(extractions) (extractions & FREEZE_FOR_DEL)
 #define is_freezed_for_mov(extractions) (!is_freezed_for_del(extractions) &&  (extractions & FREEZE_FOR_MOV))
 #define is_freezed_for_epo(extractions) (!is_freezed_for_del(extractions) &&  (extractions & FREEZE_FOR_EPO))
+// LUCKY: check
+#define is_freezed_for_lnk(extractions) (!is_freezed_for_del(extractions) &&  (extractions & FREEZE_FOR_LNK))
 
 #define get_freezed(extractions, flag)  (( (extractions) << 32) | (extractions) | flag)
-#define get_cleaned_extractions(extractions) (( (extractions) & (~(FREEZE_FOR_EPO | FREEZE_FOR_MOV | FREEZE_FOR_DEL))) >> 32)
+#define get_cleaned_extractions(extractions) (( (extractions) & (~(FREEZE_FOR_LNK | FREEZE_FOR_EPO | FREEZE_FOR_MOV | FREEZE_FOR_DEL))) >> 32)
+// LUCKY: Remove possibile locked bits and return extractions
+#define get_extractions_wtoutlk(extractions) ( (extractions) & (~(FREEZE_FOR_LNK)))
 
 
 

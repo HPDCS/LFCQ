@@ -57,6 +57,8 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	// add allocator of nbc_bucket_node
 	init_bucket_subsystem();
 	__init_skipList_subsystem();
+	// LUCKY:
+	init_array_subsystem();
 	// add callback for set tables and array of nodes whene a grace period has been identified
 	gc_hid[0] = gc_add_hook(std_free_hook);
 	critical_enter();
@@ -171,8 +173,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 		t_state = 2;
 
 		// search the two adjacent nodes that surround the new key and try to insert with a CAS
-		//printf("Insert: idxBucket %u, payload %p, timestamp %f\n", bucket->index, payload, timestamp);
 		res = search_and_insert(bucket, lookup_table, newIndex, timestamp, 0, epoch, payload);
+		printf("Inserted: idxBucket %llu, payload %p, timestamp %f\n", newIndex, payload, timestamp);
 		
 	}while(res != OK);
 
@@ -216,167 +218,6 @@ __thread unsigned long long __last_current 	= -1;
 __thread unsigned long long __last_index 	= -1;
 __thread table_t *__last_table 				= NULL;
 __thread bucket_t *__last_bckt 				= NULL;
-
-/**
- * This function extract the minimum item from the NBCQ. 
- * The cost of this operation when succeeds should be O(1)
- *
- * @param  q: pointer to the interested queue
- * @param  result: location to save payload address
- * @return the highest priority 
- *
- */
-pkey_t pq_dequeue1(void *q, void** result)
-{
-	t_state = 0;
-	vbpq *queue = (vbpq*)q;
-	bucket_t *min, *min_next, 
-					*left_node, *left_node_next, 
-					*array, *right_node;
-	table_t *h = NULL;
-	
-	unsigned long long current, old_current, new_current;
-	unsigned long long index;
-	unsigned long long epoch;
-	
-	unsigned int size, attempts = 0;
-	unsigned int counter;
-	int res = ABORT;
-	pkey_t left_ts;
-	int con_de = 0;
-	performed_dequeue++;
-	
-	critical_enter();
-
-begin:
-	// Get the current set table
-	t_state = 0;
-	h = read_table(&queue->hashtable);
-	t_state =1;
-//   acquire_node(&h->socket);
-	// Get data from the table
-	size = h->size;
-	array = h->array;
-	current = h->current;
-	con_de = h->d_counter.count;
-	attempts = 0;
-
-	if(__last_table != h){
-		__last_table 	= h;
-		__last_current  = -1;
-		__last_index  = -1;
-		__last_bckt 	= NULL;
-		__last_node 	= NULL;
-		__last_val 	= 0;
-	}
-
-	do
-	{
-		*result  = NULL;
-		left_ts  = INFTY;
-
-		// To many attempts: there is some problem? recheck the table
-		if( h->read_table_period == attempts){	goto begin; }
-		attempts++;
-
-		if(__last_current != current)
-		{
-			// get fields from current
-			index = current >> 32;
-
-			__last_current  = current;
-			__last_index	= index;
-			__last_bckt 	= NULL;
-			__last_node 	= NULL;
-			__last_val 		= 0;
-		}
-		else index = __last_index;
-
-		// Read the epoch
-		epoch = current & MASK_EPOCH;
-
-		// get the physical bucket
-		min = array + virtual_to_physical(index, size);
-		min_next = min->next;
-
-		// a reshuffle has been detected => restart
-		if(is_marked(min_next, MOV)) goto begin;
-
-		left_node = __last_bckt;
-
-		if(left_node == NULL || left_node->index != index || is_freezed(left_node->extractions)){
-			left_node = search(min, &left_node_next, &right_node, &counter, index);
-			if(is_marked(left_node_next, VAL) && left_node_next != right_node 
-					&& BOOL_CAS(&left_node->next, left_node_next, right_node))
-				connect_to_be_freed_node_list(left_node_next, counter);
-
-			// if i'm here it means that the physical bucket was empty. Check for queue emptyness
-			if(left_node->type == HEAD  && right_node->type == TAIL 
-					&& size == 1 && !is_freezed_for_mov(min->extractions)){
-				critical_exit();
-				*result = NULL;
-				return INFTY;
-			}
-		}
-
-		// Bucket present
-		if(left_node->index == index && left_node->type != HEAD){
-			if(left_node->epoch > epoch) goto begin;
-			if(left_node != __last_bckt){
-				__last_bckt = left_node;
-				__last_node = &left_node->head;
-				__last_val = 0;
-			}
-
-			// Extract a node
-			res = extract_from_bucket(left_node, result, &left_ts, (unsigned int)epoch);
-			
-			if(res == MOV_FOUND) goto begin;
-
-			// The bucket was not empty
-			if(res == OK){
-					critical_exit();
-					concurrent_dequeue += (unsigned long long) (__sync_fetch_and_add(&h->d_counter.count, 1) - con_de);
-					return left_ts;
-			}
-		}
-
-		// bucket empty or absent
-		new_current = h->current;
-		if(new_current == current){
-			// save from livelock with empty queue
-			if(index == MASK_EPOCH && h->e_counter.count == 0) goto begin;
-
-			index++;
-			__last_index++;
-
-			if((__last_index - (__last_current>>32)) == EXTRACTION_VIRTUAL_BUCKET_LEN){
-				// increase current
-
-				num_cas++;
-				double rand, prob;
-				drand48_r(&seedT, &rand);
-				prob = (double)h->d_counter.count - (double)con_de ;
-				if(prob > 1.0) prob = 1/prob;
-				else prob = 1.0;
-
-				if(rand < prob){
-					old_current = VAL_CAS( &(h->current), current, ((index << 32) | epoch) );
-					if(old_current == current){
-						current = ((index << 32) | epoch);
-						num_cas_useful++;
-					}else
-						current = old_current;
-				}else
-					current = h->current;
-			}
-		}
-		else
-			current = new_current;
-	}while(1);
-	
-	return INFTY;
-}
 
 // LUCKY:  Dequeue
 pkey_t pq_dequeue(void *q, void** result)
@@ -459,6 +300,7 @@ begin:
 		left_node = __last_bckt;
 
 		if(left_node == NULL || left_node->index != index || is_freezed(left_node->extractions)){
+			// FIXME: Loop su questa search
 			left_node = search(min, &left_node_next, &right_node, &counter, index);
 			if(is_marked(left_node_next, VAL) && left_node_next != right_node 
 					&& BOOL_CAS(&left_node->next, left_node_next, right_node))
@@ -484,25 +326,37 @@ begin:
 
 			// LUCKY: 
 			int numaNode = getNumaNode(pthread_self(), left_node->numaNodes);
-			if(validContent(left_node->ptr_arrays[numaNode]->indexWrite))
+			if(validContent(left_node->ptr_arrays[numaNode]->indexWrite)){
+				// Invalido inserimenti sugli array per numa node
 				setUnvalidContent(left_node);
+				//atomic_bts_x64(&left_node->extractions, LNK_BIT_POS);
+			}	
+				assert(validContent(left_node->ptr_arrays[numaNode]->indexWrite) == false);
 
+			// Applico la state machine per costruire l'array ordinato
+			// che comprende tutti gli elementi
 			stateMachine(left_node, DEQUEUE);
-			idxRead = VAL_FAA(&left_node->ptr_arrays[numaNode]->indexRead, 1);
+			assert(validContent(left_node->ptr_arrays[numaNode]->indexWrite) == false || unordered(left_node) == false);
+			idxRead = VAL_FAA(&left_node->extractions, 1);
 
-			if(validRead(idxRead) || getDynamic(idxRead) >= getFixed(left_node->ptr_arrays[numaNode]->indexWrite)){
+			// index read nel caso di array ordered non esiste, o meglio è uguale alla length
+			// dello stesso Futuri inserimenti avvengono tramite l'utilizzo della lista
+			int isBlocked = is_freezed(get_cleaned_extractions(idxRead));
+			if(isBlocked || getDynamic(idxRead) >= left_node->arrayOrdered->length){
 				goto nextBucket;
 				continue;
 			}
-			// LUCKY: End
 
 			// Extract a node extract_from_list
 			//res = extract_from_bucket(left_node, result, &left_ts, (unsigned int)epoch);
-			res = extract_from_ArrayOrList(left_node, result, &left_ts, (unsigned int)epoch, idxRead);
+			assert(validContent(idxRead) == false || getDynamic(idxRead) < left_node->arrayOrdered[numaNode].length);
+			//res = extract_from_ArrayOrList(left_node, result, &left_ts, (unsigned int)epoch, idxRead);
+			res = OK;
 
 			if(res == MOV_FOUND) goto begin;
 
-			//printf("Dequeue: result %p, timestamp %f\n", *result, left_ts);
+			if(res != EMPTY) printf("bucketIndex: %llu Dequeue: result %p, timestamp %f\n", index, *result, left_ts);
+			// LUCKY: End
 
 			// The bucket was not empty
 			if(res == OK){

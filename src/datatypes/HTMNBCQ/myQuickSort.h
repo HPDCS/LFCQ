@@ -56,7 +56,6 @@ void quickSort(nodeElem_t* arr,  long long int low,  long long int high){
 
 		// Separately sort elements before
 		// partition and after partition
-		// FIXME: Problemi qui durante l'ordinamento, il secondo parametro diventa abnorme
 		quickSort(arr, low, pi-1);
 		quickSort(arr, pi+1, high);
 	}

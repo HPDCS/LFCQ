@@ -30,7 +30,9 @@ extern __thread unsigned long long scan_list_length_en ;
 #define MINIMUM_SIZE 1
 #define SAMPLE_SIZE 50
 
-#define ENABLE_EXPANSION 1
+//#define ENABLE_EXPANSION 1
+// LUCKY: Disabilitare Resize
+#define ENABLE_EXPANSION 0
 #define READTABLE_PERIOD 64
 #define COMPACT_RANDOM_ENQUEUE 1
 
@@ -205,13 +207,23 @@ static int search_and_insert(bucket_t *head, SkipList *lookup_table, unsigned in
 			newb->epoch 		= epoch;
 			newb->next 			= right;
 		
+			// LUCKY:
+			int numaNode = getNumaNode(pthread_self(), newb->numaNodes);
+			unsigned long long idxRead = VAL_FAA(&newb->ptr_arrays[numaNode]->indexWrite, 1);
+			int val = nodesInsert(newb->ptr_arrays[numaNode], getDynamic(idxRead), payload, timestamp);
+			assert(val == MYARRAY_INSERT);
+
+			newb->head.next = newb->tail;
+			// LUCKY: End
+
+/* 		LUCKY: Removed the insert in list
 			newb->head.next			= node_alloc();
 			newb->head.tie_breaker 	= 0;
 			
 			newb->head.next->next 				= newb->tail;
 			newb->head.next->payload			= payload;
 			newb->head.next->tie_breaker 		= 1;
-			newb->head.next->timestamp	  		= timestamp;	
+			newb->head.next->timestamp	  		= timestamp;	 */
 
 
 			if(!BOOL_CAS(&left->next, left_next, newb)){
@@ -225,6 +237,8 @@ static int search_and_insert(bucket_t *head, SkipList *lookup_table, unsigned in
 			update_cache(newb);
 
 			//skipListAdd(lookup_table, index, newb);
+			// LUCKY:
+			assert(left->next == newb && left->next->head.next == left->next->tail && left->next->next == right);
 			return OK;
 		}
 /*		

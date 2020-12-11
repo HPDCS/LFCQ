@@ -80,7 +80,6 @@ static inline node_t* node_alloc(){
 	return res;
 }
 
-
 /* allocate a node */
 static inline void tail_node_init(node_t* res){
 	long rand;
@@ -144,13 +143,17 @@ static inline bucket_t* bucket_alloc(node_t *tail){
     for(i=0;i<VB_NUM_LEVELS-1;i++)
 			res->head.upper_next[i]	= res->tail;
     
-		res->numaNodes = numa_num_configured_nodes();
-		res->indexWrite = 0;
+		// LUCKY:
+		//res->numaNodes = numa_num_configured_nodes();
+		int length = 4;
+		res->numaNodes = 1;
 		res->ptr_arrays = (arrayNodes_t**)malloc(sizeof(arrayNodes_t*)*res->numaNodes);
 		for(int i=0; i < res->numaNodes; i++){
-			res->ptr_arrays[i] = initArray(300);
+			res->ptr_arrays[i] = initArray(length);
 		}
-		
+		res->app = initArray(length*res->numaNodes);
+		assert(res->head.next == res->tail && res->ptr_arrays[0]->indexWrite == 0);
+		// LUCKY: End
     __sync_bool_compare_and_swap(&res->hash, res->hash, hash);
     #ifndef RTM
     pthread_spin_init(&res->lock, 0);
