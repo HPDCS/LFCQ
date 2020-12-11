@@ -151,6 +151,7 @@ static inline bucket_t* bucket_alloc(node_t *tail){
 		for(int i=0; i < res->numaNodes; i++){
 			res->ptr_arrays[i] = initArray(length);
 		}
+		res->arrayOrdered = NULL;
 		res->app = initArray(length*res->numaNodes);
 		assert(res->head.next == res->tail && res->ptr_arrays[0]->indexWrite == 0);
 		// LUCKY: End

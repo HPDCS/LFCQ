@@ -329,7 +329,6 @@ begin:
 			if(validContent(left_node->ptr_arrays[numaNode]->indexWrite)){
 				// Invalido inserimenti sugli array per numa node
 				setUnvalidContent(left_node);
-				//atomic_bts_x64(&left_node->extractions, LNK_BIT_POS);
 			}	
 				assert(validContent(left_node->ptr_arrays[numaNode]->indexWrite) == false);
 
@@ -350,8 +349,7 @@ begin:
 			// Extract a node extract_from_list
 			//res = extract_from_bucket(left_node, result, &left_ts, (unsigned int)epoch);
 			assert(validContent(idxRead) == false || getDynamic(idxRead) < left_node->arrayOrdered[numaNode].length);
-			//res = extract_from_ArrayOrList(left_node, result, &left_ts, (unsigned int)epoch, idxRead);
-			res = OK;
+			res = extract_from_ArrayOrList(left_node, result, &left_ts, (unsigned int)epoch, idxRead);
 
 			if(res == MOV_FOUND) goto begin;
 

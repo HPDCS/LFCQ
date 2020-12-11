@@ -170,7 +170,7 @@ arrayNodes_t* vectorOrderingAndBuild(bucket_t* bckt){
 		if(getFixed(bckt->ptr_arrays[actNuma]->indexWrite) > 0)
 			copyArray(bckt->ptr_arrays[actNuma], getFixed(bckt->ptr_arrays[actNuma]->indexWrite), newArray);
 		if(!unordered(bckt)){
-			free(newArray);
+			arrayNodes_safe_free(newArray);
 			return NULL;
 		}
 	}
@@ -395,40 +395,40 @@ void stateMachine(bucket_t* bckt, unsigned long dequeueStop){
 		if(bckt->arrayOrdered != newArray)
 			free(newArray);
 		assert(unordered(bckt) == false);
+		//assert(validContent(array->indexWrite) == false && unordered(bckt) == false && is_freezed_for_lnk(bckt->extractions) == false);
 	}
 
 	if(dequeueStop) return;
 
-	assert(validContent(array->indexWrite) == false || unordered(bckt) == true || is_freezed_for_lnk(bckt->extractions) == false);
-	int isnotLinked = !is_freezed_for_lnk(bckt->extractions);
-	int isOrdered = !unordered(bckt);
-	if(isOrdered && isnotLinked){
+	if(!unordered(bckt) && !is_freezed_for_lnk(bckt->extractions)){
+		//assert(validContent(array->indexWrite) == false && unordered(bckt) == false && is_freezed_for_lnk(bckt->extractions) == false);
 		unsigned int attempts = MAX_ATTEMPTS;
 		unsigned int idx;
 		unsigned int __status;
 		unsigned long long newExt = 0;
 		array = bckt->arrayOrdered;
-		assert(bckt->head.next == bckt->tail);
 		while(bckt->head.next == bckt->tail){
 			if(attempts > 0){
 				// START TRANSACTION
 				if((__status = _xbegin ()) == _XBEGIN_STARTED){
-					idx = get_extractions_wtoutlk(bckt->extractions);
-					bckt->head.next = (node_t*)array->nodes[idx].ptr;
-					newExt = bckt->extractions >> 60;
-					newExt = (0ULL | (newExt << 60));
-					bckt->extractions = newExt;
-					TM_COMMIT();
+					if(is_freezed_for_lnk(bckt->extractions) == false){
+						idx = get_extractions_wtoutlk(bckt->extractions);
+						bckt->head.next = (node_t*)array->nodes[idx].ptr;
+						newExt = bckt->extractions >> 60;
+						newExt = (0ULL | (newExt << 60));
+						bckt->extractions = newExt;
+						TM_COMMIT();
+					}else
+						TM_ABORT(0x1);
 				}else
 					expBackoffTime(&testSleep, &maxSleep);
-			}else{
-				if(BOOL_CAS(&bckt->head.next, NULL, (node_t*)array->nodes[0].ptr))
-					VAL_FAA(&bckt->extractions, 0ULL);
-			}
+			}else
+				BOOL_CAS(&bckt->head.next, NULL, (node_t*)array->nodes[0].ptr);
 			attempts--;
 		}
-		//setLinked(bckt);
+		assert(bckt->head.next != NULL);
 		atomic_bts_x64(&bckt->extractions, LNK_BIT_POS);
+		assert(is_freezed_for_lnk(bckt->extractions) == true);
 	}
 }
 
@@ -441,7 +441,7 @@ void stateMachine(bucket_t* bckt, unsigned long dequeueStop){
  * Function that insert a new node in the array
 */
 int nodesInsert(arrayNodes_t* array, int idxWrite, void* payload, pkey_t timestamp){
-	printf("Insert in Array: %p %f\n", payload, timestamp);
+	//printf("Insert in Array: %p %f\n", payload, timestamp);
 	int attempts = MAX_ATTEMPTS;
 	int resRet = MYARRAY_ERROR;
 	int __status = 0;
@@ -476,7 +476,7 @@ int nodesInsert(arrayNodes_t* array, int idxWrite, void* payload, pkey_t timesta
 int nodesDequeue(arrayNodes_t* array, int idxRead, void** payload, pkey_t* timestamp){
 	if(idxRead < array->length){
 		get(array, idxRead, payload, timestamp);
-		printf("ArrayDequeue: result %p, timestamp %f\n", *payload, *timestamp);
+		//printf("ArrayDequeue: result %p, timestamp %f\n", *payload, *timestamp);
 		return MYARRAY_EXTRACT;
 	} else{
 		return MYARRAY_ERROR;

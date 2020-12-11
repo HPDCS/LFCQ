@@ -550,6 +550,11 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	newN->tie_breaker = 1;
 	// Get amount of extractions, important
 	extracted = bckt->extractions;
+	int numaNode = getNumaNode(pthread_self(), bckt->numaNodes);
+/* 	if(is_freezed_for_lnk(extracted))
+		assert(validContent(bckt->ptr_arrays[numaNode]->indexWrite) == false && unordered(bckt) == false && bckt->head.next != bckt->tail);
+	else
+		assert(getFixed(bckt->ptr_arrays[numaNode]->indexWrite) <= bckt->ptr_arrays[numaNode]->length && bckt->head.next == bckt->tail); */
 
   // If the request operation is another type then I return and notify that
 	if(get_op_type(bckt->op_descriptor) == SET_AS_MOV){
@@ -566,7 +571,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 
 	// LUCKY:
 
-	int numaNode = getNumaNode(pthread_self(), bckt->numaNodes);
+	//int numaNode = getNumaNode(pthread_self(), bckt->numaNodes);
 	unsigned long long idxWrite = 0;
 	if(validContent(idxWrite))
 		idxWrite = VAL_FAA(&bckt->ptr_arrays[numaNode]->indexWrite, 1);
@@ -576,13 +581,18 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	// FIXME: Troppo tardi l'inserimento quando arrivo a questo punto
 	// o rileggo idxWrite oppure bho come si risolve?!
 	if(!is_freezed_for_lnk(bckt->extractions)){
+		// Assert sui flags (SUPER IMPORTANTE)
+/* 		assert(validContent(bckt->ptr_arrays[numaNode]->indexWrite) == true && unordered(bckt) == true && is_freezed_for_lnk(bckt->extractions) == false
+			&& bckt->head.next == bckt->tail); */
+		// Assert sulla posizione dove si va a scrivere
 		assert(bckt->ptr_arrays[numaNode]->nodes+getDynamic(idxWrite) != NULL);
 		assert(bckt->ptr_arrays[numaNode]->nodes[getDynamic(idxWrite)].ptr == NULL);
 		int res = nodesInsert(bckt->ptr_arrays[numaNode], getDynamic(idxWrite), payload, timestamp) == MYARRAY_INSERT ? OK : ABORT;
-		printArray(bckt->ptr_arrays[numaNode]->nodes, bckt->ptr_arrays[numaNode]->indexWrite, 0);
-		printList(bckt->head.next);
+		//printArray(bckt->ptr_arrays[numaNode]->nodes, bckt->ptr_arrays[numaNode]->indexWrite, 0);
+		//printList(bckt->head.next);
 		return res;
 	}
+
 
   // The amount of elements to skip are equal to the extracted value
   toskip = get_extractions_wtoutlk(bckt->extractions);
@@ -694,7 +704,12 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 
 	update_cache(bckt);
 	// LUCKY:
-	printList(bckt->head.next);
+	//printList(bckt->head.next);
+
+	// Assert sui flags (SUPER IMPORTANTE)
+/* 	assert(validContent(bckt->ptr_arrays[numaNode]->indexWrite) == false && unordered(bckt) == false && is_freezed_for_lnk(bckt->extractions) == true
+		&& bckt->head.next != bckt->tail); */
+
 	return res;
 }
 
@@ -706,12 +721,18 @@ __thread unsigned long long __last_val = 0;
 */
 static inline int extract_from_ArrayOrList(bucket_t *bckt, void ** result, pkey_t *ts, unsigned int epoch, unsigned long long idxRead){
 	// LUCKY:
+	// riga sotto, serve solo per l'assert
+	int numaNode = getNumaNode(pthread_self(), bckt->numaNodes);
 	if(!is_freezed_for_lnk(idxRead)){
+		// Assert sui flags (SUPER IMPORTANTE)
+/* 		assert(validContent(bckt->ptr_arrays[numaNode]->indexWrite) == false && unordered(bckt) == false && is_freezed_for_lnk(bckt->extractions) == false
+			&& bckt->head.next == bckt->tail); */
 		if(getDynamic(idxRead) < bckt->arrayOrdered->length){
 			return nodesDequeue(bckt->arrayOrdered, getDynamic(idxRead), result, ts) == MYARRAY_EXTRACT ? OK : ABORT;
 		}
 	}
 	// LUCKY: end
+
 	// acquire_node(&bckt->socket);
 	node_t *curr  = &bckt->head;
 	node_t *tail  = bckt->tail;
@@ -762,6 +783,11 @@ static inline int extract_from_ArrayOrList(bucket_t *bckt, void ** result, pkey_
 	// Return the important information of extracted node
 	*result = curr->payload;
 	*ts		= curr->timestamp;
+
+	// Assert sui flags (SUPER IMPORTANTE)
+/* 	assert(validContent(bckt->ptr_arrays[numaNode]->indexWrite) == false && unordered(bckt) == false && is_freezed_for_lnk(bckt->extractions) == true
+		&& bckt->head.next != bckt->tail); */
+
 	return OK;
 }
 
