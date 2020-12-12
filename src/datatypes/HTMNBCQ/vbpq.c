@@ -232,7 +232,6 @@ pkey_t pq_dequeue(void *q, void** result)
 	unsigned long long current, old_current, new_current;
 	unsigned long long index;
 	unsigned long long epoch;
-	unsigned long long idxRead;
 	
 	unsigned int size, attempts = 0;
 	unsigned int counter;
@@ -324,36 +323,18 @@ begin:
 				__last_val = 0;
 			}
 
-			// LUCKY: 
-			int numaNode = getNumaNode(pthread_self(), left_node->numaNodes);
-			if(validContent(left_node->ptr_arrays[numaNode]->indexWrite)){
-				// Invalido inserimenti sugli array per numa node
-				setUnvalidContent(left_node);
-			}	
-				assert(validContent(left_node->ptr_arrays[numaNode]->indexWrite) == false);
-
-			// Applico la state machine per costruire l'array ordinato
-			// che comprende tutti gli elementi
-			stateMachine(left_node, DEQUEUE);
-			assert(validContent(left_node->ptr_arrays[numaNode]->indexWrite) == false || unordered(left_node) == false);
-			idxRead = VAL_FAA(&left_node->extractions, 1);
-
-			// index read nel caso di array ordered non esiste, o meglio è uguale alla length
-			// dello stesso Futuri inserimenti avvengono tramite l'utilizzo della lista
-			int isBlocked = is_freezed(get_cleaned_extractions(idxRead));
-			if(isBlocked || getDynamic(idxRead) >= left_node->arrayOrdered->length){
-				goto nextBucket;
-				continue;
-			}
-
-			// Extract a node extract_from_list
-			//res = extract_from_bucket(left_node, result, &left_ts, (unsigned int)epoch);
-			assert(validContent(idxRead) == false || getDynamic(idxRead) < left_node->arrayOrdered[numaNode].length);
-			res = extract_from_ArrayOrList(left_node, result, &left_ts, (unsigned int)epoch, idxRead);
+			// LUCKY:
+			// Extract an element
+			printf("%ld Dequeue, bucketIndex: %llu\n",syscall(SYS_gettid), index);
+			res = extract_from_ArrayOrList(left_node, result, &left_ts, (unsigned int)epoch);
+			if(result == NULL)
+				left_ts = MIN;
 
 			if(res == MOV_FOUND) goto begin;
 
-			if(res != EMPTY) printf("bucketIndex: %llu Dequeue: result %p, timestamp %f\n", index, *result, left_ts);
+			if(res == NEXT_BUCKET) goto nextBucket;
+
+			if(res != EMPTY) printf("%ld, bucketIndex: %llu Dequeue: result %p, timestamp %f\n", syscall(SYS_gettid), index, *result, left_ts);
 			// LUCKY: End
 
 			// The bucket was not empty

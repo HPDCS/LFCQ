@@ -32,6 +32,8 @@
 #define MOV_FOUND 	2
 #define PRESENT		4
 #define EMPTY		8
+// LUCKY:
+#define NEXT_BUCKET 16
 
 #define VAL (0ULL)
 #define DEL (1ULL)

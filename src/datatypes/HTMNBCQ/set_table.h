@@ -206,9 +206,10 @@ static int search_and_insert(bucket_t *head, SkipList *lookup_table, unsigned in
 			newb->extractions 	= 0ULL;
 			newb->epoch 		= epoch;
 			newb->next 			= right;
+			newb->arrayOrdered = NULL;
 		
 			// LUCKY:
-			int numaNode = getNumaNode(pthread_self(), newb->numaNodes);
+			int numaNode = getNumaNode(syscall(SYS_gettid), newb->numaNodes);
 			unsigned long long idxRead = VAL_FAA(&newb->ptr_arrays[numaNode]->indexWrite, 1);
 			int val = nodesInsert(newb->ptr_arrays[numaNode], getDynamic(idxRead), payload, timestamp);
 			assert(val == MYARRAY_INSERT);

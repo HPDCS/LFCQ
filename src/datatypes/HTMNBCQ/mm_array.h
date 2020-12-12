@@ -87,4 +87,12 @@ static inline void arrayNodes_unsafe_free(arrayNodes_t *ptr){
 	gc_unsafe_free(ptst, ptr, gc_aid[GC_ARRAYNODES]);	
 }
 
+static inline void arrayNodes_unsafe_free_malloc(arrayNodes_t *ptr){
+	int i = 0;
+	while(i < ptr->length){
+		free(ptr->nodes+i);
+	}
+	gc_unsafe_free(ptst, ptr, gc_aid[GC_ARRAYNODES]);	
+}
+
 #endif

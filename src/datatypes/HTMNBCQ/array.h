@@ -61,17 +61,20 @@ typedef struct __arrayNodes_t {
 arrayNodes_t* initArray(unsigned int length){
 
 	arrayNodes_t* array;
-	array = arrayNodes_alloc(length);
+	//array = arrayNodes_alloc(length);
 
-	//array = gc_alloc(ptst, gc_aid[GC_INTERNALS]);
-	//array = (arrayNodes_t*)malloc(sizeof(arrayNodes_t));
-	//assert(array != NULL);
-	//bzero(array,  sizeof(arrayNodes_t));
+	array = gc_alloc(ptst, gc_aid[GC_ARRAYNODES]);
+	assert(array != NULL);
+	bzero(array,  sizeof(arrayNodes_t));
 
-	//array->nodes = gc_alloc(ptst, gc_aid[GC_INTERNALS]);
-	// array->nodes = (nodeElem_t*)malloc(sizeof(nodeElem_t)*array->length);
-	// assert(array->nodes != NULL);
-	// bzero(array->nodes, sizeof(nodeElem_t)*array->length);
+	array->epoch = 0;
+	array->indexRead = 0;
+	array->indexWrite = 0;
+	array->length = length;
+
+	array->nodes = (nodeElem_t*)malloc(sizeof(nodeElem_t)*array->length);
+	assert(array->nodes != NULL);
+	bzero(array->nodes, sizeof(nodeElem_t)*array->length);
 
 	return array;
 }
@@ -98,7 +101,8 @@ static inline unsigned long long getFixed(unsigned long long idx){
 */
 static inline void copyArray(arrayNodes_t* array, unsigned long long limit, arrayNodes_t* newArray){
 	for (unsigned long i = 0; i < limit; i++){
-		if(array->nodes[i].timestamp > 0.0){
+		if(array->nodes[i].ptr != NULL && array->nodes[i].timestamp > MIN){
+			//printf("%ld, %p, %f\n", syscall(SYS_gettid), array->nodes[i].ptr, array->nodes[i].timestamp);
 			newArray->nodes[i].ptr = array->nodes[i].ptr;
 			newArray->nodes[i].replica = array->nodes[i].replica;
 			newArray->nodes[i].timestamp = array->nodes[i].timestamp;
@@ -151,36 +155,60 @@ nodeElem_t* getNodeElem(arrayNodes_t* array, unsigned long long position){
 	return array->nodes+position;
 }
 
+static inline void blockEntriesArray(arrayNodes_t** array){
+	unsigned long long new_array = 0;
+	if((((unsigned long long)array) & BLOCK) == 0){
+		new_array = (((unsigned long long)(*array)) | BLOCK);
+		BOOL_CAS(array, *array, new_array);
+	}
+}
+
+static inline int isBlocked(arrayNodes_t* array){
+	return ((unsigned long long)array) & BLOCK;
+}
+
+static inline arrayNodes_t* unBlock(arrayNodes_t* array){
+	unsigned long long app = (unsigned long long)array;
+	app = app & ~BLOCK;
+	return (arrayNodes_t*)app;
+}
+
 /**
  * Function that implements the logic to ordering the array and build the list
 */
 arrayNodes_t* vectorOrderingAndBuild(bucket_t* bckt){
 	unsigned long long elmToOrder = 0;
 	int actNuma;
+	arrayNodes_t* array = NULL;
 	for (actNuma = 0; actNuma < bckt->numaNodes; actNuma++){
-		if(bckt->ptr_arrays[actNuma]->length < getFixed(bckt->ptr_arrays[actNuma]->indexWrite))
-			elmToOrder += bckt->ptr_arrays[actNuma]->length;
-		else
-			elmToOrder += getFixed(bckt->ptr_arrays[actNuma]->indexWrite);
+		array = unBlock(bckt->ptr_arrays[actNuma]);
+		if(array->length < getFixed(array->indexWrite)){
+			elmToOrder += array->length;
+		}else{
+			elmToOrder += getFixed(array->indexWrite);
+		}
 	}
 	actNuma = 0;
-	//arrayNodes_t* newArray = initArray(elmToOrder);
-	arrayNodes_t* newArray = bckt->app;
+	arrayNodes_t* newArray = initArray(elmToOrder);
 	for (actNuma = 0; actNuma < bckt->numaNodes; actNuma++){
-		if(getFixed(bckt->ptr_arrays[actNuma]->indexWrite) > 0)
-			copyArray(bckt->ptr_arrays[actNuma], getFixed(bckt->ptr_arrays[actNuma]->indexWrite), newArray);
+		array = unBlock(bckt->ptr_arrays[actNuma]);
+		if(getFixed(array->indexWrite) > 0)
+			copyArray(array, getFixed(array->indexWrite), newArray);
 		if(!unordered(bckt)){
 			arrayNodes_safe_free(newArray);
 			return NULL;
 		}
 	}
-
 	// Sort elements
-	if(newArray->indexWrite > newArray->length)
+	if(newArray->indexWrite > newArray->length){
 		quickSort(newArray->nodes, 0, newArray->length-1);
-	else
+	}else{
 		quickSort(newArray->nodes, 0, newArray->indexWrite-1);
+	}
 
+	// printf("Fine %ld\n", syscall(SYS_gettid));
+	// printArray(newArray->nodes, newArray->indexWrite, 0);
+	// fflush(stdout);
 	// toList also allocate the node elem
 	toList(newArray, elmToOrder, bckt->tail);
 	return newArray;
@@ -200,7 +228,7 @@ static inline void setUnvalidContent(bucket_t* bckt){
 	long long int nValCont = -1;
 	long long int index = -1;
 	int numRetry = 0;
-	int numaNode = getNumaNode(pthread_self(), bckt->numaNodes);
+	int numaNode = getNumaNode(syscall(SYS_gettid), bckt->numaNodes);
 	arrayNodes_t* array = bckt->ptr_arrays[numaNode];
 
 	do{
@@ -217,6 +245,7 @@ static inline void setUnvalidContent(bucket_t* bckt){
 	numRetry = 0;
 	int actNuma;
 	for (actNuma = 0; actNuma < bckt->numaNodes; actNuma++){
+		array = bckt->ptr_arrays[actNuma];
 		if(validContent(array->indexWrite)){
 			do{
 				index = array->indexWrite;
@@ -249,7 +278,7 @@ static inline void setUnvalidContent(bucket_t* bckt){
 static inline void setUnvalidRead(bucket_t* bckt){
 	unsigned long long  nValCont = 0;
 	unsigned long long  index = 0;
-	int numaNode = getNumaNode(pthread_self(), bckt->numaNodes);
+	int numaNode = getNumaNode(syscall(SYS_gettid), bckt->numaNodes);
 	arrayNodes_t* array = bckt->ptr_arrays[numaNode];
 	do{
 		index = array->indexRead;
@@ -284,7 +313,7 @@ static inline void setUnvalidRead(bucket_t* bckt){
 // static inline void setLinked(bucket_t* bckt){
 // 	unsigned long long nValCont = -1;
 // 	unsigned long long index = -1;
-// 	int numaNode = getNumaNode(pthread_self(), bckt->numaNodes);
+// 	int numaNode = getNumaNode(syscall(SYS_gettid), bckt->numaNodes);
 // 	arrayNodes_t* array = bckt->ptr_arrays[numaNode];
 // 	do{
 // 		index = array->indexRead;
@@ -339,35 +368,24 @@ int setCAS(arrayNodes_t* array, int position, void* payload, pkey_t timestamp){
  * To read from the array
 */
 void get(arrayNodes_t* array, int position, void** payload, pkey_t* timestamp){
-	assert(array->nodes[position].ptr != NULL);
-	node_t* app = (node_t*)array->nodes[position].ptr;
-	*payload = app->payload;
-	*timestamp = app->timestamp;
-}
-
-static inline void blockEntriesArray(arrayNodes_t* array, unsigned long long limit, unsigned long long start){
-	nodeElem_t* app = NULL;
-	unsigned long long new_app = 0;
-	while(start <= limit){
-		app = getNodeElem(array, start);
-		if((((unsigned long long)array->nodes[start].ptr) & BLOCK) == 0){
-			new_app = (((unsigned long long)app->ptr) | BLOCK);
-			BOOL_CAS(&array->nodes[start].ptr, app, new_app);
-		}
-		
-		start++;
+	if(array->nodes[position].ptr == NULL && array->nodes[position].timestamp == MIN){
+		*payload = array->nodes[position].ptr;
+		*timestamp = array->nodes[position].timestamp;
+	}else{
+		void* app1 = (void*)array->nodes[position].ptr;
+		assert(app1 != NULL);
+		node_t* app = (node_t*)app1;
+		*payload = app->payload;
+		*timestamp = app->timestamp;
 	}
-}
 
-static inline int isBlocked(arrayNodes_t* array){
-	return ((unsigned long long)array->nodes[0].ptr) & BLOCK;
 }
 
 /**
  * Function that implements the logic of flag changes
 */
 void stateMachine(bucket_t* bckt, unsigned long dequeueStop){
-	int numaNode = getNumaNode(pthread_self(), bckt->numaNodes);
+	int numaNode = getNumaNode(syscall(SYS_gettid), bckt->numaNodes);
 	arrayNodes_t* array = bckt->ptr_arrays[numaNode];
 	if(validContent(array->indexWrite)){
 		if(getDynamic(array->indexWrite)-1 >= array->length){
@@ -377,14 +395,12 @@ void stateMachine(bucket_t* bckt, unsigned long dequeueStop){
 	}
 	if(!validContent(array->indexWrite) && unordered(bckt)){
 		// First Phase: Block all used entries
-		// FIXME: Per il momento non blocca
-		if(!isBlocked(array))
-			blockEntriesArray(array, getFixed(array->indexWrite), 0);
+		if(!isBlocked(bckt->ptr_arrays[numaNode]))
+			blockEntriesArray(bckt->ptr_arrays+numaNode);
 
 		for (int actNuma = 0; actNuma < bckt->numaNodes; actNuma++){
-			array = bckt->ptr_arrays[actNuma];
-			if(!isBlocked(array)){
-				blockEntriesArray(array, getFixed(array->indexWrite), 0);
+			if(!isBlocked(bckt->ptr_arrays[actNuma])){
+				blockEntriesArray(bckt->ptr_arrays+actNuma);
 			}
 		}
 		// Second Phase: Order elements and the public the array
@@ -392,8 +408,8 @@ void stateMachine(bucket_t* bckt, unsigned long dequeueStop){
 		if(newArray != NULL){
 			setOrdered(bckt, newArray);
 		}
-		if(bckt->arrayOrdered != newArray)
-			free(newArray);
+		// if(bckt->arrayOrdered != newArray)
+		// 	arrayNodes_unsafe_free_malloc(newArray);
 		assert(unordered(bckt) == false);
 		//assert(validContent(array->indexWrite) == false && unordered(bckt) == false && is_freezed_for_lnk(bckt->extractions) == false);
 	}
@@ -402,32 +418,43 @@ void stateMachine(bucket_t* bckt, unsigned long dequeueStop){
 
 	if(!unordered(bckt) && !is_freezed_for_lnk(bckt->extractions)){
 		//assert(validContent(array->indexWrite) == false && unordered(bckt) == false && is_freezed_for_lnk(bckt->extractions) == false);
-		unsigned int attempts = MAX_ATTEMPTS;
+		int attempts = MAX_ATTEMPTS;
 		unsigned int idx;
 		unsigned int __status;
 		unsigned long long newExt = 0;
+		node_t* tmp = node_alloc();
 		array = bckt->arrayOrdered;
 		while(bckt->head.next == bckt->tail){
 			if(attempts > 0){
 				// START TRANSACTION
 				if((__status = _xbegin ()) == _XBEGIN_STARTED){
+					idx = get_extractions_wtoutlk(bckt->extractions);
 					if(is_freezed_for_lnk(bckt->extractions) == false){
-						idx = get_extractions_wtoutlk(bckt->extractions);
-						bckt->head.next = (node_t*)array->nodes[idx].ptr;
-						newExt = bckt->extractions >> 60;
-						newExt = (0ULL | (newExt << 60));
-						bckt->extractions = newExt;
+						if(array->nodes[idx].ptr != NULL){
+							bckt->head.next = (node_t*)array->nodes[idx].ptr;
+							newExt = bckt->extractions >> 60;
+							newExt = (0ULL | (newExt << 60));
+							bckt->extractions = newExt;
+						}else{
+							tmp->payload = NULL;
+							tmp->timestamp = MIN;
+							tmp->next = bckt->head.next;
+							bckt->head.next = tmp;
+						}
 						TM_COMMIT();
 					}else
 						TM_ABORT(0x1);
 				}else
 					expBackoffTime(&testSleep, &maxSleep);
-			}else
-				BOOL_CAS(&bckt->head.next, NULL, (node_t*)array->nodes[0].ptr);
+			}else{
+				BOOL_CAS(&bckt->head.next, bckt->tail, array->nodes[0].ptr);
+			}
 			attempts--;
 		}
+		if(tmp->timestamp == INFTY) node_safe_free(tmp);
 		assert(bckt->head.next != NULL);
 		atomic_bts_x64(&bckt->extractions, LNK_BIT_POS);
+		//FIXME: Triggera
 		assert(is_freezed_for_lnk(bckt->extractions) == true);
 	}
 }

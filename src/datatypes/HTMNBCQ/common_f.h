@@ -11,7 +11,7 @@
 
 #define XABORT_CODE_RET 0xf1
 
-#define BLOCK 0x1 // marker that cell is blocked
+#define BLOCK 1ULL // marker that cell is blocked
 
 #define VAL_FAA_GCC(addr, val)  __sync_fetch_and_add(\
 										(addr),\

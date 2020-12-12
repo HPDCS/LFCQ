@@ -252,12 +252,15 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 		}
 	}
 	
-	// phase 3: replace the bucket for new epoch
-	res = bucket_alloc(bckt->tail);
-	res->extractions = get_cleaned_extractions(old_extractions);
 	// LUCKY: Tenere traccia del flag linked
+	// FIXME: Controllare bene questa parte
+	unsigned long long newExt = get_cleaned_extractions(old_extractions);
 	if(is_freezed_for_lnk(old_extractions))
-		atomic_bts_x64(&res->extractions, LNK_BIT_POS);
+		atomic_bts_x64(&newExt, LNK_BIT_POS);
+
+	// phase 3: replace the bucket for new epoch
+	res = bucket_alloc_epo(bckt->tail);
+	res->extractions = newExt;
 	res->epoch = bckt->op_descriptor & MASK_EPOCH;
 	res->epoch = res->epoch < bckt->epoch ? bckt->epoch :  res->epoch;
 	res->index = bckt->index;
@@ -459,17 +462,17 @@ unsigned long long skip_extracted(node_t *tail, node_t **curr, unsigned long lon
 */
 unsigned long long fetch_position(node_t **curr, node_t **left, pkey_t timestamp, int level){
 	unsigned long long position = 0;
-	  	while((*curr)->timestamp <= timestamp){
+	while((*curr)->timestamp <= timestamp){
 		if(counter_last_key > 1000000ULL)	printf("L: %p-" KEY_STRING " C: %p-" KEY_STRING "\n", *left, (*left)->timestamp, *curr, (*curr)->timestamp);
-  		*left = *curr;
-  		if(level > 0) 
-  			*curr = (*curr)->upper_next[level-1];
-  		else
-  			*curr = (*curr)->next;
+			*left = *curr;
+			if(level > 0) 
+				*curr = (*curr)->upper_next[level-1];
+			else
+				*curr = (*curr)->next;
 		if(*curr) PREFETCH((*curr)->next, 1);
-  		position++;
-  	}
-  	return position;
+			position++;
+	}
+	return position;
 }
 
 // LUCKY: Only for Debug
@@ -550,11 +553,11 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	newN->tie_breaker = 1;
 	// Get amount of extractions, important
 	extracted = bckt->extractions;
-	int numaNode = getNumaNode(pthread_self(), bckt->numaNodes);
+	int numaNode = getNumaNode(syscall(SYS_gettid), bckt->numaNodes);
 /* 	if(is_freezed_for_lnk(extracted))
-		assert(validContent(bckt->ptr_arrays[numaNode]->indexWrite) == false && unordered(bckt) == false && bckt->head.next != bckt->tail);
+		assert(validContent(unBlock(bckt->ptr_arrays[numaNode])->indexWrite) == false && unordered(bckt) == false && bckt->head.next != bckt->tail);
 	else
-		assert(getFixed(bckt->ptr_arrays[numaNode]->indexWrite) <= bckt->ptr_arrays[numaNode]->length && bckt->head.next == bckt->tail); */
+		assert(getFixed(unBlock(bckt->ptr_arrays[numaNode])->indexWrite) <= unBlock(bckt->ptr_arrays[numaNode])->length && bckt->head.next == bckt->tail); */
 
   // If the request operation is another type then I return and notify that
 	if(get_op_type(bckt->op_descriptor) == SET_AS_MOV){
@@ -571,10 +574,10 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 
 	// LUCKY:
 
-	//int numaNode = getNumaNode(pthread_self(), bckt->numaNodes);
+	//int numaNode = getNumaNode(syscall(SYS_gettid), bckt->numaNodes);
 	unsigned long long idxWrite = 0;
 	if(validContent(idxWrite))
-		idxWrite = VAL_FAA(&bckt->ptr_arrays[numaNode]->indexWrite, 1);
+		idxWrite = VAL_FAA(&unBlock(bckt->ptr_arrays[numaNode])->indexWrite, 1);
 
 	// Evaluate State Machine
 	stateMachine(bckt, ENQUEUE);
@@ -582,13 +585,16 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	// o rileggo idxWrite oppure bho come si risolve?!
 	if(!is_freezed_for_lnk(bckt->extractions)){
 		// Assert sui flags (SUPER IMPORTANTE)
-/* 		assert(validContent(bckt->ptr_arrays[numaNode]->indexWrite) == true && unordered(bckt) == true && is_freezed_for_lnk(bckt->extractions) == false
+/* 		assert(validContent(unBlock(bckt->ptr_arrays[numaNode])->indexWrite) == true && unordered(bckt) == true && is_freezed_for_lnk(bckt->extractions) == false
 			&& bckt->head.next == bckt->tail); */
 		// Assert sulla posizione dove si va a scrivere
-		assert(bckt->ptr_arrays[numaNode]->nodes+getDynamic(idxWrite) != NULL);
-		assert(bckt->ptr_arrays[numaNode]->nodes[getDynamic(idxWrite)].ptr == NULL);
-		int res = nodesInsert(bckt->ptr_arrays[numaNode], getDynamic(idxWrite), payload, timestamp) == MYARRAY_INSERT ? OK : ABORT;
-		//printArray(bckt->ptr_arrays[numaNode]->nodes, bckt->ptr_arrays[numaNode]->indexWrite, 0);
+		arrayNodes_t* array = unBlock(bckt->ptr_arrays[numaNode]);
+		int idx = getDynamic(idxWrite);
+		assert(array->nodes+idx != NULL);
+		void* ptr = array->nodes[idx].ptr;
+		assert(ptr == NULL);
+		int res = nodesInsert(unBlock(bckt->ptr_arrays[numaNode]), getDynamic(idxWrite), payload, timestamp) == MYARRAY_INSERT ? OK : ABORT;
+		//printArray(unBlock(bckt->ptr_arrays[numaNode])->nodes, unBlock(bckt->ptr_arrays[numaNode])->indexWrite, 0);
 		//printList(bckt->head.next);
 		return res;
 	}
@@ -707,7 +713,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	//printList(bckt->head.next);
 
 	// Assert sui flags (SUPER IMPORTANTE)
-/* 	assert(validContent(bckt->ptr_arrays[numaNode]->indexWrite) == false && unordered(bckt) == false && is_freezed_for_lnk(bckt->extractions) == true
+/* 	assert(validContent(unBlock(bckt->ptr_arrays[numaNode])->indexWrite) == false && unordered(bckt) == false && is_freezed_for_lnk(bckt->extractions) == true
 		&& bckt->head.next != bckt->tail); */
 
 	return res;
@@ -719,27 +725,26 @@ __thread unsigned long long __last_val = 0;
 /**
  * Function that extract the node that has the minimum timestamp from the array or list of the passed bucket
 */
-static inline int extract_from_ArrayOrList(bucket_t *bckt, void ** result, pkey_t *ts, unsigned int epoch, unsigned long long idxRead){
-	// LUCKY:
-	// riga sotto, serve solo per l'assert
-	int numaNode = getNumaNode(pthread_self(), bckt->numaNodes);
-	if(!is_freezed_for_lnk(idxRead)){
-		// Assert sui flags (SUPER IMPORTANTE)
-/* 		assert(validContent(bckt->ptr_arrays[numaNode]->indexWrite) == false && unordered(bckt) == false && is_freezed_for_lnk(bckt->extractions) == false
-			&& bckt->head.next == bckt->tail); */
-		if(getDynamic(idxRead) < bckt->arrayOrdered->length){
-			return nodesDequeue(bckt->arrayOrdered, getDynamic(idxRead), result, ts) == MYARRAY_EXTRACT ? OK : ABORT;
-		}
-	}
-	// LUCKY: end
+static inline int extract_from_ArrayOrList(bucket_t *bckt, void ** result, pkey_t *ts, unsigned int epoch){
 
-	// acquire_node(&bckt->socket);
-	node_t *curr  = &bckt->head;
-	node_t *tail  = bckt->tail;
+	node_t *curr  = NULL;
+	node_t *tail  = NULL;
 
-	//node_t *head  = &bckt->head;
 	unsigned long long old_extracted = 0;	
 	unsigned long long extracted = 0;
+	unsigned long long idxRead = 0;
+	unsigned long long newPos = 0;
+	int res = -1;
+
+
+	begin:
+	// acquire_node(&bckt->socket);
+	curr  = &bckt->head;
+	tail  = bckt->tail;
+
+	//node_t *head  = &bckt->head;
+	old_extracted = 0;	
+	extracted = 0;
 	//unsigned skipped = 0;
 	PREFETCH(curr->next, 0);
 	assertf(bckt->type != ITEM, "trying to extract from a head bucket%s\n", "");
@@ -752,8 +757,7 @@ static inline int extract_from_ArrayOrList(bucket_t *bckt, void ** result, pkey_
 
 	// LUCKY: When using the list, I must always be one position ahead
 	//old_extracted = extracted = __sync_add_and_fetch(&bckt->extractions, 1ULL);
-	old_extracted = extracted = idxRead;
-	unsigned long long pos = get_extractions_wtoutlk(idxRead)+1;
+	old_extracted = extracted = bckt->extractions;
 
 	// If another operation is in progress, return the operation
 	if(is_freezed_for_mov(extracted)) return MOV_FOUND;
@@ -762,12 +766,61 @@ static inline int extract_from_ArrayOrList(bucket_t *bckt, void ** result, pkey_
 
 	validate_bucket(bckt);
 
+	// LUCKY:
+	int numaNode = getNumaNode(syscall(SYS_gettid), bckt->numaNodes);
+	if(validContent(unBlock(bckt->ptr_arrays[numaNode])->indexWrite)){
+		// Invalido inserimenti sugli array per numa node
+		setUnvalidContent(bckt);
+	}	
+	assert(validContent(unBlock(bckt->ptr_arrays[numaNode])->indexWrite) == false);
+
+	// Applico la state machine per costruire l'array ordinato
+	// che comprende tutti gli elementi
+	stateMachine(bckt, DEQUEUE);
+	assert(validContent(unBlock(bckt->ptr_arrays[numaNode])->indexWrite) == false || unordered(bckt) == false);
+	idxRead = VAL_FAA(&bckt->extractions, 1);
+
+	// index read nel caso di array ordered non esiste, o meglio è uguale alla length
+	// dello stesso Futuri inserimenti avvengono tramite l'utilizzo della lista
+	int isBlocked = is_freezed(get_cleaned_extractions(idxRead));
+	if(isBlocked || getDynamic(idxRead) >= getFixed(unBlock(bckt->ptr_arrays[numaNode])->indexWrite))
+		return NEXT_BUCKET;
+
+	// Extract a node extract_from_list
+	//res = extract_from_bucket(bckt, result, &left_ts, (unsigned int)epoch);
+	assert(validContent(idxRead) == false || getDynamic(idxRead) < getFixed(unBlock(bckt->ptr_arrays[numaNode])->indexWrite));
+
+	// FIXME: Possibile errore nella riga sotto
+	newPos = bckt->extractions;
+
+	// If another operation is in progress, return the operation
+	if(is_freezed_for_mov(newPos)) return MOV_FOUND;
+	if(is_freezed_for_epo(newPos)) return ABORT;
+	if(is_freezed_for_del(newPos)) return EMPTY;
+
+	if(!is_freezed_for_lnk(newPos)){
+		// Assert sui flags (SUPER IMPORTANTE)
+/* 		assert(validContent(unBlock(bckt->ptr_arrays[numaNode])->indexWrite) == false && unordered(bckt) == false && is_freezed_for_lnk(bckt->extractions) == false
+			&& bckt->head.next == bckt->tail); */
+		if(getDynamic(idxRead) < bckt->arrayOrdered->length){
+			res = nodesDequeue(bckt->arrayOrdered, getDynamic(idxRead), result, ts);
+			if(res == MYARRAY_EXTRACT) return OK;
+			else return ABORT;
+		}else{
+			goto begin;
+		}
+	}
+	// LUCKY: end
+
+	assert(curr != NULL);
+
 	if(__last_node != NULL){
 		curr = __last_node;
 		extracted -= __last_val;
 	}
 
 	// LUCKY:
+	unsigned long long pos = get_extractions_wtoutlk(newPos)+1;
 	scan_list_length += skip_extracted(tail, &curr, pos);
 
 	// If it arrived at the end of the list then return EMPTY state
@@ -785,7 +838,7 @@ static inline int extract_from_ArrayOrList(bucket_t *bckt, void ** result, pkey_
 	*ts		= curr->timestamp;
 
 	// Assert sui flags (SUPER IMPORTANTE)
-/* 	assert(validContent(bckt->ptr_arrays[numaNode]->indexWrite) == false && unordered(bckt) == false && is_freezed_for_lnk(bckt->extractions) == true
+/* 	assert(validContent(unBlock(bckt->ptr_arrays[numaNode])->indexWrite) == false && unordered(bckt) == false && is_freezed_for_lnk(bckt->extractions) == true
 		&& bckt->head.next != bckt->tail); */
 
 	return OK;
