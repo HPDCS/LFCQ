@@ -299,7 +299,7 @@ begin:
 
 		left_node = __last_bckt;
 
-		if(left_node == NULL || left_node->index != index || is_freezed(left_node->extractions)){
+		if(left_node == NULL || left_node->index != index || is_freezed(get_extractions_wtoutlk(left_node->extractions))){
 			left_node = search(min, &left_node_next, &right_node, &counter, index);
 			if(is_marked(left_node_next, VAL) && left_node_next != right_node 
 					&& BOOL_CAS(&left_node->next, left_node_next, right_node))

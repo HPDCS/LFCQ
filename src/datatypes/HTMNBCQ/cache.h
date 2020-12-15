@@ -124,7 +124,7 @@ static inline unsigned int get_cache_set_idx(unsigned int index){
       index == __cache_indx[base_offset + i] && 
       left->index == index && 
       left->hash == __cache_hash[base_offset + i] && 
-      !is_freezed(left->extractions) && 
+      !is_freezed(get_extractions_wtoutlk(left->extractions)) && 
       is_marked(left->next, VAL)
     )
     {

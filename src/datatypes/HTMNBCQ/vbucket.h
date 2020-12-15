@@ -255,10 +255,8 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 	// phase 3: replace the bucket for new epoch
 	res = bucket_alloc_epo(bckt->tail);
 	// LUCKY: Tenere traccia del flag linked
-	// FIXME: Controllare bene questa parte
-	// predere i 32bit più significativi
 	unsigned long long newExt = 0;
-	newExt = ((old_extractions << 4) >> 4);
+	newExt = get_cleaned_extractions(old_extractions);
 	if(is_freezed_for_lnk(old_extractions))
 		newExt = newExt | (1ULL << LNK_BIT_POS);
 	res->extractions = newExt;
@@ -331,7 +329,7 @@ static inline void execute_operation(bucket_t *bckt){
 	}
 	// A SET_AS_MOV operation to execute
 	else if(pending_op_type == SET_AS_MOV){
-		while(!is_freezed(old_extractions)){
+		while(!is_freezed(get_extractions_wtoutlk(old_extractions))){
 			// Gets the count of the extract by freezing which will become the new value of the extract begins
 			new_extractions = get_freezed(old_extractions, FREEZE_FOR_MOV);
 			if(__sync_bool_compare_and_swap(&bckt->extractions, old_extractions, new_extractions)) 	
@@ -346,7 +344,7 @@ static inline void execute_operation(bucket_t *bckt){
 	}
 	// A CHANGE_EPOCH operation to execute
 	else if(pending_op_type == CHANGE_EPOCH){
-		while(!is_freezed(old_extractions)){
+		while(!is_freezed(get_extractions_wtoutlk(old_extractions))){
 			// Gets the count of the extract by freezing which will become the new value of the extract begins
 			new_extractions = get_freezed(old_extractions, FREEZE_FOR_EPO);
 			old_extractions = __sync_val_compare_and_swap(&bckt->extractions, old_extractions, new_extractions);
@@ -497,6 +495,15 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 
 //	acquire_node(&bckt->socket);
 
+	// Get amount of extractions, important
+	unsigned long long extracted = 0;
+	extracted = bckt->extractions;
+
+	// If another operation is in progress, return the operation
+	if(is_freezed_for_mov(extracted)) return MOV_FOUND;
+	if(is_freezed_for_epo(extracted)) return ABORT;
+	if(is_freezed_for_del(extracted)) return EMPTY;
+
 	while(bckt != NULL && bckt->epoch < epoch){
 		bckt = increase_epoch(bckt, epoch);
 	} 
@@ -505,7 +512,6 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	node_t *tail  = bckt->tail;
 	node_t *left  = &bckt->head;
 	node_t *curr  = left;
-	unsigned long long extracted = 0;
 	unsigned long long toskip = 0;
 	unsigned long long position = 0;
 	unsigned int __global_try = 0;
@@ -548,9 +554,6 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	}
 	counter_last_key++;
 	newN->tie_breaker = 1;
-	// Get amount of extractions, important
-	extracted = bckt->extractions;
-	int numaNode = getNumaNode(syscall(SYS_gettid), bckt->numaNodes);
 
   // If the request operation is another type then I return and notify that
 	if(get_op_type(bckt->op_descriptor) == SET_AS_MOV){
@@ -566,8 +569,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	}
 
 	// LUCKY:
-
-	//int numaNode = getNumaNode(syscall(SYS_gettid), bckt->numaNodes);
+	int numaNode = getNumaNode(syscall(SYS_gettid), bckt->numaNodes);
 	unsigned long long idxWrite = 0;
 	if(validContent(idxWrite))
 		idxWrite = VAL_FAA(&unBlock(bckt->ptr_arrays[numaNode])->indexWrite, 1);
@@ -588,9 +590,6 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 		assert(array->nodes+idx != NULL);
 		void* ptr = array->nodes[idx].ptr;
 		assert(ptr == NULL);
-		// FIXME: Con questo check posso togliere al rilettura
-		// if(idxWrite > unBlock(bckt->ptr_arrays[numaNode])->length)
-		// 	return ABORT;
 		return res = nodesInsert(unBlock(bckt->ptr_arrays[numaNode]), getDynamic(idxWrite), payload, timestamp) == MYARRAY_INSERT ? OK : ABORT;
 	}
 
@@ -717,10 +716,7 @@ static inline int extract_from_ArrayOrList(bucket_t *bckt, void ** result, pkey_
 	node_t *curr  = NULL;
 	node_t *tail  = NULL;
 
-	unsigned long long old_extracted = 0;	
-	unsigned long long extracted = 0;
 	unsigned long long idxRead = 0;
-	unsigned long long newPos = 0;
 	int res = -1;
 
 
@@ -729,9 +725,6 @@ static inline int extract_from_ArrayOrList(bucket_t *bckt, void ** result, pkey_
 	curr  = &bckt->head;
 	tail  = bckt->tail;
 
-	//node_t *head  = &bckt->head;
-	old_extracted = 0;	
-	extracted = 0;
 	//unsigned skipped = 0;
 	PREFETCH(curr->next, 0);
 	assertf(bckt->type != ITEM, "trying to extract from a head bucket%s\n", "");
@@ -744,12 +737,12 @@ static inline int extract_from_ArrayOrList(bucket_t *bckt, void ** result, pkey_
 
 	// LUCKY: When using the list, I must always be one position ahead
 	//old_extracted = extracted = __sync_add_and_fetch(&bckt->extractions, 1ULL);
-	old_extracted = extracted = bckt->extractions;
+	// old_extracted = extracted = bckt->extractions;
 
-	// If another operation is in progress, return the operation
-	if(is_freezed_for_mov(extracted)) return MOV_FOUND;
-	if(is_freezed_for_epo(extracted)) return ABORT;
-	if(is_freezed_for_del(extracted)) return EMPTY;
+	// // If another operation is in progress, return the operation
+	// if(is_freezed_for_mov(extracted)) return MOV_FOUND;
+	// if(is_freezed_for_epo(extracted)) return ABORT;
+	// if(is_freezed_for_del(extracted)) return EMPTY;
 
 	validate_bucket(bckt);
 

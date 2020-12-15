@@ -411,7 +411,7 @@ double compute_mean_separation_time(table_t *h,
 //				if(tid == 1)	LOG("%d- INDEX: %u COUNTER %u SAMPLESIZE %u\n",tid, index, counter, sample_size);
 				curr = &left->head;
 				toskip = left->extractions;
-				if(is_freezed(toskip)) toskip = get_cleaned_extractions(left->extractions);
+				if(is_freezed(get_extractions_wtoutlk(toskip))) toskip = get_cleaned_extractions(left->extractions);
 			  	while(toskip > 0ULL && curr != left->tail){
 			  		curr = curr->next;
 			  		toskip--;

@@ -394,8 +394,9 @@ void get(arrayNodes_t* array, int position, void** payload, pkey_t* timestamp){
 /**
  * Function that implements the logic of flag changes
 */
-void stateMachine(bucket_t* bckt, unsigned long dequeueStop){
+int stateMachine(bucket_t* bckt, unsigned long dequeueStop){
 	int numaNode = getNumaNode(syscall(SYS_gettid), bckt->numaNodes);
+	int public = 0;
 	arrayNodes_t* array = bckt->ptr_arrays[numaNode];
 	if(validContent(array->indexWrite)){
 		if(getDynamic(array->indexWrite)-1 >= array->length){
@@ -420,11 +421,13 @@ void stateMachine(bucket_t* bckt, unsigned long dequeueStop){
 		}
 		if(bckt->arrayOrdered != newArray)
 			arrayNodes_unsafe_free_malloc(newArray);
+		else
+			public = 1;
 
 		assert(unordered(bckt) == false);
 	}
 
-	if(dequeueStop) return;
+	if(dequeueStop) return public;
 
 	if(!unordered(bckt) && !is_freezed_for_lnk(bckt->extractions)){
 		int attempts = MAX_ATTEMPTS;
@@ -463,6 +466,7 @@ void stateMachine(bucket_t* bckt, unsigned long dequeueStop){
 		atomic_bts_x64(&bckt->extractions, LNK_BIT_POS);
 		assert(bckt->extractions & FREEZE_FOR_LNK);
 	}
+	return public;
 }
 
 //#define array_safe_free(ptr) 			gc_free(ptst, ptr, gc_aid[GC_INTERNALS])

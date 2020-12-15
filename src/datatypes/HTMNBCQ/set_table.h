@@ -152,7 +152,7 @@ static int search_and_insert(bucket_t *head, SkipList *lookup_table, unsigned in
 */		if( 0 &&
 			lookup_res != NULL && 
 			lookup_res->index <= index &&
-                        !is_freezed(lookup_res->extractions)    &&
+                        !is_freezed(get_extractions_wtoutlk(lookup_res->extractions))    &&
                         is_marked(lookup_res->next, VAL) &&
                         lookup_res->hash  == old_hash
 		  )
@@ -291,7 +291,7 @@ int  migrate_node(bucket_t *bckt, table_t *new_h)
 	last_bckt = bckt;
 	extractions = bckt->extractions;
 	head = &bckt->head;
-	assertf(!is_freezed(extractions), "Migrating bucket not freezed%s\n", "");
+	assertf(!is_freezed(get_extractions_wtoutlk(extractions)), "Migrating bucket not freezed%s\n", "");
 
 /*
 	if(!is_freezed_for_mov(extractions)){
@@ -338,7 +338,7 @@ curr
 				extractions = left->extractions;
 			  	toskip		= extractions;
 				// if the left node is freezed signal this to the caller
-				if(is_freezed(extractions)) 	return ABORT;
+				if(is_freezed(get_extractions_wtoutlk(extractions))) 	return ABORT;
 				// if left node has some extraction signal this to the caller
 				if(toskip) return ABORT;
 				
@@ -604,7 +604,7 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 					connect_to_be_freed_node_list(left_node_next, distance);
 				
 				if(left_node2 != left_node) break;
-				assertf(!is_freezed(left_node->extractions), "%s\n", "NODE not FREEZED");
+				assertf(!is_freezed(get_extractions_wtoutlk(left_node->extractions)), "%s\n", "NODE not FREEZED");
 				if(right_node->type != TAIL){
 					post_operation(right_node, SET_AS_MOV, 0ULL, NULL);
 					execute_operation(right_node);
@@ -647,7 +647,7 @@ static inline table_t* read_table(table_t * volatile *curr_table_ptr){
 					connect_to_be_freed_node_list(left_node_next, distance);
 				
 				if(left_node2 != left_node) continue;
-				assertf(!is_freezed(left_node->extractions), "%s\n", "NODE not FREEZED");
+				assertf(!is_freezed(get_extractions_wtoutlk(left_node->extractions)), "%s\n", "NODE not FREEZED");
 				if(right_node->type != TAIL){
 					post_operation(right_node, SET_AS_MOV, 0ULL, NULL);
 					execute_operation(right_node);
