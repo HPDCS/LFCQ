@@ -197,7 +197,7 @@ static inline bucket_t* bucket_alloc_epo(node_t *tail){
     res->head.payload		= NULL;
     res->head.timestamp		= MIN;
     res->head.tie_breaker	= 0U;
-    res->head.next			= res->tail;
+    res->head.next			= NULL;
     for(i=0;i<VB_NUM_LEVELS-1;i++)
 			res->head.upper_next[i]	= res->tail;
     
@@ -206,8 +206,6 @@ static inline bucket_t* bucket_alloc_epo(node_t *tail){
 		res->numaNodes = 2;
 		res->ptr_arrays = NULL;
 		res->arrayOrdered = NULL;
-		//res->app = initArray(length*res->numaNodes);
-		assert(res->head.next == res->tail);
 		// LUCKY: End
 
     __sync_bool_compare_and_swap(&res->hash, res->hash, hash);

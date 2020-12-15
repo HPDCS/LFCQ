@@ -33,8 +33,9 @@ unsigned int maxSleep = 0;
 typedef struct __nodeElem_t {
 	// Event payload and its replica
 	void* ptr;
-	void* replica;
 	pkey_t timestamp;
+	unsigned int tie_breaker;
+	void* replica;
 } nodeElem_t;
 
 /**
@@ -48,8 +49,8 @@ typedef struct __arrayNodes_t {
 	long long int length;
 	// Important for insertion ed extraction
 	unsigned int epoch;
-	unsigned long long indexRead;
-	unsigned long long indexWrite;
+	long long int indexRead;
+	long long int indexWrite;
 } arrayNodes_t;
 
 #include "./myQuickSort.h"
@@ -91,7 +92,7 @@ static inline unsigned long long getDynamic(unsigned long long idx){
 */
 static inline unsigned long long getFixed(unsigned long long idx){
 	//idx = (idx & (1ULL << 63));
-	idx = ((idx << 1) >> 1);
+	idx = idx & ~(1ULL << LNK_BIT_POS);
 	idx = idx >> 32;
 	return idx;
 }
@@ -100,13 +101,18 @@ static inline unsigned long long getFixed(unsigned long long idx){
  * Function create a copy of an array
 */
 static inline void copyArray(arrayNodes_t* array, unsigned long long limit, arrayNodes_t* newArray){
+	int found = 0;
 	for (unsigned long i = 0; i < limit; i++){
-		if(array->nodes[i].ptr != NULL && array->nodes[i].timestamp > MIN){
-			//printf("%ld, %p, %f\n", syscall(SYS_gettid), array->nodes[i].ptr, array->nodes[i].timestamp);
-			newArray->nodes[i].ptr = array->nodes[i].ptr;
-			newArray->nodes[i].replica = array->nodes[i].replica;
-			newArray->nodes[i].timestamp = array->nodes[i].timestamp;
-			newArray->indexWrite++;
+		if(array->nodes[i].ptr != NULL && array->nodes[i].timestamp > 0.0){
+			found = binarySearch(newArray->nodes, 0, newArray->indexWrite-1, array->nodes[i].timestamp);
+			if(found == -1){
+				newArray->nodes[newArray->indexWrite].ptr = array->nodes[i].ptr;
+				newArray->nodes[newArray->indexWrite].replica = array->nodes[i].replica;
+				newArray->nodes[newArray->indexWrite].timestamp = array->nodes[i].timestamp;
+				newArray->nodes[newArray->indexWrite].tie_breaker = 0;
+				newArray->indexWrite++;
+			}else
+				newArray->nodes[found].tie_breaker++;
 		}
 	}
 }
@@ -117,17 +123,16 @@ static inline void copyArray(arrayNodes_t* array, unsigned long long limit, arra
 static inline void toList(arrayNodes_t* array, unsigned long long limit, node_t* tail){
 	node_t* prec = node_alloc();
 	node_t* succ = NULL;
-	for (unsigned long i = 0; i < limit; i++){
-		if(array->nodes[i].timestamp > 0.0){
-			prec->payload = array->nodes[i].ptr;
-			prec->timestamp = array->nodes[i].timestamp;
-			prec->next = tail;
-			array->nodes[i].ptr = prec;
-			if(i != limit){
-				succ = node_alloc();
-				prec->next = succ;
-				prec = succ;
-			}
+	for(unsigned long i = 0; i < limit; i++){
+		prec->payload = array->nodes[i].ptr;
+		prec->timestamp = array->nodes[i].timestamp;
+		prec->tie_breaker = array->nodes[i].tie_breaker;
+		prec->next = tail;
+		array->nodes[i].ptr = prec;
+		if(i != limit){
+			succ = node_alloc();
+			prec->next = succ;
+			prec = succ;
 		}
 	}
 }
@@ -182,35 +187,28 @@ arrayNodes_t* vectorOrderingAndBuild(bucket_t* bckt){
 	arrayNodes_t* array = NULL;
 	for (actNuma = 0; actNuma < bckt->numaNodes; actNuma++){
 		array = unBlock(bckt->ptr_arrays[actNuma]);
-		if(array->length < getFixed(array->indexWrite)){
-			elmToOrder += array->length;
-		}else{
-			elmToOrder += getFixed(array->indexWrite);
-		}
+		elmToOrder += getFixed(array->indexWrite);
 	}
 	actNuma = 0;
 	arrayNodes_t* newArray = initArray(elmToOrder);
-	for (actNuma = 0; actNuma < bckt->numaNodes; actNuma++){
-		array = unBlock(bckt->ptr_arrays[actNuma]);
-		if(getFixed(array->indexWrite) > 0)
-			copyArray(array, getFixed(array->indexWrite), newArray);
-		if(!unordered(bckt)){
-			arrayNodes_safe_free(newArray);
-			return NULL;
+	// printf("newArray->nodes %p, elemToOrder: %u\n", newArray->nodes, elmToOrder);
+	if(elmToOrder > 0){
+		for (actNuma = 0; actNuma < bckt->numaNodes; actNuma++){
+			array = unBlock(bckt->ptr_arrays[actNuma]);
+			if(getFixed(array->indexWrite) > 0)
+				copyArray(array, getFixed(array->indexWrite), newArray);
+			if(!unordered(bckt)){
+				arrayNodes_safe_free(newArray);
+				return NULL;
+			}
 		}
-	}
-	// Sort elements
-	if(newArray->indexWrite > newArray->length){
-		quickSort(newArray->nodes, 0, newArray->length-1);
-	}else{
-		quickSort(newArray->nodes, 0, newArray->indexWrite-1);
-	}
 
-	// printf("Fine %ld\n", syscall(SYS_gettid));
-	// printArray(newArray->nodes, newArray->indexWrite, 0);
-	// fflush(stdout);
-	// toList also allocate the node elem
-	toList(newArray, elmToOrder, bckt->tail);
+		// Sort elements
+		quickSort(newArray->nodes, 0, newArray->indexWrite-1);
+
+		// toList also allocate the node elem
+		toList(newArray, elmToOrder, bckt->tail);
+	}
 	return newArray;
 }
 
@@ -234,7 +232,7 @@ static inline void setUnvalidContent(bucket_t* bckt){
 	do{
 		index = array->indexWrite;
 		if(numRetry > MAX_ATTEMPTS && index == 0) 
-			nValCont = index | (1ULL << 63);
+			nValCont = index | (1ULL << LNK_BIT_POS);
 		else{
 			nValCont =  index | (index << 32);
 		}
@@ -250,7 +248,7 @@ static inline void setUnvalidContent(bucket_t* bckt){
 			do{
 				index = array->indexWrite;
 				if(numRetry > MAX_ATTEMPTS && index == 0)
-					nValCont = index | (1ULL << 63);
+					nValCont = index | (1ULL << LNK_BIT_POS);
 				else{
 					nValCont =  index | (index << 32);
 				}
@@ -278,22 +276,34 @@ static inline void setUnvalidContent(bucket_t* bckt){
 static inline void setUnvalidRead(bucket_t* bckt){
 	unsigned long long  nValCont = 0;
 	unsigned long long  index = 0;
+	int numRetry = 0;
 	int numaNode = getNumaNode(syscall(SYS_gettid), bckt->numaNodes);
 	arrayNodes_t* array = bckt->ptr_arrays[numaNode];
 	do{
 		index = array->indexRead;
-		nValCont =  index | (index << 32);
+		if(numRetry > MAX_ATTEMPTS && index == 0) 
+			nValCont = index | (1ULL << 63);
+		else{
+			nValCont =  index | (index << 32);
+		}
 		BOOL_CAS(&array->indexRead, index, nValCont);
-	}while(!is_freezed(get_cleaned_extractions(array->indexRead)));
+		numRetry++;
+	}while(validContent(array->indexRead));
 
-	int actNuma;
-	for (actNuma = 0; actNuma < bckt->numaNodes; actNuma++){
-		if(!is_freezed(get_cleaned_extractions(array->indexRead))){
+	numRetry = 0;
+	for (int actNuma = 0; actNuma < bckt->numaNodes; actNuma++){
+		array = bckt->ptr_arrays[actNuma];
+		if(validContent(array->indexRead)){
 			do{
 				index = array->indexRead;
-				nValCont =  index | (index << 32);
+				if(numRetry > MAX_ATTEMPTS && index == 0)
+					nValCont = index | (1ULL << 63);
+				else{
+					nValCont =  index | (index << 32);
+				}
 				BOOL_CAS(&array->indexRead, index, nValCont);
-			}while(!is_freezed(get_cleaned_extractions(array->indexRead)));
+				numRetry++;
+			}while(validContent(array->indexRead));
 		}
 	}
 }
@@ -408,21 +418,19 @@ void stateMachine(bucket_t* bckt, unsigned long dequeueStop){
 		if(newArray != NULL){
 			setOrdered(bckt, newArray);
 		}
-		// if(bckt->arrayOrdered != newArray)
-		// 	arrayNodes_unsafe_free_malloc(newArray);
+		if(bckt->arrayOrdered != newArray)
+			arrayNodes_unsafe_free_malloc(newArray);
+
 		assert(unordered(bckt) == false);
-		//assert(validContent(array->indexWrite) == false && unordered(bckt) == false && is_freezed_for_lnk(bckt->extractions) == false);
 	}
 
 	if(dequeueStop) return;
 
 	if(!unordered(bckt) && !is_freezed_for_lnk(bckt->extractions)){
-		//assert(validContent(array->indexWrite) == false && unordered(bckt) == false && is_freezed_for_lnk(bckt->extractions) == false);
 		int attempts = MAX_ATTEMPTS;
 		unsigned int idx;
 		unsigned int __status;
 		unsigned long long newExt = 0;
-		node_t* tmp = node_alloc();
 		array = bckt->arrayOrdered;
 		while(bckt->head.next == bckt->tail){
 			if(attempts > 0){
@@ -430,32 +438,30 @@ void stateMachine(bucket_t* bckt, unsigned long dequeueStop){
 				if((__status = _xbegin ()) == _XBEGIN_STARTED){
 					idx = get_extractions_wtoutlk(bckt->extractions);
 					if(is_freezed_for_lnk(bckt->extractions) == false){
-						if(array->nodes[idx].ptr != NULL){
+						if(idx < array->length && array->nodes[idx].ptr != NULL){
+							((node_t*)array->nodes[idx].ptr)->next = bckt->head.next;
 							bckt->head.next = (node_t*)array->nodes[idx].ptr;
 							newExt = bckt->extractions >> 60;
 							newExt = (0ULL | (newExt << 60));
 							bckt->extractions = newExt;
-						}else{
-							tmp->payload = NULL;
-							tmp->timestamp = MIN;
-							tmp->next = bckt->head.next;
-							bckt->head.next = tmp;
+							TM_COMMIT();
 						}
-						TM_COMMIT();
 					}else
 						TM_ABORT(0x1);
 				}else
 					expBackoffTime(&testSleep, &maxSleep);
 			}else{
-				BOOL_CAS(&bckt->head.next, bckt->tail, array->nodes[0].ptr);
+				if(array->nodes[0].ptr != NULL){
+					((node_t*)array->nodes[0].ptr)->next = bckt->head.next;
+					BOOL_CAS(&bckt->head.next, bckt->tail, array->nodes[0].ptr);
+				}
+				break;
 			}
 			attempts--;
 		}
-		if(tmp->timestamp == INFTY) node_safe_free(tmp);
 		assert(bckt->head.next != NULL);
 		atomic_bts_x64(&bckt->extractions, LNK_BIT_POS);
-		//FIXME: Triggera
-		assert(is_freezed_for_lnk(bckt->extractions) == true);
+		assert(bckt->extractions & FREEZE_FOR_LNK);
 	}
 }
 

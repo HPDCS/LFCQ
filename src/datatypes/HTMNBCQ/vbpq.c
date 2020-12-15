@@ -175,6 +175,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 		// search the two adjacent nodes that surround the new key and try to insert with a CAS
 		res = search_and_insert(bucket, lookup_table, newIndex, timestamp, 0, epoch, payload);
 		printf("Inserted: idxBucket %llu, payload %p, timestamp %f\n", newIndex, payload, timestamp);
+		fflush(stdout);
 		
 	}while(res != OK);
 
@@ -299,7 +300,6 @@ begin:
 		left_node = __last_bckt;
 
 		if(left_node == NULL || left_node->index != index || is_freezed(left_node->extractions)){
-			// FIXME: Loop su questa search
 			left_node = search(min, &left_node_next, &right_node, &counter, index);
 			if(is_marked(left_node_next, VAL) && left_node_next != right_node 
 					&& BOOL_CAS(&left_node->next, left_node_next, right_node))
@@ -325,16 +325,12 @@ begin:
 
 			// LUCKY:
 			// Extract an element
-			printf("%ld Dequeue, bucketIndex: %llu\n",syscall(SYS_gettid), index);
 			res = extract_from_ArrayOrList(left_node, result, &left_ts, (unsigned int)epoch);
-			if(result == NULL)
-				left_ts = MIN;
 
 			if(res == MOV_FOUND) goto begin;
 
-			if(res == NEXT_BUCKET) goto nextBucket;
-
-			if(res != EMPTY) printf("%ld, bucketIndex: %llu Dequeue: result %p, timestamp %f\n", syscall(SYS_gettid), index, *result, left_ts);
+			if(res != EMPTY && res != NEXT_BUCKET) printf("%ld, bucketIndex: %llu, epoch %u, extractions %llu Dequeue: result %p, timestamp %f\n", syscall(SYS_gettid), index, left_node->epoch, left_node->extractions, *result, left_ts);
+			fflush(stdout);
 			// LUCKY: End
 
 			// The bucket was not empty
@@ -347,7 +343,6 @@ begin:
 		}
 
 		// bucket empty or absent
-		nextBucket:
 		new_current = h->current;
 		if(new_current == current){
 			// save from livelock with empty queue
