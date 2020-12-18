@@ -174,8 +174,8 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 
 		// search the two adjacent nodes that surround the new key and try to insert with a CAS
 		res = search_and_insert(bucket, lookup_table, newIndex, timestamp, 0, epoch, payload);
-		printf("Inserted: idxBucket %llu, payload %p, timestamp %f\n", newIndex, payload, timestamp);
-		fflush(stdout);
+		// printf("Inserted: idxBucket %llu, payload %p, timestamp %f\n", newIndex, payload, timestamp);
+		// fflush(stdout);
 		
 	}while(res != OK);
 
@@ -329,8 +329,8 @@ begin:
 
 			if(res == MOV_FOUND) goto begin;
 
-			if(res != EMPTY && res != NEXT_BUCKET) printf("%ld, bucketIndex: %llu, epoch %u, extractions %llu Dequeue: result %p, timestamp %f\n", syscall(SYS_gettid), index, left_node->epoch, left_node->extractions, *result, left_ts);
-			fflush(stdout);
+			// if(res != EMPTY && res != NEXT_BUCKET) printf("%ld, bucketIndex: %llu, epoch %u, extractions %llu Dequeue: result %p, timestamp %f\n", syscall(SYS_gettid), index, left_node->epoch, left_node->extractions, *result, left_ts);
+			// fflush(stdout);
 			// LUCKY: End
 
 			// The bucket was not empty

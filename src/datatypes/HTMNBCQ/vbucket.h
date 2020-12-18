@@ -476,7 +476,7 @@ unsigned long long fetch_position(node_t **curr, node_t **left, pkey_t timestamp
 
 // LUCKY: Only for Debug
 void printList(node_t* now){
-	printf("List: \n");
+	printf("%u, List: \n", syscall(SYS_gettid));
 	while(now->next != NULL){
 		printf("%p %f\n", now->payload, now->timestamp);
 		now = now->next;
@@ -691,6 +691,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 		res = bucket_connect_fallback(bckt, newN, epoch);
 		// In case of error, delete the created node and return the error status
 		if(res != OK) 	node_unsafe_free(newN);
+		// printList(bckt->head.next);
 		return res;
 	}
 
@@ -702,6 +703,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 //	__sync_fetch_and_add(&bckt->pad3, -1LL);
 
 	update_cache(bckt);
+	// printList(bckt->head.next);
 	return res;
 }
 
@@ -766,7 +768,7 @@ static inline int extract_from_ArrayOrList(bucket_t *bckt, void ** result, pkey_
 	if(is_freezed_for_del(idxRead)) return EMPTY;
 
 	// FIXME: Forse risolto
-	if(!is_freezed_for_lnk(idxRead) && getDynamic(idxRead) > getFixed(idxRead)){
+	if(!is_freezed_for_lnk(idxRead) && getDynamic(idxRead) > getFixed(bckt->arrayOrdered->indexWrite)){
 		post_operation(bckt, DELETE, 0ULL, NULL);
 		return EMPTY;
 	}

@@ -120,16 +120,16 @@ static inline void copyArray(arrayNodes_t* array, unsigned long long limit, arra
 /**
  * Function create a copy of an array
 */
-static inline void toList(arrayNodes_t* array, unsigned long long limit, node_t* tail){
+static inline void toList(arrayNodes_t* array, unsigned long long limit, node_t** tail){
 	node_t* prec = node_alloc();
 	node_t* succ = NULL;
 	for(unsigned long i = 0; i < limit; i++){
 		prec->payload = array->nodes[i].ptr;
 		prec->timestamp = array->nodes[i].timestamp;
 		prec->tie_breaker = array->nodes[i].tie_breaker;
-		prec->next = tail;
+		prec->next = *tail;
 		array->nodes[i].ptr = prec;
-		if(i != limit){
+		if(i < limit-1){
 			succ = node_alloc();
 			prec->next = succ;
 			prec = succ;
@@ -207,7 +207,7 @@ arrayNodes_t* vectorOrderingAndBuild(bucket_t* bckt){
 		quickSort(newArray->nodes, 0, newArray->indexWrite-1);
 
 		// toList also allocate the node elem
-		toList(newArray, elmToOrder, bckt->tail);
+		toList(newArray, newArray->indexWrite, &bckt->tail);
 	}
 	return newArray;
 }
@@ -416,13 +416,16 @@ int stateMachine(bucket_t* bckt, unsigned long dequeueStop){
 		}
 		// Second Phase: Order elements and the public the array
 		arrayNodes_t*  newArray = vectorOrderingAndBuild(bckt);
+
 		if(newArray != NULL){
+			// Lock the write on the array ordered
+			newArray->indexWrite = (newArray->indexWrite << 32) | newArray->indexWrite;
 			setOrdered(bckt, newArray);
+			if(bckt->arrayOrdered != newArray)
+				arrayNodes_unsafe_free_malloc(newArray);
+			else
+				public = 1;
 		}
-		if(bckt->arrayOrdered != newArray)
-			arrayNodes_unsafe_free_malloc(newArray);
-		else
-			public = 1;
 
 		assert(unordered(bckt) == false);
 	}
@@ -442,7 +445,6 @@ int stateMachine(bucket_t* bckt, unsigned long dequeueStop){
 					idx = get_extractions_wtoutlk(bckt->extractions);
 					if(is_freezed_for_lnk(bckt->extractions) == false){
 						if(idx < array->length && array->nodes[idx].ptr != NULL){
-							((node_t*)array->nodes[idx].ptr)->next = bckt->head.next;
 							bckt->head.next = (node_t*)array->nodes[idx].ptr;
 							newExt = bckt->extractions >> 60;
 							newExt = (0ULL | (newExt << 60));

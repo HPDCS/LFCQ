@@ -71,8 +71,7 @@ static inline void nodeElem_unsafe_free(nodeElem_t* ptr){
 
 /* Safe free arrayNodes memory */
 static inline void arrayNodes_safe_free(arrayNodes_t *ptr){
-	int i = 0;
-	while(i < ptr->length){
+	for(int i = 0; i < ptr->length; i++){
 		nodeElem_safe_free(ptr->nodes+i);
 	}
 	gc_free(ptst, ptr, gc_aid[GC_ARRAYNODES]);	
@@ -80,9 +79,8 @@ static inline void arrayNodes_safe_free(arrayNodes_t *ptr){
 
 /* Unsafe free arrayNodes memory */
 static inline void arrayNodes_unsafe_free(arrayNodes_t *ptr){
-	int i = 0;
-	while(i < ptr->length){
-		nodeElem_safe_free(ptr->nodes+i);
+	for(int i = 0; i < ptr->length; i++){
+		nodeElem_unsafe_free(ptr->nodes+i);
 	}
 	gc_unsafe_free(ptst, ptr, gc_aid[GC_ARRAYNODES]);	
 }
