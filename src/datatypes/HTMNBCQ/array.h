@@ -23,6 +23,8 @@
 #define MYARRAY_INSERT 0
 #define MYARRAY_EXTRACT 1
 
+#define BLOCK_ENTRY 0xFFFFFFFFFFFFFFFF
+
 // Data for expBackoffTime, should be thread local
 unsigned int testSleep = 1;
 unsigned int maxSleep = 0;
@@ -83,14 +85,14 @@ arrayNodes_t* initArray(unsigned int length){
 /**
  * Function return the low part of a 64 bit number
 */
-static inline unsigned long long getDynamic(unsigned long long idx){
+static inline long long int getDynamic(unsigned long long idx){
 	return ((idx << 32) >> 32);
 }
 
 /**
  * Function return the high part of a 64 bit number
 */
-static inline unsigned long long getFixed(unsigned long long idx){
+static inline long long int getFixed(unsigned long long idx){
 	//idx = (idx & (1ULL << 63));
 	idx = idx & ~(1ULL << LNK_BIT_POS);
 	idx = idx >> 32;
@@ -103,17 +105,18 @@ static inline unsigned long long getFixed(unsigned long long idx){
 static inline void copyArray(arrayNodes_t* array, unsigned long long limit, arrayNodes_t* newArray){
 	int found = 0;
 	for (unsigned long i = 0; i < limit; i++){
-		if(array->nodes[i].ptr != NULL && array->nodes[i].timestamp > 0.0){
-			found = binarySearch(newArray->nodes, 0, newArray->indexWrite-1, array->nodes[i].timestamp);
-			if(found == -1){
+		if(array->nodes[i].ptr != BLOCK_ENTRY && array->nodes[i].timestamp > MIN && array->nodes[i].timestamp < INFTY){
+			// found = binarySearch(newArray->nodes, 0, newArray->indexWrite-1, array->nodes[i].timestamp);
+			// if(found == -1){
 				newArray->nodes[newArray->indexWrite].ptr = array->nodes[i].ptr;
 				newArray->nodes[newArray->indexWrite].replica = array->nodes[i].replica;
 				newArray->nodes[newArray->indexWrite].timestamp = array->nodes[i].timestamp;
 				newArray->nodes[newArray->indexWrite].tie_breaker = 0;
 				newArray->indexWrite++;
-			}else
-				newArray->nodes[found].tie_breaker++;
-		}
+			// }else
+			// 	newArray->nodes[found].tie_breaker++;
+		}else
+			newArray->length--;
 	}
 }
 
@@ -160,23 +163,25 @@ nodeElem_t* getNodeElem(arrayNodes_t* array, unsigned long long position){
 	return array->nodes+position;
 }
 
-static inline void blockEntriesArray(arrayNodes_t** array){
-	unsigned long long new_array = 0;
-	if((((unsigned long long)array) & BLOCK) == 0){
-		new_array = (((unsigned long long)(*array)) | BLOCK);
-		BOOL_CAS(array, *array, new_array);
-	}
+static inline void blockArray(arrayNodes_t** array){
+	long long int idx = 0;
+	long long int limit = 0;
+	if(getFixed((*array)->indexWrite) > (*array)->length)
+		limit = getFixed((*array)->indexWrite);
+	else
+		limit = (*array)->length;
+	void* initAddr = NULL;
+	while(idx < limit){
+		initAddr = (*array)->nodes[idx].ptr;
+		if(initAddr == NULL)
+			BOOL_CAS(&(*array)->nodes[idx].ptr, initAddr, BLOCK_ENTRY);
+		idx++;
+	}	
 }
 
-static inline int isBlocked(arrayNodes_t* array){
-	return ((unsigned long long)array) & BLOCK;
-}
-
-static inline arrayNodes_t* unBlock(arrayNodes_t* array){
-	unsigned long long app = (unsigned long long)array;
-	app = app & ~BLOCK;
-	return (arrayNodes_t*)app;
-}
+// static inline int isBlocked(arrayNodes_t** array){
+// 	return (*array)->nodes[(*array)->length-1].ptr == 0xFFFFFFFFFFFFFFFF;
+// }
 
 /**
  * Function that implements the logic to ordering the array and build the list
@@ -186,28 +191,47 @@ arrayNodes_t* vectorOrderingAndBuild(bucket_t* bckt){
 	int actNuma;
 	arrayNodes_t* array = NULL;
 	for (actNuma = 0; actNuma < bckt->numaNodes; actNuma++){
-		array = unBlock(bckt->ptr_arrays[actNuma]);
-		elmToOrder += getFixed(array->indexWrite);
+		array = bckt->ptr_arrays[actNuma];
+		if(getFixed(array->indexWrite) > array->length)
+			elmToOrder += array->length;
+		else 
+			elmToOrder += getFixed(array->indexWrite);
 	}
 	actNuma = 0;
-	arrayNodes_t* newArray = initArray(elmToOrder);
+	arrayNodes_t* newArray = NULL;
 	// printf("newArray->nodes %p, elemToOrder: %u\n", newArray->nodes, elmToOrder);
 	if(elmToOrder > 0){
+		newArray = initArray(elmToOrder);
 		for (actNuma = 0; actNuma < bckt->numaNodes; actNuma++){
-			array = unBlock(bckt->ptr_arrays[actNuma]);
-			if(getFixed(array->indexWrite) > 0)
-				copyArray(array, getFixed(array->indexWrite), newArray);
+			array = bckt->ptr_arrays[actNuma];
+			if(getFixed(array->indexWrite) > 0){
+				if(getFixed(array->indexWrite) > array->length)
+					copyArray(array, array->length, newArray);
+				else
+					copyArray(array, getFixed(array->indexWrite), newArray);
+			}
 			if(!unordered(bckt)){
 				arrayNodes_safe_free(newArray);
 				return NULL;
 			}
 		}
 
+		if(!unordered(bckt)) return NULL;
+
+		void* addr = NULL;
+		for (int i = 0; i < newArray->length; i++){
+			addr = newArray->nodes[i].ptr;
+			assert(addr == NULL || addr == 0x1);
+		}
+
+		//printArray(newArray->nodes, newArray->length, 0);
 		// Sort elements
-		quickSort(newArray->nodes, 0, newArray->indexWrite-1);
+		quickSort(newArray->nodes, 0, newArray->length-1);
 
 		// toList also allocate the node elem
-		toList(newArray, newArray->indexWrite, &bckt->tail);
+		toList(newArray, newArray->length, &bckt->tail);
+
+		//printList(newArray->nodes[0].ptr);
 	}
 	return newArray;
 }
@@ -308,52 +332,19 @@ static inline void setUnvalidRead(bucket_t* bckt){
 	}
 }
 
-// /**
-//  * Function that checks if the list is enabled or not
-// */
-// static inline int unlinked(unsigned long long index){
-// 	//return (index >> 63) == 0;
-// 	index =is_freezed_for_lnk(index);
-// 	return index;
-// }
-
-// /**
-//  * Function that publish the ordered array of nodes
-// */
-// static inline void setLinked(bucket_t* bckt){
-// 	unsigned long long nValCont = -1;
-// 	unsigned long long index = -1;
-// 	int numaNode = getNumaNode(syscall(SYS_gettid), bckt->numaNodes);
-// 	arrayNodes_t* array = bckt->ptr_arrays[numaNode];
-// 	do{
-// 		index = array->indexRead;
-// 		nValCont = index | 1ULL << 63;
-// 		BOOL_CAS(&array->indexRead, index, nValCont);
-// 	}while(!is_freezed_for_lnk(array->indexRead));
-
-// 	int actNuma;
-// 	for (actNuma = 0; actNuma < bckt->numaNodes; actNuma++){
-// 		array = bckt->ptr_arrays[actNuma];
-// 		if(validRead(array->indexRead)){
-// 			do{
-// 				index = array->indexRead;
-// 				nValCont = index | 1ULL << 63;
-// 				BOOL_CAS(&array->indexRead, index, nValCont);
-// 			}while(!is_freezed_for_lnk(array->indexRead));
-// 		}
-// 	}
-// }
-
 /**
  * To write in the array
 */
 int set(arrayNodes_t* array, int position, void* payload, pkey_t timestamp){
-		array->nodes[position].ptr = payload;
-		array->nodes[position].timestamp = timestamp;
-		if(array->nodes[position].ptr == payload)
+		if(array->nodes[position].ptr == NULL){
+			array->nodes[position].ptr = payload;
+			array->nodes[position].timestamp = timestamp;
 			return MYARRAY_INSERT;
-		else
+		}else{
+			// printf("SET payload: %p, timestamp: %f\n", payload, timestamp);
+			// fflush(stdout);
 			return MYARRAY_ERROR;
+		}
 }
 
 /**
@@ -361,9 +352,14 @@ int set(arrayNodes_t* array, int position, void* payload, pkey_t timestamp){
 */
 int setCAS(arrayNodes_t* array, int position, void* payload, pkey_t timestamp){
 	int res = -1;
-	printArray(array->nodes, array->length-1, 0);
-	assert(&array->nodes[position] != NULL);
-	assert(array->nodes[position].ptr == NULL);
+	if(array->nodes[position].ptr != NULL){
+		// printf("setCAS payload: %p, timestamp: %f\n", payload, timestamp);
+		// fflush(stdout);
+		return MYARRAY_ERROR;
+	}
+	// printArray(array->nodes, array->length-1, 0);
+	// assert(&array->nodes[position] != NULL);
+	// assert(array->nodes[position].ptr == NULL);
 	while(array->nodes[position].ptr == NULL){
 		res = BOOL_CAS(&array->nodes[position].ptr, NULL, payload);
 	}
@@ -371,24 +367,17 @@ int setCAS(arrayNodes_t* array, int position, void* payload, pkey_t timestamp){
 		array->nodes[position].timestamp = timestamp;
 		return MYARRAY_INSERT;
 	}
-	else return MYARRAY_ERROR;
 }
 
 /**
  * To read from the array
 */
 void get(arrayNodes_t* array, int position, void** payload, pkey_t* timestamp){
-	if(array->nodes[position].ptr == NULL && array->nodes[position].timestamp == MIN){
-		*payload = array->nodes[position].ptr;
-		*timestamp = array->nodes[position].timestamp;
-	}else{
-		void* app1 = (void*)array->nodes[position].ptr;
-		assert(app1 != NULL);
-		node_t* app = (node_t*)app1;
-		*payload = app->payload;
-		*timestamp = app->timestamp;
-	}
-
+	void* app1 = (void*)array->nodes[position].ptr;
+	assert(app1 != NULL && app1 != BLOCK_ENTRY);
+	node_t* app = (node_t*)app1;
+	*payload = app->payload;
+	*timestamp = app->timestamp;
 }
 
 /**
@@ -399,35 +388,40 @@ int stateMachine(bucket_t* bckt, unsigned long dequeueStop){
 	int public = 0;
 	arrayNodes_t* array = bckt->ptr_arrays[numaNode];
 	if(validContent(array->indexWrite)){
-		if(getDynamic(array->indexWrite)-1 >= array->length){
+		if(getDynamic(array->indexWrite) > 0 && getDynamic(array->indexWrite)-1 >= array->length){
 			setUnvalidContent(bckt);
 			assert(validContent(array->indexWrite) == false);
 		}
 	}
 	if(!validContent(array->indexWrite) && unordered(bckt)){
 		// First Phase: Block all used entries
-		if(!isBlocked(bckt->ptr_arrays[numaNode]))
-			blockEntriesArray(bckt->ptr_arrays+numaNode);
+		blockArray(bckt->ptr_arrays+numaNode);
 
 		for (int actNuma = 0; actNuma < bckt->numaNodes; actNuma++){
-			if(!isBlocked(bckt->ptr_arrays[actNuma])){
-				blockEntriesArray(bckt->ptr_arrays+actNuma);
-			}
+			blockArray(bckt->ptr_arrays+actNuma);
 		}
 		// Second Phase: Order elements and the public the array
-		arrayNodes_t*  newArray = vectorOrderingAndBuild(bckt);
+		arrayNodes_t*  newArray = NULL;
+		if(unordered(bckt))
+			newArray = vectorOrderingAndBuild(bckt);
 
 		if(newArray != NULL){
 			// Lock the write on the array ordered
 			newArray->indexWrite = (newArray->indexWrite << 32) | newArray->indexWrite;
-			setOrdered(bckt, newArray);
+			if(unordered(bckt)) 
+				setOrdered(bckt, newArray);
 			if(bckt->arrayOrdered != newArray)
 				arrayNodes_unsafe_free_malloc(newArray);
 			else
 				public = 1;
+			assert(unordered(bckt) == false);
 		}
 
-		assert(unordered(bckt) == false);
+		// for(int i = 0; i < getFixed(bckt->arrayOrdered->indexWrite); i++){
+		// 	node_t* app = ((node_t*)bckt->arrayOrdered->nodes[i].ptr);
+		// 	assert(app->payload == 0x1);
+		// 	assert((app->timestamp == 0.0) == false);
+		// }
 	}
 
 	if(dequeueStop) return public;

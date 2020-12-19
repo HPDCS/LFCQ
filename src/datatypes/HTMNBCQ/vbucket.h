@@ -572,7 +572,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	int numaNode = getNumaNode(syscall(SYS_gettid), bckt->numaNodes);
 	unsigned long long idxWrite = 0;
 	if(validContent(idxWrite))
-		idxWrite = VAL_FAA(&unBlock(bckt->ptr_arrays[numaNode])->indexWrite, 1);
+		idxWrite = VAL_FAA(&bckt->ptr_arrays[numaNode]->indexWrite, 1);
 
 	// Evaluate State Machine
 	stateMachine(bckt, ENQUEUE);
@@ -585,12 +585,18 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	if(is_freezed_for_del(extracted)) return EMPTY;
 
 	if(!is_freezed_for_lnk(extracted) && validContent(idxWrite)){
-		arrayNodes_t* array = unBlock(bckt->ptr_arrays[numaNode]);
+		arrayNodes_t* array = bckt->ptr_arrays[numaNode];
 		int idx = getDynamic(idxWrite);
+		// Non ha senso fare questo check se ora metto BLOCK_ENTRY
+		// quando devo bloccare gli inserimenti
 		assert(array->nodes+idx != NULL);
 		void* ptr = array->nodes[idx].ptr;
-		assert(ptr == NULL);
-		return res = nodesInsert(unBlock(bckt->ptr_arrays[numaNode]), getDynamic(idxWrite), payload, timestamp) == MYARRAY_INSERT ? OK : ABORT;
+		if(ptr != BLOCK_ENTRY && ptr != NULL){
+			printf("pointer: %p\n", ptr);
+			fflush(stdout);
+			assert(ptr != BLOCK_ENTRY && ptr == NULL);
+		}
+		return res = nodesInsert(bckt->ptr_arrays[numaNode], getDynamic(idxWrite), payload, timestamp) == MYARRAY_INSERT ? OK : ABORT;
 	}
 
   // The amount of elements to skip are equal to the extracted value
@@ -750,16 +756,16 @@ static inline int extract_from_ArrayOrList(bucket_t *bckt, void ** result, pkey_
 
 	// LUCKY:
 	int numaNode = getNumaNode(syscall(SYS_gettid), bckt->numaNodes);
-	if(validContent(unBlock(bckt->ptr_arrays[numaNode])->indexWrite)){
+	if(validContent(bckt->ptr_arrays[numaNode]->indexWrite)){
 		// Invalido inserimenti sugli array per numa node
 		setUnvalidContent(bckt);
 	}	
-	assert(validContent(unBlock(bckt->ptr_arrays[numaNode])->indexWrite) == false);
+	assert(validContent(bckt->ptr_arrays[numaNode]->indexWrite) == false);
 
 	// Applico la state machine per costruire l'array ordinato
 	// che comprende tutti gli elementi
 	stateMachine(bckt, DEQUEUE);
-	assert(validContent(unBlock(bckt->ptr_arrays[numaNode])->indexWrite) == false || unordered(bckt) == false);
+	assert(validContent(bckt->ptr_arrays[numaNode]->indexWrite) == false || unordered(bckt) == false);
 	idxRead = VAL_FAA(&bckt->extractions, 1);
 
 	// If another operation is in progress, return the operation
