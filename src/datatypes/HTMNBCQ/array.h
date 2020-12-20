@@ -105,7 +105,7 @@ static inline long long int getFixed(unsigned long long idx){
 static inline void copyArray(arrayNodes_t* array, unsigned long long limit, arrayNodes_t* newArray){
 	int found = 0;
 	for (unsigned long i = 0; i < limit; i++){
-		if(array->nodes[i].ptr != BLOCK_ENTRY && array->nodes[i].timestamp > MIN && array->nodes[i].timestamp < INFTY){
+		if(array->nodes[i].ptr != BLOCK_ENTRY && array->nodes[i].timestamp >= MIN && array->nodes[i].timestamp < INFTY){
 			// found = binarySearch(newArray->nodes, 0, newArray->indexWrite-1, array->nodes[i].timestamp);
 			// if(found == -1){
 				newArray->nodes[newArray->indexWrite].ptr = array->nodes[i].ptr;
@@ -164,24 +164,27 @@ nodeElem_t* getNodeElem(arrayNodes_t* array, unsigned long long position){
 }
 
 static inline void blockArray(arrayNodes_t** array){
+	// FIXME: Chiedere e valutare
+	// Verso discusso durante la progettazione
 	long long int idx = 0;
 	long long int limit = 0;
 	if(getFixed((*array)->indexWrite) > (*array)->length)
 		limit = getFixed((*array)->indexWrite);
 	else
 		limit = (*array)->length;
-	void* initAddr = NULL;
 	while(idx < limit){
-		initAddr = (*array)->nodes[idx].ptr;
-		if(initAddr == NULL)
-			BOOL_CAS(&(*array)->nodes[idx].ptr, initAddr, BLOCK_ENTRY);
+		while((*array)->nodes[idx].ptr == NULL){
+			BOOL_CAS(&(*array)->nodes[idx].ptr, NULL, BLOCK_ENTRY);
+		}
 		idx++;
-	}	
+	}
+	// Verso che Romolo pensa sempre e mi dice
+	// long long int idx = (*array)->length-1;
+	// while(idx > 0){
+	// 	BOOL_CAS(&(*array)->nodes[idx].ptr, NULL, BLOCK_ENTRY);
+	// 	idx--;
+	// }
 }
-
-// static inline int isBlocked(arrayNodes_t** array){
-// 	return (*array)->nodes[(*array)->length-1].ptr == 0xFFFFFFFFFFFFFFFF;
-// }
 
 /**
  * Function that implements the logic to ordering the array and build the list
@@ -224,14 +227,14 @@ arrayNodes_t* vectorOrderingAndBuild(bucket_t* bckt){
 			assert(addr == NULL || addr == 0x1);
 		}
 
-		//printArray(newArray->nodes, newArray->length, 0);
+		//  printArray(newArray->nodes, newArray->length, 0);
 		// Sort elements
 		quickSort(newArray->nodes, 0, newArray->length-1);
 
 		// toList also allocate the node elem
 		toList(newArray, newArray->length, &bckt->tail);
-
-		//printList(newArray->nodes[0].ptr);
+		
+		//  printList(newArray->nodes[0].ptr);
 	}
 	return newArray;
 }
@@ -335,38 +338,32 @@ static inline void setUnvalidRead(bucket_t* bckt){
 /**
  * To write in the array
 */
-int set(arrayNodes_t* array, int position, void* payload, pkey_t timestamp){
-		if(array->nodes[position].ptr == NULL){
-			array->nodes[position].ptr = payload;
-			array->nodes[position].timestamp = timestamp;
-			return MYARRAY_INSERT;
-		}else{
-			// printf("SET payload: %p, timestamp: %f\n", payload, timestamp);
-			// fflush(stdout);
-			return MYARRAY_ERROR;
-		}
+static inline int set(arrayNodes_t* array, int position, void* payload, pkey_t timestamp){
+	int retVal = MYARRAY_ERROR;
+	if(array->nodes[position].ptr == NULL){
+		array->nodes[position].ptr = payload;
+		array->nodes[position].timestamp = timestamp;
+		retVal = MYARRAY_INSERT;
+	}
+	return retVal;
 }
 
 /**
  * To write in the array using CAS
 */
-int setCAS(arrayNodes_t* array, int position, void* payload, pkey_t timestamp){
-	int res = -1;
-	if(array->nodes[position].ptr != NULL){
-		// printf("setCAS payload: %p, timestamp: %f\n", payload, timestamp);
-		// fflush(stdout);
-		return MYARRAY_ERROR;
-	}
-	// printArray(array->nodes, array->length-1, 0);
-	// assert(&array->nodes[position] != NULL);
-	// assert(array->nodes[position].ptr == NULL);
+static inline int setCAS(arrayNodes_t* array, int position, void* payload, pkey_t timestamp){
+	void* res = 0x1;
+	int retVal = MYARRAY_ERROR;
+	assert(array->nodes[position].ptr == NULL || array->nodes[position].ptr == BLOCK_ENTRY);
 	while(array->nodes[position].ptr == NULL){
-		res = BOOL_CAS(&array->nodes[position].ptr, NULL, payload);
+		res = VAL_CAS(&array->nodes[position].ptr, NULL, payload);
+		if(res == NULL){
+			array->nodes[position].timestamp = timestamp;
+			retVal = MYARRAY_INSERT;
+		}
 	}
-	if(res){
-		array->nodes[position].timestamp = timestamp;
-		return MYARRAY_INSERT;
-	}
+
+	return retVal;
 }
 
 /**
@@ -415,13 +412,14 @@ int stateMachine(bucket_t* bckt, unsigned long dequeueStop){
 			else
 				public = 1;
 			assert(unordered(bckt) == false);
+			// printArray(bckt->arrayOrdered->nodes, bckt->arrayOrdered->length, 0);
 		}
 
-		// for(int i = 0; i < getFixed(bckt->arrayOrdered->indexWrite); i++){
-		// 	node_t* app = ((node_t*)bckt->arrayOrdered->nodes[i].ptr);
-		// 	assert(app->payload == 0x1);
-		// 	assert((app->timestamp == 0.0) == false);
-		// }
+		// Code for checking if the arrayOrdered elements are composed as I expect
+		 for(int i = 0; i < getFixed(bckt->arrayOrdered->indexWrite); i++){
+		 	node_t* app = ((node_t*)bckt->arrayOrdered->nodes[i].ptr);
+		 	assert(app->payload == 0x1 && app->timestamp > MIN && app->timestamp < INFTY);
+		 }
 	}
 
 	if(dequeueStop) return public;
@@ -451,7 +449,6 @@ int stateMachine(bucket_t* bckt, unsigned long dequeueStop){
 					expBackoffTime(&testSleep, &maxSleep);
 			}else{
 				if(array->nodes[0].ptr != NULL){
-					((node_t*)array->nodes[0].ptr)->next = bckt->head.next;
 					BOOL_CAS(&bckt->head.next, bckt->tail, array->nodes[0].ptr);
 				}
 				break;
@@ -461,6 +458,7 @@ int stateMachine(bucket_t* bckt, unsigned long dequeueStop){
 		assert(bckt->head.next != NULL);
 		atomic_bts_x64(&bckt->extractions, LNK_BIT_POS);
 		assert(bckt->extractions & FREEZE_FOR_LNK);
+		// printList(bckt->head.next);
 	}
 	return public;
 }
@@ -482,9 +480,12 @@ int nodesInsert(arrayNodes_t* array, int idxWrite, void* payload, pkey_t timesta
 		// START TRANSACTION
 		__status = _xbegin();
 		if(__status == _XBEGIN_STARTED){
-			if(validContent(idxWrite)){
-				resRet =  set(array, idxWrite, payload, timestamp);
+			if(array->nodes[idxWrite].ptr == NULL){
+				array->nodes[idxWrite].ptr = payload;
+				array->nodes[idxWrite].timestamp = timestamp;
+				resRet = MYARRAY_INSERT;
 				TM_COMMIT();
+				//resRet =  set(array, idxWrite, payload, timestamp);
 			}else{
 				TM_ABORT(XABORT_CODE_RET);
 			}
@@ -497,7 +498,7 @@ int nodesInsert(arrayNodes_t* array, int idxWrite, void* payload, pkey_t timesta
 	}
 
 	// Fallback to CAS
-	if(attempts <= 0){
+	if(resRet == MYARRAY_ERROR){
 			resRet = setCAS(array, idxWrite, payload, timestamp);
 	}
 	return resRet;

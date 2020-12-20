@@ -145,7 +145,7 @@ static inline bucket_t* bucket_alloc(node_t *tail){
     
 		// LUCKY:
 		//res->numaNodes = numa_num_configured_nodes();
-		int length = 4;
+		int length = 20000;
 		res->numaNodes = 2;
 		res->ptr_arrays = (arrayNodes_t**)malloc(sizeof(arrayNodes_t*)*res->numaNodes);
 		for(int i=0; i < res->numaNodes; i++){

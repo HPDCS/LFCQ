@@ -587,16 +587,10 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	if(!is_freezed_for_lnk(extracted) && validContent(idxWrite)){
 		arrayNodes_t* array = bckt->ptr_arrays[numaNode];
 		int idx = getDynamic(idxWrite);
-		// Non ha senso fare questo check se ora metto BLOCK_ENTRY
-		// quando devo bloccare gli inserimenti
 		assert(array->nodes+idx != NULL);
 		void* ptr = array->nodes[idx].ptr;
-		if(ptr != BLOCK_ENTRY && ptr != NULL){
-			printf("pointer: %p\n", ptr);
-			fflush(stdout);
-			assert(ptr != BLOCK_ENTRY && ptr == NULL);
-		}
-		return res = nodesInsert(bckt->ptr_arrays[numaNode], getDynamic(idxWrite), payload, timestamp) == MYARRAY_INSERT ? OK : ABORT;
+		assert(ptr != BLOCK_ENTRY && ptr == NULL);
+		return nodesInsert(bckt->ptr_arrays[numaNode], getDynamic(idxWrite), payload, timestamp) == MYARRAY_INSERT ? OK : ABORT;
 	}
 
   // The amount of elements to skip are equal to the extracted value
@@ -783,8 +777,9 @@ static inline int extract_from_ArrayOrList(bucket_t *bckt, void ** result, pkey_
 		// Assert sui flags (SUPER IMPORTANTE)
 /* 		assert(validContent(unBlock(bckt->ptr_arrays[numaNode])->indexWrite) == false && unordered(bckt) == false && is_freezed_for_lnk(bckt->extractions) == false
 			&& bckt->head.next == bckt->tail); */
-		if(getDynamic(idxRead) < bckt->arrayOrdered->length){
+		if(getDynamic(idxRead) < bckt->arrayOrdered->length && getDynamic(idxRead) < getFixed(bckt->arrayOrdered->indexWrite)){
 			res = nodesDequeue(bckt->arrayOrdered, getDynamic(idxRead), result, ts);
+			assert(*result == 0x1 && *ts >= MIN && *ts < INFTY);
 			if(res == MYARRAY_EXTRACT) return OK;
 			else return ABORT;
 		}else{

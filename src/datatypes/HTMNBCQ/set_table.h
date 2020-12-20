@@ -129,65 +129,7 @@ static int search_and_insert(bucket_t *head, SkipList *lookup_table, unsigned in
 
 	do{
 		long old_hash = 0;
-//		int res = skipListContains(lookup_table, index, &lookup_res, &old_hash);
 
-/*		if(
-			0 &&
-			res &&
-			lookup_res != NULL && 
-			lookup_res->index == index &&
-			lookup_res->hash  == old_hash 
-			//!is_freezed(lookup_res->extractions) && 
-			//is_marked(lookup_res->next, VAL)
-		)
-		{
-			__cache_load[0]++;
-			if(
-                        !is_freezed(lookup_res->extractions) 	&&
-                        is_marked(lookup_res->next, VAL)	&&
-			bucket_connect(lookup_res, timestamp, tie_breaker, payload, epoch) == OK
-			) 
-				return OK;
-		}
-*/		if( 0 &&
-			lookup_res != NULL && 
-			lookup_res->index <= index &&
-                        !is_freezed(get_extractions_wtoutlk(lookup_res->extractions))    &&
-                        is_marked(lookup_res->next, VAL) &&
-                        lookup_res->hash  == old_hash
-		  )
-		{
-			__cache_load[0]++;
-			do{
-				left		= lookup_res;
-				left_next	= left->next;
-				lookup_res 	= right		= get_next_valid(left);
-				
-			}while(right->index <= index);
-		}
-	
-/*	}
-
-		if(!found){
-			ListNode *pred = preds[MIN_LEVEL];
-			ListNode *succ = succs[MIN_LEVEL];
-
-			ListNode *newNode = makeNormalNode(key, topLevel, value);
-			for (level = MIN_LEVEL; level <= topLevel; level++) {
-				ListNode *succ = succs[level];
-				SET_ATOMIC_REF(&(newNode->next[level]), succ, FALSE_MARK);
-			}
-			ListNode *pred = preds[MIN_LEVEL];
-			ListNode *succ = succs[MIN_LEVEL];
-			if (  !(REF_CAS(&(pred->next[MIN_LEVEL]), succ, newNode, FALSE_MARK, FALSE_MARK))  ) {
-				gc_free(ptst, newNode, gc_id[topLevel]);
-				continue;
-			}
-		}
-
-		
-		{
-*/
 		// first get bucket
 		left = search(head, &left_next, &right, &distance, index);
 		if(is_marked(left_next, VAL) && left_next != right && BOOL_CAS(&left->next, left_next, right))
@@ -210,8 +152,8 @@ static int search_and_insert(bucket_t *head, SkipList *lookup_table, unsigned in
 		
 			// LUCKY:
 			int numaNode = getNumaNode(syscall(SYS_gettid), newb->numaNodes);
-			unsigned long long idxRead = VAL_FAA(&newb->ptr_arrays[numaNode]->indexWrite, 1);
-			int val = nodesInsert(newb->ptr_arrays[numaNode], getDynamic(idxRead), payload, timestamp);
+			unsigned long long idxWrite = VAL_FAA(&newb->ptr_arrays[numaNode]->indexWrite, 1);
+			int val = nodesInsert(newb->ptr_arrays[numaNode], getDynamic(idxWrite), payload, timestamp);
 			assert(val == MYARRAY_INSERT);
 
 			newb->head.next = newb->tail;
@@ -242,16 +184,6 @@ static int search_and_insert(bucket_t *head, SkipList *lookup_table, unsigned in
 			assert(left->next == newb && left->next->head.next == left->next->tail && left->next->next == right);
 			return OK;
 		}
-/*		
-		if(
-		0 && 
-		left != lookup_res
-		)
-		{
-			skipListRemove(lookup_table, index);
-			skipListAdd(lookup_table, index, left);
-		}
-*/
 			update_cache(left);
 		 	return bucket_connect(left, timestamp, tie_breaker, payload, epoch);
 		}while(1);
