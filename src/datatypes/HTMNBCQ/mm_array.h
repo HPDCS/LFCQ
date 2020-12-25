@@ -14,7 +14,7 @@ static inline nodeElem_t* nodeElem_init(nodeElem_t* nodes, int length){
 		res = nodes+i;
 		bzero(res, sizeof(nodeElem_t));
 		res->ptr = NULL;
-		res->replica = NULL;
+		//res->replica = NULL;
 		res->timestamp = MIN;
 	}
 	return res;
@@ -49,7 +49,7 @@ static inline arrayNodes_t* arrayNodes_alloc(int length){
     }while(1);
     bzero(res, sizeof(arrayNodes_t));
 	res->epoch = 0;
-	res->indexRead = 0;
+	//res->indexRead = 0;
 	res->indexWrite = 0;
 	res->length = length;
 	//res->nodes = nodeElem_alloc(length);

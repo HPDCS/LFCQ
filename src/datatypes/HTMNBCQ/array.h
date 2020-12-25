@@ -36,8 +36,8 @@ typedef struct __nodeElem_t {
 	// Event payload and its replica
 	void* ptr;
 	pkey_t timestamp;
-	unsigned int tie_breaker;
-	void* replica;
+	// unsigned int tie_breaker;
+	// void* replica;
 } nodeElem_t;
 
 /**
@@ -51,7 +51,7 @@ typedef struct __arrayNodes_t {
 	long long int length;
 	// Important for insertion ed extraction
 	unsigned int epoch;
-	long long int indexRead;
+	//long long int indexRead;
 	long long int indexWrite;
 } arrayNodes_t;
 
@@ -71,7 +71,7 @@ arrayNodes_t* initArray(unsigned int length){
 	bzero(array,  sizeof(arrayNodes_t));
 
 	array->epoch = 0;
-	array->indexRead = 0;
+	//array->indexRead = 0;
 	array->indexWrite = 0;
 	array->length = length;
 
@@ -109,9 +109,9 @@ static inline void copyArray(arrayNodes_t* array, unsigned long long limit, arra
 			// found = binarySearch(newArray->nodes, 0, newArray->indexWrite-1, array->nodes[i].timestamp);
 			// if(found == -1){
 				newArray->nodes[newArray->indexWrite].ptr = array->nodes[i].ptr;
-				newArray->nodes[newArray->indexWrite].replica = array->nodes[i].replica;
+				//newArray->nodes[newArray->indexWrite].replica = array->nodes[i].replica;
 				newArray->nodes[newArray->indexWrite].timestamp = array->nodes[i].timestamp;
-				newArray->nodes[newArray->indexWrite].tie_breaker = 0;
+				//newArray->nodes[newArray->indexWrite].tie_breaker = 0;
 				newArray->indexWrite++;
 			// }else
 			// 	newArray->nodes[found].tie_breaker++;
@@ -129,7 +129,7 @@ static inline void toList(arrayNodes_t* array, unsigned long long limit, node_t*
 	for(unsigned long i = 0; i < limit; i++){
 		prec->payload = array->nodes[i].ptr;
 		prec->timestamp = array->nodes[i].timestamp;
-		prec->tie_breaker = array->nodes[i].tie_breaker;
+		//prec->tie_breaker = array->nodes[i].tie_breaker;
 		prec->next = *tail;
 		array->nodes[i].ptr = prec;
 		if(i < limit-1){
@@ -164,26 +164,13 @@ nodeElem_t* getNodeElem(arrayNodes_t* array, unsigned long long position){
 }
 
 static inline void blockArray(arrayNodes_t** array){
-	// FIXME: Chiedere e valutare
-	// Verso discusso durante la progettazione
 	long long int idx = 0;
-	long long int limit = 0;
-	if(getFixed((*array)->indexWrite) > (*array)->length)
-		limit = getFixed((*array)->indexWrite);
-	else
-		limit = (*array)->length;
-	while(idx < limit){
+	while(idx < (*array)->length){
 		while((*array)->nodes[idx].ptr == NULL){
 			BOOL_CAS(&(*array)->nodes[idx].ptr, NULL, BLOCK_ENTRY);
 		}
 		idx++;
 	}
-	// Verso che Romolo pensa sempre e mi dice
-	// long long int idx = (*array)->length-1;
-	// while(idx > 0){
-	// 	BOOL_CAS(&(*array)->nodes[idx].ptr, NULL, BLOCK_ENTRY);
-	// 	idx--;
-	// }
 }
 
 /**
@@ -193,8 +180,9 @@ arrayNodes_t* vectorOrderingAndBuild(bucket_t* bckt){
 	unsigned long long elmToOrder = 0;
 	int actNuma;
 	arrayNodes_t* array = NULL;
-	for (actNuma = 0; actNuma < bckt->numaNodes; actNuma++){
+	for (actNuma = 0; actNuma < bckt->tot_arrays; actNuma++){
 		array = bckt->ptr_arrays[actNuma];
+		if(array == NULL) continue;
 		if(getFixed(array->indexWrite) > array->length)
 			elmToOrder += array->length;
 		else 
@@ -205,8 +193,9 @@ arrayNodes_t* vectorOrderingAndBuild(bucket_t* bckt){
 	// printf("newArray->nodes %p, elemToOrder: %u\n", newArray->nodes, elmToOrder);
 	if(elmToOrder > 0){
 		newArray = initArray(elmToOrder);
-		for (actNuma = 0; actNuma < bckt->numaNodes; actNuma++){
+		for (actNuma = 0; actNuma < bckt->tot_arrays; actNuma++){
 			array = bckt->ptr_arrays[actNuma];
+			if(array == NULL) continue;
 			if(getFixed(array->indexWrite) > 0){
 				if(getFixed(array->indexWrite) > array->length)
 					copyArray(array, array->length, newArray);
@@ -224,7 +213,7 @@ arrayNodes_t* vectorOrderingAndBuild(bucket_t* bckt){
 		void* addr = NULL;
 		for (int i = 0; i < newArray->length; i++){
 			addr = newArray->nodes[i].ptr;
-			assert(addr == NULL || addr == 0x1);
+			assert(addr != NULL);
 		}
 
 		//  printArray(newArray->nodes, newArray->length, 0);
@@ -256,7 +245,7 @@ static inline void setUnvalidContent(bucket_t* bckt){
 	int numaNode = getNumaNode(syscall(SYS_gettid), bckt->numaNodes);
 	arrayNodes_t* array = bckt->ptr_arrays[numaNode];
 
-	do{
+	while(validContent(array->indexWrite)){
 		index = array->indexWrite;
 		if(numRetry > MAX_ATTEMPTS && index == 0) 
 			nValCont = index | (1ULL << LNK_BIT_POS);
@@ -265,12 +254,14 @@ static inline void setUnvalidContent(bucket_t* bckt){
 		}
 		BOOL_CAS(&array->indexWrite, index, nValCont);
 		numRetry++;
-	}while(validContent(array->indexWrite));
-
+	}
+	
 	numRetry = 0;
 	int actNuma;
-	for (actNuma = 0; actNuma < bckt->numaNodes; actNuma++){
+	// printf("Array da bloccare = %u\n", bckt->tot_arrays);
+	for (actNuma = 0; actNuma < bckt->tot_arrays; actNuma++){
 		array = bckt->ptr_arrays[actNuma];
+		if(array == NULL) continue;
 		if(validContent(array->indexWrite)){
 			do{
 				index = array->indexWrite;
@@ -283,6 +274,8 @@ static inline void setUnvalidContent(bucket_t* bckt){
 				numRetry++;
 			}while(validContent(array->indexWrite));
 		}
+		// printf("%p, bloccato Array %d idxWrite = %lld\n", bckt, actNuma, getFixed(get_extractions_wtoutlk(array->indexWrite)));
+		// fflush(stdout);
 	}
 }
 
@@ -300,40 +293,42 @@ static inline void setUnvalidContent(bucket_t* bckt){
 /**
  * Function that blocks the dequeue in the array setting the high part equal to the low part in indexWrite
 */
-static inline void setUnvalidRead(bucket_t* bckt){
-	unsigned long long  nValCont = 0;
-	unsigned long long  index = 0;
-	int numRetry = 0;
-	int numaNode = getNumaNode(syscall(SYS_gettid), bckt->numaNodes);
-	arrayNodes_t* array = bckt->ptr_arrays[numaNode];
-	do{
-		index = array->indexRead;
-		if(numRetry > MAX_ATTEMPTS && index == 0) 
-			nValCont = index | (1ULL << 63);
-		else{
-			nValCont =  index | (index << 32);
-		}
-		BOOL_CAS(&array->indexRead, index, nValCont);
-		numRetry++;
-	}while(validContent(array->indexRead));
+// static inline void setUnvalidRead(bucket_t* bckt){
+// 	unsigned long long  nValCont = 0;
+// 	unsigned long long  index = 0;
+// 	int numRetry = 0;
+// 	int numaNode = getNumaNode(syscall(SYS_gettid), bckt->numaNodes);
+// 	arrayNodes_t* array = bckt->ptr_arrays[numaNode];
+// 	// TODO: Valutare se mettere un if prima di fare questo while
+// 	do{
+// 		index = array->indexRead;
+// 		if(numRetry > MAX_ATTEMPTS && index == 0) 
+// 			nValCont = index | (1ULL << 63);
+// 		else{
+// 			nValCont =  index | (index << 32);
+// 		}
+// 		BOOL_CAS(&array->indexRead, index, nValCont);
+// 		numRetry++;
+// 	}while(validContent(array->indexRead));
 
-	numRetry = 0;
-	for (int actNuma = 0; actNuma < bckt->numaNodes; actNuma++){
-		array = bckt->ptr_arrays[actNuma];
-		if(validContent(array->indexRead)){
-			do{
-				index = array->indexRead;
-				if(numRetry > MAX_ATTEMPTS && index == 0)
-					nValCont = index | (1ULL << 63);
-				else{
-					nValCont =  index | (index << 32);
-				}
-				BOOL_CAS(&array->indexRead, index, nValCont);
-				numRetry++;
-			}while(validContent(array->indexRead));
-		}
-	}
-}
+// 	numRetry = 0;
+// 	for (int actNuma = 0; actNuma < bckt->tot_arrays; actNuma++){
+// 		array = bckt->ptr_arrays[actNuma];
+// 		if(array == NULL) continue;
+// 		if(validContent(array->indexRead)){
+// 			do{
+// 				index = array->indexRead;
+// 				if(numRetry > MAX_ATTEMPTS && index == 0)
+// 					nValCont = index | (1ULL << 63);
+// 				else{
+// 					nValCont =  index | (index << 32);
+// 				}
+// 				BOOL_CAS(&array->indexRead, index, nValCont);
+// 				numRetry++;
+// 			}while(validContent(array->indexRead));
+// 		}
+// 	}
+// }
 
 /**
  * To write in the array
@@ -398,6 +393,13 @@ int stateMachine(bucket_t* bckt, unsigned long dequeueStop){
 			blockArray(bckt->ptr_arrays+actNuma);
 		}
 		// Second Phase: Order elements and the public the array
+
+		// for (int i = 0; i < bckt->tot_arrays && bckt->index == 24; i++){
+		// 	if(bckt->ptr_arrays[i] != NULL){
+		// 		printArray(bckt->ptr_arrays[i]->nodes, bckt->ptr_arrays[i]->indexWrite, 0);
+		// 	}
+		// }
+
 		arrayNodes_t*  newArray = NULL;
 		if(unordered(bckt))
 			newArray = vectorOrderingAndBuild(bckt);
@@ -416,10 +418,10 @@ int stateMachine(bucket_t* bckt, unsigned long dequeueStop){
 		}
 
 		// Code for checking if the arrayOrdered elements are composed as I expect
-		 for(int i = 0; i < getFixed(bckt->arrayOrdered->indexWrite); i++){
-		 	node_t* app = ((node_t*)bckt->arrayOrdered->nodes[i].ptr);
-		 	assert(app->payload == 0x1 && app->timestamp > MIN && app->timestamp < INFTY);
-		 }
+		for(int i = 0; i < getFixed(bckt->arrayOrdered->indexWrite); i++){
+			node_t* app = ((node_t*)bckt->arrayOrdered->nodes[i].ptr);
+			assert(app->payload != NULL && app->timestamp > MIN && app->timestamp < INFTY);
+		}
 	}
 
 	if(dequeueStop) return public;
@@ -476,7 +478,7 @@ int nodesInsert(arrayNodes_t* array, int idxWrite, void* payload, pkey_t timesta
 	int attempts = MAX_ATTEMPTS;
 	int resRet = MYARRAY_ERROR;
 	int __status = 0;
-	while(attempts > 0 && resRet == MYARRAY_ERROR){
+	while(attempts > 0 && array->nodes[idxWrite].ptr == NULL && resRet == MYARRAY_ERROR){
 		// START TRANSACTION
 		__status = _xbegin();
 		if(__status == _XBEGIN_STARTED){
@@ -499,7 +501,7 @@ int nodesInsert(arrayNodes_t* array, int idxWrite, void* payload, pkey_t timesta
 
 	// Fallback to CAS
 	if(resRet == MYARRAY_ERROR){
-			resRet = setCAS(array, idxWrite, payload, timestamp);
+		resRet = setCAS(array, idxWrite, payload, timestamp);
 	}
 	return resRet;
 }

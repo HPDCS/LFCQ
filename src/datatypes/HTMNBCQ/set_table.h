@@ -30,9 +30,9 @@ extern __thread unsigned long long scan_list_length_en ;
 #define MINIMUM_SIZE 1
 #define SAMPLE_SIZE 50
 
-//#define ENABLE_EXPANSION 1
+#define ENABLE_EXPANSION 1
 // LUCKY: Disabilitare Resize
-#define ENABLE_EXPANSION 0
+//#define ENABLE_EXPANSION 0
 #define READTABLE_PERIOD 64
 #define COMPACT_RANDOM_ENQUEUE 1
 
@@ -118,6 +118,7 @@ static inline bucket_t* get_next_valid(bucket_t *bckt){
 	return res;
 }
 
+#include "array_set_table.h"
 
 static int search_and_insert(bucket_t *head, SkipList *lookup_table, unsigned int index, pkey_t timestamp, unsigned int tie_breaker, unsigned int epoch, void* payload){
 	bucket_t *left, *left_next, *right, *lookup_res;
@@ -427,6 +428,9 @@ committed = false;
 
 
 static inline table_t* read_table(table_t * volatile *curr_table_ptr){
+	// LUCKY: Per fare i test
+	return array_read_table(curr_table_ptr);
+
   #if ENABLE_EXPANSION == 0
   	return *curr_table_ptr;
   #else

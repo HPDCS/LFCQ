@@ -145,14 +145,14 @@ static inline bucket_t* bucket_alloc(node_t *tail){
     
 		// LUCKY:
 		//res->numaNodes = numa_num_configured_nodes();
-		int length = 20000;
-		res->numaNodes = 2;
+		res->numaNodes = NUMA_NODE;
+		res->tot_arrays = res->numaNodes;
 		res->ptr_arrays = (arrayNodes_t**)malloc(sizeof(arrayNodes_t*)*res->numaNodes);
 		for(int i=0; i < res->numaNodes; i++){
-			res->ptr_arrays[i] = initArray(length);
+			res->ptr_arrays[i] = initArray(NODES_LENGTH);
 		}
 		res->arrayOrdered = NULL;
-		//res->app = initArray(length*res->numaNodes);
+		res->destBuckets = NULL;
 		assert(res->head.next == res->tail && res->ptr_arrays[0]->indexWrite == 0);
 		// LUCKY: End
     __sync_bool_compare_and_swap(&res->hash, res->hash, hash);
@@ -203,11 +203,71 @@ static inline bucket_t* bucket_alloc_epo(node_t *tail){
     
 		// LUCKY:
 		//res->numaNodes = numa_num_configured_nodes();
-		res->numaNodes = 2;
+		res->numaNodes = NUMA_NODE;
+		res->tot_arrays = res->numaNodes;
 		res->ptr_arrays = NULL;
 		res->arrayOrdered = NULL;
+		res->destBuckets = NULL;
 		// LUCKY: End
 
+    __sync_bool_compare_and_swap(&res->hash, res->hash, hash);
+    #ifndef RTM
+    pthread_spin_init(&res->lock, 0);
+    #endif
+
+	return res;
+}
+
+/* allocate a bucket */
+static inline bucket_t* bucket_alloc_resize(node_t *tail, int ptrsLength){
+	bucket_t* res;
+	int i;
+	do{
+		res = gc_alloc(ptst, gc_aid[GC_BUCKETS]);
+	  #ifdef ENABLE_CACHE_PARTITION
+	   	unsigned long long index = CACHE_INDEX(res);
+		assert(index <= CACHE_INDEX_MASK);
+		if(index <= ( CACHE_LIMIT - sizeof(bucket_t)/CACHE_LINE_SIZE ) ) {
+	  #endif
+			break;
+	  #ifdef ENABLE_CACHE_PARTITION
+		}
+	   	node_t *tmp = (node_t*)res;
+	   	node_t *tmp_end = (node_t*)(res+1);
+	   	while(tmp < tmp_end){
+			node_unsafe_free(tmp);
+			tmp += 1;
+	    }
+	  #endif
+    }while(1);
+    long hash = res->hash;
+    hash++;
+    if(hash == 0) hash++;
+    res->extractions 		= 0ULL;
+    res->epoch				= 0U;
+    res->pending_insert		= NULL;
+    res->op_descriptor 		= 0ULL;
+    res->tail 				= tail;
+    res->socket 			= -1;
+    res->head.payload		= NULL;
+    res->head.timestamp		= MIN;
+    res->head.tie_breaker	= 0U;
+    res->head.next			= res->tail;
+    for(i=0;i<VB_NUM_LEVELS-1;i++)
+			res->head.upper_next[i]	= res->tail;
+    
+		// LUCKY:
+		//res->numaNodes = numa_num_configured_nodes();
+		res->numaNodes = NUMA_NODE;
+		res->tot_arrays = ptrsLength;
+		res->ptr_arrays = (arrayNodes_t**)malloc(sizeof(arrayNodes_t*)*res->tot_arrays);
+		for(int i=0; i < res->tot_arrays; i++){
+			if(i < res->numaNodes) res->ptr_arrays[i] = initArray(NODES_LENGTH);
+			else res->ptr_arrays[i] = NULL;
+		}
+		res->arrayOrdered = NULL;
+		res->destBuckets = NULL;
+		// LUCKY: End
     __sync_bool_compare_and_swap(&res->hash, res->hash, hash);
     #ifndef RTM
     pthread_spin_init(&res->lock, 0);

@@ -103,6 +103,15 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 		res->hashtable->array[i].index = 0U;
 		res->hashtable->array[i].socket = -1;
 		res->hashtable->array[i].extractions = 0ULL;
+		// LUCKY:
+		res->hashtable->array[i].numaNodes = NUMA_NODE;
+		res->hashtable->array[i].tot_arrays = res->hashtable->array[i].numaNodes;
+		res->hashtable->array[i].ptr_arrays = (arrayNodes_t**)malloc(sizeof(arrayNodes_t*)*res->hashtable->array[i].tot_arrays);
+		for(int i=0; i < res->hashtable->array[i].tot_arrays; i++){
+			res->hashtable->array[i].ptr_arrays[i] = initArray(NODES_LENGTH);
+		}
+		res->hashtable->array[i].arrayOrdered = NULL;
+		// LUCKY: end
 	}
 
 	res->hashtable->index = alloc_index(MINIMUM_SIZE);

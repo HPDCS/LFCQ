@@ -136,9 +136,10 @@ struct __bucket_t {
 	//-----------------------------
 	// LUCKY: 
 	unsigned int numaNodes;
+	unsigned int tot_arrays;
 	struct __arrayNodes_t** ptr_arrays;
 	struct __arrayNodes_t* arrayOrdered;
-	struct __arrayNodes_t* app;
+	struct __bucket_t** destBuckets;
 	// LUCKY: End
 	//-----------------------------
   #ifndef RTM
@@ -272,8 +273,10 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 
 	// LUCKY: Copy the old array information
 	res->numaNodes = bckt->numaNodes;
+	res->tot_arrays = bckt->tot_arrays;
 	res->ptr_arrays = bckt->ptr_arrays;
 	res->arrayOrdered = bckt->arrayOrdered;
+	res->destBuckets = bckt->destBuckets;
 			
 	do{
 		old_next = bckt->next;
@@ -779,7 +782,7 @@ static inline int extract_from_ArrayOrList(bucket_t *bckt, void ** result, pkey_
 			&& bckt->head.next == bckt->tail); */
 		if(getDynamic(idxRead) < bckt->arrayOrdered->length && getDynamic(idxRead) < getFixed(bckt->arrayOrdered->indexWrite)){
 			res = nodesDequeue(bckt->arrayOrdered, getDynamic(idxRead), result, ts);
-			assert(*result == 0x1 && *ts >= MIN && *ts < INFTY);
+			assert(*result != NULL && *ts >= MIN && *ts < INFTY);
 			if(res == MYARRAY_EXTRACT) return OK;
 			else return ABORT;
 		}else{

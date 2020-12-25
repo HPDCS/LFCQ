@@ -11,6 +11,9 @@
 
 #define XABORT_CODE_RET 0xf1
 
+#define NUMA_NODE 1
+#define NODES_LENGTH 300
+
 #define BLOCK 1ULL // marker that cell is blocked
 
 #define VAL_FAA_GCC(addr, val)  __sync_fetch_and_add(\

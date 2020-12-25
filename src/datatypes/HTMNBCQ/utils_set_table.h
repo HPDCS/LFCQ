@@ -290,6 +290,15 @@ static void set_new_table(table_t *h, unsigned int counter)
 			new_h->array[i].index = i;
 			new_h->array[i].socket = -1;
 			new_h->array[i].extractions = 0ULL;
+			// LUCKY:
+			new_h->array[i].numaNodes = NUMA_NODE;
+			new_h->array[i].tot_arrays = new_h->array[i].numaNodes;
+			new_h->array[i].ptr_arrays = (arrayNodes_t**)malloc(sizeof(arrayNodes_t*)*new_h->array[i].tot_arrays);
+			for(int j=0; j < new_h->array[i].tot_arrays; j++){
+				new_h->array[i].ptr_arrays[j] = initArray(NODES_LENGTH);
+			}
+			new_h->array[i].arrayOrdered = NULL;
+			// LUCKY: end
 		}
 
 //		new_h->index = alloc_index(new_size);

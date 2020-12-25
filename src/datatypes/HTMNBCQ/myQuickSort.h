@@ -38,7 +38,6 @@ static inline  long long partition (nodeElem_t* arr,  long long int low,  long l
 void printArray(nodeElem_t* arr, int size, int low){
 	for (; low < size; low++){
 		printf("%ld, %p %f\n", syscall(SYS_gettid) , arr[low].ptr, arr[low].timestamp);
-		if(arr[low].ptr == NULL) break;
 	}
 	printf("\n");
 }
