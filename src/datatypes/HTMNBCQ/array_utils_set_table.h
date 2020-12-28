@@ -114,7 +114,6 @@ double array_compute_mean_separation_time(table_t *h,
 	unsigned int stopIter = 1;
 	long long int idxWrite = 0;
 	arrayNodes_t* consArr = NULL;
-	arrayNodes_t* ordered = NULL;
 	arrayNodes_t* selected = initArray(sample_size);
 	// LUCKY: end
 
@@ -135,66 +134,68 @@ double array_compute_mean_separation_time(table_t *h,
 //				if(tid == 1)	LOG("%d- INDEX: %u COUNTER %u SAMPLESIZE %u\n",tid, index, counter, sample_size);
 				// LUCKY:
 				stopIter = 1;
-				for(idxPtr = 0; idxPtr < left->tot_arrays && stopIter; idxPtr++){
-					consArr = left->ptr_arrays[idxPtr];
+				unsigned long long elmToOrder = 0;
+				int actNuma;
+				int writes = 0;
+				for (actNuma = 0; actNuma < left->tot_arrays; actNuma++){
+					consArr = left->ptr_arrays[actNuma];
 					if(consArr == NULL) continue;
-					idxWrite = getFixed(get_extractions_wtoutlk(consArr->indexWrite));
-					if(idxWrite == 0) idxWrite = get_extractions_wtoutlk(consArr->indexWrite);
-					ordered = initArray(idxWrite);
-					if(idxWrite > consArr->length)
-						copyArray(consArr, consArr->length, ordered);
-					else
-						copyArray(consArr, idxWrite, ordered);
-					quickSort(ordered->nodes, 0, ordered->length-1);
-					for(start = 0; start < ordered->indexWrite && stopIter; start++){
-						if(ordered->nodes[start].timestamp == INFTY){
-							printf("\n\t!ERROR! INFINITE TIMESTAMP IN THE QUEUE! ABORT!\n");
-							fflush(stdout);
-							_exit(1);
-						}
-						// if(ordered->nodes[start].timestamp != sample_array[counter-1]){
-						// 	sample_array[++counter] = ordered->nodes[start].timestamp; 
-						// }
-						if(selected->indexWrite > 0){
-							if(ordered->nodes[start].timestamp != selected->nodes[selected->indexWrite-1].timestamp){
-								// printf("Selected elem %f\n", ordered->nodes[start].timestamp);
-								selected->nodes[selected->indexWrite].timestamp = ordered->nodes[start].timestamp;
-							}
-						}else{
-							// printf("Selected elem %f\n", ordered->nodes[start].timestamp);
-							selected->nodes[selected->indexWrite].timestamp = ordered->nodes[start].timestamp;
-						}
-						selected->indexWrite++;
-						counter++;
-						if(h->new_table->bucket_width != -1.0) return h->new_table->bucket_width;
-						if(counter == sample_size) stopIter = 0;
-					}
-					arrayNodes_safe_free(ordered);
-					ordered = NULL;
+					writes = consArr->indexWrite;
+					if(writes > consArr->length)
+						elmToOrder += consArr->length;
+					else 
+						elmToOrder += writes;
 				}
+				actNuma = 0;
+				arrayNodes_t* newArray = NULL;
+				if(elmToOrder > 0){
+					newArray = initArray(elmToOrder);
+					for (actNuma = 0; actNuma < left->tot_arrays; actNuma++){
+						consArr = left->ptr_arrays[actNuma];
+						if(consArr == NULL) continue;
+						writes = consArr->indexWrite;
+						if(consArr->indexWrite > 0){
+							if(writes > consArr->length)
+								copyArray(consArr, consArr->length, newArray);
+							else
+								copyArray(consArr, writes, newArray);
+						}
+						if(!unordered(left)){
+							arrayNodes_safe_free(newArray);
+						}
+					}
+
+					// Sort elements
+					quickSort(newArray->nodes, 0, newArray->length-1);
+				}
+				for(start = 0; newArray != NULL && start < newArray->length && stopIter; start++){
+					if(newArray->nodes[start].timestamp == INFTY){
+						printf("\n\t!ERROR! INFINITE TIMESTAMP IN THE QUEUE! ABORT!\n");
+						fflush(stdout);
+						_exit(1);
+					}
+					// if(ordered->nodes[start].timestamp != sample_array[counter-1]){
+					// 	sample_array[++counter] = ordered->nodes[start].timestamp; 
+					// }
+					if(selected->indexWrite > 0){
+						if(newArray->nodes[start].timestamp != selected->nodes[selected->indexWrite-1].timestamp){
+							// printf("Selected elem %f\n", ordered->nodes[start].timestamp);
+							selected->nodes[selected->indexWrite].timestamp = newArray->nodes[start].timestamp;
+						}
+					}else{
+						// printf("Selected elem %f\n", ordered->nodes[start].timestamp);
+						selected->nodes[selected->indexWrite].timestamp = newArray->nodes[start].timestamp;
+					}
+					selected->indexWrite++;
+					counter++;
+					if(h->new_table->bucket_width != -1.0) return h->new_table->bucket_width;
+					if(counter == sample_size) stopIter = 0;
+				}
+				if(newArray != NULL){
+					arrayNodesOrdered_safe_free(newArray);
+					newArray = NULL;
+					}
 					// LUCKY: end
-					// LUCKY: Below there is the old code
-// 				curr = &left->head;
-// 				toskip = left->extractions;
-// 				if(is_freezed(get_extractions_wtoutlk(toskip))) toskip = get_cleaned_extractions(left->extractions);
-// 			  	while(toskip > 0ULL && curr != left->tail){
-// 			  		curr = curr->next;
-// 			  		toskip--;
-// 			  	}
-//  				if(curr != left->tail){
-// 					assert(curr->next != NULL);
-// 					curr = curr->next;
-// 					while(curr != left->tail){
-// 						if(curr->timestamp == INFTY) assert(curr != left->tail);
-// //						if(tid == 1)LOG("%d- TS: " "%.10f" "\n", tid, curr->timestamp);
-// 						if(curr->timestamp != sample_array[counter-1])
-// 							sample_array[++counter] = curr->timestamp; 
-// 						assert(curr->next!=NULL || h->new_table->bucket_width == -1.0 );
-// 						if(h->new_table->bucket_width != -1.0) return h->new_table->bucket_width;
-// 						curr = curr->next;
-// 						if(counter == sample_size) break;
-// 					}
-// 				}
 			}
 
 			if(index == new_min_index) new_min_index = -1;
