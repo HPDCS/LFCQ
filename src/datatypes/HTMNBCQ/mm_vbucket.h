@@ -286,6 +286,18 @@ static inline void bucket_safe_free(bucket_t *ptr){
 		node_safe_free(tmp);
 	}
 
+	// if(get_op_type(ptr->op_descriptor) != CHANGE_EPOCH){
+	// 	for(int i = 0; i < ptr->tot_arrays; i++){
+	// 		if(ptr->ptr_arrays[i])
+	// 			arrayNodes_safe_free_malloc(ptr->ptr_arrays[i]);
+	// 	}
+	// 	free(ptr->ptr_arrays);
+	// 	ptr->ptr_arrays = NULL;
+		
+	// 	if(ptr->arrayOrdered != NULL)
+	// 		arrayNodes_safe_free_malloc(ptr->arrayOrdered);
+	// 	ptr->arrayOrdered = NULL;
+	// }
 	gc_free(ptst, ptr, gc_aid[GC_BUCKETS]);
 	
 }
@@ -299,6 +311,19 @@ static inline void bucket_unsafe_free(bucket_t *ptr){
 		if(tmp->timestamp == INFTY)	assert(tmp == ptr->tail);
 		node_unsafe_free(tmp);
 	}
+
+	// if(get_op_type(ptr->op_descriptor) != CHANGE_EPOCH){
+	// 	for(int i = 0; i < ptr->tot_arrays; i++){
+	// 		if(ptr->ptr_arrays[i])
+	// 			arrayNodes_unsafe_free_malloc(ptr->ptr_arrays[i]);
+	// 	}
+	// 	free(ptr->ptr_arrays);
+	// 	ptr->ptr_arrays = NULL;
+		
+	// 	if(ptr->arrayOrdered != NULL)
+	// 		arrayNodes_unsafe_free_malloc(ptr->arrayOrdered);
+	// 	ptr->arrayOrdered = NULL;
+	// }
 
 	gc_unsafe_free(ptst, ptr, gc_aid[GC_BUCKETS]);
 

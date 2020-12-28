@@ -275,6 +275,10 @@ static void set_new_table(table_t *h, unsigned int counter)
 		new_h->cached_node			= NULL;
 		new_h->socket				= -1;
 		new_h->b_tail.extractions 	= 0ULL;
+		// LUCKY:
+		new_h->b_tail.pending_insert = NULL;
+		new_h->b_tail.op_descriptor = 0ULL;
+		// LUCKY: end
 		new_h->b_tail.epoch 		= 0U;
 		new_h->b_tail.index 		= UINT_MAX;
 		new_h->b_tail.type 			= TAIL;
@@ -291,6 +295,8 @@ static void set_new_table(table_t *h, unsigned int counter)
 			new_h->array[i].socket = -1;
 			new_h->array[i].extractions = 0ULL;
 			// LUCKY:
+			new_h->array[i].pending_insert = NULL;
+			new_h->array[i].op_descriptor = 0ULL;
 			new_h->array[i].numaNodes = NUMA_NODE;
 			new_h->array[i].tot_arrays = new_h->array[i].numaNodes;
 			new_h->array[i].ptr_arrays = (arrayNodes_t**)malloc(sizeof(arrayNodes_t*)*new_h->array[i].tot_arrays);

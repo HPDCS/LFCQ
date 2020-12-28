@@ -181,8 +181,6 @@ static int search_and_insert(bucket_t *head, SkipList *lookup_table, unsigned in
 			update_cache(newb);
 
 			//skipListAdd(lookup_table, index, newb);
-			// LUCKY:
-			assert(left->next == newb && left->next->head.next == left->next->tail && left->next->next == right);
 			return OK;
 		}
 			update_cache(left);

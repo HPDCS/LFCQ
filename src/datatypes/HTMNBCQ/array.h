@@ -166,6 +166,15 @@ nodeElem_t* getNodeElem(arrayNodes_t* array, unsigned long long position){
 static inline void blockArray(arrayNodes_t** array){
 	long long int idx = 0;
 	while(idx < (*array)->length){
+		while((*array)->nodes[idx].timestamp == MIN){
+			BOOL_CAS(UNION_CAST(&(*array)->nodes[idx].timestamp, unsigned long long *),
+						UNION_CAST(MIN,unsigned long long),
+						UNION_CAST(INFTY, unsigned long long));
+		}
+		idx++;
+	}
+	idx = 0;
+	while(idx < (*array)->length){
 		while((*array)->nodes[idx].ptr == NULL){
 			BOOL_CAS(&(*array)->nodes[idx].ptr, NULL, BLOCK_ENTRY);
 		}
@@ -262,17 +271,15 @@ static inline void setUnvalidContent(bucket_t* bckt){
 	for (actNuma = 0; actNuma < bckt->tot_arrays; actNuma++){
 		array = bckt->ptr_arrays[actNuma];
 		if(array == NULL) continue;
-		if(validContent(array->indexWrite)){
-			do{
-				index = array->indexWrite;
-				if(numRetry > MAX_ATTEMPTS && index == 0)
-					nValCont = index | (1ULL << LNK_BIT_POS);
-				else{
-					nValCont =  index | (index << 32);
-				}
-				BOOL_CAS(&array->indexWrite, index, nValCont);
-				numRetry++;
-			}while(validContent(array->indexWrite));
+		while(validContent(array->indexWrite)){
+			index = array->indexWrite;
+			if(numRetry > MAX_ATTEMPTS && index == 0)
+				nValCont = index | (1ULL << LNK_BIT_POS);
+			else{
+				nValCont =  index | (index << 32);
+			}
+			BOOL_CAS(&array->indexWrite, index, nValCont);
+			numRetry++;
 		}
 		// printf("%p, bloccato Array %d idxWrite = %lld\n", bckt, actNuma, getFixed(get_extractions_wtoutlk(array->indexWrite)));
 		// fflush(stdout);
@@ -418,10 +425,10 @@ int stateMachine(bucket_t* bckt, unsigned long dequeueStop){
 		}
 
 		// Code for checking if the arrayOrdered elements are composed as I expect
-		for(int i = 0; i < getFixed(bckt->arrayOrdered->indexWrite); i++){
-			node_t* app = ((node_t*)bckt->arrayOrdered->nodes[i].ptr);
-			assert(app->payload != NULL && app->timestamp > MIN && app->timestamp < INFTY);
-		}
+		// for(int i = 0; i < getFixed(bckt->arrayOrdered->indexWrite); i++){
+		// 	node_t* app = ((node_t*)bckt->arrayOrdered->nodes[i].ptr);
+		// 	assert(app->payload != NULL && app->timestamp > MIN && app->timestamp < INFTY);
+		// }
 	}
 
 	if(dequeueStop) return public;
@@ -464,11 +471,6 @@ int stateMachine(bucket_t* bckt, unsigned long dequeueStop){
 	}
 	return public;
 }
-
-//#define array_safe_free(ptr) 			gc_free(ptst, ptr, gc_aid[GC_INTERNALS])
-//#define array_unsafe_free(ptr) 			gc_unsafe_free(ptst, ptr, gc_aid[GC_INTERNALS])
-//void array_safe_free(myArray_t* array);
-//void array_unsafe_free(myArray_t* array);
 
 /**
  * Function that insert a new node in the array

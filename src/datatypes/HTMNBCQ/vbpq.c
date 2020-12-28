@@ -87,6 +87,10 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 	res->hashtable->e_counter.count = 0;
 	res->hashtable->d_counter.count = 0;
 	res->hashtable->b_tail.extractions = 0ULL;
+	// LUCKY:
+	res->hashtable->b_tail.pending_insert = NULL;
+	res->hashtable->b_tail.op_descriptor = 0ULL;
+	// LUCKY: end
 	res->hashtable->b_tail.epoch = 0U;
 	res->hashtable->b_tail.index = UINT_MAX;
 	res->hashtable->b_tail.type = TAIL;
@@ -104,6 +108,8 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 		res->hashtable->array[i].socket = -1;
 		res->hashtable->array[i].extractions = 0ULL;
 		// LUCKY:
+		res->hashtable->array[i].pending_insert = NULL;
+		res->hashtable->array[i].op_descriptor = 0ULL;
 		res->hashtable->array[i].numaNodes = NUMA_NODE;
 		res->hashtable->array[i].tot_arrays = res->hashtable->array[i].numaNodes;
 		res->hashtable->array[i].ptr_arrays = (arrayNodes_t**)malloc(sizeof(arrayNodes_t*)*res->hashtable->array[i].tot_arrays);
