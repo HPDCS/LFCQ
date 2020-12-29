@@ -3,13 +3,14 @@
 
 #include "array_utils_set_table.h"
 
+int barrierArray3 = 0;
+
 static inline int copyFormList(bucket_t* bckt, node_t* head, node_t* tail, unsigned long long extractions, arrayNodes_t** newPtrs, unsigned int lenNewPtrs, double newHBW){
 
 	// Count the elements to copy
 	node_t* current = head;
 	node_t* start = NULL;
-	unsigned int alreadyExt = get_cleaned_extractions(get_extractions_wtoutlk(extractions));
-	if(alreadyExt == 0) alreadyExt = 1;
+	unsigned int alreadyExt = get_cleaned_extractions(get_extractions_wtoutlk(bckt->extractions))+1;
 
 	skip_extracted(tail, &current, alreadyExt);	
 	start = current;
@@ -17,6 +18,7 @@ static inline int copyFormList(bucket_t* bckt, node_t* head, node_t* tail, unsig
 	unsigned int new_index = 0;
 	unsigned int myIdx = 0;
 	int *numElmsPerArray = malloc(lenNewPtrs * sizeof(int));
+	assert(numElmsPerArray != NULL);
 	bzero(numElmsPerArray, lenNewPtrs * sizeof(int));
 	int elmsToCopy = 0;
 	while (current != tail){
@@ -79,6 +81,7 @@ static inline int copyOrderedArray(bucket_t* bckt, arrayNodes_t* ordered, unsign
 		get_cleaned_extractions(get_extractions_wtoutlk(extractions));
 	// printf("locked elements %d\n", newNodLen);
 	// fflush(stdout);
+	if(newNodLen == 0) return 0;
 	if(newNodLen < 0){
 		return copyFormList(bckt, &bckt->head, bckt->tail, bckt->extractions, newPtrs, lenNewPtrs, newHBW);
 	}
@@ -137,6 +140,7 @@ static inline int copyUnorderedArrays(bucket_t* bckt, arrayNodes_t** unordered, 
 	unsigned int new_index = 0;
 	unsigned int myIdx = 0;
 	int *numElmsPerArray = malloc(lenNewPtrs * sizeof(int));
+	assert(numElmsPerArray != NULL);
 	bzero(numElmsPerArray, lenNewPtrs * sizeof(int));
 	for(int j = 0; j < lenUnord; j++){
 		for(int k = 0; unordered[j] != NULL && k < getFixed(get_extractions_wtoutlk(unordered[j]->indexWrite)); k++){
@@ -194,15 +198,15 @@ static inline int copyUnorderedArrays(bucket_t* bckt, arrayNodes_t** unordered, 
 	}
 	free(numElmsPerArray);
 
-	int contaElementi = 0;
-	for(int idxArray = 0; idxArray < bckt->tot_arrays; idxArray++){
-		for(int i = 0; bckt->ptr_arrays[idxArray] != NULL && i < bckt->ptr_arrays[idxArray]->length; i++){
-			if(bckt->ptr_arrays[idxArray]->nodes[i].ptr != BLOCK_ENTRY && bckt->ptr_arrays[idxArray]->nodes[i].timestamp != INFTY){
-				contaElementi++;
-			}
-		}
-	}
-	assert(contaElementi == counter);
+	// int contaElementi = 0;
+	// for(int idxArray = 0; idxArray < bckt->tot_arrays; idxArray++){
+	// 	for(int i = 0; bckt->ptr_arrays[idxArray] != NULL && i < bckt->ptr_arrays[idxArray]->length; i++){
+	// 		if(bckt->ptr_arrays[idxArray]->nodes[i].ptr != BLOCK_ENTRY && bckt->ptr_arrays[idxArray]->nodes[i].timestamp != INFTY){
+	// 			contaElementi++;
+	// 		}
+	// 	}
+	// }
+	// assert(contaElementi == counter);
 
 	// printf("%u In copyUnorderedArrays, head %p, copied = %u\n", syscall(SYS_gettid), bckt, counter);
 	// fflush(stdout);
@@ -216,7 +220,8 @@ static inline int publishArray(table_t* new_h, bucket_t* src, bucket_t** destBck
 	unsigned int myIdx = new_index % numBuckDest;
 
 	BOOL_CAS(src->destBuckets+myIdx, NULL, dest);
-	assert(src->destBuckets[myIdx]->index == dest->index && src->destBuckets[myIdx]->type == dest->type);
+	//assert(src->destBuckets[myIdx]->index == dest->index);
+	//assert(src->destBuckets[myIdx]->type == dest->type && dest->type == ITEM);
 	if(src->destBuckets[myIdx] != dest) return -1;
 
 	int writes = 0;
@@ -233,8 +238,7 @@ static inline int publishArray(table_t* new_h, bucket_t* src, bucket_t** destBck
 				assert(dest->ptr_arrays[idxDest] == newPtrs[*i]);
 				__sync_fetch_and_add(&new_h->e_counter.count, writes);
 				countElemPub += writes;
-			}else
-				checkSameArray(dest->ptr_arrays[idxDest], newPtrs[*i]);
+			}
 		}
 		(*i)++;
 	}
@@ -282,6 +286,7 @@ int array_migrate_node(bucket_t *bckt, table_t *new_h, unsigned int numArrDest, 
 	unsigned int bcktsLen = numBuckDest;
 	if(bckt->destBuckets == NULL){
 		bucket_t** buckets = (bucket_t**)malloc(sizeof(bucket_t*)*bcktsLen);
+		assert(buckets != NULL);
 		bzero(buckets, sizeof(bucket_t*)*bcktsLen);
 		while(bckt->destBuckets == NULL){
 			BOOL_CAS(&bckt->destBuckets, NULL, buckets);
@@ -290,6 +295,7 @@ int array_migrate_node(bucket_t *bckt, table_t *new_h, unsigned int numArrDest, 
 
 	unsigned int newPtrlen = numBuckDest;
 	arrayNodes_t** newPtr_arrays = (arrayNodes_t**)malloc(sizeof(arrayNodes_t*)*newPtrlen);
+	assert(newPtr_arrays != NULL);
 
 	// La configurazone che ha ora l'algoritmo va sempre verso copyUnordered
 	// Ora ritorna che pubblica 240 elementi, contollare le estrazioni
@@ -299,11 +305,11 @@ int array_migrate_node(bucket_t *bckt, table_t *new_h, unsigned int numArrDest, 
 	arrayNodes_t* ordered = bckt->arrayOrdered;
 
 	int countElmsCopied = 0;
-	if(is_freezed_for_lnk(extractions) && ordered != NULL)
+	if(is_freezed_for_lnk(bckt->extractions) && !unordered(bckt))
 		countElmsCopied = copyFormList(bckt, &bckt->head, tail, extractions, newPtr_arrays, newPtrlen, new_h->bucket_width);
-	else if(!is_freezed_for_lnk(bckt->extractions) && ordered != NULL)
+	else if(!is_freezed_for_lnk(bckt->extractions) && !unordered(bckt))
 		countElmsCopied = copyOrderedArray(bckt, ordered, extractions, newPtr_arrays, newPtrlen, new_h->bucket_width);
-	else if(!is_freezed_for_lnk(bckt->extractions) && ordered == NULL)
+	else if(!is_freezed_for_lnk(bckt->extractions) && unordered(bckt))
 		countElmsCopied = copyUnorderedArrays(bckt, bckt->ptr_arrays, bckt->tot_arrays, newPtr_arrays, newPtrlen, new_h->bucket_width);
 	else
 		assert(0);

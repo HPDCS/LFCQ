@@ -75,6 +75,7 @@ arrayNodes_t* initArray(unsigned int length){
 	array->indexWrite = 0;
 	array->length = length;
 
+	assert(sizeof(nodeElem_t)*array->length > 0);
 	array->nodes = (nodeElem_t*)malloc(sizeof(nodeElem_t)*array->length);
 	assert(array->nodes != NULL);
 	bzero(array->nodes, sizeof(nodeElem_t)*array->length);
@@ -165,18 +166,14 @@ nodeElem_t* getNodeElem(arrayNodes_t* array, unsigned long long position){
 
 static inline void blockArray(arrayNodes_t** array){
 	long long int idx = 0;
-	while(idx < (*array)->length){
-		while((*array)->nodes[idx].timestamp == MIN){
-			BOOL_CAS(UNION_CAST(&(*array)->nodes[idx].timestamp, unsigned long long *),
+	long long int length = (*array)->length;
+	nodeElem_t* tuples = (*array)->nodes;
+	while(idx < length){
+		while(tuples[idx].timestamp == MIN){
+			BOOL_CAS(UNION_CAST(&tuples[idx].timestamp, unsigned long long *),
 						UNION_CAST(MIN,unsigned long long),
 						UNION_CAST(INFTY, unsigned long long));
-		}
-		idx++;
-	}
-	idx = 0;
-	while(idx < (*array)->length){
-		while((*array)->nodes[idx].ptr == NULL){
-			BOOL_CAS(&(*array)->nodes[idx].ptr, NULL, BLOCK_ENTRY);
+			BOOL_CAS(&tuples[idx].ptr, NULL, BLOCK_ENTRY);
 		}
 		idx++;
 	}
@@ -222,7 +219,7 @@ arrayNodes_t* vectorOrderingAndBuild(bucket_t* bckt){
 		void* addr = NULL;
 		for (int i = 0; i < newArray->length; i++){
 			addr = newArray->nodes[i].ptr;
-			assert(addr != NULL);
+			//assert(addr != NULL);
 		}
 
 		//  printArray(newArray->nodes, newArray->length, 0);

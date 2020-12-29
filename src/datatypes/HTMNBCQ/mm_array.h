@@ -78,6 +78,18 @@ static inline void arrayNodes_safe_free(arrayNodes_t *ptr){
 	gc_free(ptst, ptr, gc_aid[GC_ARRAYNODES]);	
 }
 
+/* Safe free arrayNodes memory */
+static inline void arrayNodesOrdered_safe_free(arrayNodes_t *ptr){
+	for(int i = 0; i < ptr->length; i++){
+		if(ptr->nodes+i != NULL){
+			//if(ptr->nodes[i].ptr != NULL) 
+				//node_safe_free(ptr->nodes[i].ptr);
+			nodeElem_safe_free(ptr->nodes+i);
+		}
+	}
+	gc_free(ptst, ptr, gc_aid[GC_ARRAYNODES]);	
+}
+
 /* Unsafe free arrayNodes memory */
 static inline void arrayNodes_unsafe_free(arrayNodes_t *ptr){
 	for(int i = 0; i < ptr->length; i++){
@@ -89,13 +101,13 @@ static inline void arrayNodes_unsafe_free(arrayNodes_t *ptr){
 
 static inline void arrayNodes_safe_free_malloc(arrayNodes_t *ptr){
 	if(ptr->nodes != NULL) 
-		free(ptr->nodes);
+		gc_add_ptr_to_hook_list(ptst, ptr->nodes, gc_hid[0]);
 	gc_unsafe_free(ptst, ptr, gc_aid[GC_ARRAYNODES]);	
 }
 
 static inline void arrayNodes_unsafe_free_malloc(arrayNodes_t *ptr){
-	if(ptr->nodes != NULL) 
-		free(ptr->nodes);
+	// if(ptr->nodes != NULL) 
+	// 	free(ptr->nodes);
 	gc_unsafe_free(ptst, ptr, gc_aid[GC_ARRAYNODES]);	
 }
 

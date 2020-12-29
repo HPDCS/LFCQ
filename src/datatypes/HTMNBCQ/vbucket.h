@@ -590,9 +590,9 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	if(!is_freezed_for_lnk(extracted) && validContent(idxWrite)){
 		arrayNodes_t* array = bckt->ptr_arrays[numaNode];
 		int idx = getDynamic(idxWrite);
-		assert(array->nodes+idx != NULL);
+		//assert(array->nodes+idx != NULL);
 		void* ptr = array->nodes[idx].ptr;
-		assert(ptr != BLOCK_ENTRY && ptr == NULL);
+		//assert(ptr != BLOCK_ENTRY && ptr == NULL);
 		return nodesInsert(bckt->ptr_arrays[numaNode], getDynamic(idxWrite), payload, timestamp) == MYARRAY_INSERT ? OK : ABORT;
 	}
 
@@ -762,7 +762,7 @@ static inline int extract_from_ArrayOrList(bucket_t *bckt, void ** result, pkey_
 	// Applico la state machine per costruire l'array ordinato
 	// che comprende tutti gli elementi
 	stateMachine(bckt, DEQUEUE);
-	assert(validContent(bckt->ptr_arrays[numaNode]->indexWrite) == false || unordered(bckt) == false);
+	//assert(validContent(bckt->ptr_arrays[numaNode]->indexWrite) == false || unordered(bckt) == false);
 	idxRead = VAL_FAA(&bckt->extractions, 1);
 
 	// If another operation is in progress, return the operation
@@ -770,8 +770,10 @@ static inline int extract_from_ArrayOrList(bucket_t *bckt, void ** result, pkey_
 	if(is_freezed_for_epo(idxRead)) return ABORT;
 	if(is_freezed_for_del(idxRead)) return EMPTY;
 
+	arrayNodes_t* ordered = bckt->arrayOrdered;
+
 	// FIXME: Forse risolto
-	if(!is_freezed_for_lnk(idxRead) && getDynamic(idxRead) > getFixed(bckt->arrayOrdered->indexWrite)){
+	if(!is_freezed_for_lnk(idxRead) && getDynamic(idxRead) > getFixed(ordered->indexWrite)){
 		post_operation(bckt, DELETE, 0ULL, NULL);
 		return EMPTY;
 	}

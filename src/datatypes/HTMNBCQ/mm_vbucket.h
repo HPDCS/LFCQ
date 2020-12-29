@@ -62,14 +62,17 @@ static inline node_t* node_alloc(){
 	long rand;
 	do{
 		res = gc_alloc(ptst, gc_aid[GC_INTERNALS]);
+		// Because ordered array may contain or not node element
+		// Is not really good to have this code
+		//if(res == NULL || res == 0x1) continue;
 	    #ifdef ENABLE_CACHE_PARTITION
 	    	unsigned long long index = CACHE_INDEX(res);
 			assert(index <= CACHE_INDEX_MASK);
 	    	if(index >= CACHE_LIMIT  )
 	    #endif
 	    		{break;}
-    }while(1);
-    bzero(res, sizeof(node_t));
+  }while(1);
+	bzero(res, sizeof(node_t));
 	res->next 			= NULL;
 	res->payload			= NULL;
 	res->tie_breaker		= 0;
@@ -147,6 +150,7 @@ static inline bucket_t* bucket_alloc(node_t *tail){
 		//res->numaNodes = numa_num_configured_nodes();
 		res->numaNodes = NUMA_NODE;
 		res->tot_arrays = res->numaNodes;
+		assert(sizeof(arrayNodes_t*)*res->numaNodes > 0);
 		res->ptr_arrays = (arrayNodes_t**)malloc(sizeof(arrayNodes_t*)*res->numaNodes);
 		for(int i=0; i < res->numaNodes; i++){
 			res->ptr_arrays[i] = initArray(NODES_LENGTH);
@@ -291,12 +295,14 @@ static inline void bucket_safe_free(bucket_t *ptr){
 	// 		if(ptr->ptr_arrays[i])
 	// 			arrayNodes_safe_free_malloc(ptr->ptr_arrays[i]);
 	// 	}
-	// 	free(ptr->ptr_arrays);
-	// 	ptr->ptr_arrays = NULL;
+	// 	//free(ptr->ptr_arrays);
+		// gc_add_ptr_to_hook_list(ptst, ptr->ptr_arrays, gc_hid[0]);
+	// 	//ptr->ptr_arrays = NULL;
+		
 		
 	// 	if(ptr->arrayOrdered != NULL)
 	// 		arrayNodes_safe_free_malloc(ptr->arrayOrdered);
-	// 	ptr->arrayOrdered = NULL;
+	// 	//ptr->arrayOrdered = NULL;
 	// }
 	gc_free(ptst, ptr, gc_aid[GC_BUCKETS]);
 	

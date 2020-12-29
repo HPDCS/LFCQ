@@ -12,7 +12,7 @@
 #define XABORT_CODE_RET 0xf1
 
 #define NUMA_NODE 1
-#define NODES_LENGTH 300
+#define NODES_LENGTH 250
 
 #define BLOCK 1ULL // marker that cell is blocked
 
@@ -82,7 +82,7 @@ static inline int getcpu() {
 }
 
 static inline int getNumaNode(unsigned int tid, unsigned int num){
-	return tid % num;
+	return nid;
 }
 
 #endif
