@@ -191,10 +191,10 @@ double array_compute_mean_separation_time(table_t *h,
 					if(h->new_table->bucket_width != -1.0) return h->new_table->bucket_width;
 					if(counter == sample_size) stopIter = 0;
 				}
-				if(newArray != NULL){
-					arrayNodesOrdered_safe_free(newArray);
-					newArray = NULL;
-					}
+				// if(newArray != NULL){
+				// 	arrayNodesOrdered_safe_free(newArray);
+				// 	newArray = NULL;
+				// }
 					// LUCKY: end
 			}
 

@@ -6,32 +6,15 @@ static inline void init_array_subsystem(){
 	gc_aid[GC_NODEELEMS] 	=  gc_add_allocator(sizeof(nodeElem_t	));	
 }
 
-/* initialization of a nodeElem */
-static inline nodeElem_t* nodeElem_init(nodeElem_t* nodes, int length){
-	nodeElem_t* res;
-	int i = 0;
-	while(i < length){
-		res = nodes+i;
-		bzero(res, sizeof(nodeElem_t));
-		res->ptr = NULL;
-		//res->replica = NULL;
-		res->timestamp = MIN;
-	}
-	return res;
-}
 
 static inline nodeElem_t* nodeElem_alloc(int length){
-	nodeElem_t* res;
-	do{
-		res = gc_alloc(ptst, gc_aid[GC_NODEELEMS]);
-	    #ifdef ENABLE_CACHE_PARTITION
-	    	unsigned long long index = CACHE_INDEX(res);
-			assert(index <= CACHE_INDEX_MASK);
-	    	if(index >= CACHE_LIMIT  )
-	    #endif
-	    		{break;}
-  }while(1);
-	return res;
+	nodeElem_t* res = NULL;
+	int status = 0;
+
+	// allocate new array of tuples
+	status = posix_memalign((void**)&res, CACHE_LINE_SIZE, length*sizeof(nodeElem_t));
+	if(status != 0) {printf("No enough memory to array of tuples structure\n"); _exit(0);}
+	bzero(res, length*sizeof(nodeElem_t));
 }
 
 
@@ -52,8 +35,8 @@ static inline arrayNodes_t* arrayNodes_alloc(int length){
 	//res->indexRead = 0;
 	res->indexWrite = 0;
 	res->length = length;
-	//res->nodes = nodeElem_alloc(length);
-	res->nodes = (nodeElem_t*)malloc(sizeof(nodeElem_t)*length);
+	res->nodes = nodeElem_alloc(length);
+	//res->nodes = (nodeElem_t*)malloc(sizeof(nodeElem_t)*length);
 	assert(res->nodes != NULL);
 	bzero(res->nodes, sizeof(nodeElem_t)*length);
 	return res;

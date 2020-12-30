@@ -572,7 +572,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	}
 
 	// LUCKY:
-	int numaNode = getNumaNode(syscall(SYS_gettid), bckt->numaNodes);
+	int numaNode = getNumaNode();
 	unsigned long long idxWrite = 0;
 	if(validContent(idxWrite))
 		idxWrite = VAL_FAA(&bckt->ptr_arrays[numaNode]->indexWrite, 1);
@@ -752,7 +752,7 @@ static inline int extract_from_ArrayOrList(bucket_t *bckt, void ** result, pkey_
 	validate_bucket(bckt);
 
 	// LUCKY:
-	int numaNode = getNumaNode(syscall(SYS_gettid), bckt->numaNodes);
+	int numaNode = getNumaNode();
 	if(validContent(bckt->ptr_arrays[numaNode]->indexWrite)){
 		// Invalido inserimenti sugli array per numa node
 		setUnvalidContent(bckt);

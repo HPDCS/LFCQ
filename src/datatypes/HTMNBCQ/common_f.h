@@ -81,7 +81,7 @@ static inline int getcpu() {
     #endif
 }
 
-static inline int getNumaNode(unsigned int tid, unsigned int num){
+static inline int getNumaNode(){
 	return nid;
 }
 

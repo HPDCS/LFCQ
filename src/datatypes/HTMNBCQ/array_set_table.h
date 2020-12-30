@@ -50,7 +50,7 @@ static inline int copyFormList(bucket_t* bckt, node_t* head, node_t* tail, unsig
 			myIdx = new_index % lenNewPtrs;
 
 			assert(get_cleaned_extractions(bckt->extractions) == get_cleaned_extractions(extractions));
-			
+			assert(newPtrs[myIdx]->indexWrite < newPtrs[myIdx]->length);
 			newPtrs[myIdx]->nodes[newPtrs[myIdx]->indexWrite].ptr = current->payload;
 			newPtrs[myIdx]->nodes[newPtrs[myIdx]->indexWrite].timestamp = current->timestamp;
 			newPtrs[myIdx]->indexWrite++;
@@ -104,6 +104,7 @@ static inline int copyOrderedArray(bucket_t* bckt, arrayNodes_t* ordered, unsign
 			new_index = hash(ordered->nodes[i].timestamp, newHBW);
 			myIdx = new_index % lenNewPtrs;
 		
+			assert(newPtrs[myIdx]->indexWrite < newPtrs[myIdx]->length);
 			assert(ordered->nodes[i].ptr != NULL && ordered->nodes[i].timestamp >= MIN || ordered->nodes[i].timestamp < INFTY);
 			newPtrs[myIdx]->nodes[newPtrs[myIdx]->indexWrite].ptr = ordered->nodes[i].ptr;
 			newPtrs[myIdx]->nodes[newPtrs[myIdx]->indexWrite].timestamp = ordered->nodes[i].timestamp;
@@ -179,6 +180,7 @@ static inline int copyUnorderedArrays(bucket_t* bckt, arrayNodes_t** unordered, 
 				new_index = hash(consArray->nodes[idxRNods].timestamp, newHBW);
 				myIdx = new_index % lenNewPtrs;
 					assert(consArray->nodes[idxRNods].ptr != NULL);
+					assert(newPtrs[myIdx]->indexWrite < newPtrs[myIdx]->length);
 					newPtrs[myIdx]->nodes[newPtrs[myIdx]->indexWrite].ptr = consArray->nodes[idxRNods].ptr;
 					newPtrs[myIdx]->nodes[newPtrs[myIdx]->indexWrite].timestamp = consArray->nodes[idxRNods].timestamp;
 					newPtrs[myIdx]->indexWrite++;
@@ -216,15 +218,18 @@ static inline int copyUnorderedArrays(bucket_t* bckt, arrayNodes_t** unordered, 
 static inline int publishArray(table_t* new_h, bucket_t* src, bucket_t** destBckt, unsigned int numArrDest, unsigned int numBuckDest, 
 	unsigned int new_index, arrayNodes_t** newPtrs, unsigned int lenNewPtrs, int* i){
 	bucket_t* dest = *destBckt;
+	int writes = newPtrs[*i]->indexWrite;
 	unsigned int countElemPub = 0;
 	unsigned int myIdx = new_index % numBuckDest;
 
-	BOOL_CAS(src->destBuckets+myIdx, NULL, dest);
+	if(writes > 0)
+		BOOL_CAS(src->destBuckets+myIdx, NULL, dest);
+
 	//assert(src->destBuckets[myIdx]->index == dest->index);
 	//assert(src->destBuckets[myIdx]->type == dest->type && dest->type == ITEM);
 	if(src->destBuckets[myIdx] != dest) return -1;
 
-	int writes = 0;
+	
 	int idxDest = 0;
 	while(*i < lenNewPtrs && newPtrs[*i] != NULL && 
 		new_index == hash(newPtrs[*i]->nodes[0].timestamp, new_h->bucket_width)){
@@ -413,7 +418,7 @@ static inline table_t* array_read_table(table_t * volatile *curr_table_ptr){
 						( ((unsigned int)( -(read_table_count != UINT_MAX) )) & read_table_count);
 	
 	// after READTABLE_PERIOD iterations check if a new set table is required 
-	//if(read_table_count++ % h->read_table_period == 0)
+	if(read_table_count++ % h->read_table_period == 0)
 	{
 		// make two reads of op. counters in order to reduce probability of a descheduling between each read
 		for(i=0;i<2;i++){

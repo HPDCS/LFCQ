@@ -76,9 +76,10 @@ arrayNodes_t* initArray(unsigned int length){
 	array->length = length;
 
 	assert(sizeof(nodeElem_t)*array->length > 0);
-	array->nodes = (nodeElem_t*)malloc(sizeof(nodeElem_t)*array->length);
+	// array->nodes = (nodeElem_t*)malloc(sizeof(nodeElem_t)*array->length);
+	// bzero(array->nodes, sizeof(nodeElem_t)*array->length);
+	array->nodes = nodeElem_alloc(length);
 	assert(array->nodes != NULL);
-	bzero(array->nodes, sizeof(nodeElem_t)*array->length);
 
 	return array;
 }
@@ -248,7 +249,7 @@ static inline void setUnvalidContent(bucket_t* bckt){
 	long long int nValCont = -1;
 	long long int index = -1;
 	int numRetry = 0;
-	int numaNode = getNumaNode(syscall(SYS_gettid), bckt->numaNodes);
+	int numaNode = getNumaNode();
 	arrayNodes_t* array = bckt->ptr_arrays[numaNode];
 
 	while(validContent(array->indexWrite)){
@@ -301,7 +302,7 @@ static inline void setUnvalidContent(bucket_t* bckt){
 // 	unsigned long long  nValCont = 0;
 // 	unsigned long long  index = 0;
 // 	int numRetry = 0;
-// 	int numaNode = getNumaNode(syscall(SYS_gettid), bckt->numaNodes);
+// 	int numaNode = getNumaNode();
 // 	arrayNodes_t* array = bckt->ptr_arrays[numaNode];
 // 	// TODO: Valutare se mettere un if prima di fare questo while
 // 	do{
@@ -380,7 +381,7 @@ void get(arrayNodes_t* array, int position, void** payload, pkey_t* timestamp){
  * Function that implements the logic of flag changes
 */
 int stateMachine(bucket_t* bckt, unsigned long dequeueStop){
-	int numaNode = getNumaNode(syscall(SYS_gettid), bckt->numaNodes);
+	int numaNode = getNumaNode();
 	int public = 0;
 	arrayNodes_t* array = bckt->ptr_arrays[numaNode];
 	if(validContent(array->indexWrite)){
