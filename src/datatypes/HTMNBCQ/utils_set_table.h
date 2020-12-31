@@ -299,6 +299,7 @@ static void set_new_table(table_t *h, unsigned int counter)
 			new_h->array[i].op_descriptor = 0ULL;
 			new_h->array[i].numaNodes = NUMA_NODE;
 			new_h->array[i].tot_arrays = new_h->array[i].numaNodes;
+			assert(sizeof(arrayNodes_t*)*new_h->array[i].tot_arrays  > 0);
 			new_h->array[i].ptr_arrays = (arrayNodes_t**)malloc(sizeof(arrayNodes_t*)*new_h->array[i].tot_arrays);
 			for(int j=0; j < new_h->array[i].tot_arrays; j++){
 				new_h->array[i].ptr_arrays[j] = initArray(NODES_LENGTH);

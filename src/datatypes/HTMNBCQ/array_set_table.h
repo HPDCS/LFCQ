@@ -75,7 +75,7 @@ static inline int copyFormList(bucket_t* bckt, node_t* head, node_t* tail, unsig
 }
 
 static inline int copyOrderedArray(bucket_t* bckt, arrayNodes_t* ordered, unsigned long long extractions, arrayNodes_t** newPtrs, unsigned int lenNewPtrs, double newHBW){
-	
+
 	// Obtain the number of elements to copy
 	int newNodLen = getFixed(get_extractions_wtoutlk(ordered->indexWrite)) - 
 		get_cleaned_extractions(get_extractions_wtoutlk(extractions));
@@ -85,6 +85,8 @@ static inline int copyOrderedArray(bucket_t* bckt, arrayNodes_t* ordered, unsign
 	if(newNodLen < 0){
 		return copyFormList(bckt, &bckt->head, bckt->tail, bckt->extractions, newPtrs, lenNewPtrs, newHBW);
 	}
+
+	// printf("Copia Ordinata del bucket %p, elems %d, %u\n", bckt, newNodLen, tid);
 
 	// Allocation of all needed arrays
 	for(int i = 0; i < lenNewPtrs; i++){
@@ -110,6 +112,7 @@ static inline int copyOrderedArray(bucket_t* bckt, arrayNodes_t* ordered, unsign
 			newPtrs[myIdx]->nodes[newPtrs[myIdx]->indexWrite].timestamp = ordered->nodes[i].timestamp;
 			//newPtrs[myIdx]->nodes[newPtrs[myIdx]->indexWrite].tie_breaker = ordered->nodes[i].tie_breaker;
 			newPtrs[myIdx]->indexWrite++;
+			// printf("%u, %p %f\n", tid, ordered->nodes[i].ptr, ordered->nodes[i].timestamp);
 			counter++;
 		}
 	}
@@ -133,6 +136,7 @@ static inline int copyUnorderedArrays(bucket_t* bckt, arrayNodes_t** unordered, 
 	
 	// Count the elements to copy
 	unsigned int newNodLen = 0;
+	
 	for(int i = 0; i < lenUnord; i++){
 		if(unordered[i] == NULL) continue;
 		newNodLen += getFixed(get_extractions_wtoutlk(unordered[i]->indexWrite));
@@ -210,7 +214,7 @@ static inline int copyUnorderedArrays(bucket_t* bckt, arrayNodes_t** unordered, 
 	// }
 	// assert(contaElementi == counter);
 
-	// printf("%u In copyUnorderedArrays, head %p, copied = %u\n", syscall(SYS_gettid), bckt, counter);
+	// printf("%u In copyUnorderedArrays, head %p, copied = %u\n", tid, bckt, counter);
 	// fflush(stdout);
 	return counter;
 }
@@ -219,15 +223,16 @@ static inline int publishArray(table_t* new_h, bucket_t* src, bucket_t** destBck
 	unsigned int new_index, arrayNodes_t** newPtrs, unsigned int lenNewPtrs, int* i){
 	bucket_t* dest = *destBckt;
 	int writes = newPtrs[*i]->indexWrite;
+	int success = 0;
 	unsigned int countElemPub = 0;
 	unsigned int myIdx = new_index % numBuckDest;
 
 	if(writes > 0)
-		BOOL_CAS(src->destBuckets+myIdx, NULL, dest);
+		success = BOOL_CAS(src->destBuckets+myIdx, NULL, dest);
 
 	//assert(src->destBuckets[myIdx]->index == dest->index);
 	//assert(src->destBuckets[myIdx]->type == dest->type && dest->type == ITEM);
-	if(src->destBuckets[myIdx] != dest) return -1;
+	if(success == false) return -1;
 
 	
 	int idxDest = 0;
@@ -238,7 +243,8 @@ static inline int publishArray(table_t* new_h, bucket_t* src, bucket_t** destBck
 		if(writes > 0){
 			idxDest = (src->index % (numArrDest-dest->numaNodes)) + dest->numaNodes;
 			assert(idxDest < numArrDest || idxDest > numArrDest);
-			if(BOOL_CAS(dest->ptr_arrays+idxDest, NULL, newPtrs[*i])){
+			arrayNodes_t** ptr = dest->ptr_arrays+idxDest;
+			if(BOOL_CAS(ptr, NULL, newPtrs[*i])){
 				// Controllare se va a buon fine oppure se somma zero
 				assert(dest->ptr_arrays[idxDest] == newPtrs[*i]);
 				__sync_fetch_and_add(&new_h->e_counter.count, writes);
@@ -287,9 +293,11 @@ int array_migrate_node(bucket_t *bckt, table_t *new_h, unsigned int numArrDest, 
 	assertf(!is_freezed(get_extractions_wtoutlk(extractions)), "Migrating bucket not freezed%s\n", "");
 
 	// LUCKY:
+	arrayNodes_t* ordered = bckt->arrayOrdered;
 	
 	unsigned int bcktsLen = numBuckDest;
 	if(bckt->destBuckets == NULL){
+		assert(sizeof(bucket_t*)*bcktsLen > 0);
 		bucket_t** buckets = (bucket_t**)malloc(sizeof(bucket_t*)*bcktsLen);
 		assert(buckets != NULL);
 		bzero(buckets, sizeof(bucket_t*)*bcktsLen);
@@ -299,6 +307,7 @@ int array_migrate_node(bucket_t *bckt, table_t *new_h, unsigned int numArrDest, 
 	}
 
 	unsigned int newPtrlen = numBuckDest;
+	assert(sizeof(arrayNodes_t*)*newPtrlen > 0);
 	arrayNodes_t** newPtr_arrays = (arrayNodes_t**)malloc(sizeof(arrayNodes_t*)*newPtrlen);
 	assert(newPtr_arrays != NULL);
 
@@ -306,8 +315,6 @@ int array_migrate_node(bucket_t *bckt, table_t *new_h, unsigned int numArrDest, 
 	// Ora ritorna che pubblica 240 elementi, contollare le estrazioni
 	// anche in questo caso, se un bucket ha extractions != 0 allora ordino e
 	// tolgo gli elementi estratti
-
-	arrayNodes_t* ordered = bckt->arrayOrdered;
 
 	int countElmsCopied = 0;
 	if(is_freezed_for_lnk(bckt->extractions) && !unordered(bckt))
@@ -318,6 +325,16 @@ int array_migrate_node(bucket_t *bckt, table_t *new_h, unsigned int numArrDest, 
 		countElmsCopied = copyUnorderedArrays(bckt, bckt->ptr_arrays, bckt->tot_arrays, newPtr_arrays, newPtrlen, new_h->bucket_width);
 	else
 		assert(0);
+	// if(!is_freezed_for_lnk(bckt->extractions) && ordered == NULL){
+	// 	countElmsCopied = copyUnorderedArrays(bckt, bckt->ptr_arrays, bckt->tot_arrays, newPtr_arrays, newPtrlen, new_h->bucket_width);
+	// }
+	// else if(!is_freezed_for_lnk(bckt->extractions) && ordered != NULL){
+	// 	countElmsCopied = copyOrderedArray(bckt, ordered, extractions, newPtr_arrays, newPtrlen, new_h->bucket_width);
+	// }else if(is_freezed_for_lnk(bckt->extractions) && ordered != NULL){
+	// 	countElmsCopied = copyFormList(bckt, &bckt->head, tail, extractions, newPtr_arrays, newPtrlen, new_h->bucket_width);
+	// }else{
+	// 	assert(0);
+	// }
 
 	//assert(countElmsCopied == contaElementi);
 	int countElemPub = 0;
@@ -360,7 +377,7 @@ int array_migrate_node(bucket_t *bckt, table_t *new_h, unsigned int numArrDest, 
 					left = new;
 
 					res = publishArray(new_h, bckt, &left, numArrDest, numBuckDest, new_index, newPtr_arrays, newPtrlen, &i);
-					if(res < 0) return ABORT;
+					if(res < 0) break;
 					countElemPub += res;
 
 					break;
@@ -370,7 +387,7 @@ int array_migrate_node(bucket_t *bckt, table_t *new_h, unsigned int numArrDest, 
 				return ABORT;
 			}else if(left->index == new_index && left->type == ITEM){
 				res = publishArray(new_h, bckt, &left, numArrDest, numBuckDest, new_index, newPtr_arrays, newPtrlen, &i);
-				if(res < 0) return ABORT;
+				if(res < 0) break;
 				countElemPub += res;
 
 				break;
@@ -465,19 +482,11 @@ static inline table_t* array_read_table(table_t * volatile *curr_table_ptr){
 			LOG("COMPUTE BW -  OLD:%.20f NEW:%.20f %u SAME TS:%u\n", new_bw, newaverage, new_h->size, acc_counter != 0 ? acc/acc_counter : 0);
 		}
 		
-		// int old = 0;
-		// if(barrierArray3 = 0) old = BOOL_CAS(&barrierArray3, 0, BLOCK_ENTRY);
-		// else old = VAL_FAA(&barrierArray3, 1);
-		// if(old == 11) BOOL_CAS(&barrierArray3, old, 0);
-		// else while(!barrierArray3);
+		// pthread_barrier_wait(&barrier);
 
 		// dumpTable(h, "Original");
 		
-		// old = 0;
-		// if(barrierArray3 = 0) old = BOOL_CAS(&barrierArray3, 0, BLOCK_ENTRY);
-		// else old = VAL_FAA(&barrierArray3, 1);
-		// if(old == 11) BOOL_CAS(&barrierArray3, old, 0);
-		// else while(!barrierArray3);
+		// pthread_barrier_wait(&barrier1);
 
 		unsigned int bucket_done = 0;
 		unsigned int lenNewPtrs = 0;
@@ -612,21 +621,13 @@ static inline table_t* array_read_table(table_t * volatile *curr_table_ptr){
 		//if(a != b && *curr_table_ptr != h) printf("Pre a = %llu, a_ex = %d, b = %llu\n", a, h->d_counter, b);
 		//fflush(stdout);
 		
-		// old = 0;
-		// if(barrierArray3 = 0) old = BOOL_CAS(&barrierArray3, 0, BLOCK_ENTRY);
-		// else old = VAL_FAA(&barrierArray3, 1);
-		// if(old == 11) BOOL_CAS(&barrierArray3, old, 0);
-		// else while(!barrierArray3);
+		// pthread_barrier_wait(&barrier2);
 
 		// dumpTable(new_h, "New");
 
-		// old = 0;
-		// if(barrierArray3 = 0) old = BOOL_CAS(&barrierArray3, 0, BLOCK_ENTRY);
-		// else old = VAL_FAA(&barrierArray3, 1);
-		// if(old == 11) BOOL_CAS(&barrierArray3, old, 0);
-		// else while(!barrierArray3);
+		// pthread_barrier_wait(&barrier3);
 
-		assert(a == b || *curr_table_ptr != h);
+		//assert(a == b || *curr_table_ptr != h);
 		//LOG("OLD ELEM COUNT: %llu NEW ELEM_COUNT %llu\n", ATOMIC_READ( &h->e_counter ) - ATOMIC_READ( &h->d_counter ), ATOMIC_READ( &new_h->e_counter ) - ATOMIC_READ( &new_h->d_counter ));		
 		if( BOOL_CAS(curr_table_ptr, h, new_h) ){ //Try to replace the old table with the new one
 		 	// I won the challenge thus I collect memory
@@ -665,7 +666,7 @@ static inline table_t* array_read_table(table_t * volatile *curr_table_ptr){
 
 void dumpTable(table_t* h, char** string){
 	char str[50];
-	snprintf( str, 50, "./Tables/%d_%p.txt", syscall(SYS_gettid), h);
+	snprintf( str, 50, "./Tables/%d_%p.txt", tid, h);
 	FILE* fp;
 	fp = fopen(str, "w+");
 	bucket_t left_node_next;
@@ -680,7 +681,27 @@ void dumpTable(table_t* h, char** string){
 		while(bucket->type != TAIL){
 			if(bucket->type != HEAD){
 				ext = get_cleaned_extractions(bucket->extractions);
-				if(is_freezed_for_lnk(bucket->extractions) && bucket != NULL){
+				if(!is_freezed_for_lnk(bucket->extractions) && bucket->arrayOrdered == NULL){
+					for (int i = 0; i < bucket->tot_arrays; i++){
+						for(int k = 0; bucket->ptr_arrays[i] != NULL && k < bucket->ptr_arrays[i]->length; k++){
+							if(bucket->ptr_arrays[i]->nodes[k].ptr != NULL && bucket->ptr_arrays[i]->nodes[k].timestamp >= MIN && bucket->ptr_arrays[i]->nodes[k].timestamp <= INFTY){
+								fprintf(fp, "%p, %u, %p, %f, Unordered\n", bucket, bucket->index, bucket->ptr_arrays[i]->nodes[k].ptr, bucket->ptr_arrays[i]->nodes[k].timestamp);
+								fflush(fp);
+								counter++;
+							}
+						}
+					}
+				}
+				else if(!is_freezed_for_lnk(bucket->extractions) && bucket->arrayOrdered != NULL){
+					int j = ext > 0 ? ext : 0;
+					for(; j < bucket->arrayOrdered->length; j++){
+						if(bucket->arrayOrdered->nodes[j].ptr != NULL && bucket->arrayOrdered->nodes[j].timestamp >= MIN && bucket->arrayOrdered->nodes[j].timestamp <= INFTY){
+							fprintf(fp, "%p, %u, %p, %f, Ordered\n", bucket, bucket->index, bucket->arrayOrdered->nodes[j].ptr, bucket->arrayOrdered->nodes[j].timestamp);
+							fflush(fp);
+							counter++;
+						}
+					}
+				}else if(is_freezed_for_lnk(bucket->extractions) && bucket->arrayOrdered != NULL){
 					current = bucket->head.next;
 					if(ext > 0) skip_extracted(bucket->tail, &current, ext);
 					else skip_extracted(bucket->tail, &current, getDynamic(get_extractions_wtoutlk(bucket->extractions)));
@@ -693,27 +714,17 @@ void dumpTable(table_t* h, char** string){
 						//}
 						current = current->next;
 					}
-				}
-				else if(!is_freezed_for_lnk(bucket->extractions) && bucket->arrayOrdered != NULL){
-					int j = ext > 0 ? ext : 0;
-					for(; j < bucket->arrayOrdered->length; j++){
-						if(bucket->arrayOrdered->nodes[j].ptr != NULL && bucket->arrayOrdered->nodes[j].timestamp >= MIN && bucket->arrayOrdered->nodes[j].timestamp <= INFTY){
-							fprintf(fp, "%p, %u, %p, %f, Ordered\n", bucket, bucket->index, bucket->arrayOrdered->nodes[j].ptr, bucket->arrayOrdered->nodes[j].timestamp);
-							fflush(fp);
-							counter++;
-						}
-					}
 				}else{
-					for (int i = 0; i < bucket->tot_arrays; i++){
-						for(int k = 0; bucket->ptr_arrays[i] != NULL && k < bucket->ptr_arrays[i]->length; k++){
-							if(bucket->ptr_arrays[i]->nodes[k].ptr != NULL && bucket->ptr_arrays[i]->nodes[k].timestamp >= MIN && bucket->ptr_arrays[i]->nodes[k].timestamp <= INFTY){
-								fprintf(fp, "%p, %u, %p, %f, Unordered\n", bucket, bucket->index, bucket->ptr_arrays[i]->nodes[k].ptr, bucket->ptr_arrays[i]->nodes[k].timestamp);
-								fflush(fp);
-								counter++;
-							}
-						}
-					}
+					assert(0);
 				}
+				// if(is_freezed_for_lnk(bucket->extractions) && bucket->arrayOrdered != NULL){
+
+				// }
+				// else if(!is_freezed_for_lnk(bucket->extractions) && bucket->arrayOrdered != NULL){
+
+				// }else{
+
+				// }
 				if(bucket->pending_insert != NULL && bucket->pending_insert != 0x1){
 					node_t* node = (node_t*)bucket->pending_insert;
 					fprintf(fp, "%p, %u, %p, %f, Posted\n", bucket, bucket->index, node->payload, node->timestamp);

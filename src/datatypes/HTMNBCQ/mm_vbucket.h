@@ -264,6 +264,7 @@ static inline bucket_t* bucket_alloc_resize(node_t *tail, int ptrsLength){
 		//res->numaNodes = numa_num_configured_nodes();
 		res->numaNodes = NUMA_NODE;
 		res->tot_arrays = ptrsLength;
+		assert(sizeof(arrayNodes_t*)*res->tot_arrays > 0);
 		res->ptr_arrays = (arrayNodes_t**)malloc(sizeof(arrayNodes_t*)*res->tot_arrays);
 		for(int i=0; i < res->tot_arrays; i++){
 			if(i < res->numaNodes) res->ptr_arrays[i] = initArray(NODES_LENGTH);

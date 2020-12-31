@@ -12,6 +12,7 @@ static inline nodeElem_t* nodeElem_alloc(int length){
 	int status = 0;
 
 	// allocate new array of tuples
+	assert(length*sizeof(nodeElem_t) > 0);
 	status = posix_memalign((void**)&res, CACHE_LINE_SIZE, length*sizeof(nodeElem_t));
 	if(status != 0) {printf("No enough memory to array of tuples structure\n"); _exit(0);}
 	bzero(res, length*sizeof(nodeElem_t));

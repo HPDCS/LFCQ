@@ -29,10 +29,10 @@ static inline void array_block_table(table_t *h)
 
 		// LUCKY: Try to block read and write from arrays in bucket
 		//setUnvalidRead(bucket);
-		setUnvalidContent(bucket);
-		for(unsigned int i = 0; i < bucket->tot_arrays; i++){
-			blockArray(bucket->ptr_arrays+i);
-		}
+		// setUnvalidContent(bucket);
+		// for(unsigned int i = 0; i < bucket->tot_arrays; i++){
+		// 	blockArray(bucket->ptr_arrays+i);
+		// }
 		// LUCKY: end
 
 

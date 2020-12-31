@@ -5,6 +5,10 @@
 #include "vbucket.h"
 #include "skipList.h"
 
+pthread_barrier_t barrier;
+pthread_barrier_t barrier1;
+pthread_barrier_t barrier2;
+pthread_barrier_t barrier3;
 
 #define TID tid
 

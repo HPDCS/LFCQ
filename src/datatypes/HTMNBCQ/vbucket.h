@@ -771,6 +771,7 @@ static inline int extract_from_ArrayOrList(bucket_t *bckt, void ** result, pkey_
 	if(is_freezed_for_del(idxRead)) return EMPTY;
 
 	arrayNodes_t* ordered = bckt->arrayOrdered;
+	if(!is_freezed_for_lnk(idxRead) && ordered == NULL) return ABORT;
 
 	// FIXME: Forse risolto
 	if(!is_freezed_for_lnk(idxRead) && getDynamic(idxRead) > getFixed(ordered->indexWrite)){

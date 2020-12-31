@@ -11,7 +11,7 @@
 
 #define XABORT_CODE_RET 0xf1
 
-#define NUMA_NODE 1
+#define NUMA_NODE 2
 #define NODES_LENGTH 250
 
 #define BLOCK 1ULL // marker that cell is blocked

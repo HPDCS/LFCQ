@@ -7,8 +7,7 @@
 #include "../../utils/hpdcs_utils.h"
 #include "../../gc/ptst.h"
 
-
-
+#define THREAD_TO_WAIT 12
 
 /*************************************
  * THREAD LOCAL VARIABLES			 *
@@ -112,6 +111,7 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 		res->hashtable->array[i].op_descriptor = 0ULL;
 		res->hashtable->array[i].numaNodes = NUMA_NODE;
 		res->hashtable->array[i].tot_arrays = res->hashtable->array[i].numaNodes;
+		assert(sizeof(arrayNodes_t*)*res->hashtable->array[i].tot_arrays > 0);
 		res->hashtable->array[i].ptr_arrays = (arrayNodes_t**)malloc(sizeof(arrayNodes_t*)*res->hashtable->array[i].tot_arrays);
 		for(int i=0; i < res->hashtable->array[i].tot_arrays; i++){
 			res->hashtable->array[i].ptr_arrays[i] = initArray(NODES_LENGTH);
@@ -122,6 +122,10 @@ void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem
 
 	res->hashtable->index = alloc_index(MINIMUM_SIZE);
 	init_index(res->hashtable);
+	pthread_barrier_init (&barrier, NULL, THREAD_TO_WAIT);
+	pthread_barrier_init (&barrier1, NULL, THREAD_TO_WAIT);
+	pthread_barrier_init (&barrier2, NULL, THREAD_TO_WAIT);
+	pthread_barrier_init (&barrier3, NULL, THREAD_TO_WAIT);
 	return res;
 }
 
@@ -189,10 +193,11 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 
 		// search the two adjacent nodes that surround the new key and try to insert with a CAS
 		res = search_and_insert(bucket, lookup_table, newIndex, timestamp, 0, epoch, payload);
-		// printf("Inserted: idxBucket %llu, payload %p, timestamp %f\n", newIndex, payload, timestamp);
-		// fflush(stdout);
 		
 	}while(res != OK);
+
+	// printf("Inserted: idxBucket %llu, payload %p, timestamp %f\n", newIndex, payload, timestamp);
+	// fflush(stdout);
 
 	// the insertion succeeds, thus we want to ensure that the insertion becomes visible
 	flush_current(h, newIndex);
@@ -344,7 +349,8 @@ begin:
 
 			if(res == MOV_FOUND) goto begin;
 
-			// if(res != EMPTY && res != NEXT_BUCKET) printf("%ld, bucketIndex: %llu, epoch %u, extractions %llu Dequeue: result %p, timestamp %f\n", syscall(SYS_gettid), index, left_node->epoch, left_node->extractions, *result, left_ts);
+			//if(res != EMPTY && res != NEXT_BUCKET) printf("%ld, bucketIndex: %llu, epoch %u, extractions %llu Dequeue: result %p, timestamp %f\n", syscall(SYS_gettid), index, left_node->epoch, left_node->extractions, *result, left_ts);
+			// if(res != EMPTY && res != NEXT_BUCKET) printf("bucketIndex: %llu, %p, %f\n", index, *result, left_ts);
 			// fflush(stdout);
 			// LUCKY: End
 
