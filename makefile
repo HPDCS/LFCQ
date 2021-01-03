@@ -18,7 +18,8 @@ ARCH_value := src/arch/x86.o
 
 SLCQ_value := src/datatypes/slcalqueue/calqueue.o  $(UTIL_value)
 
-VBPQ_value := src/datatypes/nbcalendars_with_vb2/vbpq.o $(UTIL_value) $(GACO_value) $(ARCH_value)
+#VBPQ_value := src/datatypes/nbcalendars_with_vb2/vbpq.o $(UTIL_value) $(GACO_value) $(ARCH_value)
+VBPQ_value := src/datatypes/HTMNBCQ/vbpq.o $(UTIL_value) $(GACO_value) $(ARCH_value)
 
 NBCQ_value := src/datatypes/nbcalendars/nb_calqueue.o src/datatypes/nbcalendars/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)
 NBVB_value := src/datatypes/nbcalendars_with_vb/nb_calqueue.o src/datatypes/nbcalendars_with_vb/common_nb_calqueue.o $(UTIL_value) $(GACO_value) $(ARCH_value)

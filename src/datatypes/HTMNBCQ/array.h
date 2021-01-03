@@ -66,7 +66,8 @@ arrayNodes_t* initArray(unsigned int length){
 	arrayNodes_t* array;
 	//array = arrayNodes_alloc(length);
 
-	array = gc_alloc(ptst, gc_aid[GC_ARRAYNODES]);
+	//array = gc_alloc(ptst, gc_aid[GC_ARRAYNODES]);
+	array = (arrayNodes_t*)malloc(sizeof(arrayNodes_t));
 	assert(array != NULL);
 	bzero(array,  sizeof(arrayNodes_t));
 
@@ -75,10 +76,11 @@ arrayNodes_t* initArray(unsigned int length){
 	array->indexWrite = 0;
 	array->length = length;
 
-	assert(sizeof(nodeElem_t)*array->length > 0);
+	assert(sizeof(nodeElem_t)*length > 0);
 	// array->nodes = (nodeElem_t*)malloc(sizeof(nodeElem_t)*array->length);
-	// bzero(array->nodes, sizeof(nodeElem_t)*array->length);
-	array->nodes = nodeElem_alloc(length);
+	//array->nodes = nodeElem_alloc(length);
+	array->nodes = (nodeElem_t*)malloc(sizeof(nodeElem_t)*length);
+	bzero(array->nodes, sizeof(nodeElem_t)*length);
 	assert(array->nodes != NULL);
 
 	return array;
@@ -214,7 +216,9 @@ arrayNodes_t* vectorOrderingAndBuild(bucket_t* bckt){
 				return NULL;
 			}
 		}
-
+		// TODO: Set the epoch of the ordered array equal to the bucket epoch
+		newArray->epoch = bckt->epoch;
+		
 		if(!unordered(bckt)) return NULL;
 
 		void* addr = NULL;
@@ -394,8 +398,9 @@ int stateMachine(bucket_t* bckt, unsigned long dequeueStop){
 		// First Phase: Block all used entries
 		blockArray(bckt->ptr_arrays+numaNode);
 
-		for (int actNuma = 0; actNuma < bckt->numaNodes; actNuma++){
-			blockArray(bckt->ptr_arrays+actNuma);
+		for (int actNuma = 0; actNuma < bckt->tot_arrays; actNuma++){
+			if(bckt->ptr_arrays[actNuma] != NULL) 
+				blockArray(bckt->ptr_arrays+actNuma);
 		}
 		// Second Phase: Order elements and the public the array
 

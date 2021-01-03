@@ -7,7 +7,9 @@
 #include "../../utils/hpdcs_utils.h"
 #include "../../gc/ptst.h"
 
-#define THREAD_TO_WAIT 12
+//#include <malloc.h>
+
+#define THREAD_TO_WAIT 8
 
 /*************************************
  * THREAD LOCAL VARIABLES			 *
@@ -33,6 +35,7 @@ __thread double last_bw = 0.0;
 int gc_aid[2];
 int gc_hid[1];
 
+int NODES_LENGTH;
 
 
 void std_free_hook(ptst_t *p, void *ptr){	free(ptr); }
@@ -47,6 +50,9 @@ void std_free_hook(ptst_t *p, void *ptr){	free(ptr); }
  */
 void* pq_init(unsigned int threshold, double perc_used_bucket, unsigned int elem_per_bucket)
 {
+	// mallopt(M_CHECK_ACTION, 7);
+	NODES_LENGTH = elem_per_bucket*3;
+
 	unsigned int i = 0;
 	int res_mem_posix = 0;
 	vbpq* res = NULL;
@@ -165,7 +171,7 @@ int pq_enqueue(void* q, pkey_t timestamp, void* payload)
 		if(res == MOV_FOUND){
 			// check for a resize
 			t_state = 0;
-			h = read_table(&queue->hashtable);
+			h = array_read_table(&queue->hashtable);
 			// get actual size
 			size = h->size;
 			// read the actual epoch
@@ -266,7 +272,7 @@ pkey_t pq_dequeue(void *q, void** result)
 begin:
 	// Get the current set table
 	t_state = 0;
-	h = read_table(&queue->hashtable);
+	h = array_read_table(&queue->hashtable);
 	t_state =1;
 //   acquire_node(&h->socket);
 	// Get data from the table

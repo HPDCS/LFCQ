@@ -430,9 +430,6 @@ committed = false;
 
 
 static inline table_t* read_table(table_t * volatile *curr_table_ptr){
-	// LUCKY: Per fare i test
-	return array_read_table(curr_table_ptr);
-
   #if ENABLE_EXPANSION == 0
   	return *curr_table_ptr;
   #else

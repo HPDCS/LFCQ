@@ -3,7 +3,10 @@
 
 #include "array_utils_set_table.h"
 
-int barrierArray3 = 0;
+#define MEM mem
+extern __thread int MEM;
+
+int barrierArray3 = 0;   
 
 static inline int copyFormList(bucket_t* bckt, node_t* head, node_t* tail, unsigned long long extractions, arrayNodes_t** newPtrs, unsigned int lenNewPtrs, double newHBW){
 
@@ -22,9 +25,11 @@ static inline int copyFormList(bucket_t* bckt, node_t* head, node_t* tail, unsig
 	bzero(numElmsPerArray, lenNewPtrs * sizeof(int));
 	int elmsToCopy = 0;
 	while (current != tail){
-		if(current->payload != BLOCK_ENTRY && current->timestamp >= MIN && current->timestamp < INFTY){
+		if(current->payload != BLOCK_ENTRY && current->payload != NULL &&
+			current->timestamp >= MIN && current->timestamp < INFTY){
 			new_index = hash(current->timestamp, newHBW);
 			myIdx = new_index % lenNewPtrs;
+			assert(myIdx < lenNewPtrs);
 			numElmsPerArray[myIdx] += 1;
 			elmsToCopy++;
 		}
@@ -45,7 +50,8 @@ static inline int copyFormList(bucket_t* bckt, node_t* head, node_t* tail, unsig
 
 	unsigned int counter = 0;
 	while(current != tail){
-		if(current->payload != BLOCK_ENTRY && current->timestamp >= MIN && current->timestamp < INFTY){
+		if(current->payload != BLOCK_ENTRY && current->payload != NULL && 
+			current->timestamp >= MIN && current->timestamp < INFTY){
 			new_index = hash(current->timestamp, newHBW);
 			myIdx = new_index % lenNewPtrs;
 
@@ -63,7 +69,7 @@ static inline int copyFormList(bucket_t* bckt, node_t* head, node_t* tail, unsig
 	// Iteration to remove the unused arrays
 	for(int i = 0; i < lenNewPtrs; i++){
 		if(newPtrs[i] != NULL && newPtrs[i]->indexWrite == 0){
-			arrayNodes_unsafe_free_malloc(newPtrs[i]);
+			arrayNodes_safe_free_malloc(newPtrs[i]);
 			newPtrs[i] = NULL;
 		}
 	}
@@ -90,7 +96,7 @@ static inline int copyOrderedArray(bucket_t* bckt, arrayNodes_t* ordered, unsign
 
 	// Allocation of all needed arrays
 	for(int i = 0; i < lenNewPtrs; i++){
-		newPtrs[i] = initArray(newNodLen);
+		newPtrs[i] = initArray(newNodLen+newNodLen/2);
 	}
 
 	// Copy of all the elements putting it in the right array associated to a bucket
@@ -102,7 +108,8 @@ static inline int copyOrderedArray(bucket_t* bckt, arrayNodes_t* ordered, unsign
 	void* ptrCopy = NULL;
 	for(; i < ordered->length; i++){
 		assert(get_cleaned_extractions(bckt->extractions) == get_cleaned_extractions(extractions) && !is_freezed_for_lnk(bckt->extractions));
-		if(ordered->nodes[i].ptr != BLOCK_ENTRY && ordered->nodes[i].timestamp >= MIN && ordered->nodes[i].timestamp < INFTY){
+		if(ordered->nodes[i].ptr != BLOCK_ENTRY && ordered->nodes[i].ptr != NULL && 
+			ordered->nodes[i].timestamp >= MIN && ordered->nodes[i].timestamp < INFTY){
 			new_index = hash(ordered->nodes[i].timestamp, newHBW);
 			myIdx = new_index % lenNewPtrs;
 		
@@ -119,8 +126,8 @@ static inline int copyOrderedArray(bucket_t* bckt, arrayNodes_t* ordered, unsign
 
 	// Iteration to remove the unused arrays
 	for(int i = 0; i < lenNewPtrs; i++){
-		if(newPtrs[i]->indexWrite == 0){
-			arrayNodes_unsafe_free_malloc(newPtrs[i]);
+		if(newPtrs[i]->indexWrite <= 0){
+			arrayNodes_safe_free_malloc(newPtrs[i]);
 			newPtrs[i] = NULL;
 		}
 	}
@@ -149,9 +156,11 @@ static inline int copyUnorderedArrays(bucket_t* bckt, arrayNodes_t** unordered, 
 	bzero(numElmsPerArray, lenNewPtrs * sizeof(int));
 	for(int j = 0; j < lenUnord; j++){
 		for(int k = 0; unordered[j] != NULL && k < getFixed(get_extractions_wtoutlk(unordered[j]->indexWrite)); k++){
-			if(unordered[j]->nodes[k].timestamp != BLOCK_ENTRY && unordered[j]->nodes[k].timestamp >= MIN && unordered[j]->nodes[k].timestamp < INFTY){
+			if(unordered[j]->nodes[k].ptr != BLOCK_ENTRY && unordered[j]->nodes[k].ptr != NULL &&
+				unordered[j]->nodes[k].timestamp >= MIN && unordered[j]->nodes[k].timestamp < INFTY){
 				new_index = hash(unordered[j]->nodes[k].timestamp, newHBW);
 				myIdx = new_index % lenNewPtrs;
+				assert(myIdx < lenNewPtrs);
 				numElmsPerArray[myIdx]+=1;
 			}
 		}
@@ -175,12 +184,10 @@ static inline int copyUnorderedArrays(bucket_t* bckt, arrayNodes_t** unordered, 
 		consArray = unordered[idxArray];
 		if(consArray == NULL) continue;
 		idxRNods = 0;
-		// printf("locked elements %lld\n", idxWNods);
-		// fflush(stdout);
-
 		while(idxRNods < consArray->length){
 			//assert(!is_freezed_for_lnk(bckt->extractions) && bckt->arrayOrdered == NULL);
-			if(consArray->nodes[idxRNods].ptr != BLOCK_ENTRY && consArray->nodes[idxRNods].timestamp >= MIN && consArray->nodes[idxRNods].timestamp < INFTY){
+			if(consArray->nodes[idxRNods].ptr != BLOCK_ENTRY && consArray->nodes[idxRNods].ptr != NULL && 
+				consArray->nodes[idxRNods].timestamp >= MIN && consArray->nodes[idxRNods].timestamp < INFTY){
 				new_index = hash(consArray->nodes[idxRNods].timestamp, newHBW);
 				myIdx = new_index % lenNewPtrs;
 					assert(consArray->nodes[idxRNods].ptr != NULL);
@@ -198,7 +205,7 @@ static inline int copyUnorderedArrays(bucket_t* bckt, arrayNodes_t** unordered, 
 	// Iteration to remove the unused arrays
 	for(int i = 0; i < lenNewPtrs; i++){
 		if(newPtrs[i] != NULL && newPtrs[i]->indexWrite == 0){
-			arrayNodes_unsafe_free_malloc(newPtrs[i]);
+			arrayNodes_safe_free_malloc(newPtrs[i]);
 			newPtrs[i] = NULL;
 		}
 	}
@@ -232,7 +239,10 @@ static inline int publishArray(table_t* new_h, bucket_t* src, bucket_t** destBck
 
 	//assert(src->destBuckets[myIdx]->index == dest->index);
 	//assert(src->destBuckets[myIdx]->type == dest->type && dest->type == ITEM);
-	if(success == false) return -1;
+	if(success == false){
+		arrayNodes_safe_free_malloc(newPtrs[*i]);
+		return -1;
+	} 
 
 	
 	int idxDest = 0;
@@ -242,7 +252,7 @@ static inline int publishArray(table_t* new_h, bucket_t* src, bucket_t** destBck
 		writes = newPtrs[*i]->indexWrite;
 		if(writes > 0){
 			idxDest = (src->index % (numArrDest-dest->numaNodes)) + dest->numaNodes;
-			assert(idxDest < numArrDest || idxDest > numArrDest);
+			assert(idxDest < numArrDest);
 			arrayNodes_t** ptr = dest->ptr_arrays+idxDest;
 			if(BOOL_CAS(ptr, NULL, newPtrs[*i])){
 				// Controllare se va a buon fine oppure se somma zero
@@ -295,15 +305,17 @@ int array_migrate_node(bucket_t *bckt, table_t *new_h, unsigned int numArrDest, 
 	// LUCKY:
 	arrayNodes_t* ordered = bckt->arrayOrdered;
 	
-	unsigned int bcktsLen = numBuckDest;
+	unsigned int dimBuckets = numBuckDest*sizeof(bucket_t*);
 	if(bckt->destBuckets == NULL){
-		assert(sizeof(bucket_t*)*bcktsLen > 0);
-		bucket_t** buckets = (bucket_t**)malloc(sizeof(bucket_t*)*bcktsLen);
+		assert(dimBuckets > 0);
+		bucket_t** buckets = (bucket_t**)malloc(dimBuckets);
 		assert(buckets != NULL);
-		bzero(buckets, sizeof(bucket_t*)*bcktsLen);
+		bzero(buckets, dimBuckets);
 		while(bckt->destBuckets == NULL){
 			BOOL_CAS(&bckt->destBuckets, NULL, buckets);
 		}
+		if(bckt->destBuckets != buckets)
+			free(buckets);
 	}
 
 	unsigned int newPtrlen = numBuckDest;
@@ -402,6 +414,7 @@ int array_migrate_node(bucket_t *bckt, table_t *new_h, unsigned int numArrDest, 
 	// fflush(stdout);
 	finalize_set_as_mov(bckt);
 
+	free(newPtr_arrays);
 	return OK;
 }
 
@@ -482,6 +495,7 @@ static inline table_t* array_read_table(table_t * volatile *curr_table_ptr){
 			LOG("COMPUTE BW -  OLD:%.20f NEW:%.20f %u SAME TS:%u\n", new_bw, newaverage, new_h->size, acc_counter != 0 ? acc/acc_counter : 0);
 		}
 		
+
 		// pthread_barrier_wait(&barrier);
 
 		// dumpTable(h, "Original");
@@ -493,7 +507,6 @@ static inline table_t* array_read_table(table_t * volatile *curr_table_ptr){
 		unsigned int lenDestBckt = 0;
 		lenNewPtrs = h->array->numaNodes + 1 + ceil(new_h->bucket_width/h->bucket_width);
 		lenDestBckt = ceil(h->bucket_width/new_h->bucket_width)+1;
-		
 		
 		//for(retry_copy_phase = 0;retry_copy_phase<10;retry_copy_phase++){
 		while(bucket_done != size){

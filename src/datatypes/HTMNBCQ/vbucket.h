@@ -785,7 +785,7 @@ static inline int extract_from_ArrayOrList(bucket_t *bckt, void ** result, pkey_
 			&& bckt->head.next == bckt->tail); */
 		if(getDynamic(idxRead) < bckt->arrayOrdered->length && getDynamic(idxRead) < getFixed(bckt->arrayOrdered->indexWrite)){
 			res = nodesDequeue(bckt->arrayOrdered, getDynamic(idxRead), result, ts);
-			assert(*result != NULL && *ts >= MIN && *ts < INFTY);
+			//assert(*result != NULL && *ts >= MIN && *ts < INFTY);
 			if(res == MYARRAY_EXTRACT) return OK;
 			else return ABORT;
 		}else{

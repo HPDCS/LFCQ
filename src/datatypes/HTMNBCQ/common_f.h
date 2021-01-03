@@ -11,8 +11,8 @@
 
 #define XABORT_CODE_RET 0xf1
 
-#define NUMA_NODE 2
-#define NODES_LENGTH 250
+#define NUMA_NODE 1
+extern int NODES_LENGTH;
 
 #define BLOCK 1ULL // marker that cell is blocked
 
@@ -82,7 +82,11 @@ static inline int getcpu() {
 }
 
 static inline int getNumaNode(){
-	return nid;
+  #if NUMA_NODE > 1
+    return nid;
+  #else
+    return 0;
+  #endif
 }
 
 #endif

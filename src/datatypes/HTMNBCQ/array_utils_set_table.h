@@ -114,7 +114,7 @@ double array_compute_mean_separation_time(table_t *h,
 	unsigned int stopIter = 1;
 	long long int idxWrite = 0;
 	arrayNodes_t* consArr = NULL;
-	arrayNodes_t* selected = initArray(sample_size);
+	arrayNodes_t* selected = initArray(SAMPLE_SIZE);
 	// LUCKY: end
 
 // printf("sample_size %d\n", sample_size);
@@ -160,9 +160,6 @@ double array_compute_mean_separation_time(table_t *h,
 							else
 								copyArray(consArr, writes, newArray);
 						}
-						if(!unordered(left)){
-							arrayNodes_safe_free(newArray);
-						}
 					}
 
 					// Sort elements
@@ -177,6 +174,7 @@ double array_compute_mean_separation_time(table_t *h,
 					// if(ordered->nodes[start].timestamp != sample_array[counter-1]){
 					// 	sample_array[++counter] = ordered->nodes[start].timestamp; 
 					// }
+					assert(selected->indexWrite < selected->length);
 					if(selected->indexWrite > 0){
 						if(newArray->nodes[start].timestamp != selected->nodes[selected->indexWrite-1].timestamp){
 							// printf("Selected elem %f\n", ordered->nodes[start].timestamp);
@@ -191,11 +189,8 @@ double array_compute_mean_separation_time(table_t *h,
 					if(h->new_table->bucket_width != -1.0) return h->new_table->bucket_width;
 					if(counter == sample_size) stopIter = 0;
 				}
-				// if(newArray != NULL){
-				// 	arrayNodesOrdered_safe_free(newArray);
-				// 	newArray = NULL;
-				// }
-					// LUCKY: end
+				arrayNodes_safe_free_malloc(newArray);
+				// LUCKY: end
 			}
 
 			if(index == new_min_index) new_min_index = -1;
@@ -220,10 +215,6 @@ double array_compute_mean_separation_time(table_t *h,
 	for(int i = 0; i < sample_size; i++){
 		sample_array[++counter] = selected->nodes[i].timestamp;
 	}
-
-	// for(int i = 0; i < sample_size+1; i++){
-	// 	printf("sample_array[%d] = %f\n", i , sample_array[i]);
-	// }
 
 	if( counter < sample_size)
 		sample_size = counter;
