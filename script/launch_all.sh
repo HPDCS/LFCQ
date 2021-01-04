@@ -19,7 +19,7 @@ mkdir -p $results
                                                         PWD=`pwd`
 echo $PWD
                                                         cd ..
-                                                        make clean; make $version; make -f makefileF $version;
+                                                        make clean; make -f makefileF $version;
                                                         cd script
 
 for i in $iterations; do

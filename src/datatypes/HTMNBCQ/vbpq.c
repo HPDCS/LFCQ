@@ -28,6 +28,17 @@ __thread unsigned long long near = 0;
 __thread unsigned int 		acc = 0;
 __thread unsigned int 		acc_counter = 0;
 
+extern __thread unsigned long long insertedInList;
+extern __thread unsigned long long insertedInArray;
+extern __thread unsigned long long dequeueInList;
+extern __thread unsigned long long dequeueInArray;
+extern __thread unsigned long long arrayMalloc;
+extern __thread unsigned long long arrayGC;
+extern __thread unsigned long long stateMachineFailedDeq;
+extern __thread unsigned long long numBcktOrdered;
+extern __thread unsigned long long arrayGCAfterResize;
+extern __thread unsigned long long arrayMallocAfterResize;
+extern __thread unsigned long long arrayAllocForOrder;
 
 __thread double last_bw = 0.0;
 
@@ -530,12 +541,49 @@ insertions2-rtm_insertions2);
 			near,
 			read_table_count	  ,
 			malloc_count, last_bw);
+
+	printf("\n%d- "
+		"EVENT INSERTED IN LIST %lld "
+		"EVENT INSERTED IN ARRAY %lld ###"
+		"EVENT DEQUEUE IN LIST %lld "
+		"EVENT DEQUEUE IN ARRAY %lld ###"
+		"ARRAY ALLOC WITH MALLOC %lld "
+		"ARRAY ALLOC WITH MALLOC AFTER RESIZE %lld "
+		"ARRAY ALLOC WITH GC %lld "
+		"ARRAY ALLOC WITH GC AFTER RESIZE %lld "
+		"ARRAY ALLOC FOR ORDERING %lld ###"
+		"STATE MACHINE DEQ FAILS %lld "
+		"BUCKET ORDERED %lld ###\n",
+		TID,
+		insertedInList,
+		insertedInArray,
+		dequeueInList,
+		dequeueInArray,
+		arrayMalloc,
+		arrayMallocAfterResize,
+		arrayGC,
+		arrayGCAfterResize,
+		arrayAllocForOrder,
+		stateMachineFailedDeq,
+		numBcktOrdered
+	);
 }
 
 void pq_reset_statistics(){
 		near = 0;
 		num_cas = 0;
 		num_cas_useful = 0;	
+		insertedInList = 0;
+		insertedInArray = 0;
+		dequeueInList = 0;
+		dequeueInArray = 0;
+		arrayMalloc = 0;
+		arrayMallocAfterResize = 0;
+		arrayGC = 0;
+		arrayGCAfterResize = 0;
+		arrayAllocForOrder = 0;
+		stateMachineFailedDeq = 0;
+		numBcktOrdered = 0;
 }
 
 unsigned int pq_num_malloc(){ return (unsigned int) malloc_count; }

@@ -29,6 +29,15 @@
 unsigned int testSleep = 1;
 unsigned int maxSleep = 0;
 
+ __thread unsigned long long arrayMalloc = 0;
+ __thread unsigned long long arrayGC = 0;
+ __thread unsigned long long arrayGCAfterResize = 0;
+ __thread unsigned long long arrayMallocAfterResize = 0;
+ __thread unsigned long long arrayAllocForOrder = 0;
+ __thread unsigned long long numBcktOrdered = 0;
+
+ char memArray = 0;
+
 /**
  * Structure that implements my idea of an element of the array nodes
 */
@@ -80,10 +89,14 @@ arrayNodes_t* initArray(unsigned int length){
 		array->nodes = gc_alloc(ptst, gc_aid[GC_NODEELEMS]);
 		array->length = NODES_LENGTH;
 		bzero(array->nodes, sizeof(nodeElem_t)*NODES_LENGTH);
+		VAL_FAA(&arrayGC, 1);
+		if(memArray == 1) VAL_FAA(&arrayGCAfterResize, 1);
 	}else{
 		array->nodes = (nodeElem_t*)malloc(sizeof(nodeElem_t)*length);
 		array->length = length;
 		bzero(array->nodes, sizeof(nodeElem_t)*length);
+		VAL_FAA(&arrayMalloc, 1);
+		if(memArray == 1) VAL_FAA(&arrayMallocAfterResize, 1);
 	}
 	assert(array->nodes != NULL);
 
@@ -172,7 +185,7 @@ nodeElem_t* getNodeElem(arrayNodes_t* array, unsigned long long position){
 
 static inline void blockArray(arrayNodes_t** array){
 	long long int idx = 0;
-	long long int length = (*array)->length;
+	long long int length = get_cleaned_extractions((*array)->indexWrite);
 	nodeElem_t* tuples = (*array)->nodes;
 	while(idx < length){
 		while(tuples[idx].timestamp == MIN){
@@ -195,24 +208,25 @@ arrayNodes_t* vectorOrderingAndBuild(bucket_t* bckt){
 	for (actNuma = 0; actNuma < bckt->tot_arrays; actNuma++){
 		array = bckt->ptr_arrays[actNuma];
 		if(array == NULL) continue;
-		if(getFixed(array->indexWrite) > array->length)
+		if(get_cleaned_extractions(array->indexWrite) > array->length)
 			elmToOrder += array->length;
 		else 
-			elmToOrder += getFixed(array->indexWrite);
+			elmToOrder += get_cleaned_extractions(array->indexWrite);
 	}
 	actNuma = 0;
 	arrayNodes_t* newArray = NULL;
 	// printf("newArray->nodes %p, elemToOrder: %u\n", newArray->nodes, elmToOrder);
 	if(elmToOrder > 0){
 		newArray = initArray(elmToOrder);
+		VAL_FAA(&arrayAllocForOrder, 1);
 		for (actNuma = 0; actNuma < bckt->tot_arrays; actNuma++){
 			array = bckt->ptr_arrays[actNuma];
 			if(array == NULL) continue;
-			if(getFixed(array->indexWrite) > 0){
-				if(getFixed(array->indexWrite) > array->length)
+			if(get_cleaned_extractions(array->indexWrite) > 0){
+				if(get_cleaned_extractions(array->indexWrite) > array->length)
 					copyArray(array, array->length, newArray);
 				else
-					copyArray(array, getFixed(array->indexWrite), newArray);
+					copyArray(array, get_cleaned_extractions(array->indexWrite), newArray);
 			}
 			if(!unordered(bckt)){
 				arrayNodes_safe_free_malloc(newArray);
@@ -433,8 +447,10 @@ int stateMachine(bucket_t* bckt, unsigned long dequeueStop){
 						node_safe_free(newArray->nodes[i].ptr);
 				}
 				arrayNodes_safe_free(newArray);
-			}else
+			}else{
+				VAL_FAA(&numBcktOrdered, 1);
 				public = 1;
+			}
 			assert(unordered(bckt) == false);
 			// printArray(bckt->arrayOrdered->nodes, bckt->arrayOrdered->length, 0);
 		}

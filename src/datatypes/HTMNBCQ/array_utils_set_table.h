@@ -133,6 +133,12 @@ double array_compute_mean_separation_time(table_t *h,
 			if(left->index == index  && left->type != HEAD){
 //				if(tid == 1)	LOG("%d- INDEX: %u COUNTER %u SAMPLESIZE %u\n",tid, index, counter, sample_size);
 				// LUCKY:
+				for(int i = 0; i < left->tot_arrays; i++){
+					if(left->ptr_arrays[i] != NULL){
+						blockArray(left->ptr_arrays+i);
+					}
+				}
+
 				stopIter = 1;
 				unsigned long long elmToOrder = 0;
 				int actNuma;
@@ -140,7 +146,7 @@ double array_compute_mean_separation_time(table_t *h,
 				for (actNuma = 0; actNuma < left->tot_arrays; actNuma++){
 					consArr = left->ptr_arrays[actNuma];
 					if(consArr == NULL) continue;
-					writes = consArr->indexWrite;
+					writes = get_cleaned_extractions(consArr->indexWrite);
 					if(writes > consArr->length)
 						elmToOrder += consArr->length;
 					else 
@@ -153,8 +159,8 @@ double array_compute_mean_separation_time(table_t *h,
 					for (actNuma = 0; actNuma < left->tot_arrays; actNuma++){
 						consArr = left->ptr_arrays[actNuma];
 						if(consArr == NULL) continue;
-						writes = consArr->indexWrite;
-						if(consArr->indexWrite > 0){
+						writes = get_cleaned_extractions(consArr->indexWrite);
+						if(writes > 0){
 							if(writes > consArr->length)
 								copyArray(consArr, consArr->length, newArray);
 							else

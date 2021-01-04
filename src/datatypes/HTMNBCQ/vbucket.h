@@ -47,6 +47,16 @@ extern __thread struct drand48_data seedT;
 extern __thread unsigned int tid;
 extern __thread int nid;
 
+ __thread unsigned long long insertedInList = 0;
+ __thread unsigned long long insertedInArray = 0;
+ __thread unsigned long long dequeueInList = 0;
+ __thread unsigned long long dequeueInArray = 0;
+ __thread unsigned long long stateMachineFailedDeq = 0;
+
+//  __thread node_t* contatore = NULL;
+//  __thread unsigned long long indexVB = 0;
+//  __thread unsigned long long indexVPos = 0;
+
 #define GC_BUCKETS   0
 #define GC_INTERNALS 1
 
@@ -224,34 +234,42 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 		newN->payload	= bckt->pending_insert->payload;
 		newN->hash		= bckt->pending_insert->hash;
 		
-		// check if there is space in the bucket
-		while(toskip > 0ULL && curr != tail){
-			curr = curr->next;
-			toskip--;
-		}
-		head  = curr;
+		if(!is_freezed_for_lnk(bckt->extractions) && unordered(bckt)){
+			int numaNode = getNumaNode();
+			unsigned long long idxWrite = VAL_FAA(&bckt->ptr_arrays[numaNode]->indexWrite, 1);
+			int val = nodesInsert(bckt->ptr_arrays[numaNode], getDynamic(idxWrite), bckt->pending_insert->payload, bckt->pending_insert->timestamp);
+			assert(val == MYARRAY_INSERT);
+		}else{
 
-		// there is no space so the whoever has tried a fallback has to retry
-		if(curr == tail && toskip >= 0ULL) 	node_unsafe_free(newN);
-		else{
-			// connect...
-			do{
-					newN->tie_breaker = 1;
-					left = curr = head;
-					curr = curr->next;
-					while(curr->timestamp <= newN->timestamp){
-						// keep memory if it was inserted to release memory
-						if(curr->timestamp == newN->timestamp && curr->hash == newN->hash) present = 1;
-						left = curr;
+			// check if there is space in the bucket
+			while(toskip > 0ULL && curr != tail){
+				curr = curr->next;
+				toskip--;
+			}
+			head  = curr;
+
+			// there is no space so the whoever has tried a fallback has to retry
+			if(curr == tail && toskip >= 0ULL) 	node_unsafe_free(newN);
+			else{
+				// connect...
+				do{
+						newN->tie_breaker = 1;
+						left = curr = head;
 						curr = curr->next;
-					}
-					if(left->timestamp == newN->timestamp)	newN->tie_breaker+= left->tie_breaker;
-					newN->next = curr;
-			}while(!present && !__sync_bool_compare_and_swap(&left->next, curr, newN));
-			// CAS has done insert of the new node
+						while(curr->timestamp <= newN->timestamp){
+							// keep memory if it was inserted to release memory
+							if(curr->timestamp == newN->timestamp && curr->hash == newN->hash) present = 1;
+							left = curr;
+							curr = curr->next;
+						}
+						if(left->timestamp == newN->timestamp)	newN->tie_breaker+= left->tie_breaker;
+						newN->next = curr;
+				}while(!present && !__sync_bool_compare_and_swap(&left->next, curr, newN));
+				// CAS has done insert of the new node
 
-			if(present) node_unsafe_free(newN);
-			// now either it was present or i'm inserted so communicate that the op has compleated
+				if(present) node_unsafe_free(newN);
+				// now either it was present or i'm inserted so communicate that the op has compleated
+			}
 		}
 	}
 
@@ -596,8 +614,12 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 		//assert(array->nodes+idx != NULL);
 		void* ptr = array->nodes[idx].ptr;
 		//assert(ptr != BLOCK_ENTRY && ptr == NULL);
-		return nodesInsert(bckt->ptr_arrays[numaNode], getDynamic(idxWrite), payload, timestamp) == MYARRAY_INSERT ? OK : ABORT;
+		int res = nodesInsert(bckt->ptr_arrays[numaNode], getDynamic(idxWrite), payload, timestamp) == MYARRAY_INSERT ? OK : ABORT;
+		if(res == OK) VAL_FAA(&insertedInArray, 1);
+		return res;
 	}
+
+	VAL_FAA(&insertedInList, 1);
 
   // The amount of elements to skip are equal to the extracted value
   toskip = get_extractions_wtoutlk(extracted);
@@ -774,7 +796,10 @@ static inline int extract_from_ArrayOrList(bucket_t *bckt, void ** result, pkey_
 	if(is_freezed_for_del(idxRead)) return EMPTY;
 
 	arrayNodes_t* ordered = bckt->arrayOrdered;
-	if(!is_freezed_for_lnk(idxRead) && ordered == NULL) return ABORT;
+	if(!is_freezed_for_lnk(idxRead) && ordered == NULL){
+		VAL_FAA(&stateMachineFailedDeq, 1);
+		return ABORT;
+	}
 
 	// FIXME: Forse risolto
 	if(!is_freezed_for_lnk(idxRead) && getDynamic(idxRead) > getFixed(ordered->indexWrite)){
@@ -789,23 +814,29 @@ static inline int extract_from_ArrayOrList(bucket_t *bckt, void ** result, pkey_
 		if(getDynamic(idxRead) < bckt->arrayOrdered->length && getDynamic(idxRead) < getFixed(bckt->arrayOrdered->indexWrite)){
 			res = nodesDequeue(bckt->arrayOrdered, getDynamic(idxRead), result, ts);
 			//assert(*result != NULL && *ts >= MIN && *ts < INFTY);
-			if(res == MYARRAY_EXTRACT) return OK;
+			if(res == MYARRAY_EXTRACT){
+				VAL_FAA(&dequeueInArray, 1);
+				return OK;
+			} 
 			else return ABORT;
 		}else{
 			goto begin;
 		}
 	}
 	// LUCKY: end
+	VAL_FAA(&dequeueInList, 1);
 
 	assert(curr != NULL);
 
+	unsigned long long pos = get_extractions_wtoutlk(idxRead)+1;
+
 	// if(__last_node != NULL){
 	// 	curr = __last_node;
-	// 	extracted -= __last_val;
+	// 	pos -= __last_val;
 	// }
 
 	// LUCKY:
-	unsigned long long pos = get_extractions_wtoutlk(idxRead)+1;
+
 	scan_list_length += skip_extracted(tail, &curr, pos);
 
 	// If it arrived at the end of the list then return EMPTY state
@@ -815,8 +846,8 @@ static inline int extract_from_ArrayOrList(bucket_t *bckt, void ** result, pkey_
 		return EMPTY; 
 	}
 	// __last_node = curr;
-	// __last_val  = old_extracted;
-	//	__sync_bool_compare_and_swap(&curr->taken, 0, 1);
+	// __last_val  = pos;
+	//__sync_bool_compare_and_swap(&curr->taken, 0, 1);
 
 	// Return the important information of extracted node
 	*result = curr->payload;
