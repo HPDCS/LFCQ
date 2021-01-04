@@ -105,13 +105,14 @@ typedef ListNode* markable_ref;
  */ 
 struct __node_t {
 	void *payload;						// 8
-	pkey_t timestamp;  					//  
-	char __pad_1[8-sizeof(pkey_t)];		// 16
+	pkey_t timestamp;  					// 
+	char inList;
+	char __pad_1[7];		// 16
 	unsigned int tie_breaker;			// 20
 	int hash;							// 24
 	void * volatile replica;			// 40
 	node_t * volatile next;				// 32
-	node_t * volatile upper_next[VB_NUM_LEVELS-1];	// 64
+	node_t * volatile upper_next[VB_NUM_LEVELS-2];	// 64
 };
 
 /**
@@ -218,6 +219,7 @@ static inline void complete_freeze_for_epo(bucket_t *bckt, unsigned long long ol
 	if(bckt->pending_insert != ((void*)1ULL) ){
 		toskip = get_cleaned_extractions(old_extractions);
 		newN = node_alloc();
+		newN->inList = 1;
 		newN->timestamp  = bckt->pending_insert->timestamp;
 		newN->payload	= bckt->pending_insert->payload;
 		newN->hash		= bckt->pending_insert->hash;
@@ -532,6 +534,7 @@ int bucket_connect(bucket_t *bckt, pkey_t timestamp, unsigned int tie_breaker, v
 	node_t *newN   = node_alloc(); //node_alloc_by_index(bckt->index);
 	newN->timestamp = timestamp;
 	newN->payload	= payload;
+	newN->inList = 1;
 
 	// Check the validity of the bucket
 	validate_bucket(bckt);

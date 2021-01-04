@@ -245,6 +245,7 @@ __thread unsigned long long __last_current 	= -1;
 __thread unsigned long long __last_index 	= -1;
 __thread table_t *__last_table 				= NULL;
 __thread bucket_t *__last_bckt 				= NULL;
+__thread unsigned long long contatoreStareMachine = 0;
 
 // LUCKY:  Dequeue
 pkey_t pq_dequeue(void *q, void** result)
@@ -304,12 +305,25 @@ begin:
 		{
 			// get fields from current
 			index = current >> 32;
-
 			__last_current  = current;
 			__last_index	= index;
 			__last_bckt 	= NULL;
 			__last_node 	= NULL;
 			__last_val 		= 0;
+
+			//if(contatoreStareMachine % 2 == 0){
+				double rand;
+				bucket_t *f_left_node, *f_left_node_next, *f_right_node;
+				drand48_r(&seedT, &rand);
+				unsigned int counter = 0;
+				unsigned int random = index+(((unsigned int)( ( (double)(size) )*rand ))%40)+40;
+				f_left_node = search(h->array+virtual_to_physical(random, size), &f_left_node_next, &f_right_node, &counter, 0);
+				if(f_left_node->type != HEAD){
+					stateMachine(f_left_node, DEQUEUE);
+				}
+			//}
+			//contatoreStareMachine+=1;
+
 		}
 		else index = __last_index;
 

@@ -3,7 +3,7 @@
 
 static inline void init_array_subsystem(){
 	gc_aid[GC_ARRAYNODES] = gc_add_allocator(sizeof(arrayNodes_t));
-	gc_aid[GC_NODEELEMS] 	=  gc_add_allocator(sizeof(nodeElem_t	));	
+	gc_aid[GC_NODEELEMS] 	=  gc_add_allocator(sizeof(nodeElem_t)*NODES_LENGTH);
 }
 
 
@@ -53,38 +53,43 @@ static inline void nodeElemStaticAlloc_unsafe_free(nodeElem_t* ptr){
 	//gc_unsafe_free(ptst, ptr, gc_aid[GC_NODEELEMS]);
 }
 
-/* Safe free arrayNodes memory */
-static inline void arrayNodes_safe_free(arrayNodes_t *ptr){
-	//gc_free(ptst, ptr, gc_aid[GC_ARRAYNODES]);	
-}
-
-/* Safe free arrayNodes memory */
-static inline void arrayNodesOrdered_safe_free(arrayNodes_t *ptr){
-	//gc_free(ptst, ptr, gc_aid[GC_ARRAYNODES]);	
-}
-
-/* Unsafe free arrayNodes memory */
-static inline void arrayNodes_unsafe_free(arrayNodes_t *ptr){
-	// for(int i = 0; i < ptr->length; i++){
-	// 	if(ptr->nodes+i != NULL)
-	// 		nodeElem_unsafe_free(ptr->nodes+i);
-	// }
-	// gc_unsafe_free(ptst, ptr, gc_aid[GC_ARRAYNODES]);	
-}
-
+// In realtà libera i nodi
 static inline void arrayNodes_safe_free_malloc(arrayNodes_t *ptr){
 	if(ptr != NULL){
-		if(ptr->nodes != NULL) 
-			gc_add_ptr_to_hook_list(ptst, ptr->nodes, gc_hid[0]);
-		gc_add_ptr_to_hook_list(ptst, ptr, gc_hid[0]);
+		if(ptr->nodes != NULL){
+			if(ptr->length == NODES_LENGTH){
+				gc_free(ptst, ptr->nodes, gc_aid[GC_NODEELEMS]);
+			}else{
+				free(ptr->nodes);
+			}
+		}
 	}
 }
 
+// In realtà libera i nodi
 static inline void arrayNodes_unsafe_free_malloc(arrayNodes_t *ptr){
 	if(ptr != NULL) {
-		if(ptr->nodes != NULL) 
-			gc_add_ptr_to_hook_list(ptst, ptr->nodes, gc_hid[0]);
-		gc_add_ptr_to_hook_list(ptst, ptr, gc_hid[0]);
+		if(ptr->nodes != NULL){
+			if(ptr->length == NODES_LENGTH){
+				gc_unsafe_free(ptst, ptr->nodes, gc_aid[GC_NODEELEMS]);
+			}else{
+				free(ptr->nodes);
+			}
+		}
+	}
+}
+
+/* Safe free arrayNodes memory */
+static inline void arrayNodes_safe_free(arrayNodes_t *ptr){
+	if(ptr != NULL){
+			gc_free(ptst, ptr, gc_aid[GC_ARRAYNODES]);
+	}
+}
+
+/* UnSafe free arrayNodes memory */
+static inline void arrayNodes_unsafe_free(arrayNodes_t *ptr){
+	if(ptr != NULL){
+			gc_unsafe_free(ptst, ptr, gc_aid[GC_ARRAYNODES]);
 	}
 }
 

@@ -163,7 +163,10 @@ double array_compute_mean_separation_time(table_t *h,
 					}
 
 					// Sort elements
-					quickSort(newArray->nodes, 0, newArray->length-1);
+					//printArray(newArray->nodes, newArray->indexWrite, 0);
+					quickSort(newArray->nodes, 0, newArray->indexWrite-1);
+					//printf("Dopo\n");
+					//printArray(newArray->nodes, newArray->indexWrite, 0);
 				}
 				for(start = 0; newArray != NULL && start < newArray->length && stopIter; start++){
 					if(newArray->nodes[start].timestamp == INFTY){
@@ -209,7 +212,7 @@ double array_compute_mean_separation_time(table_t *h,
 
 
 	counter = 1;
-	//printArray(selected->nodes, selected->length-1, 0);
+	//printArray(selected->nodes, selected->indexWrite, 0);
 	if(selected->indexWrite > 1)
 		quickSort(selected->nodes, 0, selected->indexWrite-1);
 	for(int i = 0; i < sample_size; i++){

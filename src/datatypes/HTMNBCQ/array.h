@@ -66,21 +66,25 @@ arrayNodes_t* initArray(unsigned int length){
 	arrayNodes_t* array;
 	//array = arrayNodes_alloc(length);
 
-	//array = gc_alloc(ptst, gc_aid[GC_ARRAYNODES]);
-	array = (arrayNodes_t*)malloc(sizeof(arrayNodes_t));
+	array = gc_alloc(ptst, gc_aid[GC_ARRAYNODES]);
+	//array = (arrayNodes_t*)malloc(sizeof(arrayNodes_t));
 	assert(array != NULL);
 	bzero(array,  sizeof(arrayNodes_t));
 
 	array->epoch = 0;
 	//array->indexRead = 0;
 	array->indexWrite = 0;
-	array->length = length;
 
 	assert(sizeof(nodeElem_t)*length > 0);
-	// array->nodes = (nodeElem_t*)malloc(sizeof(nodeElem_t)*array->length);
-	//array->nodes = nodeElem_alloc(length);
-	array->nodes = (nodeElem_t*)malloc(sizeof(nodeElem_t)*length);
-	bzero(array->nodes, sizeof(nodeElem_t)*length);
+	if(length <= NODES_LENGTH){
+		array->nodes = gc_alloc(ptst, gc_aid[GC_NODEELEMS]);
+		array->length = NODES_LENGTH;
+		bzero(array->nodes, sizeof(nodeElem_t)*NODES_LENGTH);
+	}else{
+		array->nodes = (nodeElem_t*)malloc(sizeof(nodeElem_t)*length);
+		array->length = length;
+		bzero(array->nodes, sizeof(nodeElem_t)*length);
+	}
 	assert(array->nodes != NULL);
 
 	return array;
@@ -119,8 +123,7 @@ static inline void copyArray(arrayNodes_t* array, unsigned long long limit, arra
 				newArray->indexWrite++;
 			// }else
 			// 	newArray->nodes[found].tie_breaker++;
-		}else
-			newArray->length--;
+		}
 	}
 }
 
@@ -212,6 +215,7 @@ arrayNodes_t* vectorOrderingAndBuild(bucket_t* bckt){
 					copyArray(array, getFixed(array->indexWrite), newArray);
 			}
 			if(!unordered(bckt)){
+				arrayNodes_safe_free_malloc(newArray);
 				arrayNodes_safe_free(newArray);
 				return NULL;
 			}
@@ -219,22 +223,26 @@ arrayNodes_t* vectorOrderingAndBuild(bucket_t* bckt){
 		// TODO: Set the epoch of the ordered array equal to the bucket epoch
 		newArray->epoch = bckt->epoch;
 		
-		if(!unordered(bckt)) return NULL;
-
-		void* addr = NULL;
-		for (int i = 0; i < newArray->length; i++){
-			addr = newArray->nodes[i].ptr;
-			//assert(addr != NULL);
+		if(!unordered(bckt)){
+			arrayNodes_safe_free_malloc(newArray);
+			arrayNodes_safe_free(newArray);
+			return NULL;
 		}
 
-		//  printArray(newArray->nodes, newArray->length, 0);
+		// void* addr = NULL;
+		// for (int i = 0; i < newArray->length; i++){
+		// 	addr = newArray->nodes[i].ptr;
+		// 	//assert(addr != NULL);
+		// }
+
+		//printArray(newArray->nodes, newArray->indexWrite, 0);
 		// Sort elements
-		quickSort(newArray->nodes, 0, newArray->length-1);
+		quickSort(newArray->nodes, 0, newArray->indexWrite-1);
 
 		// toList also allocate the node elem
-		toList(newArray, newArray->length, &bckt->tail);
+		toList(newArray, newArray->indexWrite, &bckt->tail);
 		
-		//  printList(newArray->nodes[0].ptr);
+		//printList(newArray->nodes[0].ptr);
 	}
 	return newArray;
 }
@@ -419,9 +427,13 @@ int stateMachine(bucket_t* bckt, unsigned long dequeueStop){
 			newArray->indexWrite = (newArray->indexWrite << 32) | newArray->indexWrite;
 			if(unordered(bckt)) 
 				setOrdered(bckt, newArray);
-			if(bckt->arrayOrdered != newArray)
-				arrayNodes_unsafe_free_malloc(newArray);
-			else
+			if(bckt->arrayOrdered != newArray){
+				for(int i = 0; i < newArray->length; i++){
+					if(newArray->nodes[i].ptr != NULL)
+						node_safe_free(newArray->nodes[i].ptr);
+				}
+				arrayNodes_safe_free(newArray);
+			}else
 				public = 1;
 			assert(unordered(bckt) == false);
 			// printArray(bckt->arrayOrdered->nodes, bckt->arrayOrdered->length, 0);

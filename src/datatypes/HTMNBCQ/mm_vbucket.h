@@ -285,20 +285,24 @@ static inline void bucket_safe_free(bucket_t *ptr){
 		tmp = current;
 		current = tmp->next;
 		if(tmp->timestamp == INFTY)	assert(tmp == ptr->tail);
-		node_safe_free(tmp);
+		if(tmp->inList == 1) node_safe_free(tmp);
 	}
 
 	if(get_op_type(ptr->op_descriptor) != CHANGE_EPOCH){
 		for(int i = 0; i < ptr->tot_arrays; i++){
 			if(ptr->ptr_arrays[i])
-				gc_add_ptr_to_hook_list(ptst, ptr->ptr_arrays[i], gc_hid[0]);
+				arrayNodes_safe_free_malloc(ptr->ptr_arrays[i]);
 		}
 		gc_add_ptr_to_hook_list(ptst, ptr->ptr_arrays, gc_hid[0]);
 		
 		if(ptr->arrayOrdered != NULL){
-			if(ptr->arrayOrdered->nodes != NULL)
-				gc_add_ptr_to_hook_list(ptst, ptr->arrayOrdered->nodes, gc_hid[0]);
-			gc_add_ptr_to_hook_list(ptst, ptr->arrayOrdered, gc_hid[0]);
+			if(ptr->arrayOrdered->nodes != NULL){
+				for(int i = 0; i < getFixed(ptr->arrayOrdered->indexWrite); i++){
+					if(ptr->arrayOrdered->nodes[i].ptr != NULL)
+						node_safe_free(ptr->arrayOrdered->nodes[i].ptr);
+				}
+			}
+			arrayNodes_safe_free(ptr->arrayOrdered);
 		}
 	}
 	gc_free(ptst, ptr, gc_aid[GC_BUCKETS]);
@@ -317,14 +321,18 @@ static inline void bucket_unsafe_free(bucket_t *ptr){
 
 	if(get_op_type(ptr->op_descriptor) != CHANGE_EPOCH){
 		for(int j = 0; j < ptr->numaNodes; j++){
-			gc_add_ptr_to_hook_list(ptst, ptr->ptr_arrays[j], gc_hid[0]);
+			arrayNodes_unsafe_free_malloc(ptr->ptr_arrays[j]);
 		}
 		gc_add_ptr_to_hook_list(ptst, ptr->ptr_arrays, gc_hid[0]);
 
 		if(ptr->arrayOrdered != NULL){
-			if(ptr->arrayOrdered->nodes != NULL)
-				gc_add_ptr_to_hook_list(ptst, ptr->arrayOrdered->nodes, gc_hid[0]);
-			gc_add_ptr_to_hook_list(ptst, ptr->arrayOrdered, gc_hid[0]);
+			if(ptr->arrayOrdered->nodes != NULL){
+				for(int i = 0; i < getFixed(ptr->arrayOrdered->indexWrite); i++){
+					if(ptr->arrayOrdered->nodes[i].ptr != NULL)
+						node_safe_free(ptr->arrayOrdered->nodes[i].ptr);
+				}
+			}
+			arrayNodes_unsafe_free(ptr->arrayOrdered);
 		}
 	}
 

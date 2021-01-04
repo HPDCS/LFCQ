@@ -156,7 +156,7 @@ static int search_and_insert(bucket_t *head, SkipList *lookup_table, unsigned in
 			newb->arrayOrdered = NULL;
 		
 			// LUCKY:
-			int numaNode = getNumaNode(syscall(SYS_gettid), newb->numaNodes);
+			int numaNode = getNumaNode();
 			unsigned long long idxWrite = VAL_FAA(&newb->ptr_arrays[numaNode]->indexWrite, 1);
 			int val = nodesInsert(newb->ptr_arrays[numaNode], getDynamic(idxWrite), payload, timestamp);
 			assert(val == MYARRAY_INSERT);
