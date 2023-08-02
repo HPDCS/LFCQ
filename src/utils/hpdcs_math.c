@@ -95,3 +95,48 @@ double camel_compile_time_rand(struct drand48_data *seed, double mean)
 	return  mean * random_num * low_length/low_density   +i*(high_length+low_length);
 }
 
+
+
+double zipf_rand(struct drand48_data *seed, double a){
+  double b;
+
+  a = a - 1.0;
+  b = pow(2.0, a);
+  int count = 1000;
+  while (1) {
+    double T, U, V, X, VX;
+    drand48_r(seed, &U);
+    U = 1.0 - U;
+    X = pow(U, -1.0 / a);
+    if (X < 1.0){
+      count-=1;
+      if(count<0) printf("failed after 1000 attempts");
+      continue;
+    }
+    drand48_r(seed, &V);
+    T = pow(1.0 + 1.0 / X, a);
+    VX = V * X;
+
+    if (VX * (T - 1.0) / (b - 1.0) <= T / b) {
+      printf("%f\n",X);
+      return X;
+    }
+  }
+}
+
+
+double zipf_compile_time_rand(struct drand48_data *seed, double a){
+ return zipf_rand(seed, 5);
+}
+
+
+
+double pareto_compile_time_rand(struct drand48_data *seed, double mean){
+  double R;
+  drand48_r(seed, &R);
+  return mean * 0.75 * pow(R, -0.25);
+}
+
+
+
+

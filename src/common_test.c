@@ -47,6 +47,12 @@ void* local_trace(void *arg){
 		case 'C':
 			current_dist = camel_compile_time_rand;
 			break;
+                case 'Z':
+                        current_dist = zipf_compile_time_rand;
+                        break;
+                case 'P':
+	                current_dist = pareto_compile_time_rand;
+	                break;
 		default:
 			printf("#ERROR: Unknown distribution\n");
 			exit(1);
