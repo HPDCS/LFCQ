@@ -171,6 +171,12 @@ void classic_hold(
 			case 'C':
 				current_dist = camel_compile_time_rand;
 				break;
+                        case 'Z':
+                                current_dist = zipf_compile_time_rand;
+                                break;
+                        case 'P':
+                                current_dist = pareto_compile_time_rand;
+                                break;
 			default:
 				printf("#ERROR: Unknown distribution\n");
 				exit(1);
@@ -257,6 +263,12 @@ void classic_hold(
 			case 'C':
 				current_dist = camel_compile_time_rand;
 				break;
+                        case 'Z':
+                                current_dist = zipf_compile_time_rand;
+                                break;
+                        case 'P':
+                                current_dist = pareto_compile_time_rand;
+                                break;
 			default:
 				printf("#ERROR: Unknown distribution\n");
 				exit(1);
@@ -365,9 +377,9 @@ void* process(void *arg)
     srand48_r(my_id+254, &seedT);
     
 
-//	CPU_ZERO(&cpuset);
-//	CPU_SET((unsigned int)cpu, &cpuset);
-//	pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+	CPU_ZERO(&cpuset);
+	CPU_SET((unsigned int)cpu, &cpuset);
+	pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
 
 
     __sync_fetch_and_add(&BARRIER, 1);
