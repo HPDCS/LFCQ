@@ -17,7 +17,7 @@ extern unsigned long long trace_index;
 
 
 extern pkey_t dequeue(void);
-extern pkey_t enqueue(int my_id, struct drand48_data* seed, pkey_t local_min, double (*current_prob) (struct drand48_data*, double));
+extern int enqueue(int my_id, struct drand48_data* seed, pkey_t local_min, double (*current_prob) (struct drand48_data*, double));
 extern void generate_trace(char distribution);
 
 #endif

@@ -49,9 +49,6 @@
 
 
 
-
-
-
 struct payload
 {
 	double timestamp;
@@ -87,8 +84,6 @@ unsigned int TIME;
 
 __thread struct drand48_data seedT;
  
-void* nbcqueue;
-
 pthread_t *p_tid;
 
 volatile unsigned int BARRIER = 0;
@@ -111,7 +106,7 @@ volatile unsigned int end_phase_3 = 0;
 volatile unsigned int end_test = 0;
 volatile long long final_ops = 0;
 
-
+#define QSIZE 250
 
 __thread unsigned int stopforcheck = 0;
 
@@ -139,12 +134,13 @@ void* process(void *arg)
 	CPU_SET((unsigned int )my_id, &cpuset);
 	pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
 
-
-    __sync_fetch_and_add(&BARRIER, 1);
     
-    
+    if(my_id == 0){
+    	printf("Populating the queue...");
+    	fflush(NULL);
+    }
 	
-	while(lock);
+	//while(lock);
 	
 	switch(PROB_DISTRIBUTION1)
 	{
@@ -168,16 +164,19 @@ void* process(void *arg)
 			exit(1);
 	}
 		
-	while(n_enqueue < 25000/THREADS)
+	while(n_enqueue < QSIZE/THREADS)
 	{
 		n_enqueue += enqueue(my_id, &seed, local_min, current_dist);
 	}
 
 
 	__sync_fetch_and_add(&BARRIER, 1);
-	while(BARRIER != THREADS);
+	while(BARRIER != THREADS+1);
 
-	printf("END\n");
+	if(my_id == 0){
+		printf("Done\nEmptying the queue...");    
+		fflush(NULL);
+	}
 
 	while(1)
 	{
@@ -187,6 +186,9 @@ void* process(void *arg)
 		else
 		n_dequeue++;
 	}
+
+	if(my_id == 0)
+		printf("Done\n");
 
 	ops[my_id] = n_enqueue - n_dequeue;
 	malloc_op[my_id] =  pq_num_malloc();
@@ -253,8 +255,20 @@ int main(int argc, char **argv)
 	NUMA_NODES  = numa_num_configured_nodes();
 	
 	//set_mempolicy(MPOL_BIND, &numa_mask, 2);
-		
+	
+	printf("##################################\n");	
+	printf("#          UNIT TEST             #\n");	
+	printf("##################################\n");	
+	LOG("\nBuilding the queue...%s", "");
+	fflush(NULL);
+
 	nbcqueue = pq_init(THREADS, PERC_USED_BUCKET, ELEM_PER_BUCKET);
+
+	LOG("Done\n%s", "");
+
+	#ifdef TRACE_LEN
+		generate_trace(PROB_DISTRIBUTION1);
+	#endif
 	
 	for(i=0;i<THREADS;i++)
 	{
@@ -268,9 +282,8 @@ int main(int argc, char **argv)
 	
 	while(BARRIER != THREADS);
 
-    __sync_bool_compare_and_swap(&BARRIER, THREADS, 0);
+    __sync_fetch_and_add(&BARRIER, 1);
 	
-    __sync_bool_compare_and_swap(&lock, 1, 0);
     
    for(i=0;i<THREADS;i++)
 		pthread_join(p_tid[i], (void*)&id);

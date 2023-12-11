@@ -51,6 +51,7 @@ extern bool iCAS_x86(volatile unsigned int *ptr, unsigned int oldVal, unsigned i
 extern int atomic_test_and_set_x86(int *);
 extern int atomic_test_and_reset_x86(int *);
 extern int atomic_test_and_set_x64(unsigned long long *);
+extern int atomic_bts_x64(volatile void *, int);
 extern void atomic_add_x86(atomic_t *, int);
 extern void atomic_sub_x86(atomic_t *, int);
 extern void atomic_inc_x86(atomic_t *);

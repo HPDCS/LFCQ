@@ -15,15 +15,13 @@ double MEAN_INTERARRIVAL_TIME = MEAN;			// Maximum distance from the current eve
 #define NUM_CORES 8
 
 
+static char distribution = 'A';
+static pthread_t p_tid[NUM_CORES];
+
 #ifdef TRACE_LEN
 pkey_t *trace = NULL;
 unsigned long long trace_index = 0;
 int tr_id = 0;
-#endif
-
-static char distribution = 'A';
-
-extern pthread_t *p_tid;
 
 void* local_trace(void *arg){
 	int id = __sync_fetch_and_add(&tr_id, 1);
@@ -49,6 +47,12 @@ void* local_trace(void *arg){
 		case 'C':
 			current_dist = camel_compile_time_rand;
 			break;
+                case 'Z':
+                        current_dist = zipf_compile_time_rand;
+                        break;
+                case 'P':
+	                current_dist = pareto_compile_time_rand;
+	                break;
 		default:
 			printf("#ERROR: Unknown distribution\n");
 			exit(1);
@@ -82,15 +86,17 @@ void generate_trace(char d)
 
 	for(i=0;i<NUM_CORES;i++)
 		pthread_join(p_tid[i], NULL);
-	
-	for(i = 1; i< TRACE_LEN-1;i++){
-		trace[i] = trace[i-1]+trace[i];
+
+	trace[0] = 1;
+	for(i = 1; i< TRACE_LEN;i++){
+		trace[i] += trace[i-1];
 	}
-	LOG("Done\n%s", "");
+	LOG("%s\n", "Done");
 
 
 }
 
+#endif
 
 
 
@@ -108,7 +114,7 @@ pkey_t dequeue(void)
 	return timestamp;
 }
 
-pkey_t enqueue(int my_id, struct drand48_data* seed, pkey_t local_min, double (*current_prob) (struct drand48_data*, double))
+int enqueue(int my_id, struct drand48_data* seed, pkey_t local_min, double (*current_prob) (struct drand48_data*, double))
 {
 	pkey_t timestamp = 0.0;
 	
@@ -127,8 +133,7 @@ pkey_t enqueue(int my_id, struct drand48_data* seed, pkey_t local_min, double (*
 	timestamp = trace[index];
 #endif
 
-	pq_enqueue(nbcqueue, timestamp, UNION_CAST(1, void*));
-	
-	return timestamp;
+	int res = pq_enqueue(nbcqueue, timestamp, UNION_CAST(1, void*));
 
+	return res;
 }

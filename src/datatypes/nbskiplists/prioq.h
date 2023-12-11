@@ -19,8 +19,6 @@ typedef void   *pval_t;
 //#define SENTINEL_KEYMAX (~1UL) /* Key value of last dummy node.  */
 #define SENTINEL_KEYMAX (INFTY) /* Key value of last dummy node.  */
 
-#define FRASER_ALLOCATOR 1
-#define MULTIPLE_NODE_SIZES 1
 
 typedef struct node_s
 {
@@ -29,12 +27,7 @@ typedef struct node_s
     int       level;
     int       inserting; //char pad2[4];
     pval_t    v;
-    #if MULTIPLE_NODE_SIZES == 1
     struct node_s *next[1];
-    #else
-    struct node_s *next[NUM_LEVELS];
-    char pad[24];
-    #endif
 } node_t;
 
 typedef struct

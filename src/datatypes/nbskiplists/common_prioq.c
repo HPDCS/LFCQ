@@ -167,7 +167,7 @@ pq_enqueue(void *p, pkey_t k, pval_t v)
     pq_t *pq = (pq_t*)p;
     node_t *preds[NUM_LEVELS], *succs[NUM_LEVELS];
     node_t *new = NULL, *del = NULL;
-    int res=0;
+    int res=1;
     
     critical_enter();
 
@@ -187,7 +187,7 @@ pq_enqueue(void *p, pkey_t k, pval_t v)
     if (succs[0]->k == k && !is_marked_ref(preds[0]->next[0]) && preds[0]->next[0] == succs[0]) {
         new->inserting = 0;
         free_node(new);
-        res=1;
+        res=0;
         goto out;
     }
     new->next[0] = succs[0];
@@ -308,7 +308,6 @@ pq_init(unsigned int threads, double none, unsigned int max_offset)
     /* head and tail nodes */
     t = calloc(1, sizeof *t + (NUM_LEVELS-1)*sizeof(node_t *));
     h = calloc(1, sizeof *h + (NUM_LEVELS-1)*sizeof(node_t *));
-    
     t->inserting = 0;
     h->inserting = 0;
 
